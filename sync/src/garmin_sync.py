@@ -54,12 +54,20 @@ ACTIVITY_DETAIL_ENDPOINTS = {
 PROFILE_ENDPOINTS = {
     "user_profile": lambda client: client.get_user_profile(),
     "devices": lambda client: client.get_devices(),
-    "gear": lambda client: client.get_gear(),
-    "gear_defaults": lambda client: client.get_gear_defaults(),
-    "goals": lambda client: client.get_goals(),
     "activity_types": lambda client: client.get_activity_types(),
     "earned_badges": lambda client: client.get_earned_badges(),
     "personal_record": lambda client: client.get_personal_record(),
+}
+
+# These need userProfileNumber from user_profile response
+PROFILE_ENDPOINTS_WITH_ID = {
+    "gear": lambda client, uid: client.get_gear(uid),
+    "gear_defaults": lambda client, uid: client.get_gear_defaults(uid),
+}
+
+# These may need special handling
+PROFILE_ENDPOINTS_EXTRA = {
+    "goals": lambda client: client.get_goals(""),
 }
 
 
@@ -127,6 +135,7 @@ def sync_profile(client) -> int:
     from db import upsert_profile_raw
     count = 0
     with get_connection() as conn:
+        # Fetch basic profile endpoints (no args needed)
         for endpoint_name, fetch_fn in PROFILE_ENDPOINTS.items():
             try:
                 data = rate_limited_call(fetch_fn, client)
@@ -136,6 +145,32 @@ def sync_profile(client) -> int:
                     print(f"  Profile: {endpoint_name} saved")
             except Exception as e:
                 print(f"  Warning: profile/{endpoint_name} failed: {e}")
+
+        # Fetch endpoints that need display_name (userProfileNumber)
+        display_name = getattr(client, "display_name", None)
+        if display_name:
+            for endpoint_name, fetch_fn in PROFILE_ENDPOINTS_WITH_ID.items():
+                try:
+                    data = rate_limited_call(fetch_fn, client, display_name)
+                    if data:
+                        upsert_profile_raw(conn, endpoint_name, data)
+                        count += 1
+                        print(f"  Profile: {endpoint_name} saved")
+                except Exception as e:
+                    print(f"  Warning: profile/{endpoint_name} failed: {e}")
+        else:
+            print("  Warning: No display_name on client, skipping gear endpoints")
+
+        # Goals endpoint needs a status argument
+        for status in ["active", "future", "past"]:
+            try:
+                data = rate_limited_call(lambda c: c.get_goals(status), client)
+                if data:
+                    upsert_profile_raw(conn, f"goals_{status}", data)
+                    count += 1
+                    print(f"  Profile: goals_{status} saved")
+            except Exception as e:
+                print(f"  Warning: profile/goals_{status} failed: {e}")
     return count
 
 
