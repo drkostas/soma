@@ -220,7 +220,7 @@ class GarminBackfill:
                 print(f"  Warning: progress update failed: {e}")
 
             pct = (i + 1) / total * 100
-            print(f"[{i+1}/{total}] {sync_date} -- {count} endpoints ({pct:.1f}%)")
+            print(f"[{i+1}/{total}] {sync_date} -- {count} endpoints ({pct:.1f}%)", flush=True)
 
         # Mark complete if we finished all dates
         if not self._shutdown:
