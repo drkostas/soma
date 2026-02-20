@@ -258,6 +258,155 @@ class GarminBackfill:
         print(f"  Oldest date done: {oldest}")
 
 
+class GarminActivityBackfill:
+    """Backfill all Garmin activity details using paginated get_activities.
+
+    Much faster than per-day discovery since it skips days with no activities
+    and uses Garmin's native pagination.
+    """
+
+    ACTIVITIES_PER_PAGE = 20  # Garmin default page size
+
+    def __init__(self):
+        self._shutdown = False
+        self.client = None
+
+        signal.signal(signal.SIGINT, self._handle_shutdown)
+        signal.signal(signal.SIGTERM, self._handle_shutdown)
+
+    def _handle_shutdown(self, signum, frame):
+        print("\n\nShutdown signal received. Progress saved.", flush=True)
+        self._shutdown = True
+
+    def _ensure_client(self):
+        if self.client is None:
+            print("Authenticating with Garmin Connect...")
+            self.client = init_garmin()
+            print("Authenticated.\n")
+
+    def run(self):
+        """Paginate through all activities and fetch details for each."""
+        self._ensure_client()
+
+        # Check prior progress
+        progress = _safe_db_op(get_backfill_progress, "garmin_activities")
+        start_index = 0
+        activities_done = 0
+        if progress and progress["items_completed"]:
+            start_index = progress["items_completed"]
+            activities_done = start_index
+            print(f"Resuming from activity index {start_index}")
+
+        print(f"Fetching activities starting from index {start_index}...\n")
+
+        page_start = start_index
+        total_new = 0
+        batch_count = 0
+
+        while not self._shutdown:
+            try:
+                activities = rate_limited_call(
+                    self.client.get_activities, page_start, self.ACTIVITIES_PER_PAGE
+                )
+            except Exception as e:
+                if "429" in str(e):
+                    print(f"  Rate limited. Waiting 60s...", flush=True)
+                    time.sleep(60)
+                    continue
+                else:
+                    print(f"  Error fetching activities at index {page_start}: {e}", flush=True)
+                    break
+
+            if not activities:
+                print(f"\nNo more activities. Reached end at index {page_start}.")
+                break
+
+            for activity in activities:
+                if self._shutdown:
+                    break
+
+                aid = activity.get("activityId")
+                if not aid:
+                    continue
+
+                activity_name = activity.get("activityName", "?")
+                activity_type = activity.get("activityType", {}).get("typeKey", "?")
+                start_time = activity.get("startTimeLocal", "?")
+
+                # Store the activity summary itself
+                try:
+                    _safe_db_op(upsert_activity_raw, aid, "summary", activity)
+                except Exception:
+                    pass
+
+                # Fetch detail endpoints
+                details_saved = 0
+                for ep_name, fetch_fn in ACTIVITY_DETAIL_ENDPOINTS.items():
+                    if self._shutdown:
+                        break
+                    try:
+                        data = rate_limited_call(fetch_fn, self.client, aid)
+                        if data:
+                            _safe_db_op(upsert_activity_raw, aid, ep_name, data)
+                            details_saved += 1
+                    except Exception as e:
+                        if "429" in str(e):
+                            print(f"    Rate limited on {ep_name}. Waiting 60s...", flush=True)
+                            time.sleep(60)
+                        # else skip silently
+
+                activities_done += 1
+                total_new += 1
+                batch_count += 1
+                print(
+                    f"  [{activities_done}] {start_time} {activity_type}: "
+                    f"{activity_name} -- {details_saved} details",
+                    flush=True,
+                )
+
+            # Save progress after each page
+            page_start += len(activities)
+            try:
+                _safe_db_op(
+                    update_backfill_progress, "garmin_activities",
+                    items_completed=activities_done,
+                    last_page=page_start,
+                    status="running",
+                )
+            except Exception as e:
+                print(f"  Warning: progress update failed: {e}", flush=True)
+
+            print(
+                f"  -- Page complete. {total_new} activities processed so far.\n",
+                flush=True,
+            )
+
+        # Mark complete if we finished
+        if not self._shutdown:
+            try:
+                _safe_db_op(
+                    update_backfill_progress, "garmin_activities",
+                    status="complete",
+                    items_completed=activities_done,
+                    total_items=activities_done,
+                )
+            except Exception:
+                pass
+            print(f"\nActivity backfill complete! {total_new} activities processed.")
+        else:
+            print(f"\nStopped. {total_new} activities processed this run. Resume to continue.")
+
+    def status(self):
+        """Print current activity backfill progress."""
+        progress = _safe_db_op(get_backfill_progress, "garmin_activities")
+        if not progress:
+            print("Activity backfill: not started")
+            return
+        print(f"Activity backfill: {progress['status']}")
+        print(f"  Activities processed: {progress['items_completed']}")
+        print(f"  Last index: {progress['last_page']}")
+
+
 class HevyBackfill:
     """Backfill all Hevy data with resume capability."""
 
@@ -331,7 +480,7 @@ class HevyBackfill:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python backfill.py <garmin|hevy|garmin-profile> [--status]")
+        print("Usage: python backfill.py <garmin|garmin-activities|garmin-profile|hevy> [--status]")
         sys.exit(1)
 
     source = sys.argv[1]
@@ -339,6 +488,12 @@ def main():
 
     if source == "garmin":
         bf = GarminBackfill()
+        if check_status:
+            bf.status()
+        else:
+            bf.run()
+    elif source == "garmin-activities":
+        bf = GarminActivityBackfill()
         if check_status:
             bf.status()
         else:
@@ -354,7 +509,7 @@ def main():
             bf.run()
     else:
         print(f"Unknown source: {source}")
-        print("Use: garmin, garmin-profile, or hevy")
+        print("Use: garmin, garmin-activities, garmin-profile, or hevy")
         sys.exit(1)
 
 
