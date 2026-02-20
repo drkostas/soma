@@ -14,3 +14,5 @@ GARMIN_PASSWORD = os.environ.get("GARMIN_PASSWORD", "")
 GARMINTOKENS = Path(
     os.environ.get("GARMINTOKENS", "~/.garminconnect")
 ).expanduser()
+HEVY_API_KEY = os.environ.get("HEVY_API_KEY", "")
+HEVY_BASE_URL = "https://api.hevyapp.com/v1"
