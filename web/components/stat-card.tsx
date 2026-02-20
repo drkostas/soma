@@ -5,9 +5,10 @@ interface StatCardProps {
   value: string | number;
   subtitle?: string;
   icon?: React.ReactNode;
+  trend?: number | null;
 }
 
-export function StatCard({ title, value, subtitle, icon }: StatCardProps) {
+export function StatCard({ title, value, subtitle, icon, trend }: StatCardProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
