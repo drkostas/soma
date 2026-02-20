@@ -111,3 +111,59 @@ CREATE TABLE IF NOT EXISTS sync_log (
     started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at    TIMESTAMPTZ
 );
+
+-- ===================
+-- LAYER 1: RAW DATA (Hevy)
+-- ===================
+
+CREATE TABLE IF NOT EXISTS hevy_raw_data (
+    id              BIGSERIAL PRIMARY KEY,
+    hevy_id         VARCHAR(100),
+    endpoint_name   VARCHAR(100) NOT NULL,
+    raw_json        JSONB NOT NULL,
+    synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(hevy_id, endpoint_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hevy_raw_endpoint ON hevy_raw_data(endpoint_name);
+CREATE INDEX IF NOT EXISTS idx_hevy_raw_hevy_id ON hevy_raw_data(hevy_id);
+
+-- ===================
+-- LAYER 1: RAW DATA (Garmin Activities)
+-- ===================
+
+CREATE TABLE IF NOT EXISTS garmin_activity_raw (
+    id              BIGSERIAL PRIMARY KEY,
+    activity_id     BIGINT NOT NULL,
+    endpoint_name   VARCHAR(100) NOT NULL,
+    raw_json        JSONB NOT NULL,
+    synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(activity_id, endpoint_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_garmin_activity_id ON garmin_activity_raw(activity_id);
+
+-- ===================
+-- LAYER 1: RAW DATA (Garmin Profile — one-time)
+-- ===================
+
+CREATE TABLE IF NOT EXISTS garmin_profile_raw (
+    id              BIGSERIAL PRIMARY KEY,
+    endpoint_name   VARCHAR(100) NOT NULL UNIQUE,
+    raw_json        JSONB NOT NULL,
+    synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ===================
+-- BACKFILL TRACKING
+-- ===================
+
+CREATE TABLE IF NOT EXISTS backfill_progress (
+    source              VARCHAR(50) PRIMARY KEY,
+    oldest_date_done    DATE,
+    last_page           INTEGER DEFAULT 0,
+    total_items         INTEGER DEFAULT 0,
+    items_completed     INTEGER DEFAULT 0,
+    status              VARCHAR(20) DEFAULT 'pending',
+    updated_at          TIMESTAMPTZ DEFAULT NOW()
+);
