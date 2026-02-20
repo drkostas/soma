@@ -1,7 +1,16 @@
 """Parse raw Garmin JSON into structured database rows (Layer 1 -> Layer 2)."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 from db import get_connection
+
+
+def _ms_to_datetime(ms):
+    """Convert millisecond Unix timestamp to datetime, or return None."""
+    if ms is None:
+        return None
+    if isinstance(ms, (int, float)):
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+    return ms
 
 
 def parse_daily_health(sync_date: date, raw_data: dict) -> dict:
@@ -62,8 +71,8 @@ def parse_sleep(raw_data: dict) -> dict | None:
         "rem_sleep_seconds": dto.get("remSleepSeconds"),
         "awake_seconds": dto.get("awakeSleepSeconds"),
         "sleep_score": overall_score,
-        "sleep_start": dto.get("sleepStartTimestampLocal"),
-        "sleep_end": dto.get("sleepEndTimestampLocal"),
+        "sleep_start": _ms_to_datetime(dto.get("sleepStartTimestampLocal")),
+        "sleep_end": _ms_to_datetime(dto.get("sleepEndTimestampLocal")),
     }
 
 

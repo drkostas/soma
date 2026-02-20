@@ -1,5 +1,6 @@
 """Garmin Connect API client wrapper with token caching."""
 
+import os
 import time
 from pathlib import Path
 
@@ -33,8 +34,14 @@ def init_garmin() -> Garmin:
             "Cannot authenticate with Garmin Connect."
         )
 
-    client = Garmin(email=GARMIN_EMAIL, password=GARMIN_PASSWORD)
-    client.login()
+    # Temporarily unset GARMINTOKENS so login() doesn't try to load from it
+    saved = os.environ.pop("GARMINTOKENS", None)
+    try:
+        client = Garmin(email=GARMIN_EMAIL, password=GARMIN_PASSWORD)
+        client.login()
+    finally:
+        if saved is not None:
+            os.environ["GARMINTOKENS"] = saved
 
     # Persist tokens
     GARMINTOKENS.mkdir(parents=True, exist_ok=True)
