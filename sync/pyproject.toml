@@ -1,0 +1,20 @@
+[project]
+name = "soma-sync"
+version = "0.1.0"
+description = "Soma health data sync engine"
+requires-python = ">=3.10"
+dependencies = [
+    "garminconnect>=0.2.38",
+    "psycopg2-binary>=2.9",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
