@@ -1,65 +1,137 @@
-import Image from "next/image";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/stat-card";
+import { WeightChart } from "@/components/weight-chart";
+import { getDb } from "@/lib/db";
 
-export default function Home() {
+export const revalidate = 300; // Revalidate every 5 minutes
+
+async function getTodayHealth() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM daily_health_summary
+    ORDER BY date DESC
+    LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
+async function getWeightHistory() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT date, weight_grams / 1000.0 as weight_kg
+    FROM weight_log
+    WHERE date >= CURRENT_DATE - 30
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
+async function getLatestWeight() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT weight_grams / 1000.0 as weight_kg, date
+    FROM weight_log
+    ORDER BY date DESC
+    LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
+export default async function Home() {
+  const [health, weightHistory, latestWeight] = await Promise.all([
+    getTodayHealth(),
+    getWeightHistory(),
+    getLatestWeight(),
+  ]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Soma</h1>
+          <p className="text-muted-foreground mt-1">
+            {health?.date
+              ? `Last synced: ${new Date(health.date).toLocaleDateString()}`
+              : "No data synced yet. Run the pipeline to get started."}
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <StatCard
+            title="Steps"
+            value={health?.total_steps?.toLocaleString() ?? "\u2014"}
+            subtitle={health?.total_distance_meters
+              ? `${(health.total_distance_meters / 1000).toFixed(1)} km`
+              : undefined}
+          />
+          <StatCard
+            title="Calories"
+            value={health?.total_kilocalories?.toLocaleString() ?? "\u2014"}
+            subtitle={health?.active_kilocalories
+              ? `${health.active_kilocalories} active`
+              : undefined}
+          />
+          <StatCard
+            title="Resting HR"
+            value={health?.resting_heart_rate ? `${health.resting_heart_rate} bpm` : "\u2014"}
+            subtitle={health?.hrv_last_night_avg
+              ? `HRV ${health.hrv_last_night_avg}ms`
+              : undefined}
+          />
+          <StatCard
+            title="Weight"
+            value={latestWeight ? `${latestWeight.weight_kg.toFixed(1)} kg` : "\u2014"}
+            subtitle={latestWeight?.date
+              ? new Date(latestWeight.date).toLocaleDateString()
+              : undefined}
+          />
         </div>
-      </main>
-    </div>
+
+        {/* Secondary Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <StatCard
+            title="Sleep"
+            value={health?.sleep_time_seconds
+              ? `${(health.sleep_time_seconds / 3600).toFixed(1)}h`
+              : "\u2014"}
+          />
+          <StatCard
+            title="Stress"
+            value={health?.avg_stress_level ?? "\u2014"}
+            subtitle={health?.max_stress_level
+              ? `Max: ${health.max_stress_level}`
+              : undefined}
+          />
+          <StatCard
+            title="Body Battery"
+            value={health?.body_battery_charged
+              ? `+${health.body_battery_charged}`
+              : "\u2014"}
+            subtitle={health?.body_battery_drained
+              ? `Drained: ${health.body_battery_drained}`
+              : undefined}
+          />
+          <StatCard
+            title="HRV Status"
+            value={health?.hrv_status ?? "\u2014"}
+            subtitle={health?.hrv_weekly_avg
+              ? `Weekly avg: ${health.hrv_weekly_avg}ms`
+              : undefined}
+          />
+        </div>
+
+        {/* Weight Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Weight Trend (30 days)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WeightChart data={weightHistory as any} />
+          </CardContent>
+        </Card>
+      </div>
+    </main>
   );
 }
