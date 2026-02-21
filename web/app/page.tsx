@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClickableStatCards } from "@/components/clickable-stat-cards";
-import { WorkoutFrequencyChart } from "@/components/workout-frequency-chart";
+import { InteractiveChartCards } from "@/components/interactive-chart-cards";
 import { ClickableRecentActivity } from "@/components/clickable-recent-activity";
 import { StepsTrendChart } from "@/components/steps-trend-chart";
 import { CalorieTrendChart } from "@/components/calorie-trend-chart";
@@ -28,7 +28,6 @@ import {
   PersonStanding,
   Timer,
   Weight,
-  Target,
   Heart,
 } from "lucide-react";
 
@@ -1226,180 +1225,29 @@ export default async function Home() {
         </Card>
       )}
 
-      {/* Training Day & Time Distribution */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {/* Day of Week */}
-        {(dayOfWeekData as any[]).length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Training Days
-                <span className="ml-auto text-xs font-normal">
-                  Most active: {(() => {
-                    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                    const sorted = [...(dayOfWeekData as any[])].sort((a, b) => Number(b.count) - Number(a.count));
-                    return sorted.length > 0 ? days[Number(sorted[0].dow)] : "";
-                  })()}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-3 h-32">
-                {(() => {
-                  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                  const counts = new Array(7).fill(0);
-                  for (const row of dayOfWeekData as any[]) {
-                    counts[Number(row.dow)] = Number(row.count);
-                  }
-                  const max = Math.max(...counts);
-                  const total = counts.reduce((s: number, c: number) => s + c, 0);
-                  return counts.map((count, i) => {
-                    const pct = max > 0 ? (count / max) * 100 : 0;
-                    const isMax = count === max;
-                    const sharePct = total > 0 ? ((count / total) * 100).toFixed(0) : "0";
-                    return (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                        <span className="text-xs font-semibold">{count}</span>
-                        <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
-                          <div
-                            className={`w-full max-w-[40px] rounded-t transition-all ${
-                              isMax ? "bg-primary" : "bg-primary/40"
-                            }`}
-                            style={{ height: `${Math.max(pct, 4)}%` }}
-                            title={`${days[i]}: ${count} activities (${sharePct}%)`}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground font-medium">{days[i]}</span>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Time of Day */}
-        {(timeOfDayData as any[]).length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Timer className="h-4 w-4" />
-                Training Time
-                <span className="ml-auto text-xs font-normal">
-                  Peak: {(() => {
-                    const sorted = [...(timeOfDayData as any[])].sort((a, b) => Number(b.count) - Number(a.count));
-                    if (sorted.length === 0) return "";
-                    const h = Number(sorted[0].hour);
-                    return h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
-                  })()}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-[2px] h-32">
-                {(() => {
-                  const counts = new Array(24).fill(0);
-                  for (const row of timeOfDayData as any[]) {
-                    counts[Number(row.hour)] = Number(row.count);
-                  }
-                  const max = Math.max(...counts);
-                  return counts.map((count, h) => {
-                    const pct = max > 0 ? (count / max) * 100 : 0;
-                    const isMax = count === max;
-                    const label = h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`;
-                    const isMorning = h >= 5 && h < 12;
-                    const isAfternoon = h >= 12 && h < 17;
-                    const isEvening = h >= 17 && h < 22;
-                    const color = isMax ? "bg-primary" :
-                      isMorning ? "bg-amber-400/60" :
-                      isAfternoon ? "bg-orange-400/60" :
-                      isEvening ? "bg-indigo-400/60" : "bg-muted-foreground/20";
-                    return (
-                      <div key={h} className="flex-1 flex flex-col items-center gap-0.5">
-                        {count > 0 && pct > 30 && (
-                          <span className="text-[8px] font-medium">{count}</span>
-                        )}
-                        <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
-                          <div
-                            className={`w-full rounded-t-sm transition-all ${color}`}
-                            style={{ height: `${Math.max(pct, count > 0 ? 4 : 0)}%` }}
-                            title={`${label}: ${count} activities`}
-                          />
-                        </div>
-                        {h % 6 === 0 && (
-                          <span className="text-[9px] text-muted-foreground">{label}</span>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-              <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground justify-center">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400/60" /> Morning</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-orange-400/60" /> Afternoon</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-indigo-400/60" /> Evening</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Middle Row: Activity Breakdown + Gym Frequency + Last Workout */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {/* Activity Breakdown */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Activity Breakdown
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {mergedCounts.map((a) => {
-              const icon = ACTIVITY_ICONS[a.type_key] || <Activity className="h-3.5 w-3.5" />;
-              const label = ACTIVITY_LABELS[a.type_key] || a.type_key.replace(/_/g, " ");
-              const pct = totalActivities > 0 ? (a.cnt / mergedCounts[0].cnt) * 100 : 0;
-              const barColor = ACTIVITY_BAR_COLORS[a.type_key] || "bg-primary/60";
-              return (
-                <div key={a.type_key} className="flex items-center gap-2 text-sm">
-                  {icon}
-                  <span className="text-muted-foreground w-14 truncate">{label}</span>
-                  <div className="flex-1 h-4 bg-muted rounded-sm overflow-hidden">
-                    <div
-                      className={`h-full ${barColor} rounded-sm`}
-                      style={{ width: `${Math.max(pct, 3)}%` }}
-                    />
-                  </div>
-                  <span className="font-medium w-8 text-right">{a.cnt}</span>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        {/* Gym Frequency */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Gym Frequency
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 mb-3">
-              <Dumbbell className="h-5 w-5 text-primary" />
-              <span className="text-2xl font-bold">{Number(workouts.total)}</span>
-              <span className="text-sm text-muted-foreground">workouts</span>
-              <span className="text-xs text-muted-foreground ml-auto">
-                {Number(workouts.count_7d)} this week
-              </span>
-            </div>
-            <WorkoutFrequencyChart data={gymFreq as any} />
-          </CardContent>
-        </Card>
-
-        {/* Last Workout */}
+      {/* Training Day & Time + Activity Breakdown + Gym Frequency (Interactive) */}
+      <InteractiveChartCards
+        dayOfWeekData={(dayOfWeekData as any[]).map((r: any) => ({
+          dow: Number(r.dow),
+          count: Number(r.count),
+        }))}
+        timeOfDayData={(timeOfDayData as any[]).map((r: any) => ({
+          hour: Number(r.hour),
+          count: Number(r.count),
+        }))}
+        activityCounts={mergedCounts}
+        gymFrequency={(gymFreq as any[]).map((r: any) => ({
+          month: r.month,
+          workouts: Number(r.workouts),
+        }))}
+        workoutStats={{
+          total: Number(workouts.total),
+          count_7d: Number(workouts.count_7d),
+        }}
+        streak={streak}
+        totalActivities={totalActivities}
+      >
+        {/* Last Workout (3rd column in the bottom grid) */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -1443,7 +1291,7 @@ export default async function Home() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </InteractiveChartCards>
 
       {/* Recent Activity Feed */}
       <Card>
