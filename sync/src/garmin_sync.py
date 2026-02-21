@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 
 from garmin_client import init_garmin, rate_limited_call
-from db import get_connection, upsert_raw_data, log_sync
+from db import get_connection, upsert_raw_data, upsert_activity_raw, log_sync
 
 
 # Endpoints to sync for each day (single date parameter)
@@ -108,6 +108,11 @@ def sync_activities_for_date(client, sync_date: date) -> list[int]:
             return []
         with get_connection() as conn:
             upsert_raw_data(conn, sync_date, "activities_list", activities)
+            # Store each activity as a 'summary' record (required by web queries)
+            for activity in activities:
+                aid = activity.get("activityId")
+                if aid:
+                    upsert_activity_raw(conn, aid, "summary", activity)
         return [a["activityId"] for a in activities if "activityId" in a]
     except Exception as e:
         print(f"  Warning: activities_list failed for {date_str}: {e}")
