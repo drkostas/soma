@@ -561,6 +561,8 @@ const MERGE_TYPES: Record<string, string> = {
   resort_skiing_snowboarding_ws: "resort_snowboarding",
   treadmill_running: "running",
   indoor_cycling: "cycling",
+  swimming: "lap_swimming",
+  open_water_swimming: "lap_swimming",
 };
 
 function formatDuration(mins: number) {
