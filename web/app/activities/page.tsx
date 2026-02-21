@@ -43,7 +43,7 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
 
 const ACTIVITY_LABELS: Record<string, string> = {
   kiteboarding_v2: "Kiteboarding",
-  wind_kite_surfing: "Kite Surfing",
+  wind_kite_surfing: "Kiteboarding",
   resort_snowboarding: "Snowboarding",
   resort_skiing_snowboarding_ws: "Snowboarding",
   hiking: "Hiking",
@@ -481,16 +481,25 @@ export default async function ActivitiesPage() {
       {/* Yearly Sport Breakdown */}
       {(yearlySports as any[]).length > 0 && (() => {
         // Group by year
-        const yearMap = new Map<number, { type_key: string; count: number; total_km: number; total_hours: number }[]>();
+        const yearMap = new Map<number, { type_key: string; label: string; count: number; total_km: number; total_hours: number }[]>();
         for (const row of yearlySports as any[]) {
           const year = Number(row.year);
           if (!yearMap.has(year)) yearMap.set(year, []);
-          yearMap.get(year)!.push({
-            type_key: row.type_key,
-            count: Number(row.count),
-            total_km: Number(row.total_km || 0),
-            total_hours: Number(row.total_hours || 0),
-          });
+          const label = ACTIVITY_LABELS[row.type_key] || row.type_key;
+          const existing = yearMap.get(year)!.find((s) => s.label === label);
+          if (existing) {
+            existing.count += Number(row.count);
+            existing.total_km += Number(row.total_km || 0);
+            existing.total_hours += Number(row.total_hours || 0);
+          } else {
+            yearMap.get(year)!.push({
+              type_key: row.type_key,
+              label,
+              count: Number(row.count),
+              total_km: Number(row.total_km || 0),
+              total_hours: Number(row.total_hours || 0),
+            });
+          }
         }
         const years = Array.from(yearMap.keys()).sort((a, b) => b - a);
 
@@ -545,15 +554,15 @@ export default async function ActivitiesPage() {
                               key={s.type_key}
                               className={`${color} transition-all`}
                               style={{ width: `${pct}%` }}
-                              title={`${ACTIVITY_LABELS[s.type_key] || s.type_key}: ${s.count}`}
+                              title={`${s.label}: ${s.count}`}
                             />
                           );
                         })}
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                         {sports.map((s) => (
-                          <span key={s.type_key} className="text-[10px] text-muted-foreground">
-                            {ACTIVITY_LABELS[s.type_key] || s.type_key}: {s.count}
+                          <span key={s.label} className="text-[10px] text-muted-foreground">
+                            {s.label}: {s.count}
                           </span>
                         ))}
                       </div>
@@ -708,10 +717,12 @@ export default async function ActivitiesPage() {
                     <div className="text-xs text-muted-foreground mb-1">Avg Wind</div>
                     <div className="text-xl font-bold text-cyan-400">{avgWindSpeed.toFixed(1)} kts</div>
                   </div>
+                  {maxWindGust > 0 && (
                   <div>
                     <div className="text-xs text-muted-foreground mb-1">Max Gust</div>
-                    <div className="text-xl font-bold text-cyan-400">{maxWindGust > 0 ? `${maxWindGust.toFixed(1)} kts` : "N/A"}</div>
+                    <div className="text-xl font-bold text-cyan-400">{maxWindGust.toFixed(1)} kts</div>
                   </div>
+                  )}
                   <div>
                     <div className="text-xs text-muted-foreground mb-1">Sessions w/ Wind</div>
                     <div className="text-xl font-bold">{kiteWithWind.length}/{kiteData.length}</div>
@@ -1049,7 +1060,7 @@ export default async function ActivitiesPage() {
                 <>
                   <StatCard title="Total Swims" value={swims.length} icon={<Waves className="h-4 w-4 text-blue-400" />} />
                   <StatCard title="Total Distance" value={`${(totalDist / 1000).toFixed(1)} km`} subtitle={`${swims.length} sessions`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
-                  <StatCard title="Avg Distance" value={`${Math.round(avgDist)}m`} icon={<Activity className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Avg Distance" value={avgDist >= 1000 ? `${(avgDist / 1000).toFixed(1)} km` : `${Math.round(avgDist)}m`} icon={<Activity className="h-4 w-4 text-blue-400" />} />
                   <StatCard title="Total Time" value={`${Math.round(totalDuration / 60)}h`} subtitle={`${Math.round(totalCal).toLocaleString()} kcal`} icon={<Clock className="h-4 w-4 text-blue-400" />} />
                 </>
               );
