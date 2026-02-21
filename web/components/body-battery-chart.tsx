@@ -21,7 +21,7 @@ interface BodyBatteryPoint {
 export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
   if (data.length === 0) return null;
 
-  const chartData = data.slice(-14).map((d) => ({
+  const chartData = data.map((d) => ({
     date: d.date,
     charged: Number(d.charged),
     drained: -Number(d.drained),
@@ -65,7 +65,7 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
           className="text-[10px]"
           tickLine={false}
           width={35}
-          tickFormatter={(v: number) => `${v}%`}
+          tickFormatter={(v: number) => `${v}`}
         />
         <Tooltip
           contentStyle={{
@@ -83,18 +83,18 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
           }
           formatter={(value: any, name: any) => {
             const label = name === "charged" ? "Charged" : "Drained";
-            return [`${Math.abs(Number(value))}%`, label];
+            return [`${Math.abs(Number(value))} pts`, label];
           }}
         />
         <ReferenceLine y={0} stroke="var(--muted-foreground)" opacity={0.3} />
         <Bar dataKey="charged" stackId="a" radius={[3, 3, 0, 0]}>
           {chartData.map((_, index) => (
-            <Cell key={index} fill="hsl(142, 71%, 45%)" opacity={0.6} />
+            <Cell key={index} fill="#22c55e" opacity={0.6} />
           ))}
         </Bar>
         <Bar dataKey="drained" stackId="a" radius={[0, 0, 3, 3]}>
           {chartData.map((_, index) => (
-            <Cell key={index} fill="hsl(0, 84%, 60%)" opacity={0.5} />
+            <Cell key={index} fill="#ef4444" opacity={0.5} />
           ))}
         </Bar>
       </BarChart>
