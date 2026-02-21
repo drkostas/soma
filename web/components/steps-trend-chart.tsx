@@ -28,7 +28,7 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={recent} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+      <BarChart data={recent} margin={{ top: 5, right: 20, bottom: 5, left: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} vertical={false} />
         <XAxis
           dataKey="date"
@@ -45,7 +45,7 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
         <YAxis
           className="text-[10px]"
           tickLine={false}
-          width={35}
+          width={45}
           tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
         />
         <Tooltip
