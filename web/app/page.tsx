@@ -9,6 +9,7 @@ import { ActivityHeatmap } from "@/components/activity-heatmap";
 import { RHRChart } from "@/components/rhr-chart";
 import { StressChart } from "@/components/stress-chart";
 import { ExpandableExerciseList } from "@/components/expandable-exercise-list";
+import { InteractiveThisWeek } from "@/components/interactive-this-week";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -760,61 +761,21 @@ export default async function Home() {
         ]}
       />
 
-      {/* This Week Training Summary */}
-      <Card className="mb-6">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <Activity className="h-4 w-4" />
-            This Week
-            {streak > 0 && (
-              <span className="ml-auto text-xs font-normal text-primary">
-                {streak}-day training streak
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(() => {
-            const tw = weeklyTraining.this_week;
-            const lw = weeklyTraining.last_week;
-
-            if (!tw) {
-              return <p className="text-sm text-muted-foreground">No training this week yet</p>;
-            }
-
-            const metrics = [
-              { label: "Sessions", value: Number(tw.sessions), prev: lw ? Number(lw.sessions) : null, unit: "" },
-              { label: "Duration", value: Number(tw.total_hours), prev: lw ? Number(lw.total_hours) : null, unit: "h" },
-              { label: "Distance", value: Number(tw.total_km), prev: lw ? Number(lw.total_km) : null, unit: "km" },
-              { label: "Calories", value: Number(tw.total_cal), prev: lw ? Number(lw.total_cal) : null, unit: "kcal" },
-            ];
-
-            return (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {metrics.map((m) => {
-                  const diff = m.prev !== null ? ((m.value - m.prev) / Math.max(m.prev, 1)) * 100 : null;
-                  return (
-                    <div key={m.label}>
-                      <div className="text-xs text-muted-foreground">{m.label}</div>
-                      <div className="text-xl font-bold">
-                        {m.unit === "kcal"
-                          ? Math.round(m.value).toLocaleString()
-                          : m.value}
-                        <span className="text-sm font-normal text-muted-foreground ml-1">{m.unit}</span>
-                      </div>
-                      {diff !== null && (
-                        <div className={`text-xs ${diff >= 0 ? "text-green-400" : "text-red-400"}`}>
-                          {diff >= 0 ? "+" : ""}{diff.toFixed(0)}% vs last week
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </CardContent>
-      </Card>
+      {/* This Week Training Summary (clickable with dialog) */}
+      <InteractiveThisWeek
+        metrics={(() => {
+          const tw = weeklyTraining.this_week;
+          const lw = weeklyTraining.last_week;
+          if (!tw) return [];
+          return [
+            { label: "Sessions", value: Number(tw.sessions), prev: lw ? Number(lw.sessions) : null, unit: "" },
+            { label: "Duration", value: Number(tw.total_hours), prev: lw ? Number(lw.total_hours) : null, unit: "h" },
+            { label: "Distance", value: Number(tw.total_km), prev: lw ? Number(lw.total_km) : null, unit: "km" },
+            { label: "Calories", value: Number(tw.total_cal), prev: lw ? Number(lw.total_cal) : null, unit: "kcal" },
+          ];
+        })()}
+        streak={streak}
+      />
 
       {/* Recovery Summary */}
       {(recovery.bodyBattery || recovery.hrv || recovery.readiness) && (
