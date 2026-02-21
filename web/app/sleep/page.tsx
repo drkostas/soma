@@ -201,6 +201,22 @@ async function getRespirationTrend() {
   return rows;
 }
 
+async function getSpO2Trend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->'dailySleepDTO'->>'averageSpO2Value')::float as avg_spo2,
+      (raw_json->'dailySleepDTO'->>'lowestSpO2Value')::float as low_spo2
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'sleep_data'
+      AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND raw_json->'dailySleepDTO'->>'averageSpO2Value' IS NOT NULL
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getSleepSchedule() {
   const sql = getDb();
   const rows = await sql`
@@ -249,7 +265,7 @@ function qualityBadge(quality: string | null) {
 }
 
 export default async function SleepPage() {
-  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration] =
+  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration, spo2Trend] =
     await Promise.all([
       getSleepStats(),
       getSleepTrend(),
@@ -262,6 +278,7 @@ export default async function SleepPage() {
       getStressTrend(),
       getSleepSchedule(),
       getRespirationTrend(),
+      getSpO2Trend(),
     ]);
 
   return (
@@ -581,6 +598,80 @@ export default async function SleepPage() {
                 );
               })()}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* SpO2 Trend */}
+      {(spo2Trend as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Activity className="h-4 w-4 text-blue-400" />
+              Blood Oxygen (SpO2)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const data = (spo2Trend as any[]).filter((d: any) => d.avg_spo2 > 0);
+              if (data.length === 0) return <p className="text-sm text-muted-foreground">No SpO2 data</p>;
+              const latest = data[data.length - 1];
+              const recent7 = data.slice(-7);
+              const avg7 = recent7.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / recent7.length;
+              const allAvg = data.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / data.length;
+              const minSpo2 = Math.min(...data.filter((d: any) => d.low_spo2 > 0).map((d: any) => Number(d.low_spo2)));
+              return (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Last Night</div>
+                      <div className="text-2xl font-bold">{Number(latest.avg_spo2).toFixed(0)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">7-Day Avg</div>
+                      <div className="text-2xl font-bold">{avg7.toFixed(0)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Overall Avg</div>
+                      <div className="text-2xl font-bold">{allAvg.toFixed(0)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Lowest Recorded</div>
+                      <div className="text-2xl font-bold">{minSpo2 < 100 ? `${minSpo2}%` : "—"}</div>
+                    </div>
+                  </div>
+                  {/* Mini bar chart of recent 30 days */}
+                  <div className="flex items-end gap-[3px] h-16">
+                    {data.slice(-30).map((d: any, i: number) => {
+                      const val = Number(d.avg_spo2);
+                      // Scale from 88-100 range for visual clarity
+                      const norm = Math.max(((val - 88) / 12) * 100, 5);
+                      const isLow = val < 94;
+                      return (
+                        <div
+                          key={i}
+                          className={`flex-1 rounded-t-sm ${isLow ? "bg-red-400/70" : "bg-blue-400/60"}`}
+                          style={{ height: `${Math.min(norm, 100)}%` }}
+                          title={`${d.date}: ${val}% avg${d.low_spo2 ? `, ${Number(d.low_spo2)}% low` : ""}`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                    {(() => {
+                      const recent = data.slice(-30);
+                      return (
+                        <>
+                          <span>{recent.length > 0 ? new Date(recent[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
+                          <span>Average Sleep SpO2</span>
+                          <span>{recent.length > 0 ? new Date(recent[recent.length - 1].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
       )}

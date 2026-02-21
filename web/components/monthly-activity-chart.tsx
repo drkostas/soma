@@ -21,6 +21,11 @@ const SPORT_COLORS: Record<string, string> = {
   Hiking: "#4ade80",
   "E-Bike": "#facc15",
   Swimming: "#60a5fa",
+  Walking: "#34d399",
+  Cycling: "#fbbf24",
+  Cardio: "#f87171",
+  SUP: "#38bdf8",
+  Other: "#a78bfa",
 };
 
 export function MonthlyActivityChart({
