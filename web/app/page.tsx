@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { WorkoutFrequencyChart } from "@/components/workout-frequency-chart";
 import { ClickableRecentActivity } from "@/components/clickable-recent-activity";
+import { StepsTrendChart } from "@/components/steps-trend-chart";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -226,6 +227,19 @@ async function getTrainingStreak() {
   return streak;
 }
 
+async function getStepsTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      total_steps as steps
+    FROM daily_health_summary
+    WHERE total_steps > 0
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getLastWorkoutDetail() {
   const sql = getDb();
   const rows = await sql`
@@ -311,7 +325,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -323,6 +337,7 @@ export default async function Home() {
       getLastWorkoutDetail(),
       getWeeklyTrainingSummary(),
       getTrainingStreak(),
+      getStepsTrend(),
     ]);
 
   // Merge duplicate activity types
@@ -481,6 +496,31 @@ export default async function Home() {
           })()}
         </CardContent>
       </Card>
+
+      {/* Steps Trend */}
+      {(stepsTrend as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Footprints className="h-4 w-4" />
+              Daily Steps
+              {weekly?.avg_steps && (
+                <span className="ml-auto text-xs font-normal">
+                  7-day avg: {Number(weekly.avg_steps).toLocaleString()}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StepsTrendChart
+              data={(stepsTrend as any[]).map((s: any) => ({
+                date: s.date,
+                steps: Number(s.steps),
+              }))}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Middle Row: Activity Breakdown + Gym Frequency + Last Workout */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

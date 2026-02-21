@@ -503,48 +503,127 @@ export default async function WorkoutsPage() {
         </Card>
       </div>
 
-      {/* Training Calendar Heatmap */}
+      {/* Training Calendar Heatmap — GitHub-style grid */}
       <Card className="mt-6 mb-6">
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            Training Calendar (Last 90 Days)
+            Training Calendar (Last 13 Weeks)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-1">
-            {(() => {
-              const today = new Date();
-              const days: { date: string; trained: boolean; program: string | null }[] = [];
-              for (let i = 89; i >= 0; i--) {
-                const d = new Date(today);
-                d.setDate(d.getDate() - i);
-                const dateStr = d.toISOString().split("T")[0];
-                const match = calendar.find((c: any) => String(c.day) === dateStr);
-                days.push({
-                  date: dateStr,
-                  trained: !!match,
-                  program: match ? (match as any).program : null,
-                });
+          {(() => {
+            const today = new Date();
+            // Build 13 weeks (91 days) aligned to week boundaries
+            const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+            // Find the Monday 13 weeks ago
+            const currentDay = today.getDay(); // 0=Sun
+            const daysToMon = currentDay === 0 ? 6 : currentDay - 1;
+            const thisMon = new Date(today);
+            thisMon.setDate(thisMon.getDate() - daysToMon);
+            const startMon = new Date(thisMon);
+            startMon.setDate(startMon.getDate() - 12 * 7);
+
+            // Build calendarSet for O(1) lookup
+            const calSet = new Map<string, string>();
+            for (const c of calendar as any[]) {
+              calSet.set(String(c.day), c.program);
+            }
+
+            // Build weeks array
+            const weeks: { date: string; trained: boolean; program: string | null }[][] = [];
+            const d = new Date(startMon);
+            while (d <= today) {
+              const weekIdx = Math.floor(
+                (d.getTime() - startMon.getTime()) / (7 * 24 * 60 * 60 * 1000)
+              );
+              if (!weeks[weekIdx]) weeks[weekIdx] = [];
+              const dateStr = d.toISOString().split("T")[0];
+              const dayOfWeek = d.getDay() === 0 ? 6 : d.getDay() - 1; // Mon=0
+              weeks[weekIdx][dayOfWeek] = {
+                date: dateStr,
+                trained: calSet.has(dateStr),
+                program: calSet.get(dateStr) || null,
+              };
+              d.setDate(d.getDate() + 1);
+            }
+
+            // Month labels
+            const monthLabels: { label: string; colStart: number }[] = [];
+            let lastMonth = "";
+            for (let w = 0; w < weeks.length; w++) {
+              const firstDay = weeks[w]?.find(Boolean);
+              if (firstDay) {
+                const m = new Date(firstDay.date).toLocaleDateString("en-US", { month: "short" });
+                if (m !== lastMonth) {
+                  monthLabels.push({ label: m, colStart: w });
+                  lastMonth = m;
+                }
               }
-              return days.map((d) => (
-                <div
-                  key={d.date}
-                  className={`w-3 h-3 rounded-sm ${
-                    d.trained
-                      ? "bg-primary"
-                      : "bg-muted"
-                  }`}
-                  title={`${d.date}${d.program ? `: ${d.program}` : ""}`}
-                />
-              ));
-            })()}
-          </div>
+            }
+
+            return (
+              <div className="overflow-x-auto">
+                {/* Month labels */}
+                <div className="flex ml-8 mb-1">
+                  {monthLabels.map((ml, i) => {
+                    const nextCol = i < monthLabels.length - 1 ? monthLabels[i + 1].colStart : weeks.length;
+                    const span = nextCol - ml.colStart;
+                    return (
+                      <div
+                        key={`${ml.label}-${ml.colStart}`}
+                        className="text-xs text-muted-foreground"
+                        style={{ width: `${span * 16}px` }}
+                      >
+                        {ml.label}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Grid: rows = days of week, columns = weeks */}
+                <div className="flex gap-0">
+                  {/* Day labels */}
+                  <div className="flex flex-col gap-[2px] mr-1">
+                    {dayLabels.map((label, i) => (
+                      <div key={label} className="h-[14px] flex items-center">
+                        {i % 2 === 0 ? (
+                          <span className="text-[9px] text-muted-foreground w-6 text-right">{label}</span>
+                        ) : (
+                          <span className="w-6" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Week columns */}
+                  {weeks.map((week, wi) => (
+                    <div key={wi} className="flex flex-col gap-[2px]">
+                      {Array.from({ length: 7 }, (_, di) => {
+                        const cell = week?.[di];
+                        if (!cell) return <div key={di} className="w-[14px] h-[14px]" />;
+                        return (
+                          <div
+                            key={di}
+                            className={`w-[14px] h-[14px] rounded-sm ${
+                              cell.trained
+                                ? "bg-primary hover:bg-primary/80"
+                                : "bg-muted/50 hover:bg-muted"
+                            }`}
+                            title={`${cell.date}${cell.program ? `: ${cell.program}` : ""}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm bg-primary" /> Trained
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-muted" /> Rest
+              <span className="w-3 h-3 rounded-sm bg-muted/50" /> Rest
             </span>
             <span className="ml-auto">
               {calendar.length} sessions in 90 days
