@@ -519,28 +519,47 @@ export default async function WorkoutsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end gap-[2px] h-24">
-              {(weeklyFreq as any[]).slice(-52).map((w: any, i: number) => {
-                const count = Number(w.workouts);
-                const maxW = Math.max(...(weeklyFreq as any[]).slice(-52).map((x: any) => Number(x.workouts)));
-                const pct = maxW > 0 ? (count / maxW) * 100 : 0;
-                const weekDate = new Date(w.week);
-                const label = weekDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                const color = count >= 4 ? "bg-green-500" :
-                  count >= 3 ? "bg-green-400/80" :
-                  count >= 2 ? "bg-primary/60" :
-                  count >= 1 ? "bg-primary/30" : "bg-muted/30";
-                return (
-                  <div key={i} className="flex-1 flex items-end justify-center" style={{ height: "80px" }}>
-                    <div
-                      className={`w-full rounded-t-sm ${color}`}
-                      style={{ height: `${Math.max(pct, count > 0 ? 6 : 0)}%` }}
-                      title={`${label}: ${count} workouts · ${w.avg_duration}m avg`}
-                    />
+            {(() => {
+              const weeks = (weeklyFreq as any[]).slice(-52);
+              const maxW = Math.max(...weeks.map((x: any) => Number(x.workouts)));
+              return (
+                <>
+                  <div className="flex items-end gap-[2px] h-24">
+                    {weeks.map((w: any, i: number) => {
+                      const count = Number(w.workouts);
+                      const pct = maxW > 0 ? (count / maxW) * 100 : 0;
+                      const weekDate = new Date(w.week);
+                      const label = weekDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                      const color = count >= 4 ? "bg-green-500" :
+                        count >= 3 ? "bg-green-400/80" :
+                        count >= 2 ? "bg-primary/60" :
+                        count >= 1 ? "bg-primary/30" : "bg-muted/30";
+                      return (
+                        <div key={i} className="flex-1 flex items-end justify-center" style={{ height: "80px" }}>
+                          <div
+                            className={`w-full rounded-t-sm ${color}`}
+                            style={{ height: `${Math.max(pct, count > 0 ? 6 : 0)}%` }}
+                            title={`${label}: ${count} workouts · ${w.avg_duration}m avg`}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                  <div className="flex gap-[2px] mt-1">
+                    {weeks.map((w: any, i: number) => {
+                      const d = new Date(w.week);
+                      const prev = i > 0 ? new Date(weeks[i - 1].week) : null;
+                      const isNewMonth = !prev || d.getMonth() !== prev.getMonth();
+                      return (
+                        <div key={i} className="flex-1 text-[9px] text-muted-foreground overflow-hidden">
+                          {isNewMonth ? d.toLocaleDateString("en-US", { month: "short" }) : ""}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
             <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground justify-center">
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary/30" /> 1</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary/60" /> 2</span>
