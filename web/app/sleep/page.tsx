@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { StatCard } from "@/components/stat-card";
 import { SleepStagesChart } from "@/components/sleep-chart";
 import { SleepScoreChart } from "@/components/sleep-score-chart";
@@ -495,27 +496,13 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
 
       {/* Charts Row 1: Sleep Stages + Score */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Sleep Stages
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SleepStagesChart data={sleepTrend as any} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Sleep Stages">
+          <SleepStagesChart data={sleepTrend as any} />
+        </ExpandableChartCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Sleep Score Trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SleepScoreChart data={scores as any} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Sleep Score Trend">
+          <SleepScoreChart data={scores as any} />
+        </ExpandableChartCard>
       </div>
 
       {/* Sleep Schedule */}
@@ -664,41 +651,25 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
 
       {/* Charts Row 2: RHR + Body Battery */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <HeartPulse className="h-4 w-4 text-red-400" />
-              Resting Heart Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RHRChart data={rhrTrend as any} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Resting Heart Rate" icon={<HeartPulse className="h-4 w-4 text-red-400" />}>
+          <RHRChart data={rhrTrend as any} />
+        </ExpandableChartCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BatteryCharging className="h-4 w-4 text-green-400" />
-              Body Battery
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {bodyBattery.length > 0 ? (
-              <BodyBatteryChart
-                data={(bodyBattery as any[]).map((bb: any) => ({
-                  date: bb.date,
-                  charged: Number(bb.charged),
-                  drained: Number(bb.drained),
-                }))}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
-                No body battery data
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Body Battery" icon={<BatteryCharging className="h-4 w-4 text-green-400" />}>
+          {bodyBattery.length > 0 ? (
+            <BodyBatteryChart
+              data={(bodyBattery as any[]).map((bb: any) => ({
+                date: bb.date,
+                charged: Number(bb.charged),
+                drained: Number(bb.drained),
+              }))}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+              No body battery data
+            </div>
+          )}
+        </ExpandableChartCard>
       </div>
 
       {/* Stress Trend */}

@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { StatCard } from "@/components/stat-card";
 import { PaceChart } from "@/components/pace-chart";
 import { MileageChart } from "@/components/mileage-chart";
@@ -848,27 +849,13 @@ export default async function RunningPage({
 
       {/* Charts Row 1: Pace + Monthly Mileage */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pace Progression
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PaceChart data={paceHistory as any} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Pace Progression">
+          <PaceChart data={paceHistory as any} />
+        </ExpandableChartCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Monthly Mileage
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MileageChart data={mileage as any} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Monthly Mileage">
+          <MileageChart data={mileage as any} />
+        </ExpandableChartCard>
       </div>
 
       {/* Year-over-Year Monthly Mileage */}
@@ -925,27 +912,13 @@ export default async function RunningPage({
 
       {/* Charts Row 2: VO2max + HR Zones */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              VO2max Trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <VO2MaxChart data={vo2max as any} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="VO2max Trend">
+          <VO2MaxChart data={vo2max as any} />
+        </ExpandableChartCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              HR Zones (Latest Run)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <HRZoneChart zones={hrZones as any} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="HR Zones (Latest Run)">
+          <HRZoneChart zones={hrZones as any} />
+        </ExpandableChartCard>
       </div>
 
       {/* HR vs Pace Scatter */}
@@ -1108,22 +1081,15 @@ export default async function RunningPage({
 
       {/* Cadence & Stride + Training Effect */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Cadence & Stride Length
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CadenceStrideChart
-              data={(cadenceStride as any[]).map((c: any) => ({
-                date: c.date,
-                cadence: Number(c.cadence),
-                stride: Number(c.stride),
-              }))}
-            />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Cadence & Stride Length">
+          <CadenceStrideChart
+            data={(cadenceStride as any[]).map((c: any) => ({
+              date: c.date,
+              cadence: Number(c.cadence),
+              stride: Number(c.stride),
+            }))}
+          />
+        </ExpandableChartCard>
 
         <Card>
           <CardHeader>
