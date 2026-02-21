@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { WeightChart } from "@/components/weight-chart";
 import { getDb } from "@/lib/db";
+import { WorkoutFrequencyChart } from "@/components/workout-frequency-chart";
 import {
   Footprints,
   Flame,
@@ -12,7 +13,7 @@ import {
   BatteryCharging,
   Activity,
   Dumbbell,
-  Database,
+
   TrendingDown,
   TrendingUp,
   Minus,
@@ -107,17 +108,57 @@ async function getWorkoutStats() {
   };
 }
 
-async function getDataCoverage() {
+async function getMonthlyFrequency() {
   const sql = getDb();
-  const garmin = await sql`SELECT COUNT(*) as count FROM garmin_raw_data`;
-  const hevy = await sql`SELECT COUNT(*) as count FROM hevy_raw_data`;
-  const activities = await sql`SELECT COUNT(DISTINCT activity_id) as count FROM garmin_activity_raw`;
-  const profile = await sql`SELECT COUNT(*) as count FROM garmin_profile_raw`;
+  const rows = await sql`
+    SELECT
+      TO_CHAR((raw_json->>'start_time')::timestamp, 'YYYY-MM') as month,
+      COUNT(*) as workouts
+    FROM hevy_raw_data
+    WHERE endpoint_name = 'workout'
+    GROUP BY month
+    ORDER BY month ASC
+  `;
+  return rows;
+}
+
+async function getLastWorkoutDetail() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      raw_json->>'title' as title,
+      raw_json->>'start_time' as start_time,
+      raw_json->>'end_time' as end_time,
+      raw_json->'exercises' as exercises
+    FROM hevy_raw_data
+    WHERE endpoint_name = 'workout'
+    ORDER BY raw_json->>'start_time' DESC
+    LIMIT 1
+  `;
+  if (!rows[0]) return null;
+  const w = rows[0];
+  const exercises = typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises;
+  const exerciseNames = exercises.map((e: any) => e.title);
+  let totalSets = 0;
+  let totalVolume = 0;
+  for (const ex of exercises) {
+    for (const s of ex.sets) {
+      if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
+        totalSets++;
+        totalVolume += s.weight_kg * s.reps;
+      }
+    }
+  }
+  const durationMin = Math.round(
+    (new Date(w.end_time).getTime() - new Date(w.start_time).getTime()) / 60000
+  );
   return {
-    garmin_records: garmin[0]?.count ?? 0,
-    hevy_records: hevy[0]?.count ?? 0,
-    activities: activities[0]?.count ?? 0,
-    profile: profile[0]?.count ?? 0,
+    title: w.title,
+    date: w.start_time,
+    exercises: exerciseNames,
+    totalSets,
+    totalVolume: Math.round(totalVolume),
+    durationMin,
   };
 }
 
@@ -129,7 +170,7 @@ function TrendIcon({ value }: { value: number | null }) {
 }
 
 export default async function Home() {
-  const [health, weekly, weightHistory, latestWeight, weightDelta, workouts, coverage] =
+  const [health, weekly, weightHistory, latestWeight, weightDelta, workouts, monthlyFreq, lastWorkout] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -137,14 +178,9 @@ export default async function Home() {
       getLatestWeight(),
       getWeightDelta(),
       getWorkoutStats(),
-      getDataCoverage(),
+      getMonthlyFrequency(),
+      getLastWorkoutDetail(),
     ]);
-
-  const totalRecords =
-    Number(coverage.garmin_records) +
-    Number(coverage.hevy_records) +
-    Number(coverage.activities) +
-    Number(coverage.profile);
 
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
@@ -279,57 +315,63 @@ export default async function Home() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Strength Training
+              Workout Frequency
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
+          <CardContent>
+            <div className="flex items-center gap-2 mb-3">
               <Dumbbell className="h-5 w-5 text-primary" />
               <span className="text-2xl font-bold">{Number(workouts.total)}</span>
-              <span className="text-sm text-muted-foreground">total workouts</span>
+              <span className="text-sm text-muted-foreground">workouts</span>
+              <span className="text-xs text-muted-foreground ml-auto">
+                {Number(workouts.count_7d)} this week
+              </span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">This week</span>
-              <span className="font-medium">{Number(workouts.count_7d)}</span>
-            </div>
-            {workouts.last && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Last workout</span>
-                <span className="font-medium">
-                  {new Date(workouts.last).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-              </div>
-            )}
+            <WorkoutFrequencyChart data={monthlyFreq as any} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Data Coverage
+              Last Workout
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Database className="h-5 w-5 text-primary" />
-              <span className="text-2xl font-bold">{totalRecords.toLocaleString()}</span>
-              <span className="text-sm text-muted-foreground">records</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Garmin daily</span>
-              <span className="font-medium">{Number(coverage.garmin_records).toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Hevy</span>
-              <span className="font-medium">{Number(coverage.hevy_records).toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Activities</span>
-              <span className="font-medium">{Number(coverage.activities)}</span>
-            </div>
+            {lastWorkout ? (
+              <>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold">{lastWorkout.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(lastWorkout.date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
+                  <span>{lastWorkout.durationMin}m</span>
+                  <span>{lastWorkout.exercises.length} exercises</span>
+                  <span>{lastWorkout.totalSets} sets</span>
+                  <span>{lastWorkout.totalVolume.toLocaleString()} kg</span>
+                </div>
+                <div className="space-y-1">
+                  {lastWorkout.exercises.slice(0, 5).map((name: string, i: number) => (
+                    <div key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-primary shrink-0" />
+                      {name}
+                    </div>
+                  ))}
+                  {lastWorkout.exercises.length > 5 && (
+                    <div className="text-xs text-muted-foreground/50">
+                      +{lastWorkout.exercises.length - 5} more
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No workouts yet</p>
+            )}
           </CardContent>
         </Card>
       </div>
