@@ -79,8 +79,8 @@ export function ExerciseProgressChart({ data }: { data: ProgressEntry[] }) {
           tickFormatter={(v) => `${v}kg`}
         />
         <Tooltip
-          formatter={(value: number, name: string) => [
-            `${value.toFixed(1)} kg`,
+          formatter={(value: any, name: any) => [
+            typeof value === "number" ? `${value.toFixed(1)} kg` : "—",
             SHORT_NAMES[name] || name,
           ]}
           labelFormatter={(label) => new Date(label).toLocaleDateString()}
