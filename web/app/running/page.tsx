@@ -38,7 +38,7 @@ function formatPace(mins: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-async function getRunningStats(rangeDays: number) {
+async function getRunningStats(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -51,12 +51,12 @@ async function getRunningStats(rangeDays: number) {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
   `;
   return rows[0] || null;
 }
 
-async function getPaceHistory(rangeDays: number) {
+async function getPaceHistory(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -67,13 +67,13 @@ async function getPaceHistory(rangeDays: number) {
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND (raw_json->>'distance')::float > 1000
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
   return rows;
 }
 
-async function getMonthlyMileage(rangeDays: number) {
+async function getMonthlyMileage(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -83,13 +83,13 @@ async function getMonthlyMileage(rangeDays: number) {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY month ORDER BY month ASC
   `;
   return rows;
 }
 
-async function getVO2MaxTrend(rangeDays: number) {
+async function getVO2MaxTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT DISTINCT ON (LEFT((raw_json->>'startTimeLocal')::text, 10))
@@ -99,7 +99,7 @@ async function getVO2MaxTrend(rangeDays: number) {
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'vO2MaxValue' IS NOT NULL
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY LEFT((raw_json->>'startTimeLocal')::text, 10),
              (raw_json->>'startTimeLocal')::text DESC
   `;
@@ -138,7 +138,7 @@ async function getLatestHRZones() {
   }));
 }
 
-async function getHRPaceData(rangeDays: number) {
+async function getHRPaceData(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -153,14 +153,13 @@ async function getHRPaceData(rangeDays: number) {
       AND (raw_json->>'distance')::float > 1000
       AND (raw_json->>'averageHR')::float > 60
       AND (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 BETWEEN 3.0 AND 10.0
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
   return rows;
 }
 
-async function getWeeklyDistance(rangeDays: number) {
-  const weekDays = Math.min(rangeDays, 365);
+async function getWeeklyDistance(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -170,13 +169,13 @@ async function getWeeklyDistance(rangeDays: number) {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${weekDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY week ORDER BY week ASC
   `;
   return rows;
 }
 
-async function getCadenceStride(rangeDays: number) {
+async function getCadenceStride(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -189,13 +188,13 @@ async function getCadenceStride(rangeDays: number) {
       AND raw_json->>'averageRunningCadenceInStepsPerMinute' IS NOT NULL
       AND (raw_json->>'averageRunningCadenceInStepsPerMinute')::float >= 120
       AND (raw_json->>'distance')::float > 1000
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
   return rows;
 }
 
-async function getTrainingEffects(rangeDays: number) {
+async function getTrainingEffects(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -208,7 +207,7 @@ async function getTrainingEffects(rangeDays: number) {
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'aerobicTrainingEffect' IS NOT NULL
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
   return rows;
@@ -293,7 +292,7 @@ async function getTrainingStatus() {
   return rows[0] || null;
 }
 
-async function getTrainingLoadTrend(rangeDays: number) {
+async function getTrainingLoadTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -310,7 +309,7 @@ async function getTrainingLoadTrend(rangeDays: number) {
     FROM garmin_raw_data
     WHERE endpoint_name = 'training_status'
       AND raw_json->'mostRecentTrainingStatus' IS NOT NULL
-      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
   return rows;
@@ -438,7 +437,7 @@ async function getYearlyRunningStats() {
   return rows;
 }
 
-async function getPaceDistribution(rangeDays: number) {
+async function getPaceDistribution(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH paces AS (
@@ -448,7 +447,7 @@ async function getPaceDistribution(rangeDays: number) {
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
         AND (raw_json->>'distance')::float > 1000
-        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     )
     SELECT
       CASE
@@ -481,7 +480,7 @@ async function getPaceDistribution(rangeDays: number) {
   return rows;
 }
 
-async function getDistanceDistribution(rangeDays: number) {
+async function getDistanceDistribution(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH distances AS (
@@ -490,7 +489,7 @@ async function getDistanceDistribution(rangeDays: number) {
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     )
     SELECT
       CASE
@@ -517,7 +516,7 @@ async function getDistanceDistribution(rangeDays: number) {
   return rows;
 }
 
-async function getOverallHRDistribution(rangeDays: number) {
+async function getOverallHRDistribution(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -543,14 +542,14 @@ async function getOverallHRDistribution(rangeDays: number) {
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'averageHR' IS NOT NULL
       AND (raw_json->>'distance')::float > 1000
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY zone, sort_order
     ORDER BY sort_order ASC
   `;
   return rows;
 }
 
-async function getMonthlyElevation(rangeDays: number) {
+async function getMonthlyElevation(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -563,14 +562,14 @@ async function getMonthlyElevation(rangeDays: number) {
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'elevationGain' IS NOT NULL
       AND (raw_json->>'elevationGain')::float > 0
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY month
     ORDER BY month ASC
   `;
   return rows;
 }
 
-async function getRunningConsistency(rangeDays: number) {
+async function getRunningConsistency(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH weeks AS (
@@ -580,7 +579,7 @@ async function getRunningConsistency(rangeDays: number) {
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
       GROUP BY week
       ORDER BY week ASC
     )
@@ -598,7 +597,7 @@ async function getRunningConsistency(rangeDays: number) {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY run_date ASC
   `;
   let maxGap = 0;
@@ -607,7 +606,7 @@ async function getRunningConsistency(rangeDays: number) {
     if (gap > maxGap) maxGap = gap;
   }
   const r = rows[0] || {};
-  const totalWeeks = Math.round(rangeDays / 7);
+  const totalWeeks = Math.round((Date.now() - new Date(cutoff).getTime()) / (7 * 86400000));
   return {
     weeks_with_runs: Number(r.weeks_with_runs || 0),
     avg_runs_per_week: Number(r.avg_runs_per_week || 0),
@@ -618,7 +617,7 @@ async function getRunningConsistency(rangeDays: number) {
   };
 }
 
-async function getRecentRuns(rangeDays: number) {
+async function getRecentRuns(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -637,7 +636,7 @@ async function getRecentRuns(rangeDays: number) {
     LEFT JOIN garmin_activity_raw w ON w.activity_id = s.activity_id AND w.endpoint_name = 'weather'
     WHERE s.endpoint_name = 'summary'
       AND s.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (s.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (s.raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (s.raw_json->>'startTimeLocal')::text DESC
     LIMIT 20
   `;
@@ -679,7 +678,7 @@ async function getShoeMileage() {
   return rows;
 }
 
-async function getSplitAnalysis(rangeDays: number) {
+async function getSplitAnalysis(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH recent_activities AS (
@@ -687,7 +686,7 @@ async function getSplitAnalysis(rangeDays: number) {
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ),
     split_data AS (
       SELECT
@@ -723,7 +722,7 @@ async function getSplitAnalysis(rangeDays: number) {
   return rows;
 }
 
-async function getBestSplits(rangeDays: number) {
+async function getBestSplits(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH recent_activities AS (
@@ -731,7 +730,7 @@ async function getBestSplits(rangeDays: number) {
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ),
     split_data AS (
       SELECT
@@ -777,32 +776,33 @@ export default async function RunningPage({
 }) {
   const { range: rangeParam } = await searchParams;
   const rangeDays = rangeToDays(rangeParam);
+  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
 
   const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution, shoeMileage, splitAnalysis, bestSplits, trainingLoadTrend] =
     await Promise.all([
-      getRunningStats(rangeDays),
-      getPaceHistory(rangeDays),
-      getMonthlyMileage(rangeDays),
-      getVO2MaxTrend(rangeDays),
+      getRunningStats(cutoff),
+      getPaceHistory(cutoff),
+      getMonthlyMileage(cutoff),
+      getVO2MaxTrend(cutoff),
       getLatestHRZones(),
-      getHRPaceData(rangeDays),
-      getWeeklyDistance(rangeDays),
-      getCadenceStride(rangeDays),
-      getTrainingEffects(rangeDays),
+      getHRPaceData(cutoff),
+      getWeeklyDistance(cutoff),
+      getCadenceStride(cutoff),
+      getTrainingEffects(cutoff),
       getPersonalRecords(),
-      getRecentRuns(rangeDays),
+      getRecentRuns(cutoff),
       getFitnessScores(),
       getTrainingStatus(),
-      getPaceDistribution(rangeDays),
-      getDistanceDistribution(rangeDays),
+      getPaceDistribution(cutoff),
+      getDistanceDistribution(cutoff),
       getYearlyRunningStats(),
-      getMonthlyElevation(rangeDays),
-      getRunningConsistency(rangeDays),
-      getOverallHRDistribution(rangeDays),
+      getMonthlyElevation(cutoff),
+      getRunningConsistency(cutoff),
+      getOverallHRDistribution(cutoff),
       getShoeMileage(),
-      getSplitAnalysis(rangeDays),
-      getBestSplits(rangeDays),
-      getTrainingLoadTrend(rangeDays),
+      getSplitAnalysis(cutoff),
+      getBestSplits(cutoff),
+      getTrainingLoadTrend(cutoff),
     ]);
 
   return (

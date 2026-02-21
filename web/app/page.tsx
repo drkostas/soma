@@ -87,7 +87,7 @@ async function getWorkoutStats() {
   };
 }
 
-async function getGymFrequency(rangeDays: number) {
+async function getGymFrequency(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -95,14 +95,14 @@ async function getGymFrequency(rangeDays: number) {
       COUNT(*) as workouts
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
-      AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
     GROUP BY month
     ORDER BY month ASC
   `;
   return rows;
 }
 
-async function getRunningStats(rangeDays: number) {
+async function getRunningStats(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -112,12 +112,12 @@ async function getRunningStats(rangeDays: number) {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
   `;
   return rows[0] || null;
 }
 
-async function getActivityCounts(rangeDays: number) {
+async function getActivityCounts(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -125,14 +125,14 @@ async function getActivityCounts(rangeDays: number) {
       COUNT(*) as cnt
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY type_key
     ORDER BY cnt DESC
   `;
   return rows;
 }
 
-async function getRecentActivities(rangeDays: number) {
+async function getRecentActivities(cutoff: string) {
   const sql = getDb();
   // Get recent Garmin activities (dedup by startTime+name, keep highest-calorie entry)
   const garminRows = await sql`
@@ -147,7 +147,7 @@ async function getRecentActivities(rangeDays: number) {
         (raw_json->>'calories')::float as calories
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
-        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
       ORDER BY (raw_json->>'startTimeLocal'), raw_json->>'activityName', (raw_json->>'calories')::float DESC
     ) deduped
     ORDER BY date DESC
@@ -248,7 +248,7 @@ async function getTrainingStreak() {
   return streak;
 }
 
-async function getStepsTrend(rangeDays: number) {
+async function getStepsTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -256,13 +256,13 @@ async function getStepsTrend(rangeDays: number) {
       total_steps as steps
     FROM daily_health_summary
     WHERE total_steps > 0
-      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getCalorieTrend(rangeDays: number) {
+async function getCalorieTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -271,7 +271,7 @@ async function getCalorieTrend(rangeDays: number) {
       bmr_kilocalories as bmr
     FROM daily_health_summary
     WHERE active_kilocalories > 0
-      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
   return rows;
@@ -313,7 +313,7 @@ async function getIntensityMinutes() {
   return rows[0] || null;
 }
 
-async function getWeightTrend(rangeDays: number) {
+async function getWeightTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -323,13 +323,13 @@ async function getWeightTrend(rangeDays: number) {
     FROM garmin_raw_data
     WHERE endpoint_name = 'body_composition'
       AND raw_json->'totalAverage'->>'weight' IS NOT NULL
-      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getTrainingByDayOfWeek(rangeDays: number) {
+async function getTrainingByDayOfWeek(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -337,7 +337,7 @@ async function getTrainingByDayOfWeek(rangeDays: number) {
       COUNT(*) as count
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY dow
     ORDER BY dow ASC
   `;
@@ -401,7 +401,7 @@ async function getLatestSleep() {
   return rows[0] || null;
 }
 
-async function getStressTrend(rangeDays: number) {
+async function getStressTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -410,13 +410,13 @@ async function getStressTrend(rangeDays: number) {
       max_stress_level as max_stress
     FROM daily_health_summary
     WHERE avg_stress_level > 0
-      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getRestingHRTrend(rangeDays: number) {
+async function getRestingHRTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -424,14 +424,13 @@ async function getRestingHRTrend(rangeDays: number) {
       resting_heart_rate as rhr
     FROM daily_health_summary
     WHERE resting_heart_rate > 0
-      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getFloorsTrend(rangeDays: number) {
-  const floorsDays = Math.min(rangeDays, 90);
+async function getFloorsTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -446,7 +445,7 @@ async function getFloorsTrend(rangeDays: number) {
       ) as floors_down
     FROM garmin_raw_data
     WHERE endpoint_name = 'floors'
-      AND date >= CURRENT_DATE - make_interval(days => ${floorsDays})
+      AND date >= ${cutoff}
       AND (
         SELECT COALESCE(SUM((elem->2)::float), 0)
         FROM jsonb_array_elements(raw_json->'floorValuesArray') as elem
@@ -456,7 +455,7 @@ async function getFloorsTrend(rangeDays: number) {
   return rows;
 }
 
-async function getTrainingTimeOfDay(rangeDays: number) {
+async function getTrainingTimeOfDay(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -464,15 +463,14 @@ async function getTrainingTimeOfDay(rangeDays: number) {
       COUNT(*) as count
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY hour
     ORDER BY hour ASC
   `;
   return rows;
 }
 
-async function getActivityHeatmap(rangeDays: number) {
-  const heatmapDays = Math.min(rangeDays, 365);
+async function getActivityHeatmap(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -486,7 +484,7 @@ async function getActivityHeatmap(rangeDays: number) {
       )) as activities
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${heatmapDays})
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY date
     ORDER BY date ASC
   `;
@@ -648,32 +646,35 @@ export default async function HomePage({
 }) {
   const { range: rangeParam } = await searchParams;
   const rangeDays = rangeToDays(rangeParam);
+  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  const floorsCutoff = new Date(Date.now() - Math.min(rangeDays, 90) * 86400000).toISOString().split("T")[0];
+  const heatmapCutoff = new Date(Date.now() - Math.min(rangeDays, 365) * 86400000).toISOString().split("T")[0];
 
   const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep, recovery, rhrTrend, stressTrend, floorsTrend] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
       getWorkoutStats(),
-      getGymFrequency(rangeDays),
-      getRunningStats(rangeDays),
-      getActivityCounts(rangeDays),
-      getRecentActivities(rangeDays),
+      getGymFrequency(cutoff),
+      getRunningStats(cutoff),
+      getActivityCounts(cutoff),
+      getRecentActivities(cutoff),
       getLastWorkoutDetail(),
       getWeeklyTrainingSummary(),
       getTrainingStreak(),
-      getStepsTrend(rangeDays),
+      getStepsTrend(cutoff),
       getFitnessAge(),
       getIntensityMinutes(),
-      getWeightTrend(rangeDays),
-      getCalorieTrend(rangeDays),
-      getActivityHeatmap(rangeDays),
-      getTrainingByDayOfWeek(rangeDays),
-      getTrainingTimeOfDay(rangeDays),
+      getWeightTrend(cutoff),
+      getCalorieTrend(cutoff),
+      getActivityHeatmap(heatmapCutoff),
+      getTrainingByDayOfWeek(cutoff),
+      getTrainingTimeOfDay(cutoff),
       getLatestSleep(),
       getRecoverySummary(),
-      getRestingHRTrend(rangeDays),
-      getStressTrend(rangeDays),
-      getFloorsTrend(rangeDays),
+      getRestingHRTrend(cutoff),
+      getStressTrend(cutoff),
+      getFloorsTrend(floorsCutoff),
     ]);
 
   // Merge duplicate activity types
