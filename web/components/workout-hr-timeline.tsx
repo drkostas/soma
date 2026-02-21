@@ -47,6 +47,9 @@ const EXERCISE_COLORS = [
 
 function formatCategory(cat: string | null): string {
   if (!cat) return "Unknown";
+  // If already mixed case (e.g. Hevy exercise titles), return as-is
+  if (cat !== cat.toUpperCase() && cat !== cat.toLowerCase()) return cat;
+  // Convert UPPER_SNAKE_CASE or lower_snake_case to Title Case
   return cat
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -76,7 +79,7 @@ function buildExerciseColorMap(sets: ExerciseSet[]): Map<string, string> {
   const map = new Map<string, string>();
   let colorIdx = 0;
   for (const s of sets) {
-    if (s.set_type === "ACTIVE" && s.exercise && !map.has(s.exercise)) {
+    if ((s.set_type === "ACTIVE" || s.set_type === "WARMUP") && s.exercise && !map.has(s.exercise)) {
       map.set(s.exercise, EXERCISE_COLORS[colorIdx % EXERCISE_COLORS.length]);
       colorIdx++;
     }
@@ -95,13 +98,14 @@ function TimelineTooltip({ active, payload, exerciseSets, exerciseColorMap }: an
   // Find which exercise set this point falls in
   let exerciseLabel = "";
   if (exerciseSets) {
-    const activeSets = exerciseSets.filter((s: ExerciseSet) => s.set_type === "ACTIVE");
+    const workingSets = exerciseSets.filter((s: ExerciseSet) => s.set_type === "ACTIVE" || s.set_type === "WARMUP");
     let setCount: Record<string, number> = {};
-    for (const s of activeSets) {
+    for (const s of workingSets) {
       const name = s.exercise || "Unknown";
       setCount[name] = (setCount[name] || 0) + 1;
       if (elapsedSec >= s.start_sec && elapsedSec <= s.start_sec + s.duration_sec) {
-        exerciseLabel = `${formatCategory(s.exercise)} - Set ${setCount[name]}`;
+        const prefix = s.set_type === "WARMUP" ? "Warmup" : `Set ${setCount[name]}`;
+        exerciseLabel = `${formatCategory(s.exercise)} - ${prefix}`;
         break;
       }
     }
@@ -129,7 +133,7 @@ function HrTimelineChart({ hrTimeline, exerciseSets }: WorkoutHrTimelineProps) {
   );
 
   const activeSets = useMemo(
-    () => (exerciseSets || []).filter((s) => s.set_type === "ACTIVE"),
+    () => (exerciseSets || []).filter((s) => s.set_type === "ACTIVE" || s.set_type === "WARMUP"),
     [exerciseSets]
   );
 
@@ -277,10 +281,10 @@ function HrPerSetChart({ hrTimeline, exerciseSets }: WorkoutHrTimelineProps) {
 
   const barData: SetBarData[] = useMemo(() => {
     if (!exerciseSets) return [];
-    const activeSets = exerciseSets.filter((s) => s.set_type === "ACTIVE");
+    const workingSets = exerciseSets.filter((s) => s.set_type === "ACTIVE" || s.set_type === "WARMUP");
     const setCountByExercise: Record<string, number> = {};
 
-    return activeSets.map((s) => {
+    return workingSets.map((s) => {
       const name = s.exercise || "Unknown";
       setCountByExercise[name] = (setCountByExercise[name] || 0) + 1;
       const setNum = setCountByExercise[name];
