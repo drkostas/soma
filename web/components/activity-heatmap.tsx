@@ -19,6 +19,7 @@ const TYPE_COLORS: Record<string, string> = {
   e_bike_fitness: "bg-yellow-500",
   lap_swimming: "bg-blue-500",
   indoor_cardio: "bg-red-400",
+  treadmill_running: "bg-green-500",
 };
 
 function getColor(types: string[]): string {

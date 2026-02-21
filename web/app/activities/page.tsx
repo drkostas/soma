@@ -78,7 +78,7 @@ async function getActivitySummary() {
       SUM(COALESCE((raw_json->>'elevationGain')::float, 0)) as total_elev
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'strength_training')
+      AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training')
     GROUP BY type_key
     ORDER BY count DESC
   `;
@@ -133,7 +133,7 @@ async function getMonthlyDistribution() {
       COUNT(*) as count
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'strength_training')
+      AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training')
     GROUP BY month, type_key
     ORDER BY month ASC
   `;
@@ -156,7 +156,7 @@ async function getAllActivities() {
       (raw_json->>'maxSpeed')::float as max_speed
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'strength_training')
+      AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training')
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
   return rows;

@@ -399,30 +399,48 @@ export default async function WorkoutsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {muscleGroups.map((mg: any) => {
-                const maxVol = Number(muscleGroups[0]?.total_volume || 1);
-                const vol = Number(mg.total_volume);
-                const pct = (vol / maxVol) * 100;
-                return (
-                  <div key={mg.muscle_group} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium capitalize">{mg.muscle_group}</span>
-                      <span className="text-muted-foreground">{Number(mg.total_sets)} sets</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-purple-400 rounded-full"
-                        style={{ width: `${Math.max(pct, 5)}%` }}
-                      />
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {vol.toLocaleString()} kg total
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {(() => {
+              const mgColors: Record<string, string> = {
+                legs: "bg-blue-500",
+                back: "bg-green-500",
+                chest: "bg-red-500",
+                shoulders: "bg-orange-500",
+                biceps: "bg-cyan-500",
+                triceps: "bg-purple-500",
+                core: "bg-yellow-500",
+                calves: "bg-emerald-500",
+                forearms: "bg-pink-500",
+              };
+              const totalVol = muscleGroups.reduce((s: number, mg: any) => s + Number(mg.total_volume), 0);
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {muscleGroups.map((mg: any) => {
+                    const maxVol = Number(muscleGroups[0]?.total_volume || 1);
+                    const vol = Number(mg.total_volume);
+                    const pct = (vol / maxVol) * 100;
+                    const volPct = totalVol > 0 ? ((vol / totalVol) * 100).toFixed(0) : "0";
+                    const barColor = mgColors[mg.muscle_group] || "bg-purple-400";
+                    return (
+                      <div key={mg.muscle_group} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium capitalize">{mg.muscle_group}</span>
+                          <span className="text-muted-foreground">{Number(mg.total_sets)} sets</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${barColor} rounded-full`}
+                            style={{ width: `${Math.max(pct, 5)}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {vol.toLocaleString()} kg · {volPct}%
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       )}

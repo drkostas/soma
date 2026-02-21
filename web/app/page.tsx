@@ -103,7 +103,7 @@ async function getRunningStats() {
       MAX((raw_json->>'vO2MaxValue')::float) as vo2max
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
   `;
   return rows[0] || null;
 }
@@ -419,6 +419,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
 const MERGE_TYPES: Record<string, string> = {
   wind_kite_surfing: "kiteboarding_v2",
   resort_skiing_snowboarding_ws: "resort_snowboarding",
+  treadmill_running: "running",
 };
 
 function formatDuration(mins: number) {

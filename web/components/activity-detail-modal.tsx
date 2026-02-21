@@ -53,7 +53,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
   const hrZones = data?.hr_zones;
 
   const typeKey = summary?.activityType?.typeKey || "";
-  const isRunning = typeKey === "running";
+  const isRunning = typeKey === "running" || typeKey === "treadmill_running";
   const isStrength = typeKey === "strength_training";
 
   const laps = splits?.lapDTOs || [];
