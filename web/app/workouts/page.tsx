@@ -809,7 +809,11 @@ export default async function WorkoutsPage() {
 
             const calSet = new Map<string, string>();
             for (const c of calendar as any[]) {
-              calSet.set(String(c.day), c.program);
+              // Normalize date to YYYY-MM-DD regardless of input format
+              const d = c.day instanceof Date
+                ? c.day.toISOString().split("T")[0]
+                : String(c.day).slice(0, 10);
+              calSet.set(d, c.program);
             }
 
             // Color map for programs
@@ -867,7 +871,7 @@ export default async function WorkoutsPage() {
                       <div
                         key={`${ml.label}-${ml.colStart}`}
                         className="text-xs text-muted-foreground"
-                        style={{ width: `${span * 18}px` }}
+                        style={{ width: `${span * 22}px` }}
                       >
                         {ml.label}
                       </div>
@@ -877,7 +881,7 @@ export default async function WorkoutsPage() {
                 <div className="flex gap-0">
                   <div className="flex flex-col gap-[2px] mr-1.5">
                     {dayLabels.map((label, i) => (
-                      <div key={label} className="h-[16px] flex items-center">
+                      <div key={label} className="h-[20px] flex items-center">
                         {i % 2 === 0 ? (
                           <span className="text-[10px] text-muted-foreground w-7 text-right">{label}</span>
                         ) : (
@@ -890,17 +894,18 @@ export default async function WorkoutsPage() {
                     <div key={wi} className="flex flex-col gap-[2px]">
                       {Array.from({ length: 7 }, (_, di) => {
                         const cell = week?.[di];
-                        if (!cell) return <div key={di} className="w-[16px] h-[16px]" />;
-                        const color = cell.trained && cell.program
+                        if (!cell) return <div key={di} className="w-[20px] h-[20px]" />;
+                        const isTrained = cell.trained;
+                        const color = isTrained && cell.program
                           ? programColors[cell.program] || "bg-primary"
-                          : cell.trained
+                          : isTrained
                             ? "bg-primary"
-                            : "bg-muted/40";
+                            : "";
                         return (
                           <div
                             key={di}
-                            className={`w-[16px] h-[16px] rounded-sm ${color} ${
-                              cell.trained ? "hover:opacity-80" : "hover:bg-muted/60"
+                            className={`w-[20px] h-[20px] rounded-sm ${isTrained ? color : "border border-muted-foreground/15 bg-muted-foreground/5"} ${
+                              isTrained ? "hover:opacity-80" : "hover:bg-muted-foreground/10"
                             } transition-opacity`}
                             title={`${cell.date}${cell.program ? ` — ${cell.program}` : ""}`}
                           />
