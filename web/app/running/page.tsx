@@ -7,6 +7,7 @@ import { VO2MaxChart } from "@/components/vo2max-chart";
 import { HRPaceChart } from "@/components/hr-pace-chart";
 import { WeeklyDistanceChart } from "@/components/weekly-distance-chart";
 import { CadenceStrideChart } from "@/components/cadence-stride-chart";
+import { ClickableRunTable } from "@/components/clickable-run-table";
 import { getDb } from "@/lib/db";
 import {
   Timer,
@@ -266,6 +267,7 @@ async function getRecentRuns() {
   const sql = getDb();
   const rows = await sql`
     SELECT
+      activity_id::text as activity_id,
       (raw_json->>'startTimeLocal')::text as date,
       (raw_json->>'activityName')::text as name,
       (raw_json->>'distance')::float / 1000.0 as distance,
@@ -577,49 +579,18 @@ export default async function RunningPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="text-left py-2 font-medium">Date</th>
-                  <th className="text-left py-2 font-medium">Name</th>
-                  <th className="text-right py-2 font-medium">Distance</th>
-                  <th className="text-right py-2 font-medium">Duration</th>
-                  <th className="text-right py-2 font-medium">Pace</th>
-                  <th className="text-right py-2 font-medium">HR</th>
-                  <th className="text-right py-2 font-medium">Cal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentRuns.map((run: any, i: number) => (
-                  <tr key={i} className="border-b border-border/50">
-                    <td className="py-2 text-muted-foreground">
-                      {new Date(run.date).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </td>
-                    <td className="py-2">{run.name}</td>
-                    <td className="py-2 text-right">
-                      {Number(run.distance).toFixed(1)} km
-                    </td>
-                    <td className="py-2 text-right">
-                      {Math.round(Number(run.duration_min))} min
-                    </td>
-                    <td className="py-2 text-right font-medium">
-                      {run.pace ? formatPace(Number(run.pace)) : "—"}
-                    </td>
-                    <td className="py-2 text-right">
-                      {run.avg_hr ? Math.round(Number(run.avg_hr)) : "—"}
-                    </td>
-                    <td className="py-2 text-right text-muted-foreground">
-                      {run.calories ? Math.round(Number(run.calories)) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ClickableRunTable
+            runs={(recentRuns as any[]).map((r: any) => ({
+              activity_id: r.activity_id,
+              date: r.date,
+              name: r.name,
+              distance: Number(r.distance),
+              duration_min: Number(r.duration_min),
+              pace: r.pace ? Number(r.pace) : null,
+              avg_hr: r.avg_hr ? Number(r.avg_hr) : null,
+              calories: r.calories ? Number(r.calories) : null,
+            }))}
+          />
         </CardContent>
       </Card>
     </div>

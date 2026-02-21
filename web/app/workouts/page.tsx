@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { getDb } from "@/lib/db";
 import { VolumeChart } from "@/components/volume-chart";
 import { ExerciseProgressChart } from "@/components/exercise-progress-chart";
+import { ClickableWorkoutList } from "@/components/clickable-workout-list";
 import {
   Dumbbell,
   Clock,
@@ -470,27 +471,17 @@ export default async function WorkoutsPage() {
               Recent Workouts
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {recent.map((w: any) => {
-              const exercises = typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises;
-              const { totalSets, totalVolume } = getWorkingSets(exercises);
-              return (
-                <div key={w.id} className="border-b border-border/50 last:border-0 pb-3 last:pb-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-sm">{w.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDate(w.start_time)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>{formatDuration(w.start_time, w.end_time)}</span>
-                    <span>{Number(w.exercise_count)} exercises</span>
-                    <span>{totalSets} sets</span>
-                    <span>{Math.round(totalVolume).toLocaleString()} kg</span>
-                  </div>
-                </div>
-              );
-            })}
+          <CardContent>
+            <ClickableWorkoutList
+              workouts={(recent as any[]).map((w: any) => ({
+                id: w.id,
+                title: w.title,
+                start_time: w.start_time,
+                end_time: w.end_time,
+                exercise_count: Number(w.exercise_count),
+                exercises: typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises,
+              }))}
+            />
           </CardContent>
         </Card>
       </div>
