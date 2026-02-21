@@ -27,8 +27,10 @@ function formatPace(speedMs: number) {
 
 function formatDur(seconds: number) {
   const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.round(seconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModalProps) {
@@ -320,13 +322,26 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
                       return (
                         <>
-                          <div className="space-y-1">
+                          {/* Column headers */}
+                          <div className="flex items-center gap-3 pb-1.5 border-b border-border/50 text-[10px] text-muted-foreground uppercase tracking-wider">
+                            <div className="w-7 text-center shrink-0">#</div>
+                            <div className="flex-1 grid grid-cols-4 gap-x-3">
+                              <div>Dist</div>
+                              <div>Pace</div>
+                              <div>HR</div>
+                              <div>Time</div>
+                            </div>
+                            <div className="w-16 text-right shrink-0">More</div>
+                          </div>
+
+                          <div className="space-y-0">
                             {laps.map((lap: any, i: number) => {
                               const pace = lap.averageSpeed > 0 ? formatPace(lap.averageSpeed) : "—";
                               const paceVal = lap.averageSpeed > 0 ? 1000 / lap.averageSpeed / 60 : 0;
                               const isFast = paceVal > 0 && avgPace > 0 && paceVal < avgPace * 0.97;
                               const isSlow = paceVal > 0 && avgPace > 0 && paceVal > avgPace * 1.03;
                               const paceColor = isFast ? "text-green-400" : isSlow ? "text-red-400" : "text-foreground";
+                              const distKm = lap.distance > 0 ? (lap.distance / 1000) : 0;
 
                               return (
                                 <div key={i} className="flex items-center gap-3 py-2.5 border-b border-border/30">
@@ -336,23 +351,26 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                                   </div>
 
                                   {/* Main metrics */}
-                                  <div className="flex-1 grid grid-cols-3 gap-x-3">
+                                  <div className="flex-1 grid grid-cols-4 gap-x-3">
+                                    <div>
+                                      <div className="text-sm font-medium">
+                                        {distKm > 0 ? `${distKm.toFixed(2)}` : "—"}
+                                        {distKm > 0 && <span className="text-[10px] text-muted-foreground ml-0.5">km</span>}
+                                      </div>
+                                    </div>
                                     <div>
                                       <div className={`text-sm font-bold ${paceColor}`}>{pace}/km</div>
-                                      <div className="text-[10px] text-muted-foreground">Pace</div>
                                     </div>
                                     <div>
                                       <div className="text-sm font-medium">
                                         {lap.averageHR > 0 ? `${Math.round(lap.averageHR)}` : "—"}
                                         {lap.averageHR > 0 && <span className="text-[10px] text-muted-foreground ml-0.5">bpm</span>}
                                       </div>
-                                      <div className="text-[10px] text-muted-foreground">HR</div>
                                     </div>
                                     <div>
                                       <div className="text-sm text-muted-foreground">
                                         {lap.duration > 0 ? formatDur(lap.duration) : "—"}
                                       </div>
-                                      <div className="text-[10px] text-muted-foreground">Time</div>
                                     </div>
                                   </div>
 
