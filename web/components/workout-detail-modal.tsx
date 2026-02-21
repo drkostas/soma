@@ -58,15 +58,15 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
     }
   }
 
-  // Compute avg HR for each Garmin active set from the HR timeline
+  // Compute avg HR for each set (ACTIVE + WARMUP) from the HR timeline
   const garminSetAvgHrs = useMemo(() => {
     if (!data?.garmin?.hr_timeline || !data?.garmin?.exercise_sets) return [];
     const timeline = data.garmin.hr_timeline as Array<{elapsed_sec: number; hr: number}>;
-    const activeSets = (data.garmin.exercise_sets as Array<any>).filter(
-      (s: any) => s.set_type === "ACTIVE"
+    const workingSets = (data.garmin.exercise_sets as Array<any>).filter(
+      (s: any) => s.set_type === "ACTIVE" || s.set_type === "WARMUP"
     );
 
-    return activeSets.map((s: any) => {
+    return workingSets.map((s: any) => {
       const startSec = s.start_sec;
       const endSec = s.start_sec + s.duration_sec;
       const hrInSet = timeline.filter(
@@ -138,10 +138,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                         </div>
                         <div className="space-y-1">
                           {sets.map((s: any, si: number) => {
-                            const avgHr =
-                              s.type !== "warmup"
-                                ? garminSetAvgHrs[garminSetIdx++] ?? null
-                                : null;
+                            const avgHr = garminSetAvgHrs[garminSetIdx++] ?? null;
                             return (
                               <div
                                 key={si}
