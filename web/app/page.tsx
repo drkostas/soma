@@ -137,7 +137,7 @@ async function getRecentActivities() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
-    LIMIT 12
+    LIMIT 15
   `;
 
   // Match gym activities with Hevy workout IDs

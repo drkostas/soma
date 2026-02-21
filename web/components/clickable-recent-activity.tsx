@@ -49,6 +49,32 @@ function formatDuration(mins: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function relativeDate(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  running: "Run",
+  strength_training: "Gym",
+  kiteboarding_v2: "Kite",
+  wind_kite_surfing: "Kite",
+  resort_snowboarding: "Snow",
+  resort_skiing_snowboarding_ws: "Snow",
+  hiking: "Hike",
+  walking: "Walk",
+  cycling: "Cycle",
+  e_bike_fitness: "E-Bike",
+  lap_swimming: "Swim",
+  indoor_cardio: "Cardio",
+};
+
 export function ClickableRecentActivity({ activities }: { activities: RecentActivity[] }) {
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -76,23 +102,20 @@ export function ClickableRecentActivity({ activities }: { activities: RecentActi
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate">{a.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {new Date(a.date).toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}
+                <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <span>{relativeDate(a.date)}</span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>{ACTIVITY_LABELS[a.type_key] || a.type_key}</span>
                 </div>
               </div>
-              <div className="text-right text-xs text-muted-foreground shrink-0">
-                <div>{a.distance_km.toFixed(1)} km</div>
-                <div>{formatDuration(a.duration_min)}</div>
-              </div>
-              {a.calories && (
-                <div className="text-xs text-muted-foreground w-14 text-right shrink-0">
-                  {Math.round(a.calories)} cal
+              <div className="text-right text-xs shrink-0">
+                <div className="text-muted-foreground">
+                  {a.distance_km > 0 ? `${a.distance_km.toFixed(1)} km` : formatDuration(a.duration_min)}
                 </div>
-              )}
+                <div className="text-muted-foreground/60">
+                  {a.distance_km > 0 ? formatDuration(a.duration_min) : a.calories ? `${Math.round(a.calories)} cal` : ""}
+                </div>
+              </div>
             </div>
           );
         })}
