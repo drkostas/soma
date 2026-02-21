@@ -350,7 +350,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                                     </div>
                                     <div>
                                       <div className="text-sm text-muted-foreground">
-                                        {lap.duration > 0 ? formatDur(lap.duration / 1000) : "—"}
+                                        {lap.duration > 0 ? formatDur(lap.duration) : "—"}
                                       </div>
                                       <div className="text-[10px] text-muted-foreground">Time</div>
                                     </div>

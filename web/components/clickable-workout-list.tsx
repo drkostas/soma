@@ -4,6 +4,9 @@ import { useState } from "react";
 import { HeartPulse, Flame } from "lucide-react";
 import { WorkoutDetailModal } from "./workout-detail-modal";
 
+const KG_TO_LBS = 2.20462;
+type WeightUnit = "kg" | "lbs";
+
 interface Workout {
   id: string;
   title: string;
@@ -44,9 +47,23 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
 
 export function ClickableWorkoutList({ workouts }: { workouts: Workout[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [unit, setUnit] = useState<WeightUnit>("kg");
+
+  const fmtVol = (kg: number) =>
+    unit === "lbs"
+      ? `${Math.round(kg * KG_TO_LBS).toLocaleString()} lbs`
+      : `${Math.round(kg).toLocaleString()} kg`;
 
   return (
     <>
+      <div className="flex justify-end mb-2">
+        <button
+          onClick={() => setUnit((u) => (u === "kg" ? "lbs" : "kg"))}
+          className="px-2 py-0.5 rounded-md text-[10px] font-medium border border-border bg-muted/50 hover:bg-accent/50 transition-colors"
+        >
+          {unit === "kg" ? "kg → lbs" : "lbs → kg"}
+        </button>
+      </div>
       <div className="space-y-3">
         {workouts.map((w) => {
           const exercises = typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises;
@@ -70,7 +87,7 @@ export function ClickableWorkoutList({ workouts }: { workouts: Workout[] }) {
                 <span>{formatDuration(w.start_time, w.end_time)}</span>
                 <span>{Number(w.exercise_count)} exercises</span>
                 <span>{totalSets} sets</span>
-                <span>{Math.round(totalVolume).toLocaleString()} kg</span>
+                <span>{fmtVol(totalVolume)}</span>
                 {w.garmin_calories && (
                   <span className="flex items-center gap-0.5 text-orange-400">
                     <Flame className="h-3 w-3" />

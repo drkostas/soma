@@ -14,6 +14,20 @@ import { HRZoneChart } from "@/components/hr-zone-chart";
 import { WorkoutHrTimeline } from "@/components/workout-hr-timeline";
 import { HeartPulse, Flame, Dumbbell } from "lucide-react";
 
+const KG_TO_LBS = 2.20462;
+
+type WeightUnit = "kg" | "lbs";
+
+function formatWeight(kg: number, unit: WeightUnit): string {
+  if (unit === "lbs") return `${(kg * KG_TO_LBS).toFixed(1)} lbs`;
+  return `${Number(kg).toFixed(1)} kg`;
+}
+
+function formatVolume(kg: number, unit: WeightUnit): string {
+  if (unit === "lbs") return `${Math.round(kg * KG_TO_LBS).toLocaleString()} lbs`;
+  return `${Math.round(kg).toLocaleString()} kg`;
+}
+
 interface WorkoutDetailModalProps {
   workoutId: string | null;
   onClose: () => void;
@@ -22,6 +36,7 @@ interface WorkoutDetailModalProps {
 export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalProps) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [unit, setUnit] = useState<WeightUnit>("kg");
 
   useEffect(() => {
     if (!workoutId) {
@@ -104,11 +119,19 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
 
         {!loading && data && (
           <Tabs defaultValue="exercises" className="mt-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <div className="flex items-center justify-between mb-2">
+              <TabsList className="grid grid-cols-3 flex-1">
               <TabsTrigger value="exercises">Exercises</TabsTrigger>
               <TabsTrigger value="summary">Summary</TabsTrigger>
               <TabsTrigger value="heartrate">Heart Rate</TabsTrigger>
-            </TabsList>
+              </TabsList>
+              <button
+                onClick={() => setUnit((u) => (u === "kg" ? "lbs" : "kg"))}
+                className="ml-2 px-2 py-1 rounded-md text-[10px] font-medium border border-border bg-muted/50 hover:bg-accent/50 transition-colors shrink-0"
+              >
+                {unit === "kg" ? "kg → lbs" : "lbs → kg"}
+              </button>
+            </div>
 
             <ScrollArea className="h-[calc(100vh-180px)] mt-4">
               <TabsContent value="exercises" className="space-y-4 px-4 pb-8">
@@ -151,9 +174,9 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                                 <span className="w-6">
                                   {s.type === "warmup" ? "W" : si + 1 - sets.filter((ss: any, ssi: number) => ssi < si && ss.type === "warmup").length}
                                 </span>
-                                <span className="w-16">
+                                <span className="w-20">
                                   {s.weight_kg > 0
-                                    ? `${Number(s.weight_kg).toFixed(1)} kg`
+                                    ? formatWeight(s.weight_kg, unit)
                                     : "BW"}
                                 </span>
                                 <span className="w-10">
@@ -198,7 +221,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                   <MetricBox label="Total Reps" value={`${totalReps}`} />
                   <MetricBox
                     label="Total Volume"
-                    value={`${Math.round(totalVolume).toLocaleString()} kg`}
+                    value={formatVolume(totalVolume, unit)}
                   />
                   {data.garmin?.calories ? (
                     <MetricBox
@@ -210,7 +233,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                       label="Avg Volume/Set"
                       value={
                         totalSets > 0
-                          ? `${Math.round(totalVolume / totalSets)} kg`
+                          ? formatVolume(totalVolume / totalSets, unit)
                           : "—"
                       }
                     />
@@ -257,7 +280,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                         <div key={i} className="flex items-center justify-between text-xs">
                           <span className="truncate mr-2">{ex.title}</span>
                           <span className="text-muted-foreground shrink-0">
-                            {Math.round(vol)} kg · {sets} sets
+                            {formatVolume(vol, unit)} · {sets} sets
                           </span>
                         </div>
                       );

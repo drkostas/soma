@@ -448,6 +448,8 @@ function TrainingDaysExpanded({
             <Tooltip
               cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
+              itemStyle={{ color: "var(--card-foreground)" }}
+              labelStyle={{ color: "var(--card-foreground)" }}
               formatter={(value: any) => [`${value} activities`, "Count"]}
             />
             <Bar dataKey="count" radius={[4, 4, 0, 0]}>
@@ -543,6 +545,8 @@ function TrainingTimeExpanded({ todCounts }: { todCounts: number[] }) {
             <Tooltip
               cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
+              itemStyle={{ color: "var(--card-foreground)" }}
+              labelStyle={{ color: "var(--card-foreground)" }}
               labelFormatter={(_: any, payload: any) => {
                 const item = payload?.[0]?.payload;
                 return item?.label || "";
@@ -648,6 +652,8 @@ function ActivityBreakdownExpanded({
             <Tooltip
               cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
+              itemStyle={{ color: "var(--card-foreground)" }}
+              labelStyle={{ color: "var(--card-foreground)" }}
               formatter={(value: any, _name: any, props: any) => {
                 const pct = totalActivities > 0 ? ((Number(value) / totalActivities) * 100).toFixed(1) : "0";
                 return [`${value} activities (${pct}%)`, props?.payload?.label || ""];
@@ -774,6 +780,8 @@ function GymFrequencyExpanded({
             <Tooltip
               cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
+              itemStyle={{ color: "var(--card-foreground)" }}
+              labelStyle={{ color: "var(--card-foreground)" }}
               labelFormatter={(m: any) => {
                 const [year, month] = String(m).split("-");
                 const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -893,6 +901,8 @@ function GymFrequencyMiniChart({ data }: { data: { month: string; workouts: numb
             return `${months[parseInt(month)]} ${year}`;
           }}
           contentStyle={tooltipStyle}
+              itemStyle={{ color: "var(--card-foreground)" }}
+              labelStyle={{ color: "var(--card-foreground)" }}
         />
         <Bar dataKey="workouts" radius={[3, 3, 0, 0]}>
           {chartData.map((entry, index) => (
