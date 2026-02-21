@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 
 interface CadenceStrideEntry {
@@ -97,6 +98,14 @@ export function CadenceStrideChart({
               </div>
             );
           }}
+        />
+        <ReferenceLine
+          yAxisId="cadence"
+          y={180}
+          stroke="#22c55e"
+          strokeDasharray="4 4"
+          strokeWidth={1.5}
+          label={{ value: "180 spm", position: "left", fontSize: 10, fill: "#22c55e" }}
         />
         <Bar
           yAxisId="cadence"

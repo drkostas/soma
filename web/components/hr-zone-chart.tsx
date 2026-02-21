@@ -18,6 +18,7 @@ const ZONE_COLORS = [
 const ZONE_NAMES = ["Warm Up", "Easy", "Aerobic", "Threshold", "Maximum"];
 
 function formatTime(seconds: number) {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
