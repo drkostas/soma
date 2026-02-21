@@ -255,8 +255,9 @@ async function getSleepSchedule() {
     const endDate = new Date(endMs);
     return {
       date: r.date,
-      bedtimeHour: startDate.getHours() + startDate.getMinutes() / 60,
-      wakeHour: endDate.getHours() + endDate.getMinutes() / 60,
+      // Use UTC methods since Garmin stores local time encoded as UTC timestamps
+      bedtimeHour: startDate.getUTCHours() + startDate.getUTCMinutes() / 60,
+      wakeHour: endDate.getUTCHours() + endDate.getUTCMinutes() / 60,
     };
   });
 }
@@ -504,7 +505,12 @@ export default async function SleepPage() {
               Sleep Schedule
               {(() => {
                 const recent = (sleepSchedule as any[]).slice(-7);
-                const avgBed = recent.reduce((s: number, d: any) => s + d.bedtimeHour, 0) / recent.length;
+                // Normalize bedtime: hours before 18 are "next day" (add 24)
+                const avgBedNorm = recent.reduce((s: number, d: any) => {
+                  const h = d.bedtimeHour;
+                  return s + (h < 18 ? h + 24 : h);
+                }, 0) / recent.length;
+                const avgBed = avgBedNorm >= 24 ? avgBedNorm - 24 : avgBedNorm;
                 const avgWake = recent.reduce((s: number, d: any) => s + d.wakeHour, 0) / recent.length;
                 const fmtH = (h: number) => {
                   const hr = Math.floor(h);
