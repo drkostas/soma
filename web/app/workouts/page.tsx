@@ -220,6 +220,44 @@ async function getWorkoutFrequencyByWeek() {
   return rows;
 }
 
+async function getMonthlyMuscleVolume() {
+  const sql = getDb();
+  const rows = await sql`
+    WITH exercise_muscles AS (
+      SELECT
+        TO_CHAR((raw_json->>'start_time')::timestamp, 'YYYY-MM') as month,
+        CASE
+          WHEN e->>'title' ILIKE '%bench%' OR e->>'title' ILIKE '%chest%' OR e->>'title' ILIKE '%dip%' THEN 'Chest'
+          WHEN e->>'title' ILIKE '%row%' OR e->>'title' ILIKE '%pull up%' OR e->>'title' ILIKE '%lat %' OR e->>'title' ILIKE '%deadlift%' OR e->>'title' ILIKE '%back extension%' THEN 'Back'
+          WHEN e->>'title' ILIKE '%shoulder%' OR e->>'title' ILIKE '%overhead press%' OR e->>'title' ILIKE '%lateral raise%' OR e->>'title' ILIKE '%face pull%' OR e->>'title' ILIKE '%rear delt%' OR e->>'title' ILIKE '%reverse fly%' THEN 'Shoulders'
+          WHEN e->>'title' ILIKE '%curl%' OR e->>'title' ILIKE '%hammer%' OR e->>'title' ILIKE '%preacher%' THEN 'Arms'
+          WHEN e->>'title' ILIKE '%tricep%' OR e->>'title' ILIKE '%pushdown%' THEN 'Arms'
+          WHEN e->>'title' ILIKE '%leg press%' OR e->>'title' ILIKE '%leg extension%' OR e->>'title' ILIKE '%squat%' OR e->>'title' ILIKE '%leg curl%' OR e->>'title' ILIKE '%romanian%' OR e->>'title' ILIKE '%hip%' THEN 'Legs'
+          WHEN e->>'title' ILIKE '%calf%' THEN 'Legs'
+          WHEN e->>'title' ILIKE '%crunch%' OR e->>'title' ILIKE '%plank%' OR e->>'title' ILIKE '%leg raise%' OR e->>'title' ILIKE '%side bend%' OR e->>'title' ILIKE '%russian twist%' OR e->>'title' ILIKE '%superman%' OR e->>'title' ILIKE '%torso%' THEN 'Core'
+          ELSE NULL
+        END as muscle_group,
+        (s->>'weight_kg')::float * (s->>'reps')::int as volume
+      FROM hevy_raw_data,
+        jsonb_array_elements(raw_json->'exercises') as e,
+        jsonb_array_elements(e->'sets') as s
+      WHERE endpoint_name = 'workout'
+        AND s->>'type' = 'normal'
+        AND (s->>'weight_kg')::float > 0
+        AND (s->>'reps')::int > 0
+    )
+    SELECT
+      month,
+      muscle_group,
+      ROUND(SUM(volume)::numeric) as volume
+    FROM exercise_muscles
+    WHERE muscle_group IS NOT NULL
+    GROUP BY month, muscle_group
+    ORDER BY month ASC, muscle_group
+  `;
+  return rows;
+}
+
 async function getTrainingCalendar() {
   const sql = getDb();
   const rows = await sql`
@@ -267,7 +305,7 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
 }
 
 export default async function WorkoutsPage() {
-  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups, weeklyFreq] =
+  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups, weeklyFreq, monthlyMuscle] =
     await Promise.all([
       getRecentWorkouts(),
       getWeeklyVolume(),
@@ -279,6 +317,7 @@ export default async function WorkoutsPage() {
       getTrainingCalendar(),
       getMuscleGroupVolume(),
       getWorkoutFrequencyByWeek(),
+      getMonthlyMuscleVolume(),
     ]);
 
   const totalWeeks = stats
@@ -504,6 +543,83 @@ export default async function WorkoutsPage() {
                       </div>
                     );
                   })}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Monthly Volume by Muscle Group */}
+      {(monthlyMuscle as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-green-400" />
+              Monthly Volume by Muscle Group
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const mgColors: Record<string, string> = {
+                Chest: "bg-red-500", Back: "bg-green-500", Shoulders: "bg-orange-500",
+                Arms: "bg-cyan-500", Legs: "bg-blue-500", Core: "bg-yellow-500",
+              };
+              const monthMap = new Map<string, Map<string, number>>();
+              const allGroups = new Set<string>();
+              for (const r of monthlyMuscle as any[]) {
+                if (!monthMap.has(r.month)) monthMap.set(r.month, new Map());
+                monthMap.get(r.month)!.set(r.muscle_group, Number(r.volume));
+                allGroups.add(r.muscle_group);
+              }
+              const months = Array.from(monthMap.keys()).sort().slice(-12);
+              const groups = ["Legs", "Back", "Chest", "Shoulders", "Arms", "Core"].filter(g => allGroups.has(g));
+
+              // Find max total for scaling
+              const maxTotal = Math.max(...months.map(m => {
+                const mg = monthMap.get(m)!;
+                return Array.from(mg.values()).reduce((s, v) => s + v, 0);
+              }));
+
+              return (
+                <div>
+                  <div className="flex items-end gap-[4px] h-36">
+                    {months.map((month) => {
+                      const mg = monthMap.get(month)!;
+                      const total = Array.from(mg.values()).reduce((s, v) => s + v, 0);
+                      const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+                      const monthDate = new Date(month + "-01");
+                      const label = monthDate.toLocaleDateString("en-US", { month: "short" });
+
+                      return (
+                        <div key={month} className="flex-1 flex flex-col items-center">
+                          <div className="w-full flex flex-col items-stretch rounded-t-sm overflow-hidden" style={{ height: `${Math.max(pct, 4)}%` }}>
+                            {groups.map((g) => {
+                              const vol = mg.get(g) || 0;
+                              const volPct = total > 0 ? (vol / total) * 100 : 0;
+                              if (volPct < 1) return null;
+                              return (
+                                <div
+                                  key={g}
+                                  className={`${mgColors[g] || "bg-gray-500"}`}
+                                  style={{ height: `${volPct}%`, minHeight: volPct > 0 ? "2px" : "0" }}
+                                  title={`${label}: ${g} ${Math.round(vol).toLocaleString()} kg`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <span className="text-[9px] text-muted-foreground mt-1">{label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-3 mt-3 text-[10px] text-muted-foreground justify-center flex-wrap">
+                    {groups.map(g => (
+                      <span key={g} className="flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-sm ${mgColors[g]}`} /> {g}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               );
             })()}

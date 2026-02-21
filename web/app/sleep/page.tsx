@@ -266,6 +266,57 @@ async function getWeekdayWeekendSleep() {
   return result;
 }
 
+async function getSleepRegularity() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::float / 3600.0 as hours,
+      (raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal')::bigint as start_ts,
+      (raw_json->'dailySleepDTO'->>'sleepEndTimestampLocal')::bigint as end_ts
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'sleep_data'
+      AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal' IS NOT NULL
+    ORDER BY date DESC
+    LIMIT 30
+  `;
+  if (rows.length < 3) return null;
+
+  // Calculate bedtime/wake time variability
+  const bedtimes: number[] = [];
+  const waketimes: number[] = [];
+  const durations: number[] = [];
+
+  for (const r of rows) {
+    const startDate = new Date(Number(r.start_ts));
+    // Use UTC methods since Garmin stores local time encoded as UTC timestamps
+    let bedHour = startDate.getUTCHours() + startDate.getUTCMinutes() / 60;
+    if (bedHour < 12) bedHour += 24; // past midnight = next day
+    bedtimes.push(bedHour);
+
+    const endDate = new Date(Number(r.end_ts));
+    waketimes.push(endDate.getUTCHours() + endDate.getUTCMinutes() / 60);
+    durations.push(Number(r.hours));
+  }
+
+  const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const stddev = (arr: number[]) => {
+    const mean = avg(arr);
+    return Math.sqrt(arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length);
+  };
+
+  return {
+    avg_bedtime: avg(bedtimes),
+    avg_waketime: avg(waketimes),
+    avg_duration: avg(durations),
+    bedtime_stddev: stddev(bedtimes),
+    waketime_stddev: stddev(waketimes),
+    duration_stddev: stddev(durations),
+    nights: rows.length,
+  };
+}
+
 function formatDuration(seconds: number) {
   const h = Math.floor(seconds / 3600);
   const m = Math.round((seconds % 3600) / 60);
@@ -288,7 +339,7 @@ function qualityBadge(quality: string | null) {
 }
 
 export default async function SleepPage() {
-  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration, spo2Trend, weekdayWeekend] =
+  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration, spo2Trend, weekdayWeekend, sleepRegularity] =
     await Promise.all([
       getSleepStats(),
       getSleepTrend(),
@@ -303,6 +354,7 @@ export default async function SleepPage() {
       getRespirationTrend(),
       getSpO2Trend(),
       getWeekdayWeekendSleep(),
+      getSleepRegularity(),
     ]);
 
   return (
@@ -461,6 +513,67 @@ export default async function SleepPage() {
                 <span className="w-3 h-1 rounded" style={{ background: "hsl(40, 80%, 55%)", display: "inline-block" }} /> Wake Time
               </span>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Sleep Regularity */}
+      {sleepRegularity && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Clock className="h-4 w-4 text-emerald-400" />
+              Sleep Regularity
+              <span className="ml-auto text-xs font-normal">Last {sleepRegularity.nights} nights</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const fmtH = (h: number) => {
+                const hr = Math.floor(h % 24);
+                const min = Math.round((h % 1) * 60);
+                const p = hr >= 12 ? "PM" : "AM";
+                const h12 = hr === 0 ? 12 : hr > 12 ? hr - 12 : hr;
+                return `${h12}:${min.toString().padStart(2, "0")} ${p}`;
+              };
+              // Regularity score: lower stddev = higher score (max 100)
+              const bedScore = Math.max(0, Math.round(100 - sleepRegularity.bedtime_stddev * 30));
+              const wakeScore = Math.max(0, Math.round(100 - sleepRegularity.waketime_stddev * 30));
+              const overallScore = Math.round((bedScore + wakeScore) / 2);
+              const scoreColor = overallScore >= 80 ? "text-green-400" : overallScore >= 60 ? "text-yellow-400" : "text-red-400";
+              const scoreLabel = overallScore >= 80 ? "Consistent" : overallScore >= 60 ? "Moderate" : "Irregular";
+
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Regularity Score</div>
+                    <div className={`text-3xl font-bold ${scoreColor}`}>{overallScore}</div>
+                    <div className={`text-xs ${scoreColor}`}>{scoreLabel}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Avg Bedtime</div>
+                    <div className="text-lg font-bold">{fmtH(sleepRegularity.avg_bedtime)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      ±{(sleepRegularity.bedtime_stddev * 60).toFixed(0)} min
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Avg Wake Time</div>
+                    <div className="text-lg font-bold">{fmtH(sleepRegularity.avg_waketime)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      ±{(sleepRegularity.waketime_stddev * 60).toFixed(0)} min
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Avg Duration</div>
+                    <div className="text-lg font-bold">{sleepRegularity.avg_duration.toFixed(1)}h</div>
+                    <div className="text-xs text-muted-foreground">
+                      ±{(sleepRegularity.duration_stddev * 60).toFixed(0)} min
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       )}
