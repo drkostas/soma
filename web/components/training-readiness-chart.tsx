@@ -35,7 +35,7 @@ export function TrainingReadinessChart({ data }: { data: ReadinessDataPoint[] })
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+      <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
         <XAxis
           dataKey="date"
@@ -47,7 +47,8 @@ export function TrainingReadinessChart({ data }: { data: ReadinessDataPoint[] })
           interval={Math.max(Math.floor(chartData.length / 6), 1)}
         />
         <YAxis
-          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+          className="text-[10px]"
+          tickLine={false}
           domain={[0, 100]}
         />
         <Tooltip

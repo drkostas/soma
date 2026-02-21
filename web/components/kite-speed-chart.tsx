@@ -53,7 +53,7 @@ export function KiteSpeedChart({ data }: { data: KiteSession[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={250}>
-      <ComposedChart data={chartData} margin={{ bottom: 10, left: -10, right: 10 }}>
+      <ComposedChart data={chartData} margin={{ bottom: 10, left: 0, right: 10 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis dataKey="dateLabel" className="text-xs" />
         <YAxis
