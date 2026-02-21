@@ -160,6 +160,53 @@ async function getYearlySportBreakdown() {
   return rows;
 }
 
+async function getCyclingSessions() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      (raw_json->>'startTimeLocal')::text as date,
+      raw_json->>'activityName' as name,
+      (raw_json->>'distance')::float / 1000.0 as distance_km,
+      (raw_json->>'duration')::float / 60.0 as duration_min,
+      (raw_json->>'averageSpeed')::float * 3.6 as avg_speed_kmh,
+      (raw_json->>'maxSpeed')::float * 3.6 as max_speed_kmh,
+      COALESCE((raw_json->>'elevationGain')::float, 0) as elev_gain,
+      (raw_json->>'averageHR')::float as avg_hr,
+      (raw_json->>'calories')::float as calories,
+      raw_json->'activityType'->>'typeKey' as type_key
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' IN ('cycling', 'e_bike_fitness', 'indoor_cycling')
+    ORDER BY (raw_json->>'startTimeLocal')::text DESC
+  `;
+  return rows;
+}
+
+async function getTimeBreakdown() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      CASE
+        WHEN raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running') THEN 'Running'
+        WHEN raw_json->'activityType'->>'typeKey' = 'strength_training' THEN 'Gym'
+        WHEN raw_json->'activityType'->>'typeKey' = 'walking' THEN 'Walking'
+        WHEN raw_json->'activityType'->>'typeKey' IN ('cycling', 'e_bike_fitness', 'indoor_cycling') THEN 'Cycling'
+        WHEN raw_json->'activityType'->>'typeKey' IN ('kiteboarding_v2', 'wind_kite_surfing') THEN 'Kite'
+        WHEN raw_json->'activityType'->>'typeKey' IN ('resort_snowboarding', 'resort_skiing_snowboarding_ws') THEN 'Snow'
+        WHEN raw_json->'activityType'->>'typeKey' IN ('lap_swimming', 'swimming') THEN 'Swim'
+        WHEN raw_json->'activityType'->>'typeKey' = 'indoor_cardio' THEN 'Cardio'
+        ELSE 'Other'
+      END as category,
+      SUM((raw_json->>'duration')::float) / 3600.0 as hours,
+      COUNT(*) as sessions
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+    GROUP BY category
+    ORDER BY hours DESC
+  `;
+  return rows;
+}
+
 async function getAllActivities() {
   const sql = getDb();
   const rows = await sql`
@@ -217,7 +264,7 @@ function extractResort(name: string): string {
 }
 
 export default async function ActivitiesPage() {
-  const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports] =
+  const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports, cyclingSessions, timeBreakdown] =
     await Promise.all([
       getActivitySummary(),
       getKiteSessions(),
@@ -225,6 +272,8 @@ export default async function ActivitiesPage() {
       getMonthlyDistribution(),
       getAllActivities(),
       getYearlySportBreakdown(),
+      getCyclingSessions(),
+      getTimeBreakdown(),
     ]);
 
   const totalSessions = summary.reduce((s, r) => s + Number(r.count), 0);
@@ -694,6 +743,122 @@ export default async function ActivitiesPage() {
               </CardContent>
             </Card>
           </div>
+        </div>
+      )}
+
+      {/* Total Time Breakdown */}
+      {(timeBreakdown as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Clock className="h-4 w-4 text-blue-400" />
+              Total Training Time Breakdown
+              <span className="ml-auto text-xs font-normal">
+                {Math.round((timeBreakdown as any[]).reduce((s: number, t: any) => s + Number(t.hours), 0))}h total
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const data = timeBreakdown as any[];
+              const totalH = data.reduce((s: number, t: any) => s + Number(t.hours), 0);
+              const catColors: Record<string, string> = {
+                Gym: "bg-orange-500", Running: "bg-green-500", Walking: "bg-emerald-400",
+                Cycling: "bg-yellow-500", Kite: "bg-cyan-500", Snow: "bg-blue-400",
+                Cardio: "bg-red-400", Swim: "bg-blue-500", Other: "bg-violet-400",
+              };
+              return (
+                <div>
+                  {/* Stacked bar */}
+                  <div className="flex h-8 rounded-lg overflow-hidden mb-4">
+                    {data.map((t: any) => {
+                      const pct = totalH > 0 ? (Number(t.hours) / totalH) * 100 : 0;
+                      if (pct < 0.5) return null;
+                      return (
+                        <div
+                          key={t.category}
+                          className={`${catColors[t.category] || "bg-gray-500"} flex items-center justify-center`}
+                          style={{ width: `${pct}%` }}
+                          title={`${t.category}: ${Number(t.hours).toFixed(0)}h (${pct.toFixed(0)}%)`}
+                        >
+                          {pct > 6 && <span className="text-[10px] font-bold text-black/70">{t.category}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Details grid */}
+                  <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                    {data.map((t: any) => {
+                      const hours = Number(t.hours);
+                      const pct = totalH > 0 ? ((hours / totalH) * 100).toFixed(0) : "0";
+                      return (
+                        <div key={t.category} className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${catColors[t.category] || "bg-gray-500"} shrink-0`} />
+                          <div className="text-xs">
+                            <div className="font-medium">{t.category}</div>
+                            <div className="text-muted-foreground">
+                              {hours.toFixed(0)}h · {Number(t.sessions)} · {pct}%
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cycling Section */}
+      {(cyclingSessions as any[]).length >= 5 && (
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+            <Bike className="h-5 w-5 text-yellow-400" />
+            Cycling
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {(() => {
+              const rides = cyclingSessions as any[];
+              const totalDist = rides.reduce((s: number, r: any) => s + Number(r.distance_km || 0), 0);
+              const totalElev = rides.reduce((s: number, r: any) => s + Number(r.elev_gain || 0), 0);
+              const topSpeed = Math.max(...rides.filter((r: any) => r.max_speed_kmh).map((r: any) => Number(r.max_speed_kmh)));
+              const avgSpeed = rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).reduce((s: number, r: any) => s + Number(r.avg_speed_kmh), 0) / rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).length;
+              return (
+                <>
+                  <StatCard title="Total Rides" value={rides.length} icon={<Bike className="h-4 w-4 text-yellow-400" />} />
+                  <StatCard title="Total Distance" value={`${totalDist.toFixed(0)} km`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Top Speed" value={`${topSpeed.toFixed(0)} km/h`} icon={<Gauge className="h-4 w-4 text-red-400" />} />
+                  <StatCard title="Total Elevation" value={`${totalElev.toFixed(0)}m`} icon={<ArrowUp className="h-4 w-4 text-green-400" />} />
+                </>
+              );
+            })()}
+          </div>
+          {/* Recent rides */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Recent Rides</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {(cyclingSessions as any[]).slice(0, 8).map((r: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-sm border-b border-border/20 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Bike className="h-3.5 w-3.5 text-yellow-400" />
+                      <span className="font-medium truncate max-w-[200px]">{r.name || "Cycling"}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{Number(r.distance_km).toFixed(1)} km</span>
+                      <span>{formatDuration(Number(r.duration_min))}</span>
+                      {Number(r.avg_speed_kmh) > 0 && <span>{Number(r.avg_speed_kmh).toFixed(0)} km/h</span>}
+                      <span className="w-20 text-right">{new Date(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
