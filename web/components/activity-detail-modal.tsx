@@ -51,6 +51,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
   const splits = data?.splits;
   const weather = data?.weather;
   const hrZones = data?.hr_zones;
+  const gear = data?.gear;
 
   const typeKey = summary?.activityType?.typeKey || "";
   const isRunning = typeKey === "running" || typeKey === "treadmill_running";
@@ -58,6 +59,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
   const laps = splits?.lapDTOs || [];
   const hasLaps = laps.length > 0 && laps[0]?.distance > 0;
+  const shoeInfo = Array.isArray(gear) ? gear.find((g: any) => g.gearTypeName === "Shoes") : null;
 
   return (
     <Sheet open={!!activityId} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -201,6 +203,50 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                     </div>
                   </div>
                 )}
+
+                {/* Gear Info */}
+                {shoeInfo && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Gear</h4>
+                    <div className="flex items-center gap-3 p-2.5 bg-muted/30 rounded-lg">
+                      <span className="text-lg">👟</span>
+                      <div>
+                        <div className="text-sm font-medium">
+                          {shoeInfo.customMakeModel || shoeInfo.displayName || "Unknown Shoe"}
+                        </div>
+                        {shoeInfo.maximumMeters > 0 && (
+                          <div className="text-xs text-muted-foreground">
+                            {Math.round(shoeInfo.maximumMeters / 1000)} km max life
+                            <span className={`ml-2 ${shoeInfo.gearStatusName === "active" ? "text-green-400" : "text-muted-foreground"}`}>
+                              {shoeInfo.gearStatusName}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Running Dynamics Summary */}
+                {isRunning && summary.avgGroundContactTime > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Running Dynamics</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {summary.avgGroundContactTime > 0 && (
+                        <MetricBox label="Ground Contact" value={`${Math.round(summary.avgGroundContactTime)} ms`} />
+                      )}
+                      {summary.avgVerticalOscillation > 0 && (
+                        <MetricBox label="Vert Oscillation" value={`${Number(summary.avgVerticalOscillation).toFixed(1)} cm`} />
+                      )}
+                      {summary.avgVerticalRatio > 0 && (
+                        <MetricBox label="Vert Ratio" value={`${Number(summary.avgVerticalRatio).toFixed(1)}%`} />
+                      )}
+                      {summary.averagePower > 0 && (
+                        <MetricBox label="Avg Power" value={`${Math.round(summary.averagePower)} W`} />
+                      )}
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="splits" className="pr-4">
@@ -253,13 +299,14 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
                     {/* Table */}
                     <div className="space-y-1">
-                      <div className="grid grid-cols-6 text-xs text-muted-foreground font-medium py-1 border-b border-border">
+                      <div className="grid grid-cols-7 text-xs text-muted-foreground font-medium py-1 border-b border-border">
                         <span>Lap</span>
                         <span className="text-right">Time</span>
                         <span className="text-right">Pace</span>
                         <span className="text-right">HR</span>
                         <span className="text-right">Elev</span>
                         <span className="text-right">Cad</span>
+                        <span className="text-right">Power</span>
                       </div>
                       {(() => {
                         const paces = laps
@@ -280,7 +327,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                                 : ""
                             : "";
                           return (
-                            <div key={i} className="grid grid-cols-6 text-sm py-1.5 border-b border-border/30">
+                            <div key={i} className="grid grid-cols-7 text-sm py-1.5 border-b border-border/30">
                               <span className="text-muted-foreground">
                                 {lap.distance > 0 ? `${(lap.distance / 1000).toFixed(2)}` : `#${i + 1}`}
                               </span>
@@ -297,17 +344,21 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                               <span className="text-right text-muted-foreground">
                                 {lap.averageRunCadence > 0 ? `${Math.round(lap.averageRunCadence)}` : "—"}
                               </span>
+                              <span className="text-right text-muted-foreground">
+                                {lap.averagePower > 0 ? `${Math.round(lap.averagePower)}W` : "—"}
+                              </span>
                             </div>
                           );
                         });
                       })()}
-                      <div className="grid grid-cols-6 text-xs font-medium py-2 border-t border-border text-muted-foreground">
+                      <div className="grid grid-cols-7 text-xs font-medium py-2 border-t border-border text-muted-foreground">
                         <span>{laps.length} laps</span>
                         <span className="text-right">{summary?.duration > 0 ? formatDur(summary.duration) : "—"}</span>
                         <span className="text-right">{summary?.averageSpeed > 0 ? formatPace(summary.averageSpeed) : "—"}</span>
                         <span className="text-right">{summary?.averageHR > 0 ? Math.round(summary.averageHR) : "—"}</span>
                         <span className="text-right">{summary?.elevationGain > 0 ? `+${Math.round(summary.elevationGain)}` : "—"}</span>
                         <span></span>
+                        <span className="text-right">{summary?.averagePower > 0 ? `${Math.round(summary.averagePower)}W` : ""}</span>
                       </div>
                     </div>
                   </div>

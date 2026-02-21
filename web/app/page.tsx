@@ -412,6 +412,27 @@ async function getRestingHRTrend() {
   return rows;
 }
 
+async function getFloorsTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (
+        SELECT COALESCE(SUM((elem->2)::float), 0)
+        FROM jsonb_array_elements(raw_json->'floorValuesArray') as elem
+      ) as floors_up,
+      (
+        SELECT COALESCE(SUM((elem->3)::float), 0)
+        FROM jsonb_array_elements(raw_json->'floorValuesArray') as elem
+      ) as floors_down
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'floors'
+    ORDER BY date DESC
+    LIMIT 14
+  `;
+  return rows.reverse();
+}
+
 async function getTrainingTimeOfDay() {
   const sql = getDb();
   const rows = await sql`
@@ -549,7 +570,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep, recovery, rhrTrend, stressTrend] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep, recovery, rhrTrend, stressTrend, floorsTrend] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -573,6 +594,7 @@ export default async function Home() {
       getRecoverySummary(),
       getRestingHRTrend(),
       getStressTrend(),
+      getFloorsTrend(),
     ]);
 
   // Merge duplicate activity types
@@ -1059,6 +1081,53 @@ export default async function Home() {
                 body_fat: w.body_fat ? Number(w.body_fat) : null,
               }))}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Floors Climbed (Last 14 Days) */}
+      {(floorsTrend as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Mountain className="h-4 w-4 text-blue-400" />
+              Floors Climbed
+              {(() => {
+                const data = floorsTrend as any[];
+                const avg = data.reduce((s: number, d: any) => s + Number(d.floors_up), 0) / data.length;
+                const today = data[data.length - 1];
+                return (
+                  <span className="ml-auto text-xs font-normal">
+                    Today: {Math.round(Number(today?.floors_up || 0))} · avg {Math.round(avg)}
+                  </span>
+                );
+              })()}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-2 h-24">
+              {(floorsTrend as any[]).map((d: any, i: number) => {
+                const up = Number(d.floors_up);
+                const maxFloors = Math.max(...(floorsTrend as any[]).map((x: any) => Number(x.floors_up)));
+                const pct = maxFloors > 0 ? (up / maxFloors) * 100 : 0;
+                const dayLabel = new Date(d.date).toLocaleDateString("en-US", { weekday: "short" });
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center">
+                    {pct > 40 && (
+                      <span className="text-[9px] text-muted-foreground mb-0.5">{Math.round(up)}</span>
+                    )}
+                    <div className="w-full flex items-end justify-center" style={{ height: "64px" }}>
+                      <div
+                        className="w-full rounded-t-sm bg-blue-400/70"
+                        style={{ height: `${Math.max(pct, up > 0 ? 4 : 0)}%` }}
+                        title={`${d.date}: ${Math.round(up)} floors up, ${Math.round(Number(d.floors_down))} down`}
+                      />
+                    </div>
+                    <span className="text-[9px] text-muted-foreground mt-0.5">{dayLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       )}
