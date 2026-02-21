@@ -164,6 +164,29 @@ async function getExercisePRs() {
   return rows;
 }
 
+async function getMuscleGroupVolume() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      e->>'muscle_group' as muscle_group,
+      COUNT(DISTINCT raw_json->>'id') as workout_count,
+      COUNT(*) as total_sets,
+      ROUND(SUM((s->>'weight_kg')::float * (s->>'reps')::int)::numeric) as total_volume
+    FROM hevy_raw_data,
+      jsonb_array_elements(raw_json->'exercises') as e,
+      jsonb_array_elements(e->'sets') as s
+    WHERE endpoint_name = 'workout'
+      AND s->>'type' = 'normal'
+      AND (s->>'weight_kg')::float > 0
+      AND (s->>'reps')::int > 0
+      AND e->>'muscle_group' IS NOT NULL
+      AND e->>'muscle_group' != ''
+    GROUP BY e->>'muscle_group'
+    ORDER BY total_volume DESC
+  `;
+  return rows;
+}
+
 async function getTrainingCalendar() {
   const sql = getDb();
   const rows = await sql`
@@ -211,7 +234,7 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
 }
 
 export default async function WorkoutsPage() {
-  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar] =
+  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups] =
     await Promise.all([
       getRecentWorkouts(),
       getWeeklyVolume(),
@@ -221,6 +244,7 @@ export default async function WorkoutsPage() {
       getProgramSplit(),
       getExercisePRs(),
       getTrainingCalendar(),
+      getMuscleGroupVolume(),
     ]);
 
   const totalWeeks = stats
@@ -346,6 +370,44 @@ export default async function WorkoutsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Muscle Group Distribution */}
+      {muscleGroups.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Target className="h-4 w-4 text-purple-400" />
+              Muscle Group Volume Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {muscleGroups.map((mg: any) => {
+                const maxVol = Number(muscleGroups[0]?.total_volume || 1);
+                const vol = Number(mg.total_volume);
+                const pct = (vol / maxVol) * 100;
+                return (
+                  <div key={mg.muscle_group} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium capitalize">{mg.muscle_group}</span>
+                      <span className="text-muted-foreground">{Number(mg.total_sets)} sets</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-purple-400 rounded-full"
+                        style={{ width: `${Math.max(pct, 5)}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {vol.toLocaleString()} kg total
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Bottom Row: Program Split + Top Exercises + Recent Workouts */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

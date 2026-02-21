@@ -11,6 +11,8 @@ import {
   Brain,
   Clock,
   Sparkles,
+  Activity,
+  Gauge,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -107,6 +109,42 @@ async function getLastNightSleep() {
   return rows[0] || null;
 }
 
+async function getHRVTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->'hrvSummary'->>'weeklyAvg')::int as weekly_avg,
+      (raw_json->'hrvSummary'->>'lastNightAvg')::int as last_night_avg,
+      raw_json->'hrvSummary'->>'status' as status
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'hrv_data'
+      AND raw_json->'hrvSummary'->>'weeklyAvg' IS NOT NULL
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
+async function getTrainingReadiness() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->0->>'score')::int as score,
+      raw_json->0->>'level' as level,
+      (raw_json->0->>'sleepScore')::int as sleep_score,
+      (raw_json->0->>'hrvFactorPercent')::int as hrv_pct,
+      raw_json->0->>'hrvFactorFeedback' as hrv_feedback,
+      (raw_json->0->>'stressHistoryFactorPercent')::int as stress_pct,
+      (raw_json->0->>'acwrFactorPercent')::int as acwr_pct
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'training_readiness'
+      AND raw_json->0->>'score' IS NOT NULL
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getBodyBatteryTrend() {
   const sql = getDb();
   const rows = await sql`
@@ -145,7 +183,7 @@ function qualityBadge(quality: string | null) {
 }
 
 export default async function SleepPage() {
-  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery] =
+  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness] =
     await Promise.all([
       getSleepStats(),
       getSleepTrend(),
@@ -153,6 +191,8 @@ export default async function SleepPage() {
       getRHRTrend(),
       getLastNightSleep(),
       getBodyBatteryTrend(),
+      getHRVTrend(),
+      getTrainingReadiness(),
     ]);
 
   return (
@@ -333,6 +373,158 @@ export default async function SleepPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* HRV Trend */}
+      {hrvTrend.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Activity className="h-4 w-4 text-emerald-400" />
+              Heart Rate Variability (HRV)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <div className="text-xs text-muted-foreground">Latest Weekly Avg</div>
+                <div className="text-2xl font-bold">
+                  {Number(hrvTrend[hrvTrend.length - 1]?.weekly_avg) || "—"}
+                  <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Last Night</div>
+                <div className="text-2xl font-bold">
+                  {Number(hrvTrend[hrvTrend.length - 1]?.last_night_avg) || "—"}
+                  <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Status</div>
+                <div className="text-2xl font-bold capitalize">
+                  {(() => {
+                    const s = hrvTrend[hrvTrend.length - 1]?.status as string;
+                    if (!s) return "—";
+                    const colors: Record<string, string> = {
+                      BALANCED: "text-green-400",
+                      LOW: "text-red-400",
+                      UNBALANCED: "text-yellow-400",
+                    };
+                    return <span className={colors[s] || ""}>{s.toLowerCase()}</span>;
+                  })()}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {hrvTrend.slice(-21).map((h: any) => {
+                const weekly = Number(h.weekly_avg);
+                const nightly = Number(h.last_night_avg);
+                return (
+                  <div key={h.date} className="flex items-center gap-2 text-xs">
+                    <span className="w-12 text-muted-foreground">
+                      {new Date(h.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                    <div className="flex-1 flex items-center gap-1">
+                      <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden relative">
+                        {nightly > 0 && (
+                          <div
+                            className="absolute h-full bg-emerald-400/60 rounded-full"
+                            style={{ width: `${Math.min((nightly / 120) * 100, 100)}%` }}
+                          />
+                        )}
+                        {weekly > 0 && (
+                          <div
+                            className="absolute h-0.5 top-1/2 -translate-y-1/2 bg-white/40"
+                            style={{ width: `${Math.min((weekly / 120) * 100, 100)}%` }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <span className="w-16 text-right text-muted-foreground">
+                      {nightly > 0 ? `${nightly}` : "—"} / {weekly > 0 ? weekly : "—"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400/60" /> Last Night</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-white/40" /> Weekly Avg</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Training Readiness */}
+      {trainingReadiness.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-amber-400" />
+              Training Readiness
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              {(() => {
+                const latest = trainingReadiness[trainingReadiness.length - 1] as any;
+                if (!latest) return null;
+                const levelColors: Record<string, string> = {
+                  PRIME: "text-green-400",
+                  HIGH: "text-green-400",
+                  MODERATE: "text-yellow-400",
+                  LOW: "text-red-400",
+                };
+                return (
+                  <>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Score</div>
+                      <div className="text-2xl font-bold">{latest.score}</div>
+                      <div className={`text-xs capitalize ${levelColors[latest.level] || ""}`}>
+                        {latest.level?.toLowerCase()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">HRV Factor</div>
+                      <div className="text-2xl font-bold">{latest.hrv_pct}%</div>
+                      <div className="text-xs text-muted-foreground capitalize">{latest.hrv_feedback?.toLowerCase()}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Stress Factor</div>
+                      <div className="text-2xl font-bold">{latest.stress_pct}%</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Training Load</div>
+                      <div className="text-2xl font-bold">{latest.acwr_pct}%</div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            <div className="space-y-1.5">
+              {trainingReadiness.slice(-21).map((tr: any) => {
+                const score = Number(tr.score);
+                const color = score >= 70 ? "bg-green-400" : score >= 40 ? "bg-yellow-400" : "bg-red-400";
+                return (
+                  <div key={tr.date} className="flex items-center gap-2 text-xs">
+                    <span className="w-12 text-muted-foreground">
+                      {new Date(tr.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                    <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${color} rounded-full`}
+                        style={{ width: `${score}%` }}
+                      />
+                    </div>
+                    <span className="w-8 text-right font-medium">{score}</span>
+                    <span className="w-16 text-right text-muted-foreground capitalize">{tr.level?.toLowerCase()}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
