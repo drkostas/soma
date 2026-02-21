@@ -55,12 +55,50 @@ function formatDuration(mins: number) {
 export function PaginatedActivityTable({ activities }: { activities: Activity[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
 
-  const totalPages = Math.ceil(activities.length / PAGE_SIZE);
-  const pageActivities = activities.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  // Get unique types for filter
+  const typeCounts = new Map<string, number>();
+  for (const a of activities) {
+    const label = ACTIVITY_LABELS[a.type_key] || a.type_key;
+    typeCounts.set(label, (typeCounts.get(label) || 0) + 1);
+  }
+  const typeOptions = Array.from(typeCounts.entries()).sort((a, b) => b[1] - a[1]);
+
+  const filtered = typeFilter
+    ? activities.filter((a) => (ACTIVITY_LABELS[a.type_key] || a.type_key) === typeFilter)
+    : activities;
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pageActivities = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <>
+      {/* Type Filter */}
+      {typeOptions.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          <button
+            onClick={() => { setTypeFilter(null); setPage(0); }}
+            className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+              !typeFilter ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent text-muted-foreground"
+            }`}
+          >
+            All ({activities.length})
+          </button>
+          {typeOptions.map(([label, count]) => (
+            <button
+              key={label}
+              onClick={() => { setTypeFilter(label); setPage(0); }}
+              className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                typeFilter === label ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent text-muted-foreground"
+              }`}
+            >
+              {label} ({count})
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -123,7 +161,7 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4 text-sm">
           <span className="text-muted-foreground">
-            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, activities.length)} of {activities.length}
+            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
           </span>
           <div className="flex items-center gap-2">
             <button

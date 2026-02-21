@@ -206,33 +206,64 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
               <TabsContent value="splits" className="pr-4">
                 {hasLaps && (
                   <div className="space-y-1">
-                    <div className="grid grid-cols-5 text-xs text-muted-foreground font-medium py-1 border-b border-border">
+                    <div className="grid grid-cols-6 text-xs text-muted-foreground font-medium py-1 border-b border-border">
                       <span>Lap</span>
+                      <span className="text-right">Time</span>
                       <span className="text-right">Pace</span>
                       <span className="text-right">HR</span>
                       <span className="text-right">Elev</span>
-                      <span className="text-right">Cadence</span>
+                      <span className="text-right">Cad</span>
                     </div>
-                    {laps.map((lap: any, i: number) => {
-                      const pace = lap.averageSpeed > 0 ? formatPace(lap.averageSpeed) : "—";
-                      return (
-                        <div key={i} className="grid grid-cols-5 text-sm py-1.5 border-b border-border/30">
-                          <span className="text-muted-foreground">
-                            {lap.distance > 0 ? `${(lap.distance / 1000).toFixed(1)} km` : `#${i + 1}`}
-                          </span>
-                          <span className="text-right font-medium">{pace}</span>
-                          <span className="text-right">
-                            {lap.averageHR > 0 ? `${Math.round(lap.averageHR)}` : "—"}
-                          </span>
-                          <span className="text-right text-muted-foreground">
-                            {lap.elevationGain > 0 ? `+${Math.round(lap.elevationGain)}m` : "—"}
-                          </span>
-                          <span className="text-right text-muted-foreground">
-                            {lap.averageRunCadence > 0 ? `${Math.round(lap.averageRunCadence)}` : "—"}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {(() => {
+                      // Compute avg pace for color coding
+                      const paces = laps
+                        .filter((l: any) => l.averageSpeed > 0 && l.distance > 0)
+                        .map((l: any) => 1000 / l.averageSpeed / 60);
+                      const avgPace = paces.length > 0
+                        ? paces.reduce((s: number, p: number) => s + p, 0) / paces.length
+                        : 0;
+
+                      return laps.map((lap: any, i: number) => {
+                        const pace = lap.averageSpeed > 0 ? formatPace(lap.averageSpeed) : "—";
+                        const paceVal = lap.averageSpeed > 0 ? 1000 / lap.averageSpeed / 60 : 0;
+                        const paceColor = paceVal > 0 && avgPace > 0
+                          ? paceVal < avgPace * 0.97
+                            ? "text-green-400"
+                            : paceVal > avgPace * 1.03
+                              ? "text-red-400"
+                              : ""
+                          : "";
+                        return (
+                          <div key={i} className="grid grid-cols-6 text-sm py-1.5 border-b border-border/30">
+                            <span className="text-muted-foreground">
+                              {lap.distance > 0 ? `${(lap.distance / 1000).toFixed(2)}` : `#${i + 1}`}
+                            </span>
+                            <span className="text-right text-muted-foreground">
+                              {lap.duration > 0 ? formatDur(lap.duration / 1000) : "—"}
+                            </span>
+                            <span className={`text-right font-medium ${paceColor}`}>{pace}</span>
+                            <span className="text-right">
+                              {lap.averageHR > 0 ? `${Math.round(lap.averageHR)}` : "—"}
+                            </span>
+                            <span className="text-right text-muted-foreground">
+                              {lap.elevationGain > 0 ? `+${Math.round(lap.elevationGain)}` : "—"}
+                            </span>
+                            <span className="text-right text-muted-foreground">
+                              {lap.averageRunCadence > 0 ? `${Math.round(lap.averageRunCadence)}` : "—"}
+                            </span>
+                          </div>
+                        );
+                      });
+                    })()}
+                    {/* Summary row */}
+                    <div className="grid grid-cols-6 text-xs font-medium py-2 border-t border-border text-muted-foreground">
+                      <span>{laps.length} laps</span>
+                      <span className="text-right">{summary?.duration > 0 ? formatDur(summary.duration) : "—"}</span>
+                      <span className="text-right">{summary?.averageSpeed > 0 ? formatPace(summary.averageSpeed) : "—"}</span>
+                      <span className="text-right">{summary?.averageHR > 0 ? Math.round(summary.averageHR) : "—"}</span>
+                      <span className="text-right">{summary?.elevationGain > 0 ? `+${Math.round(summary.elevationGain)}` : "—"}</span>
+                      <span></span>
+                    </div>
                   </div>
                 )}
               </TabsContent>
