@@ -10,6 +10,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ActivityPerformanceChart } from "@/components/activity-performance-chart";
 
 interface ActivityDetailModalProps {
   activityId: string | null;
@@ -60,6 +61,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
   const laps = splits?.lapDTOs || [];
   const hasLaps = laps.length > 0 && laps[0]?.distance > 0;
   const shoeInfo = Array.isArray(gear) ? gear.find((g: any) => g.gearTypeName === "Shoes") : null;
+  const hasTimeSeries = isRunning && Array.isArray(data?.time_series) && data.time_series.length > 0;
 
   return (
     <Sheet open={!!activityId} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -88,8 +90,9 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
         {!loading && summary && (
           <Tabs defaultValue="overview" className="mt-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className={`grid w-full ${hasTimeSeries ? "grid-cols-4" : "grid-cols-3"}`}>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              {hasTimeSeries && <TabsTrigger value="performance">Performance</TabsTrigger>}
               {hasLaps && <TabsTrigger value="splits">Splits</TabsTrigger>}
               {!hasLaps && <TabsTrigger value="splits" disabled>Splits</TabsTrigger>}
               <TabsTrigger value="details">Details</TabsTrigger>
@@ -251,6 +254,12 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                   </div>
                 )}
               </TabsContent>
+
+              {hasTimeSeries && (
+                <TabsContent value="performance" className="px-4 pb-8">
+                  <ActivityPerformanceChart timeSeries={data.time_series} />
+                </TabsContent>
+              )}
 
               <TabsContent value="splits" className="px-4 pb-8">
                 {hasLaps && (
