@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { HRZoneChart } from "@/components/hr-zone-chart";
 import { WorkoutHrTimeline } from "@/components/workout-hr-timeline";
-import { HeartPulse, Flame } from "lucide-react";
+import { HeartPulse, Flame, Dumbbell } from "lucide-react";
 
 interface WorkoutDetailModalProps {
   workoutId: string | null;
@@ -43,12 +43,13 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
       )
     : 0;
 
-  // Calculate totals
+  // Calculate totals (null-safe: sets may be missing)
   let totalSets = 0;
   let totalVolume = 0;
   let totalReps = 0;
   for (const ex of exercises) {
-    for (const s of ex.sets) {
+    const sets = Array.isArray(ex.sets) ? ex.sets : [];
+    for (const s of sets) {
       if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
         totalSets++;
         totalReps += s.reps;
@@ -92,12 +93,16 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
 
             <ScrollArea className="h-[calc(100vh-180px)] mt-4">
               <TabsContent value="exercises" className="space-y-4 px-4 pb-8">
+                {exercises.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-32 text-muted-foreground space-y-2">
+                    <Dumbbell className="h-8 w-8 opacity-30" />
+                    <p className="text-sm">No exercise data recorded</p>
+                  </div>
+                )}
                 {exercises.map((ex: any, ei: number) => {
-                  const workingSets = ex.sets.filter(
-                    (s: any) => s.type === "normal" && s.weight_kg > 0
-                  );
+                  const sets = Array.isArray(ex.sets) ? ex.sets : [];
                   const maxWeight = Math.max(
-                    ...ex.sets.filter((s: any) => s.weight_kg > 0).map((s: any) => s.weight_kg),
+                    ...sets.filter((s: any) => s.weight_kg > 0).map((s: any) => s.weight_kg),
                     0
                   );
                   return (
@@ -111,7 +116,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                         )}
                       </div>
                       <div className="space-y-1">
-                        {ex.sets.map((s: any, si: number) => (
+                        {sets.map((s: any, si: number) => (
                           <div
                             key={si}
                             className={`flex items-center gap-3 text-xs py-1 ${
@@ -121,7 +126,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                             }`}
                           >
                             <span className="w-6">
-                              {s.type === "warmup" ? "W" : si + 1 - ex.sets.filter((ss: any, ssi: number) => ssi < si && ss.type === "warmup").length}
+                              {s.type === "warmup" ? "W" : si + 1 - sets.filter((ss: any, ssi: number) => ssi < si && ss.type === "warmup").length}
                             </span>
                             <span className="w-16">
                               {s.weight_kg > 0
@@ -210,7 +215,8 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     {exercises.map((ex: any, i: number) => {
                       let vol = 0;
                       let sets = 0;
-                      for (const s of ex.sets) {
+                      const exSets = Array.isArray(ex.sets) ? ex.sets : [];
+                      for (const s of exSets) {
                         if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
                           vol += s.weight_kg * s.reps;
                           sets++;
