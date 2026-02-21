@@ -77,8 +77,8 @@ export function TrainingLoadChart({ data }: { data: TrainingLoadEntry[] }) {
             borderRadius: "8px",
             fontSize: "12px",
           }}
-          formatter={(value: number, name: string) => {
-            if (name === "acwr") return [value.toFixed(2), "ACWR"];
+          formatter={(value: any, name: any) => {
+            if (name === "acwr") return [Number(value).toFixed(2), "ACWR"];
             return [value, name === "acute" ? "Acute Load" : "Chronic Load"];
           }}
         />

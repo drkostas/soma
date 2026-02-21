@@ -591,8 +591,12 @@ async function getRunningConsistency() {
     const gap = (new Date(gaps[i].run_date).getTime() - new Date(gaps[i - 1].run_date).getTime()) / (24 * 60 * 60 * 1000);
     if (gap > maxGap) maxGap = gap;
   }
+  const r = rows[0] || {};
   return {
-    ...(rows[0] || {}),
+    weeks_with_runs: Number(r.weeks_with_runs || 0),
+    avg_runs_per_week: Number(r.avg_runs_per_week || 0),
+    max_runs_week: Number(r.max_runs_week || 0),
+    min_runs_week: Number(r.min_runs_week || 0),
     longest_gap_days: Math.round(maxGap),
     total_weeks: 26,
   };
@@ -850,7 +854,7 @@ export default async function RunningPage() {
                 }
                 return entry;
               });
-              return <YearlyMileageChart data={chartData} years={years} />;
+              return <YearlyMileageChart data={chartData as any} years={years} />;
             })()}
           </CardContent>
         </Card>

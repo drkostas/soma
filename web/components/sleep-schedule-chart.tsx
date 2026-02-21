@@ -62,7 +62,7 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
+      <AreaChart data={recent} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
         <XAxis
           dataKey="date"

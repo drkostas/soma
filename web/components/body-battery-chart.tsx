@@ -47,7 +47,7 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }} stackOffset="sign">
+      <BarChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }} stackOffset="sign">
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
         <XAxis
           dataKey="date"

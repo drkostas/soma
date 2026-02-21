@@ -88,7 +88,7 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
             borderRadius: "8px",
             fontSize: "12px",
           }}
-          formatter={(value: number, name: string) => {
+          formatter={(value: any, name: any) => {
             const labels: Record<string, string> = {
               avg: "Average SpO2",
               sleep: "Sleep SpO2",
