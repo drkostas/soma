@@ -4,6 +4,7 @@ import { PaceChart } from "@/components/pace-chart";
 import { MileageChart } from "@/components/mileage-chart";
 import { HRZoneChart } from "@/components/hr-zone-chart";
 import { VO2MaxChart } from "@/components/vo2max-chart";
+import { HRPaceChart } from "@/components/hr-pace-chart";
 import { getDb } from "@/lib/db";
 import {
   Timer,
@@ -119,6 +120,40 @@ async function getLatestHRZones() {
   }));
 }
 
+async function getHRPaceData() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      (raw_json->>'startTimeLocal')::text as date,
+      (raw_json->>'activityName')::text as name,
+      (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace,
+      (raw_json->>'averageHR')::float as hr,
+      (raw_json->>'distance')::float / 1000.0 as distance
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND (raw_json->>'distance')::float > 1000
+      AND raw_json->>'averageHR' IS NOT NULL
+    ORDER BY (raw_json->>'startTimeLocal')::text ASC
+  `;
+  return rows;
+}
+
+async function getWeeklyDistance() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      TO_CHAR(DATE_TRUNC('week', (raw_json->>'startTimeLocal')::timestamp), 'YYYY-MM-DD') as week,
+      COUNT(*) as runs,
+      SUM((raw_json->>'distance')::float) / 1000.0 as km
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' = 'running'
+    GROUP BY week ORDER BY week ASC
+  `;
+  return rows;
+}
+
 async function getPersonalRecords() {
   const sql = getDb();
 
@@ -211,13 +246,14 @@ async function getRecentRuns() {
 }
 
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, records, recentRuns] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, records, recentRuns] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
       getMonthlyMileage(),
       getVO2MaxTrend(),
       getLatestHRZones(),
+      getHRPaceData(),
       getPersonalRecords(),
       getRecentRuns(),
     ]);
@@ -309,6 +345,19 @@ export default async function RunningPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* HR vs Pace Scatter */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <HeartPulse className="h-4 w-4 text-red-400" />
+            Heart Rate vs Pace
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <HRPaceChart data={hrPaceData as any} />
+        </CardContent>
+      </Card>
 
       {/* Personal Records */}
       <Card className="mb-6">
