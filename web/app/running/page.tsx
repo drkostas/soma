@@ -23,6 +23,8 @@ import {
   Mountain,
   Gauge,
   BarChart3,
+  Thermometer,
+  Cloud,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -573,26 +575,64 @@ async function getRecentRuns() {
   const sql = getDb();
   const rows = await sql`
     SELECT
-      activity_id::text as activity_id,
-      (raw_json->>'startTimeLocal')::text as date,
-      (raw_json->>'activityName')::text as name,
-      (raw_json->>'distance')::float / 1000.0 as distance,
-      (raw_json->>'duration')::float / 60.0 as duration_min,
-      (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace,
-      (raw_json->>'averageHR')::float as avg_hr,
-      (raw_json->>'calories')::float as calories,
-      (raw_json->>'elevationGain')::float as elev_gain
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-    ORDER BY (raw_json->>'startTimeLocal')::text DESC
+      s.activity_id::text as activity_id,
+      (s.raw_json->>'startTimeLocal')::text as date,
+      (s.raw_json->>'activityName')::text as name,
+      (s.raw_json->>'distance')::float / 1000.0 as distance,
+      (s.raw_json->>'duration')::float / 60.0 as duration_min,
+      (s.raw_json->>'duration')::float / NULLIF((s.raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace,
+      (s.raw_json->>'averageHR')::float as avg_hr,
+      (s.raw_json->>'calories')::float as calories,
+      (s.raw_json->>'elevationGain')::float as elev_gain,
+      w.raw_json->>'temp' as temp_f,
+      w.raw_json->'weatherTypeDTO'->>'desc' as weather_desc
+    FROM garmin_activity_raw s
+    LEFT JOIN garmin_activity_raw w ON w.activity_id = s.activity_id AND w.endpoint_name = 'weather'
+    WHERE s.endpoint_name = 'summary'
+      AND s.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+    ORDER BY (s.raw_json->>'startTimeLocal')::text DESC
     LIMIT 10
   `;
   return rows;
 }
 
+async function getShoeMileage() {
+  const sql = getDb();
+  const rows = await sql`
+    WITH running_gear AS (
+      SELECT
+        s.activity_id,
+        (s.raw_json->>'distance')::float / 1000.0 as distance_km,
+        g.raw_json->0->>'gearPk' as gear_pk,
+        g.raw_json->0->>'displayName' as display_name,
+        g.raw_json->0->>'customMakeModel' as custom_name,
+        g.raw_json->0->>'gearStatusName' as status,
+        (g.raw_json->0->>'maximumMeters')::float / 1000.0 as max_km
+      FROM garmin_activity_raw s
+      JOIN garmin_activity_raw g ON g.activity_id = s.activity_id AND g.endpoint_name = 'gear'
+      WHERE s.endpoint_name = 'summary'
+        AND s.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND g.raw_json->0->>'gearTypeName' = 'Shoes'
+    )
+    SELECT
+      gear_pk,
+      COALESCE(custom_name, display_name) as shoe_name,
+      status,
+      max_km,
+      COUNT(*) as runs,
+      SUM(distance_km) as total_km,
+      MIN(distance_km) as shortest_km,
+      MAX(distance_km) as longest_km
+    FROM running_gear
+    WHERE gear_pk IS NOT NULL
+    GROUP BY gear_pk, shoe_name, status, max_km
+    ORDER BY total_km DESC
+  `;
+  return rows;
+}
+
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution, shoeMileage] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
@@ -613,6 +653,7 @@ export default async function RunningPage() {
       getMonthlyElevation(),
       getRunningConsistency(),
       getOverallHRDistribution(),
+      getShoeMileage(),
     ]);
 
   return (
@@ -1219,6 +1260,68 @@ export default async function RunningPage() {
         </CardContent>
       </Card>
 
+      {/* Shoe Mileage Tracker */}
+      {(shoeMileage as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Footprints className="h-4 w-4 text-emerald-400" />
+              Shoe Mileage
+              <span className="ml-auto text-xs font-normal">
+                {(shoeMileage as any[]).length} {(shoeMileage as any[]).length === 1 ? "pair" : "pairs"} tracked
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {(shoeMileage as any[]).map((shoe: any) => {
+                const totalKm = Number(shoe.total_km);
+                const maxKm = shoe.max_km ? Number(shoe.max_km) : null;
+                const pct = maxKm ? (totalKm / maxKm) * 100 : null;
+                const isActive = shoe.status === "active";
+                const wornPct = pct ?? 0;
+                const barColor = wornPct > 80 ? "bg-red-500" : wornPct > 60 ? "bg-yellow-500" : "bg-emerald-500";
+                return (
+                  <div key={shoe.gear_pk}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${isActive ? "" : "text-muted-foreground line-through"}`}>
+                          {shoe.shoe_name}
+                        </span>
+                        {!isActive && (
+                          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">retired</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {Number(shoe.runs)} runs · {totalKm.toFixed(0)} km
+                      </div>
+                    </div>
+                    {maxKm && (
+                      <div className="h-2 bg-muted rounded-full overflow-hidden mb-1">
+                        <div
+                          className={`h-full ${barColor} rounded-full transition-all`}
+                          style={{ width: `${Math.min(pct!, 100)}%` }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      {maxKm ? (
+                        <>
+                          <span>{totalKm.toFixed(0)} / {maxKm.toFixed(0)} km ({wornPct.toFixed(0)}%)</span>
+                          <span>{Math.max(0, maxKm - totalKm).toFixed(0)} km remaining</span>
+                        </>
+                      ) : (
+                        <span>{totalKm.toFixed(0)} km total</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Running Consistency (Last 26 Weeks) */}
       {runConsistency?.weeks_with_runs && (
         <Card className="mb-6">
@@ -1398,6 +1501,8 @@ export default async function RunningPage() {
               pace: r.pace ? Number(r.pace) : null,
               avg_hr: r.avg_hr ? Number(r.avg_hr) : null,
               calories: r.calories ? Number(r.calories) : null,
+              temp_c: r.temp_f ? Math.round((Number(r.temp_f) - 32) * 5 / 9) : null,
+              weather_desc: r.weather_desc || null,
             }))}
           />
         </CardContent>
