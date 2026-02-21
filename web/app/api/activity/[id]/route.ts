@@ -58,7 +58,7 @@ export async function GET(
     const hrIdx = keyIndex["directHeartRate"];
     const speedIdx = keyIndex["directSpeed"];
     const elevIdx = keyIndex["directElevation"];
-    const cadIdx = keyIndex["directRunCadence"];
+    const cadIdx = keyIndex["directDoubleCadence"];
     const powerIdx = keyIndex["directPower"];
     const respIdx = keyIndex["directRespirationRate"];
     const strideIdx = keyIndex["directStrideLength"];

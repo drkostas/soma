@@ -151,7 +151,7 @@ export function ActivityPerformanceChart({
           : null,
       hr: p.hr,
       elevation: p.elevation,
-      cadence: p.cadence,
+      cadence: p.cadence != null && p.cadence >= 100 ? p.cadence : null,
       power: p.power,
       respiration: p.respiration,
       stride: p.stride != null ? Math.round(p.stride * 100) : null,
