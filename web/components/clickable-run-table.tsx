@@ -12,6 +12,8 @@ interface Run {
   pace: number | null;
   avg_hr: number | null;
   calories: number | null;
+  temp_c?: number | null;
+  weather_desc?: string | null;
 }
 
 function formatPace(mins: number) {
@@ -36,6 +38,7 @@ export function ClickableRunTable({ runs }: { runs: Run[] }) {
               <th className="text-right py-2 font-medium">Pace</th>
               <th className="text-right py-2 font-medium">HR</th>
               <th className="text-right py-2 font-medium">Cal</th>
+              <th className="text-right py-2 font-medium">Temp</th>
             </tr>
           </thead>
           <tbody>
@@ -66,6 +69,9 @@ export function ClickableRunTable({ runs }: { runs: Run[] }) {
                 </td>
                 <td className="py-2 text-right text-muted-foreground">
                   {run.calories ? Math.round(run.calories) : "—"}
+                </td>
+                <td className="py-2 text-right text-muted-foreground">
+                  {run.temp_c != null ? `${Math.round(run.temp_c)}°C` : "—"}
                 </td>
               </tr>
             ))}
