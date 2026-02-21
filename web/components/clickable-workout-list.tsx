@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { HeartPulse, Flame } from "lucide-react";
 import { WorkoutDetailModal } from "./workout-detail-modal";
 
 interface Workout {
@@ -10,6 +11,9 @@ interface Workout {
   end_time: string;
   exercise_count: number;
   exercises: any[];
+  avg_hr?: number;
+  max_hr?: number;
+  garmin_calories?: number;
 }
 
 function formatDuration(startTime: string, endTime: string): string {
@@ -61,11 +65,23 @@ export function ClickableWorkoutList({ workouts }: { workouts: Workout[] }) {
                   })}
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                 <span>{formatDuration(w.start_time, w.end_time)}</span>
                 <span>{Number(w.exercise_count)} exercises</span>
                 <span>{totalSets} sets</span>
                 <span>{Math.round(totalVolume).toLocaleString()} kg</span>
+                {w.garmin_calories && (
+                  <span className="flex items-center gap-0.5 text-orange-400">
+                    <Flame className="h-3 w-3" />
+                    {Math.round(w.garmin_calories)}
+                  </span>
+                )}
+                {w.avg_hr && (
+                  <span className="flex items-center gap-0.5 text-red-400">
+                    <HeartPulse className="h-3 w-3" />
+                    {Math.round(w.avg_hr)}
+                  </span>
+                )}
               </div>
             </div>
           );

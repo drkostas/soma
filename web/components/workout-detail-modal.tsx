@@ -10,6 +10,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { HRZoneChart } from "@/components/hr-zone-chart";
+import { HeartPulse, Flame } from "lucide-react";
 
 interface WorkoutDetailModalProps {
   workoutId: string | null;
@@ -81,9 +83,10 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
 
         {!loading && data && (
           <Tabs defaultValue="exercises" className="mt-4">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="exercises">Exercises</TabsTrigger>
               <TabsTrigger value="summary">Summary</TabsTrigger>
+              <TabsTrigger value="heartrate">Heart Rate</TabsTrigger>
             </TabsList>
 
             <ScrollArea className="h-[calc(100vh-200px)] mt-4">
@@ -160,14 +163,21 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     label="Total Volume"
                     value={`${Math.round(totalVolume).toLocaleString()} kg`}
                   />
-                  <MetricBox
-                    label="Avg Volume/Set"
-                    value={
-                      totalSets > 0
-                        ? `${Math.round(totalVolume / totalSets)} kg`
-                        : "—"
-                    }
-                  />
+                  {data.garmin?.calories ? (
+                    <MetricBox
+                      label="Calories (Garmin)"
+                      value={`${Math.round(data.garmin.calories)} kcal`}
+                    />
+                  ) : (
+                    <MetricBox
+                      label="Avg Volume/Set"
+                      value={
+                        totalSets > 0
+                          ? `${Math.round(totalVolume / totalSets)} kg`
+                          : "—"
+                      }
+                    />
+                  )}
                 </div>
 
                 {/* Muscle groups used */}
@@ -216,6 +226,47 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     })}
                   </div>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="heartrate" className="space-y-4 pr-4">
+                {data.garmin ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      <MetricBox
+                        label="Avg HR"
+                        value={data.garmin.avg_hr ? `${Math.round(data.garmin.avg_hr)} bpm` : "—"}
+                      />
+                      <MetricBox
+                        label="Max HR"
+                        value={data.garmin.max_hr ? `${Math.round(data.garmin.max_hr)} bpm` : "—"}
+                      />
+                      <MetricBox
+                        label="Calories"
+                        value={data.garmin.calories ? `${Math.round(data.garmin.calories)}` : "—"}
+                      />
+                    </div>
+                    {data.garmin.hr_zones && data.garmin.hr_zones.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                          HR Zones
+                        </h4>
+                        <HRZoneChart zones={data.garmin.hr_zones} />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Badge variant="outline" className="text-[10px] h-4 bg-green-500/10 text-green-400 border-green-500/30">
+                        Garmin
+                      </Badge>
+                      <span>Matched from Garmin strength training activity</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-48 text-muted-foreground space-y-2">
+                    <HeartPulse className="h-8 w-8 opacity-30" />
+                    <p className="text-sm">No heart rate data</p>
+                    <p className="text-xs">No matching Garmin activity found</p>
+                  </div>
+                )}
               </TabsContent>
             </ScrollArea>
           </Tabs>
