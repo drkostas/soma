@@ -443,6 +443,69 @@ async function getDistanceDistribution() {
   return rows;
 }
 
+async function getMonthlyElevation() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      TO_CHAR((raw_json->>'startTimeLocal')::timestamp, 'YYYY-MM') as month,
+      SUM((raw_json->>'elevationGain')::float) as total_gain,
+      AVG((raw_json->>'elevationGain')::float) as avg_gain,
+      COUNT(*) as runs
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+      AND raw_json->>'elevationGain' IS NOT NULL
+      AND (raw_json->>'elevationGain')::float > 0
+    GROUP BY month
+    ORDER BY month ASC
+  `;
+  return rows;
+}
+
+async function getRunningConsistency() {
+  const sql = getDb();
+  // Get weekly run counts for the last 26 weeks
+  const rows = await sql`
+    WITH weeks AS (
+      SELECT
+        DATE_TRUNC('week', (raw_json->>'startTimeLocal')::timestamp)::date as week,
+        COUNT(*) as runs
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - INTERVAL '26 weeks'
+      GROUP BY week
+      ORDER BY week ASC
+    )
+    SELECT
+      COUNT(*) as weeks_with_runs,
+      AVG(runs) as avg_runs_per_week,
+      MAX(runs) as max_runs_week,
+      MIN(runs) as min_runs_week
+    FROM weeks
+  `;
+  // Also get longest gap between runs
+  const gaps = await sql`
+    SELECT
+      (raw_json->>'startTimeLocal')::date as run_date
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - INTERVAL '26 weeks'
+    ORDER BY run_date ASC
+  `;
+  let maxGap = 0;
+  for (let i = 1; i < gaps.length; i++) {
+    const gap = (new Date(gaps[i].run_date).getTime() - new Date(gaps[i - 1].run_date).getTime()) / (24 * 60 * 60 * 1000);
+    if (gap > maxGap) maxGap = gap;
+  }
+  return {
+    ...(rows[0] || {}),
+    longest_gap_days: Math.round(maxGap),
+    total_weeks: 26,
+  };
+}
+
 async function getRecentRuns() {
   const sql = getDb();
   const rows = await sql`
@@ -466,7 +529,7 @@ async function getRecentRuns() {
 }
 
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
@@ -484,6 +547,8 @@ export default async function RunningPage() {
       getPaceDistribution(),
       getDistanceDistribution(),
       getYearlyRunningStats(),
+      getMonthlyElevation(),
+      getRunningConsistency(),
     ]);
 
   return (
@@ -983,6 +1048,113 @@ export default async function RunningPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Running Consistency (Last 26 Weeks) */}
+      {runConsistency?.weeks_with_runs && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Activity className="h-4 w-4 text-emerald-400" />
+              Running Consistency (Last 6 Months)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Active Weeks</div>
+                <div className="text-2xl font-bold">
+                  {Number(runConsistency.weeks_with_runs)}/{runConsistency.total_weeks}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {Math.round((Number(runConsistency.weeks_with_runs) / runConsistency.total_weeks) * 100)}% consistency
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Avg Runs/Week</div>
+                <div className="text-2xl font-bold">
+                  {Number(runConsistency.avg_runs_per_week).toFixed(1)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Best Week</div>
+                <div className="text-2xl font-bold text-green-400">
+                  {Number(runConsistency.max_runs_week)} runs
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Min Week</div>
+                <div className="text-2xl font-bold">
+                  {Number(runConsistency.min_runs_week)} runs
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Longest Gap</div>
+                <div className="text-2xl font-bold text-yellow-400">
+                  {runConsistency.longest_gap_days}d
+                </div>
+              </div>
+            </div>
+            {/* Consistency bar */}
+            <div className="mt-4 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-green-400 rounded-full"
+                style={{ width: `${Math.round((Number(runConsistency.weeks_with_runs) / runConsistency.total_weeks) * 100)}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Monthly Elevation Gain */}
+      {(monthlyElevation as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Mountain className="h-4 w-4 text-amber-400" />
+              Monthly Elevation Gain
+              <span className="ml-auto text-xs font-normal">
+                {(() => {
+                  const data = monthlyElevation as any[];
+                  const total = data.reduce((s: number, m: any) => s + Number(m.total_gain || 0), 0);
+                  return `${Math.round(total).toLocaleString()}m total`;
+                })()}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-[3px] h-28">
+              {(monthlyElevation as any[]).slice(-24).map((m: any, i: number) => {
+                const gain = Number(m.total_gain || 0);
+                const maxGain = Math.max(...(monthlyElevation as any[]).slice(-24).map((x: any) => Number(x.total_gain || 0)));
+                const pct = maxGain > 0 ? (gain / maxGain) * 100 : 0;
+                const monthDate = new Date(m.month + "-01");
+                const label = monthDate.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center">
+                    {pct > 40 && (
+                      <span className="text-[8px] text-muted-foreground mb-0.5">
+                        {Math.round(gain)}m
+                      </span>
+                    )}
+                    <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
+                      <div
+                        className="w-full rounded-t-sm bg-amber-400/70"
+                        style={{ height: `${Math.max(pct, gain > 0 ? 4 : 0)}%` }}
+                        title={`${label}: ${Math.round(gain)}m gain (${m.runs} runs)`}
+                      />
+                    </div>
+                    {i % 3 === 0 && (
+                      <span className="text-[9px] text-muted-foreground mt-0.5">
+                        {label}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Yearly Summary */}
       {(yearlyStats as any[]).length > 1 && (

@@ -326,6 +326,22 @@ async function getTrainingByDayOfWeek() {
   return rows;
 }
 
+async function getLatestSleep() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int as total,
+      (raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'value')::int as score,
+      (raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'qualifierKey') as quality
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'sleep_data'
+      AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+    ORDER BY date DESC
+    LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
 async function getTrainingTimeOfDay() {
   const sql = getDb();
   const rows = await sql`
@@ -463,7 +479,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -483,6 +499,7 @@ export default async function Home() {
       getActivityHeatmap(),
       getTrainingByDayOfWeek(),
       getTrainingTimeOfDay(),
+      getLatestSleep(),
     ]);
 
   // Merge duplicate activity types
@@ -555,9 +572,11 @@ export default async function Home() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard
           title="Sleep"
-          value={health?.sleep_time_seconds
-            ? `${(health.sleep_time_seconds / 3600).toFixed(1)}h`
-            : "—"}
+          value={(() => {
+            const secs = health?.sleep_time_seconds || latestSleep?.total;
+            return secs ? `${(secs / 3600).toFixed(1)}h` : "—";
+          })()}
+          subtitle={latestSleep?.score ? `Score: ${latestSleep.score}` : undefined}
           icon={<Moon className="h-4 w-4 text-indigo-400" />}
         />
         <StatCard
