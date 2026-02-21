@@ -427,6 +427,10 @@ async function getFloorsTrend() {
       ) as floors_down
     FROM garmin_raw_data
     WHERE endpoint_name = 'floors'
+      AND (
+        SELECT COALESCE(SUM((elem->2)::float), 0)
+        FROM jsonb_array_elements(raw_json->'floorValuesArray') as elem
+      ) > 0
     ORDER BY date DESC
     LIMIT 14
   `;

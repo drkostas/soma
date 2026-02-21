@@ -31,7 +31,7 @@ function getColor(types: string[]): string {
 
 export function ActivityHeatmap({ data }: { data: DayData[] }) {
   const today = new Date();
-  const dayLabels = ["", "Mon", "", "Wed", "", "Fri", ""];
+  const dayLabels = ["Mon", "", "Wed", "", "Fri", "", "Sun"];
 
   // Go back 26 weeks
   const currentDay = today.getDay();

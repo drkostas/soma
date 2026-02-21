@@ -31,6 +31,22 @@ export function WorkoutFrequencyChart({ data }: { data: FrequencyEntry[] }) {
 
   const max = Math.max(...chartData.map((d) => d.workouts));
 
+  const tickMonths = (() => {
+    const seen = new Set<string>();
+    const unique = chartData.filter((d) => {
+      const [y, m] = d.month.split("-");
+      const key = `${["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m)]} '${y.slice(2)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).map((d) => d.month);
+    if (unique.length > 8) {
+      const step = Math.ceil(unique.length / 8);
+      return unique.filter((_, i) => i % step === 0 || i === unique.length - 1);
+    }
+    return unique;
+  })();
+
   return (
     <ResponsiveContainer width="100%" height={160}>
       <BarChart data={chartData}>
@@ -42,10 +58,9 @@ export function WorkoutFrequencyChart({ data }: { data: FrequencyEntry[] }) {
             const [year, month] = m.split("-");
             const mo = parseInt(month);
             const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            if (mo === 1) return `Jan '${year.slice(2)}`;
-            return months[mo];
+            return `${months[mo]} '${year.slice(2)}`;
           }}
-          interval={Math.max(0, Math.floor(chartData.length / 6))}
+          ticks={tickMonths}
         />
         <YAxis hide />
         <Tooltip
