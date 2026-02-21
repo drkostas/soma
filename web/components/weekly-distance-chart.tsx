@@ -36,7 +36,7 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
 
   const tickDates = longRange ? (() => {
     const seen = new Set<string>();
-    return data
+    const unique = data
       .filter((d) => {
         const key = new Date(d.week).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
         if (seen.has(key)) return false;
@@ -44,6 +44,11 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
         return true;
       })
       .map((d) => d.week);
+    if (unique.length > 8) {
+      const step = Math.ceil(unique.length / 8);
+      return unique.filter((_, i) => i % step === 0 || i === unique.length - 1);
+    }
+    return unique;
   })() : undefined;
 
   return (
