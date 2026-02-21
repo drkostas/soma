@@ -17,6 +17,9 @@ import {
   Mountain,
   Zap,
   Calendar,
+  Bike,
+  Waves,
+  PersonStanding,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -271,6 +274,10 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   resort_snowboarding: <Snowflake className="h-3.5 w-3.5 text-blue-300" />,
   resort_skiing_snowboarding_ws: <Snowflake className="h-3.5 w-3.5 text-blue-300" />,
   hiking: <Mountain className="h-3.5 w-3.5 text-green-400" />,
+  walking: <PersonStanding className="h-3.5 w-3.5 text-emerald-400" />,
+  lap_swimming: <Waves className="h-3.5 w-3.5 text-blue-400" />,
+  cycling: <Bike className="h-3.5 w-3.5 text-yellow-400" />,
+  e_bike_fitness: <Bike className="h-3.5 w-3.5 text-yellow-400" />,
 };
 
 const ACTIVITY_LABELS: Record<string, string> = {
