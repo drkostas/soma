@@ -11,6 +11,7 @@ import {
   PersonStanding,
   Heart,
   Activity,
+  Footprints,
 } from "lucide-react";
 
 const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
@@ -25,6 +26,7 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   cycling: <Bike className="h-4 w-4 text-yellow-400" />,
   indoor_cardio: <Heart className="h-4 w-4 text-red-400" />,
   other: <Activity className="h-4 w-4 text-muted-foreground" />,
+  treadmill_running: <Footprints className="h-4 w-4 text-green-400" />,
 };
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -41,6 +43,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   indoor_cycling: "Indoor Cycle",
   stand_up_paddleboarding_v2: "SUP",
   other: "Other",
+  treadmill_running: "Treadmill",
 };
 
 interface Activity {

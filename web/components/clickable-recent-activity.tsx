@@ -29,6 +29,7 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   e_bike_fitness: <Bike className="h-3.5 w-3.5 text-yellow-400" />,
   lap_swimming: <Waves className="h-3.5 w-3.5 text-blue-400" />,
   indoor_cardio: <Heart className="h-3.5 w-3.5 text-red-400" />,
+  treadmill_running: <Footprints className="h-3.5 w-3.5 text-green-400" />,
 };
 
 interface RecentActivity {
@@ -73,6 +74,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   e_bike_fitness: "E-Bike",
   lap_swimming: "Swim",
   indoor_cardio: "Cardio",
+  treadmill_running: "Treadmill",
 };
 
 export function ClickableRecentActivity({ activities }: { activities: RecentActivity[] }) {

@@ -44,7 +44,7 @@ async function getRunningStats() {
       MAX((raw_json->>'distance')::float) / 1000.0 as longest_run
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
   `;
   return rows[0] || null;
 }
@@ -58,7 +58,7 @@ async function getPaceHistory() {
       (raw_json->>'distance')::float / 1000.0 as distance
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND (raw_json->>'distance')::float > 1000
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
@@ -74,7 +74,7 @@ async function getMonthlyMileage() {
       SUM((raw_json->>'distance')::float) / 1000.0 as km
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
     GROUP BY month ORDER BY month ASC
   `;
   return rows;
@@ -88,7 +88,7 @@ async function getVO2MaxTrend() {
       (raw_json->>'vO2MaxValue')::float as vo2max
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'vO2MaxValue' IS NOT NULL
     ORDER BY LEFT((raw_json->>'startTimeLocal')::text, 10),
              (raw_json->>'startTimeLocal')::text DESC
@@ -103,7 +103,7 @@ async function getLatestHRZones() {
     SELECT activity_id
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
     LIMIT 1
   `;
@@ -139,7 +139,7 @@ async function getHRPaceData() {
       (raw_json->>'distance')::float / 1000.0 as distance
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND (raw_json->>'distance')::float > 1000
       AND raw_json->>'averageHR' IS NOT NULL
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
@@ -156,7 +156,7 @@ async function getWeeklyDistance() {
       SUM((raw_json->>'distance')::float) / 1000.0 as km
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
     GROUP BY week ORDER BY week ASC
   `;
   return rows;
@@ -171,7 +171,7 @@ async function getCadenceStride() {
       ROUND((raw_json->>'avgStrideLength')::numeric, 0) as stride
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'averageRunningCadenceInStepsPerMinute' IS NOT NULL
       AND (raw_json->>'distance')::float > 1000
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
@@ -190,7 +190,7 @@ async function getTrainingEffects() {
       (raw_json->>'distance')::float / 1000.0 as distance
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'aerobicTrainingEffect' IS NOT NULL
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
@@ -286,7 +286,7 @@ async function getPersonalRecords() {
       (raw_json->>'distance')::float / 1000.0 as distance
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND (raw_json->>'distance')::float >= 4800
     ORDER BY (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float, 0) ASC
     LIMIT 1
@@ -301,7 +301,7 @@ async function getPersonalRecords() {
       (raw_json->>'duration')::float / 60.0 as duration_min
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
     ORDER BY (raw_json->>'distance')::float DESC
     LIMIT 1
   `;
@@ -315,7 +315,7 @@ async function getPersonalRecords() {
       (raw_json->>'maxHR')::float as max_hr
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'maxHR' IS NOT NULL
     ORDER BY (raw_json->>'maxHR')::float DESC
     LIMIT 1
@@ -330,7 +330,7 @@ async function getPersonalRecords() {
       (raw_json->>'distance')::float / 1000.0 as distance
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'calories' IS NOT NULL
     ORDER BY (raw_json->>'calories')::float DESC
     LIMIT 1
@@ -359,7 +359,7 @@ async function getRecentRuns() {
       (raw_json->>'elevationGain')::float as elev_gain
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' = 'running'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
     LIMIT 10
   `;
