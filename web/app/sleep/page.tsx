@@ -7,9 +7,11 @@ import { HRVChart } from "@/components/hrv-chart";
 import { TrainingReadinessChart } from "@/components/training-readiness-chart";
 import { BodyBatteryChart } from "@/components/body-battery-chart";
 import { StressChart } from "@/components/stress-chart";
+import { SleepScheduleChart } from "@/components/sleep-schedule-chart";
 import { getDb } from "@/lib/db";
 import {
   Moon,
+  Sunrise,
   HeartPulse,
   BatteryCharging,
   Brain,
@@ -181,6 +183,32 @@ async function getBodyBatteryTrend() {
   return rows;
 }
 
+async function getSleepSchedule() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal')::bigint as start_ts,
+      (raw_json->'dailySleepDTO'->>'sleepEndTimestampLocal')::bigint as end_ts
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'sleep_data'
+      AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal' IS NOT NULL
+    ORDER BY date ASC
+  `;
+  return rows.map((r: any) => {
+    const startMs = Number(r.start_ts);
+    const endMs = Number(r.end_ts);
+    const startDate = new Date(startMs);
+    const endDate = new Date(endMs);
+    return {
+      date: r.date,
+      bedtimeHour: startDate.getHours() + startDate.getMinutes() / 60,
+      wakeHour: endDate.getHours() + endDate.getMinutes() / 60,
+    };
+  });
+}
+
 function formatDuration(seconds: number) {
   const h = Math.floor(seconds / 3600);
   const m = Math.round((seconds % 3600) / 60);
@@ -203,7 +231,7 @@ function qualityBadge(quality: string | null) {
 }
 
 export default async function SleepPage() {
-  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend] =
+  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule] =
     await Promise.all([
       getSleepStats(),
       getSleepTrend(),
@@ -214,6 +242,7 @@ export default async function SleepPage() {
       getHRVTrend(),
       getTrainingReadiness(),
       getStressTrend(),
+      getSleepSchedule(),
     ]);
 
   return (
@@ -335,6 +364,46 @@ export default async function SleepPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sleep Schedule */}
+      {(sleepSchedule as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Sunrise className="h-4 w-4 text-yellow-400" />
+              Sleep Schedule
+              {(() => {
+                const recent = (sleepSchedule as any[]).slice(-7);
+                const avgBed = recent.reduce((s: number, d: any) => s + d.bedtimeHour, 0) / recent.length;
+                const avgWake = recent.reduce((s: number, d: any) => s + d.wakeHour, 0) / recent.length;
+                const fmtH = (h: number) => {
+                  const hr = Math.floor(h);
+                  const min = Math.round((h - hr) * 60);
+                  const p = hr >= 12 ? "PM" : "AM";
+                  const h12 = hr === 0 ? 12 : hr > 12 ? hr - 12 : hr;
+                  return `${h12}:${min.toString().padStart(2, "0")} ${p}`;
+                };
+                return (
+                  <span className="ml-auto text-xs font-normal text-muted-foreground">
+                    Avg: {fmtH(avgBed)} → {fmtH(avgWake)}
+                  </span>
+                );
+              })()}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SleepScheduleChart data={sleepSchedule as any[]} />
+            <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-1 rounded" style={{ background: "hsl(250, 60%, 55%)", display: "inline-block" }} /> Bedtime
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-1 rounded" style={{ background: "hsl(40, 80%, 55%)", display: "inline-block" }} /> Wake Time
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Charts Row 2: RHR + Body Battery */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

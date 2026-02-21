@@ -26,9 +26,21 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
     hill: d.hill,
   }));
 
+  // Compute tight domains so small fluctuations are visible
+  const enduranceValues = chartData.map((d) => d.endurance).filter((v): v is number => v !== null);
+  const hillValues = chartData.map((d) => d.hill).filter((v): v is number => v !== null);
+
+  const endMin = enduranceValues.length > 0 ? Math.min(...enduranceValues) : 0;
+  const endMax = enduranceValues.length > 0 ? Math.max(...enduranceValues) : 100;
+  const endPad = Math.max((endMax - endMin) * 0.15, 50);
+
+  const hillMin = hillValues.length > 0 ? Math.min(...hillValues) : 0;
+  const hillMax = hillValues.length > 0 ? Math.max(...hillValues) : 100;
+  const hillPad = Math.max((hillMax - hillMin) * 0.15, 3);
+
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+    <ResponsiveContainer width="100%" height={260}>
+      <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
         <XAxis
           dataKey="date"
@@ -41,13 +53,17 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
         />
         <YAxis
           yAxisId="endurance"
-          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+          tick={{ fontSize: 10, fill: "hsl(210, 80%, 60%)" }}
           orientation="left"
+          domain={[Math.floor(endMin - endPad), Math.ceil(endMax + endPad)]}
+          label={{ value: "Endurance", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(210, 80%, 60%)" } }}
         />
         <YAxis
           yAxisId="hill"
-          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+          tick={{ fontSize: 10, fill: "hsl(25, 80%, 55%)" }}
           orientation="right"
+          domain={[Math.floor(hillMin - hillPad), Math.ceil(hillMax + hillPad)]}
+          label={{ value: "Hill", angle: 90, position: "insideRight", style: { fontSize: 10, fill: "hsl(25, 80%, 55%)" } }}
         />
         <Tooltip
           contentStyle={{
@@ -56,7 +72,7 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
             borderRadius: "8px",
             fontSize: "12px",
           }}
-          labelFormatter={(d) =>
+          labelFormatter={(d: any) =>
             new Date(String(d)).toLocaleDateString("en-US", {
               weekday: "short",
               month: "short",
@@ -65,7 +81,7 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
           }
           formatter={(value: any, name: any) => {
             const label = name === "endurance" ? "Endurance Score" : "Hill Score";
-            return [value, label];
+            return [Number(value).toLocaleString(), label];
           }}
         />
         <Legend
