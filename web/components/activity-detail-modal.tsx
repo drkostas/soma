@@ -205,64 +205,110 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
               <TabsContent value="splits" className="pr-4">
                 {hasLaps && (
-                  <div className="space-y-1">
-                    <div className="grid grid-cols-6 text-xs text-muted-foreground font-medium py-1 border-b border-border">
-                      <span>Lap</span>
-                      <span className="text-right">Time</span>
-                      <span className="text-right">Pace</span>
-                      <span className="text-right">HR</span>
-                      <span className="text-right">Elev</span>
-                      <span className="text-right">Cad</span>
-                    </div>
-                    {(() => {
-                      // Compute avg pace for color coding
-                      const paces = laps
+                  <div className="space-y-4">
+                    {/* Visual pace bars */}
+                    {isRunning && (() => {
+                      const paceData = laps
                         .filter((l: any) => l.averageSpeed > 0 && l.distance > 0)
-                        .map((l: any) => 1000 / l.averageSpeed / 60);
-                      const avgPace = paces.length > 0
-                        ? paces.reduce((s: number, p: number) => s + p, 0) / paces.length
-                        : 0;
-
-                      return laps.map((lap: any, i: number) => {
-                        const pace = lap.averageSpeed > 0 ? formatPace(lap.averageSpeed) : "—";
-                        const paceVal = lap.averageSpeed > 0 ? 1000 / lap.averageSpeed / 60 : 0;
-                        const paceColor = paceVal > 0 && avgPace > 0
-                          ? paceVal < avgPace * 0.97
-                            ? "text-green-400"
-                            : paceVal > avgPace * 1.03
-                              ? "text-red-400"
-                              : ""
-                          : "";
-                        return (
-                          <div key={i} className="grid grid-cols-6 text-sm py-1.5 border-b border-border/30">
-                            <span className="text-muted-foreground">
-                              {lap.distance > 0 ? `${(lap.distance / 1000).toFixed(2)}` : `#${i + 1}`}
-                            </span>
-                            <span className="text-right text-muted-foreground">
-                              {lap.duration > 0 ? formatDur(lap.duration / 1000) : "—"}
-                            </span>
-                            <span className={`text-right font-medium ${paceColor}`}>{pace}</span>
-                            <span className="text-right">
-                              {lap.averageHR > 0 ? `${Math.round(lap.averageHR)}` : "—"}
-                            </span>
-                            <span className="text-right text-muted-foreground">
-                              {lap.elevationGain > 0 ? `+${Math.round(lap.elevationGain)}` : "—"}
-                            </span>
-                            <span className="text-right text-muted-foreground">
-                              {lap.averageRunCadence > 0 ? `${Math.round(lap.averageRunCadence)}` : "—"}
-                            </span>
+                        .map((l: any) => ({
+                          pace: 1000 / l.averageSpeed / 60,
+                          hr: l.averageHR,
+                        }));
+                      if (paceData.length < 2) return null;
+                      const minPace = Math.min(...paceData.map((p: any) => p.pace));
+                      const maxPace = Math.max(...paceData.map((p: any) => p.pace));
+                      const range = maxPace - minPace || 1;
+                      const avgPace = paceData.reduce((s: number, p: any) => s + p.pace, 0) / paceData.length;
+                      return (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+                            <span>Pace per Split</span>
+                            <span>avg {formatPace(avgPace * 60)}/km</span>
                           </div>
-                        );
-                      });
+                          <div className="flex items-end gap-[3px] h-24">
+                            {paceData.map((p: any, i: number) => {
+                              const normalized = 1 - (p.pace - minPace) / range;
+                              const h = 20 + normalized * 80;
+                              const isFast = p.pace < avgPace * 0.97;
+                              const isSlow = p.pace > avgPace * 1.03;
+                              return (
+                                <div
+                                  key={i}
+                                  className={`flex-1 rounded-t-sm ${
+                                    isFast ? "bg-green-500/70" : isSlow ? "bg-red-500/50" : "bg-primary/50"
+                                  }`}
+                                  style={{ height: `${h}%` }}
+                                  title={`Split ${i + 1}: ${formatPace(p.pace * 60)}/km`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <div className="flex justify-between text-[9px] text-muted-foreground">
+                            <span>{formatPace(minPace * 60)}/km</span>
+                            <span>{formatPace(maxPace * 60)}/km</span>
+                          </div>
+                        </div>
+                      );
                     })()}
-                    {/* Summary row */}
-                    <div className="grid grid-cols-6 text-xs font-medium py-2 border-t border-border text-muted-foreground">
-                      <span>{laps.length} laps</span>
-                      <span className="text-right">{summary?.duration > 0 ? formatDur(summary.duration) : "—"}</span>
-                      <span className="text-right">{summary?.averageSpeed > 0 ? formatPace(summary.averageSpeed) : "—"}</span>
-                      <span className="text-right">{summary?.averageHR > 0 ? Math.round(summary.averageHR) : "—"}</span>
-                      <span className="text-right">{summary?.elevationGain > 0 ? `+${Math.round(summary.elevationGain)}` : "—"}</span>
-                      <span></span>
+
+                    {/* Table */}
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-6 text-xs text-muted-foreground font-medium py-1 border-b border-border">
+                        <span>Lap</span>
+                        <span className="text-right">Time</span>
+                        <span className="text-right">Pace</span>
+                        <span className="text-right">HR</span>
+                        <span className="text-right">Elev</span>
+                        <span className="text-right">Cad</span>
+                      </div>
+                      {(() => {
+                        const paces = laps
+                          .filter((l: any) => l.averageSpeed > 0 && l.distance > 0)
+                          .map((l: any) => 1000 / l.averageSpeed / 60);
+                        const avgPace = paces.length > 0
+                          ? paces.reduce((s: number, p: number) => s + p, 0) / paces.length
+                          : 0;
+
+                        return laps.map((lap: any, i: number) => {
+                          const pace = lap.averageSpeed > 0 ? formatPace(lap.averageSpeed) : "—";
+                          const paceVal = lap.averageSpeed > 0 ? 1000 / lap.averageSpeed / 60 : 0;
+                          const paceColor = paceVal > 0 && avgPace > 0
+                            ? paceVal < avgPace * 0.97
+                              ? "text-green-400"
+                              : paceVal > avgPace * 1.03
+                                ? "text-red-400"
+                                : ""
+                            : "";
+                          return (
+                            <div key={i} className="grid grid-cols-6 text-sm py-1.5 border-b border-border/30">
+                              <span className="text-muted-foreground">
+                                {lap.distance > 0 ? `${(lap.distance / 1000).toFixed(2)}` : `#${i + 1}`}
+                              </span>
+                              <span className="text-right text-muted-foreground">
+                                {lap.duration > 0 ? formatDur(lap.duration / 1000) : "—"}
+                              </span>
+                              <span className={`text-right font-medium ${paceColor}`}>{pace}</span>
+                              <span className="text-right">
+                                {lap.averageHR > 0 ? `${Math.round(lap.averageHR)}` : "—"}
+                              </span>
+                              <span className="text-right text-muted-foreground">
+                                {lap.elevationGain > 0 ? `+${Math.round(lap.elevationGain)}` : "—"}
+                              </span>
+                              <span className="text-right text-muted-foreground">
+                                {lap.averageRunCadence > 0 ? `${Math.round(lap.averageRunCadence)}` : "—"}
+                              </span>
+                            </div>
+                          );
+                        });
+                      })()}
+                      <div className="grid grid-cols-6 text-xs font-medium py-2 border-t border-border text-muted-foreground">
+                        <span>{laps.length} laps</span>
+                        <span className="text-right">{summary?.duration > 0 ? formatDur(summary.duration) : "—"}</span>
+                        <span className="text-right">{summary?.averageSpeed > 0 ? formatPace(summary.averageSpeed) : "—"}</span>
+                        <span className="text-right">{summary?.averageHR > 0 ? Math.round(summary.averageHR) : "—"}</span>
+                        <span className="text-right">{summary?.elevationGain > 0 ? `+${Math.round(summary.elevationGain)}` : "—"}</span>
+                        <span></span>
+                      </div>
                     </div>
                   </div>
                 )}
