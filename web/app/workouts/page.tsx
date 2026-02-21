@@ -348,7 +348,8 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
   let totalSets = 0;
   let totalVolume = 0;
   for (const ex of exercises) {
-    for (const s of ex.sets) {
+    const sets = Array.isArray(ex.sets) ? ex.sets : [];
+    for (const s of sets) {
       if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
         totalSets++;
         totalVolume += s.weight_kg * s.reps;

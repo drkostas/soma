@@ -20,7 +20,17 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const workout = rows[0].raw_json;
+  const raw = rows[0].raw_json;
+  // Normalise exercises: handle null, missing, or nested structures
+  const workout = {
+    ...raw,
+    exercises: Array.isArray(raw.exercises)
+      ? raw.exercises.map((ex: any) => ({
+          ...ex,
+          sets: Array.isArray(ex.sets) ? ex.sets : [],
+        }))
+      : [],
+  };
 
   // Try to find matching Garmin strength training activity
   const garminRows = await sql`
