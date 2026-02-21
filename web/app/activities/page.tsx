@@ -142,6 +142,24 @@ async function getMonthlyDistribution() {
   return rows;
 }
 
+async function getYearlySportBreakdown() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      EXTRACT(YEAR FROM (raw_json->>'startTimeLocal')::timestamp)::int as year,
+      raw_json->'activityType'->>'typeKey' as type_key,
+      COUNT(*) as count,
+      SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
+      SUM((raw_json->>'duration')::float) / 3600.0 as total_hours
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training')
+    GROUP BY year, type_key
+    ORDER BY year DESC, count DESC
+  `;
+  return rows;
+}
+
 async function getAllActivities() {
   const sql = getDb();
   const rows = await sql`
@@ -199,13 +217,14 @@ function extractResort(name: string): string {
 }
 
 export default async function ActivitiesPage() {
-  const [summary, kiteSessions, snowSessions, monthlyRaw, activities] =
+  const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports] =
     await Promise.all([
       getActivitySummary(),
       getKiteSessions(),
       getSnowSessions(),
       getMonthlyDistribution(),
       getAllActivities(),
+      getYearlySportBreakdown(),
     ]);
 
   const totalSessions = summary.reduce((s, r) => s + Number(r.count), 0);
@@ -343,6 +362,92 @@ export default async function ActivitiesPage() {
           <MonthlyActivityChart data={monthlyData} sports={sports} />
         </CardContent>
       </Card>
+
+      {/* Yearly Sport Breakdown */}
+      {(yearlySports as any[]).length > 0 && (() => {
+        // Group by year
+        const yearMap = new Map<number, { type_key: string; count: number; total_km: number; total_hours: number }[]>();
+        for (const row of yearlySports as any[]) {
+          const year = Number(row.year);
+          if (!yearMap.has(year)) yearMap.set(year, []);
+          yearMap.get(year)!.push({
+            type_key: row.type_key,
+            count: Number(row.count),
+            total_km: Number(row.total_km || 0),
+            total_hours: Number(row.total_hours || 0),
+          });
+        }
+        const years = Array.from(yearMap.keys()).sort((a, b) => b - a);
+
+        const SPORT_COLORS: Record<string, string> = {
+          kiteboarding_v2: "bg-cyan-500",
+          wind_kite_surfing: "bg-cyan-500",
+          resort_snowboarding: "bg-blue-400",
+          resort_skiing_snowboarding_ws: "bg-blue-400",
+          hiking: "bg-green-500",
+          walking: "bg-emerald-400",
+          cycling: "bg-yellow-500",
+          e_bike_fitness: "bg-yellow-500",
+          indoor_cardio: "bg-red-400",
+          lap_swimming: "bg-blue-500",
+          stand_up_paddleboarding_v2: "bg-cyan-300",
+          indoor_cycling: "bg-yellow-400",
+          other: "bg-violet-400",
+        };
+
+        return (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Activity by Year
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {years.map((year) => {
+                  const sports = yearMap.get(year)!;
+                  const totalCount = sports.reduce((s, r) => s + r.count, 0);
+                  const totalKm = sports.reduce((s, r) => s + r.total_km, 0);
+                  const totalHrs = sports.reduce((s, r) => s + r.total_hours, 0);
+
+                  return (
+                    <div key={year}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-semibold">{year}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {totalCount} sessions · {totalKm.toFixed(0)} km · {totalHrs.toFixed(0)}h
+                        </span>
+                      </div>
+                      {/* Stacked bar */}
+                      <div className="flex h-4 rounded-full overflow-hidden mb-1">
+                        {sports.map((s) => {
+                          const pct = (s.count / totalCount) * 100;
+                          const color = SPORT_COLORS[s.type_key] || "bg-muted";
+                          return (
+                            <div
+                              key={s.type_key}
+                              className={`${color} transition-all`}
+                              style={{ width: `${pct}%` }}
+                              title={`${ACTIVITY_LABELS[s.type_key] || s.type_key}: ${s.count}`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                        {sports.map((s) => (
+                          <span key={s.type_key} className="text-[10px] text-muted-foreground">
+                            {ACTIVITY_LABELS[s.type_key] || s.type_key}: {s.count}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Kiteboarding Deep Dive */}
       {kiteSessions.length > 0 && (
