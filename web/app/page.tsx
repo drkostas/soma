@@ -3,6 +3,7 @@ import { StatCard } from "@/components/stat-card";
 import { WorkoutFrequencyChart } from "@/components/workout-frequency-chart";
 import { ClickableRecentActivity } from "@/components/clickable-recent-activity";
 import { StepsTrendChart } from "@/components/steps-trend-chart";
+import { CalorieTrendChart } from "@/components/calorie-trend-chart";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -244,6 +245,20 @@ async function getStepsTrend() {
   return rows;
 }
 
+async function getCalorieTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      active_kilocalories as active,
+      bmr_kilocalories as bmr
+    FROM daily_health_summary
+    WHERE active_kilocalories > 0
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getFitnessAge() {
   const sql = getDb();
   const rows = await sql`
@@ -379,7 +394,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -395,6 +410,7 @@ export default async function Home() {
       getFitnessAge(),
       getIntensityMinutes(),
       getWeightTrend(),
+      getCalorieTrend(),
     ]);
 
   // Merge duplicate activity types
@@ -554,30 +570,57 @@ export default async function Home() {
         </CardContent>
       </Card>
 
-      {/* Steps Trend */}
-      {(stepsTrend as any[]).length > 0 && (
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Footprints className="h-4 w-4" />
-              Daily Steps
-              {weekly?.avg_steps && (
-                <span className="ml-auto text-xs font-normal">
-                  7-day avg: {Number(weekly.avg_steps).toLocaleString()}
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <StepsTrendChart
-              data={(stepsTrend as any[]).map((s: any) => ({
-                date: s.date,
-                steps: Number(s.steps),
-              }))}
-            />
-          </CardContent>
-        </Card>
-      )}
+      {/* Steps & Calorie Trends */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {(stepsTrend as any[]).length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Footprints className="h-4 w-4" />
+                Daily Steps
+                {weekly?.avg_steps && (
+                  <span className="ml-auto text-xs font-normal">
+                    7-day avg: {Number(weekly.avg_steps).toLocaleString()}
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <StepsTrendChart
+                data={(stepsTrend as any[]).map((s: any) => ({
+                  date: s.date,
+                  steps: Number(s.steps),
+                }))}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {(calorieTrend as any[]).length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Flame className="h-4 w-4 text-orange-400" />
+                Daily Calories
+                {weekly?.avg_active_cal && (
+                  <span className="ml-auto text-xs font-normal">
+                    7-day active avg: {Number(weekly.avg_active_cal).toLocaleString()} kcal
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CalorieTrendChart
+                data={(calorieTrend as any[]).map((c: any) => ({
+                  date: c.date,
+                  active: Number(c.active),
+                  bmr: Number(c.bmr),
+                }))}
+              />
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Fitness Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
