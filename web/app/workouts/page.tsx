@@ -167,22 +167,39 @@ async function getExercisePRs() {
 
 async function getMuscleGroupVolume() {
   const sql = getDb();
+  // Map exercise titles to muscle groups since Hevy workout data doesn't include muscle_group
   const rows = await sql`
+    WITH exercise_muscles AS (
+      SELECT
+        e->>'title' as exercise,
+        CASE
+          WHEN e->>'title' ILIKE '%bench%' OR e->>'title' ILIKE '%chest%' OR e->>'title' ILIKE '%dip%' THEN 'chest'
+          WHEN e->>'title' ILIKE '%row%' OR e->>'title' ILIKE '%pull up%' OR e->>'title' ILIKE '%lat %' OR e->>'title' ILIKE '%deadlift%' OR e->>'title' ILIKE '%back extension%' THEN 'back'
+          WHEN e->>'title' ILIKE '%shoulder%' OR e->>'title' ILIKE '%overhead press%' OR e->>'title' ILIKE '%lateral raise%' OR e->>'title' ILIKE '%front raise%' OR e->>'title' ILIKE '%face pull%' OR e->>'title' ILIKE '%rear delt%' OR e->>'title' ILIKE '%reverse fly%' THEN 'shoulders'
+          WHEN e->>'title' ILIKE '%curl%' OR e->>'title' ILIKE '%hammer%' OR e->>'title' ILIKE '%preacher%' OR e->>'title' ILIKE '%concentration%' THEN 'biceps'
+          WHEN e->>'title' ILIKE '%tricep%' OR e->>'title' ILIKE '%pushdown%' THEN 'triceps'
+          WHEN e->>'title' ILIKE '%leg press%' OR e->>'title' ILIKE '%leg extension%' OR e->>'title' ILIKE '%squat%' OR e->>'title' ILIKE '%leg curl%' OR e->>'title' ILIKE '%romanian%' OR e->>'title' ILIKE '%hip%' THEN 'legs'
+          WHEN e->>'title' ILIKE '%calf%' THEN 'calves'
+          WHEN e->>'title' ILIKE '%crunch%' OR e->>'title' ILIKE '%plank%' OR e->>'title' ILIKE '%leg raise%' OR e->>'title' ILIKE '%side bend%' OR e->>'title' ILIKE '%russian twist%' OR e->>'title' ILIKE '%superman%' OR e->>'title' ILIKE '%torso%' THEN 'core'
+          WHEN e->>'title' ILIKE '%wrist%' THEN 'forearms'
+          ELSE 'other'
+        END as muscle_group,
+        s
+      FROM hevy_raw_data,
+        jsonb_array_elements(raw_json->'exercises') as e,
+        jsonb_array_elements(e->'sets') as s
+      WHERE endpoint_name = 'workout'
+        AND s->>'type' = 'normal'
+        AND (s->>'weight_kg')::float > 0
+        AND (s->>'reps')::int > 0
+    )
     SELECT
-      e->>'muscle_group' as muscle_group,
-      COUNT(DISTINCT raw_json->>'id') as workout_count,
+      muscle_group,
       COUNT(*) as total_sets,
       ROUND(SUM((s->>'weight_kg')::float * (s->>'reps')::int)::numeric) as total_volume
-    FROM hevy_raw_data,
-      jsonb_array_elements(raw_json->'exercises') as e,
-      jsonb_array_elements(e->'sets') as s
-    WHERE endpoint_name = 'workout'
-      AND s->>'type' = 'normal'
-      AND (s->>'weight_kg')::float > 0
-      AND (s->>'reps')::int > 0
-      AND e->>'muscle_group' IS NOT NULL
-      AND e->>'muscle_group' != ''
-    GROUP BY e->>'muscle_group'
+    FROM exercise_muscles
+    WHERE muscle_group != 'other'
+    GROUP BY muscle_group
     ORDER BY total_volume DESC
   `;
   return rows;
