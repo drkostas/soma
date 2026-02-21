@@ -63,8 +63,8 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
   const years = Array.from(byYear.keys()).sort();
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <ScatterChart margin={{ bottom: 10, left: 10, right: 10 }}>
+    <ResponsiveContainer width="100%" height={320}>
+      <ScatterChart margin={{ bottom: 25, left: 10, right: 10 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
           type="number"
@@ -74,7 +74,6 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
           reversed
           domain={["dataMin - 0.3", "dataMax + 0.3"]}
           tickFormatter={formatPace}
-          label={{ value: "Pace (min/km)", position: "bottom", offset: 0, className: "text-xs fill-muted-foreground" }}
         />
         <YAxis
           type="number"

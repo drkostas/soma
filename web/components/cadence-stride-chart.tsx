@@ -36,14 +36,15 @@ export function CadenceStrideChart({
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
           dataKey="date"
-          className="text-xs"
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(v) =>
             new Date(v).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
             })
           }
-          interval={Math.max(0, Math.floor(data.length / 8) - 1)}
+          interval={Math.max(0, Math.floor(data.length / 6))}
         />
         <YAxis
           yAxisId="cadence"

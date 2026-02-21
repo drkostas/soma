@@ -8,6 +8,7 @@ import { TrainingReadinessChart } from "@/components/training-readiness-chart";
 import { BodyBatteryChart } from "@/components/body-battery-chart";
 import { StressChart } from "@/components/stress-chart";
 import { SleepScheduleChart } from "@/components/sleep-schedule-chart";
+import { SpO2Chart } from "@/components/spo2-chart";
 import { getDb } from "@/lib/db";
 import {
   Moon,
@@ -205,16 +206,30 @@ async function getRespirationTrend() {
 
 async function getSpO2Trend() {
   const sql = getDb();
+  // Combine sleep_data (historical) with spo2_data (recent, richer)
+  // spo2_data wins on overlapping dates via COALESCE
   const rows = await sql`
     SELECT
-      date::text as date,
-      (raw_json->'dailySleepDTO'->>'averageSpO2Value')::float as avg_spo2,
-      (raw_json->'dailySleepDTO'->>'lowestSpO2Value')::float as low_spo2
-    FROM garmin_raw_data
-    WHERE endpoint_name = 'sleep_data'
-      AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
-      AND raw_json->'dailySleepDTO'->>'averageSpO2Value' IS NOT NULL
-    ORDER BY date ASC
+      COALESCE(s.date, p.date)::text as date,
+      COALESCE(
+        (p.raw_json->>'averageSpO2')::float,
+        (s.raw_json->'dailySleepDTO'->>'averageSpO2Value')::float
+      ) as avg_spo2,
+      COALESCE(
+        (p.raw_json->>'lowestSpO2')::int,
+        (s.raw_json->'dailySleepDTO'->>'lowestSpO2Value')::int
+      ) as low_spo2,
+      (p.raw_json->>'avgSleepSpO2')::float as sleep_spo2
+    FROM garmin_raw_data s
+    FULL OUTER JOIN garmin_raw_data p
+      ON s.date = p.date AND p.endpoint_name = 'spo2_data' AND p.raw_json->>'averageSpO2' IS NOT NULL
+    WHERE s.endpoint_name = 'sleep_data'
+      AND (s.raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND (
+        s.raw_json->'dailySleepDTO'->>'averageSpO2Value' IS NOT NULL
+        OR p.raw_json->>'averageSpO2' IS NOT NULL
+      )
+    ORDER BY 1 ASC
   `;
   return rows;
 }
@@ -796,7 +811,8 @@ export default async function SleepPage() {
               const recent7 = data.slice(-7);
               const avg7 = recent7.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / recent7.length;
               const allAvg = data.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / data.length;
-              const minSpo2 = Math.min(...data.filter((d: any) => d.low_spo2 > 0).map((d: any) => Number(d.low_spo2)));
+              const lowVals = data.filter((d: any) => d.low_spo2 && Number(d.low_spo2) > 0).map((d: any) => Number(d.low_spo2));
+              const minSpo2 = lowVals.length > 0 ? Math.min(...lowVals) : null;
               return (
                 <>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -814,37 +830,15 @@ export default async function SleepPage() {
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground">Lowest Recorded</div>
-                      <div className="text-2xl font-bold">{minSpo2 < 100 ? `${minSpo2}%` : "—"}</div>
+                      <div className="text-2xl font-bold">{minSpo2 && minSpo2 < 100 ? `${minSpo2}%` : "—"}</div>
                     </div>
                   </div>
-                  {/* Mini bar chart of recent 30 days */}
-                  <div className="flex items-end gap-[3px] h-16">
-                    {data.slice(-30).map((d: any, i: number) => {
-                      const val = Number(d.avg_spo2);
-                      // Scale from 88-100 range for visual clarity
-                      const norm = Math.max(((val - 88) / 12) * 100, 5);
-                      const isLow = val < 94;
-                      return (
-                        <div
-                          key={i}
-                          className={`flex-1 rounded-t-sm ${isLow ? "bg-red-400/70" : "bg-blue-400/60"}`}
-                          style={{ height: `${Math.min(norm, 100)}%` }}
-                          title={`${d.date}: ${val}% avg${d.low_spo2 ? `, ${Number(d.low_spo2)}% low` : ""}`}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    {(() => {
-                      const recent = data.slice(-30);
-                      return (
-                        <>
-                          <span>{recent.length > 0 ? new Date(recent[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
-                          <span>Average Sleep SpO2</span>
-                          <span>{recent.length > 0 ? new Date(recent[recent.length - 1].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
-                        </>
-                      );
-                    })()}
+                  <SpO2Chart data={data} />
+                  <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-blue-400 inline-block" /> Average</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-purple-400 inline-block" style={{ borderTop: "2px dashed" }} /> Sleep</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-red-400 inline-block" /> Lowest</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-green-400 inline-block" style={{ borderTop: "2px dashed" }} /> 95% normal</span>
                   </div>
                 </>
               );

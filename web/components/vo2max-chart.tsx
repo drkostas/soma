@@ -35,13 +35,15 @@ export function VO2MaxChart({ data }: { data: VO2Entry[] }) {
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
           dataKey="date"
-          className="text-xs"
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(d) =>
             new Date(d).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
             })
           }
+          interval={Math.max(0, Math.floor(chartData.length / 6))}
         />
         <YAxis
           className="text-xs"

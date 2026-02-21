@@ -35,7 +35,8 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
           dataKey="week"
-          className="text-xs"
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(v) => {
             const d = new Date(v);
             return d.toLocaleDateString("en-US", {
@@ -43,7 +44,7 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
               day: "numeric",
             });
           }}
-          interval={Math.max(0, Math.floor(data.length / 8) - 1)}
+          interval={Math.max(0, Math.floor(data.length / 6))}
         />
         <YAxis className="text-xs" />
         <ReferenceLine

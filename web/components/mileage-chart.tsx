@@ -38,27 +38,14 @@ export function MileageChart({ data }: { data: MileageEntry[] }) {
       <BarChart data={chartData}>
         <XAxis
           dataKey="month"
-          className="text-xs"
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(m) => {
-            const [, month] = m.split("-");
-            const months = [
-              "",
-              "Jan",
-              "Feb",
-              "Mar",
-              "Apr",
-              "May",
-              "Jun",
-              "Jul",
-              "Aug",
-              "Sep",
-              "Oct",
-              "Nov",
-              "Dec",
-            ];
-            return months[parseInt(month)] || m;
+            const [year, month] = m.split("-");
+            const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            return `${months[parseInt(month)]} '${year.slice(2)}`;
           }}
-          tick={{ fontSize: 11 }}
+          interval={Math.max(0, Math.floor(chartData.length / 8))}
         />
         <YAxis
           className="text-xs"

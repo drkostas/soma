@@ -50,9 +50,10 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
     trend: ma[i],
   }));
 
-  const paces = chartData.map((d) => d.pace).filter((p) => p > 0 && p < 15);
+  // Filter out extreme outliers (walks/warmups) for domain calculation
+  const paces = chartData.map((d) => d.pace).filter((p) => p > 3 && p < 10);
   const minP = Math.floor(Math.min(...paces) - 0.3);
-  const maxP = Math.ceil(Math.max(...paces) + 0.3);
+  const maxP = Math.min(Math.ceil(Math.max(...paces) + 0.3), 10);
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -64,7 +65,7 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
           tickFormatter={(d) =>
             new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })
           }
-          interval={Math.max(Math.floor(chartData.length / 8), 1)}
+          interval={Math.max(Math.floor(chartData.length / 6), 1)}
         />
         <YAxis
           tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
