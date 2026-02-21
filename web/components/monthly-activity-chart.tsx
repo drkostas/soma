@@ -80,7 +80,7 @@ export function MonthlyActivityChart({
             const [y, m] = String(label ?? "").split("-");
             const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
             return (
-              <div className="bg-card border border-border rounded-lg p-2 text-xs shadow-lg">
+              <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
                 <div className="font-medium mb-1">{months[parseInt(m) - 1]} {y}</div>
                 {payload.filter((p: any) => p.value > 0).map((p: any) => (
                   <div key={p.dataKey} className="flex items-center gap-2">

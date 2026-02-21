@@ -59,7 +59,7 @@ export function YearlyMileageChart({
           content={({ active, payload, label }) => {
             if (!active || !payload?.length) return null;
             return (
-              <div className="bg-card border border-border rounded-lg p-2 text-xs shadow-lg">
+              <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
                 <div className="font-medium mb-1">{MONTH_LABELS[(label as number) - 1]}</div>
                 {payload
                   .filter((p: any) => p.value > 0)

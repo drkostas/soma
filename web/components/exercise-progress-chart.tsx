@@ -93,7 +93,7 @@ export function ExerciseProgressChart({ data }: { data: ProgressEntry[] }) {
                     if (!active || !payload?.[0]) return null;
                     const d = payload[0].payload;
                     return (
-                      <div className="bg-card border border-border rounded-lg p-1.5 text-xs shadow-lg">
+                      <div className="bg-card text-card-foreground border border-border rounded-lg p-1.5 text-xs shadow-lg">
                         <div>{new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</div>
                         <div className="font-medium">{d.weight.toFixed(1)} kg</div>
                       </div>

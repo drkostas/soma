@@ -89,7 +89,7 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
             if (!active || !payload?.[0]) return null;
             const d = payload[0].payload;
             return (
-              <div className="bg-card border border-border rounded-lg p-2 text-xs shadow-lg">
+              <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
                 <div className="font-medium">{d.name}</div>
                 <div className="text-muted-foreground">{new Date(d.date).toLocaleDateString()}</div>
                 <div className="mt-1">Pace: {formatPace(d.pace)}/km</div>

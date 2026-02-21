@@ -76,6 +76,7 @@ export function TrainingLoadChart({ data }: { data: TrainingLoadEntry[] }) {
             border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
+            color: "var(--card-foreground)",
           }}
           formatter={(value: any, name: any) => {
             if (name === "acwr") return [Number(value).toFixed(2), "ACWR"];

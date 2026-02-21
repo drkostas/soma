@@ -85,7 +85,7 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
             const d = payload[0].payload;
             const weekDate = new Date(d.week);
             return (
-              <div className="bg-card border border-border rounded-lg p-2 text-xs shadow-lg">
+              <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
                 <div className="font-medium">
                   Week of{" "}
                   {weekDate.toLocaleDateString("en-US", {
