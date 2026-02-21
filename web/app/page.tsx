@@ -6,6 +6,7 @@ import { StepsTrendChart } from "@/components/steps-trend-chart";
 import { CalorieTrendChart } from "@/components/calorie-trend-chart";
 import { WeightTrendChart } from "@/components/weight-trend-chart";
 import { ActivityHeatmap } from "@/components/activity-heatmap";
+import { RHRChart } from "@/components/rhr-chart";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -383,6 +384,19 @@ async function getLatestSleep() {
   return rows[0] || null;
 }
 
+async function getRestingHRTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      resting_heart_rate as rhr
+    FROM daily_health_summary
+    WHERE resting_heart_rate > 0
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getTrainingTimeOfDay() {
   const sql = getDb();
   const rows = await sql`
@@ -520,7 +534,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep, recovery] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep, recovery, rhrTrend] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -542,6 +556,7 @@ export default async function Home() {
       getTrainingTimeOfDay(),
       getLatestSleep(),
       getRecoverySummary(),
+      getRestingHRTrend(),
     ]);
 
   // Merge duplicate activity types
@@ -817,6 +832,40 @@ export default async function Home() {
           </Card>
         )}
       </div>
+
+      {/* Resting Heart Rate Trend */}
+      {(rhrTrend as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <HeartPulse className="h-4 w-4 text-red-400" />
+              Resting Heart Rate
+              {(() => {
+                const data = (rhrTrend as any[]).filter((r: any) => Number(r.rhr) > 0);
+                if (data.length === 0) return null;
+                const latest = Number(data[data.length - 1].rhr);
+                const avg7d = data.slice(-7).reduce((s: number, r: any) => s + Number(r.rhr), 0) / Math.min(data.length, 7);
+                return (
+                  <span className="ml-auto text-xs font-normal">
+                    Latest: {latest} bpm · 7-day avg: {Math.round(avg7d)} bpm
+                  </span>
+                );
+              })()}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RHRChart
+              data={(rhrTrend as any[])
+                .filter((r: any) => Number(r.rhr) > 0)
+                .slice(-90)
+                .map((r: any) => ({
+                  date: r.date,
+                  rhr: Number(r.rhr),
+                }))}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Fitness Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

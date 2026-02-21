@@ -278,70 +278,101 @@ async function getTrainingStatus() {
 async function getPersonalRecords() {
   const sql = getDb();
 
-  // Fastest 5K (runs >= 5km, best pace)
-  const fastest5k = await sql`
-    SELECT
-      (raw_json->>'startTimeLocal')::text as date,
-      (raw_json->>'activityName')::text as name,
-      (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace,
-      (raw_json->>'distance')::float / 1000.0 as distance
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'distance')::float >= 4800
-    ORDER BY (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float, 0) ASC
-    LIMIT 1
-  `;
-
-  // Longest run
-  const longest = await sql`
-    SELECT
-      (raw_json->>'startTimeLocal')::text as date,
-      (raw_json->>'activityName')::text as name,
-      (raw_json->>'distance')::float / 1000.0 as distance,
-      (raw_json->>'duration')::float / 60.0 as duration_min
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-    ORDER BY (raw_json->>'distance')::float DESC
-    LIMIT 1
-  `;
-
-  // Highest avg HR
-  const maxHR = await sql`
-    SELECT
-      (raw_json->>'startTimeLocal')::text as date,
-      (raw_json->>'activityName')::text as name,
-      (raw_json->>'averageHR')::float as avg_hr,
-      (raw_json->>'maxHR')::float as max_hr
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND raw_json->>'maxHR' IS NOT NULL
-    ORDER BY (raw_json->>'maxHR')::float DESC
-    LIMIT 1
-  `;
-
-  // Most calories
-  const maxCal = await sql`
-    SELECT
-      (raw_json->>'startTimeLocal')::text as date,
-      (raw_json->>'activityName')::text as name,
-      (raw_json->>'calories')::float as calories,
-      (raw_json->>'distance')::float / 1000.0 as distance
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND raw_json->>'calories' IS NOT NULL
-    ORDER BY (raw_json->>'calories')::float DESC
-    LIMIT 1
-  `;
+  const [fastest5k, fastest10k, longest, maxHR, maxCal, fastestPace] = await Promise.all([
+    // Estimated 5K time (runs >= 5km, best pace → projected 5K time)
+    sql`
+      SELECT
+        (raw_json->>'startTimeLocal')::text as date,
+        (raw_json->>'activityName')::text as name,
+        (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace,
+        (raw_json->>'distance')::float / 1000.0 as distance,
+        ((raw_json->>'duration')::float / (raw_json->>'distance')::float) * 5000.0 as est_5k_seconds
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND (raw_json->>'distance')::float >= 4800
+      ORDER BY (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float, 0) ASC
+      LIMIT 1
+    `,
+    // Estimated 10K time (runs >= 10km, best pace → projected 10K time)
+    sql`
+      SELECT
+        (raw_json->>'startTimeLocal')::text as date,
+        (raw_json->>'activityName')::text as name,
+        (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace,
+        (raw_json->>'distance')::float / 1000.0 as distance,
+        ((raw_json->>'duration')::float / (raw_json->>'distance')::float) * 10000.0 as est_10k_seconds
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND (raw_json->>'distance')::float >= 9500
+      ORDER BY (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float, 0) ASC
+      LIMIT 1
+    `,
+    // Longest run
+    sql`
+      SELECT
+        (raw_json->>'startTimeLocal')::text as date,
+        (raw_json->>'activityName')::text as name,
+        (raw_json->>'distance')::float / 1000.0 as distance,
+        (raw_json->>'duration')::float / 60.0 as duration_min
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+      ORDER BY (raw_json->>'distance')::float DESC
+      LIMIT 1
+    `,
+    // Highest max HR
+    sql`
+      SELECT
+        (raw_json->>'startTimeLocal')::text as date,
+        (raw_json->>'activityName')::text as name,
+        (raw_json->>'averageHR')::float as avg_hr,
+        (raw_json->>'maxHR')::float as max_hr
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND raw_json->>'maxHR' IS NOT NULL
+      ORDER BY (raw_json->>'maxHR')::float DESC
+      LIMIT 1
+    `,
+    // Most calories
+    sql`
+      SELECT
+        (raw_json->>'startTimeLocal')::text as date,
+        (raw_json->>'activityName')::text as name,
+        (raw_json->>'calories')::float as calories,
+        (raw_json->>'distance')::float / 1000.0 as distance
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND raw_json->>'calories' IS NOT NULL
+      ORDER BY (raw_json->>'calories')::float DESC
+      LIMIT 1
+    `,
+    // Fastest single-km pace (runs > 3km for quality filter)
+    sql`
+      SELECT
+        (raw_json->>'startTimeLocal')::text as date,
+        (raw_json->>'activityName')::text as name,
+        (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace,
+        (raw_json->>'distance')::float / 1000.0 as distance
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND (raw_json->>'distance')::float > 3000
+      ORDER BY (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float, 0) ASC
+      LIMIT 1
+    `,
+  ]);
 
   return {
     fastest5k: fastest5k[0] || null,
+    fastest10k: fastest10k[0] || null,
     longest: longest[0] || null,
     maxHR: maxHR[0] || null,
     maxCal: maxCal[0] || null,
+    fastestPace: fastestPace[0] || null,
   };
 }
 
@@ -1074,22 +1105,71 @@ export default async function RunningPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {records.fastest5k && (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Best Pace (5K+)</div>
-                <div className="text-lg font-bold">
-                  {formatPace(Number(records.fastest5k.pace))}/km
+          {/* Race Time Estimates */}
+          {(records.fastest5k || records.fastest10k) && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 pb-6 border-b border-border/50">
+              {records.fastest5k && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground mb-1">Est. 5K Time</div>
+                  <div className="text-2xl font-bold text-green-400">
+                    {(() => {
+                      const secs = Number(records.fastest5k.est_5k_seconds);
+                      const m = Math.floor(secs / 60);
+                      const s = Math.round(secs % 60);
+                      return `${m}:${s.toString().padStart(2, "0")}`;
+                    })()}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatPace(Number(records.fastest5k.pace))}/km ·{" "}
+                    {new Date(records.fastest5k.date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {Number(records.fastest5k.distance).toFixed(1)} km ·{" "}
-                  {new Date(records.fastest5k.date).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
+              )}
+              {records.fastest10k && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground mb-1">Est. 10K Time</div>
+                  <div className="text-2xl font-bold text-blue-400">
+                    {(() => {
+                      const secs = Number(records.fastest10k.est_10k_seconds);
+                      const m = Math.floor(secs / 60);
+                      const s = Math.round(secs % 60);
+                      return `${m}:${s.toString().padStart(2, "0")}`;
+                    })()}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatPace(Number(records.fastest10k.pace))}/km ·{" "}
+                    {new Date(records.fastest10k.date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+              {records.fastestPace && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground mb-1">Best Avg Pace</div>
+                  <div className="text-2xl font-bold text-amber-400">
+                    {formatPace(Number(records.fastestPace.pace))}/km
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {Number(records.fastestPace.distance).toFixed(1)} km ·{" "}
+                    {new Date(records.fastestPace.date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {/* Other Records */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {records.longest && (
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Longest Run</div>
