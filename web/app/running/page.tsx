@@ -145,6 +145,7 @@ async function getHRPaceData() {
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND (raw_json->>'distance')::float > 1000
       AND raw_json->>'averageHR' IS NOT NULL
+      AND (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 BETWEEN 3.0 AND 10.0
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
   return rows;
@@ -631,8 +632,84 @@ async function getShoeMileage() {
   return rows;
 }
 
+async function getSplitAnalysis() {
+  const sql = getDb();
+  // Get average pace per split position (km 1, km 2, etc.) across all runs
+  const rows = await sql`
+    WITH split_data AS (
+      SELECT
+        s.activity_id,
+        (lap->>'lapIndex')::int as lap_index,
+        (lap->>'distance')::float as distance,
+        (lap->>'duration')::float as duration,
+        (lap->>'averageHR')::float as avg_hr,
+        (lap->>'averageRunCadence')::float as cadence,
+        (lap->>'averagePower')::float as power
+      FROM garmin_activity_raw s,
+        jsonb_array_elements(s.raw_json->'lapDTOs') as lap
+      WHERE s.endpoint_name = 'splits'
+        AND (lap->>'distance')::float BETWEEN 900 AND 1100
+        AND (lap->>'duration')::float > 0
+    )
+    SELECT
+      lap_index + 1 as km,
+      COUNT(*) as runs,
+      AVG(duration / NULLIF(distance / 1000.0, 0) / 60.0) as avg_pace,
+      AVG(avg_hr) as avg_hr,
+      AVG(cadence) as avg_cadence,
+      AVG(power) as avg_power,
+      PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY duration / NULLIF(distance / 1000.0, 0) / 60.0) as fast_pace,
+      PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY duration / NULLIF(distance / 1000.0, 0) / 60.0) as slow_pace
+    FROM split_data
+    WHERE lap_index < 15
+    GROUP BY lap_index
+    HAVING COUNT(*) >= 10
+    ORDER BY lap_index ASC
+  `;
+  return rows;
+}
+
+async function getBestSplits() {
+  const sql = getDb();
+  const rows = await sql`
+    WITH split_data AS (
+      SELECT
+        s.activity_id,
+        (lap->>'lapIndex')::int as lap_index,
+        (lap->>'distance')::float as distance,
+        (lap->>'duration')::float as duration,
+        (lap->>'averageHR')::float as avg_hr,
+        (lap->>'averageRunCadence')::float as cadence
+      FROM garmin_activity_raw s,
+        jsonb_array_elements(s.raw_json->'lapDTOs') as lap
+      WHERE s.endpoint_name = 'splits'
+        AND (lap->>'distance')::float BETWEEN 900 AND 1100
+        AND (lap->>'duration')::float > 0
+    ),
+    with_pace AS (
+      SELECT *,
+        duration / NULLIF(distance / 1000.0, 0) / 60.0 as pace
+      FROM split_data
+    )
+    SELECT
+      wp.activity_id,
+      wp.lap_index + 1 as km,
+      wp.pace,
+      wp.avg_hr,
+      wp.cadence,
+      (sm.raw_json->>'startTimeLocal')::text as date,
+      (sm.raw_json->>'activityName')::text as activity_name
+    FROM with_pace wp
+    JOIN garmin_activity_raw sm ON sm.activity_id = wp.activity_id AND sm.endpoint_name = 'summary'
+    WHERE wp.pace BETWEEN 2.5 AND 10
+    ORDER BY wp.pace ASC
+    LIMIT 5
+  `;
+  return rows;
+}
+
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution, shoeMileage] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution, shoeMileage, splitAnalysis, bestSplits] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
@@ -654,6 +731,8 @@ export default async function RunningPage() {
       getRunningConsistency(),
       getOverallHRDistribution(),
       getShoeMileage(),
+      getSplitAnalysis(),
+      getBestSplits(),
     ]);
 
   return (
@@ -1028,6 +1107,94 @@ export default async function RunningPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Per-KM Split Analysis */}
+      {(splitAnalysis as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-cyan-400" />
+              Per-KM Split Analysis
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                avg across all runs
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Split pace bars */}
+              <div className="space-y-1.5">
+                {(() => {
+                  const splits = splitAnalysis as any[];
+                  const paces = splits.map((s: any) => Number(s.avg_pace));
+                  const minPace = Math.min(...paces);
+                  const maxPace = Math.max(...paces);
+                  const range = maxPace - minPace || 1;
+
+                  return splits.map((s: any) => {
+                    const pace = Number(s.avg_pace);
+                    const hr = s.avg_hr ? Math.round(Number(s.avg_hr)) : null;
+                    const cadence = s.avg_cadence ? Math.round(Number(s.avg_cadence)) : null;
+                    const power = s.avg_power ? Math.round(Number(s.avg_power)) : null;
+                    // Normalize: fastest pace = 100%, slowest = 30%
+                    const normalizedWidth = 100 - ((pace - minPace) / range) * 70;
+                    // Color: green for fastest splits, yellow for mid, orange for slowest
+                    const relPos = (pace - minPace) / range;
+                    const barColor = relPos < 0.33 ? "bg-emerald-500" : relPos < 0.66 ? "bg-yellow-500" : "bg-orange-500";
+
+                    return (
+                      <div key={s.km} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-10 text-right font-mono">
+                          km {s.km}
+                        </span>
+                        <div className="flex-1 h-5 bg-muted/30 rounded-sm overflow-hidden relative">
+                          <div
+                            className={`h-full ${barColor} rounded-sm transition-all`}
+                            style={{ width: `${normalizedWidth}%` }}
+                          />
+                          <span className="absolute inset-y-0 right-2 flex items-center text-[10px] font-mono text-muted-foreground">
+                            {formatPace(pace)}/km
+                          </span>
+                        </div>
+                        <div className="hidden md:flex items-center gap-3 text-[10px] text-muted-foreground w-36">
+                          {hr && <span>{hr} bpm</span>}
+                          {cadence && <span>{cadence} spm</span>}
+                          {power && <span>{power}W</span>}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground w-12 text-right">
+                          {Number(s.runs)} runs
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* Best single KM splits */}
+              {(bestSplits as any[]).length > 0 && (
+                <div className="pt-3 border-t border-border/50">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">Fastest Single KM Splits</div>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                    {(bestSplits as any[]).map((s: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2 p-2 bg-muted/20 rounded">
+                        <span className={`text-sm font-bold ${i === 0 ? "text-amber-400" : i === 1 ? "text-slate-300" : "text-amber-700"}`}>
+                          #{i + 1}
+                        </span>
+                        <div>
+                          <div className="text-sm font-medium font-mono">{formatPace(Number(s.pace))}/km</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            km {s.km} · {s.activity_name?.slice(0, 15)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Training Status */}
       {trainingStatus && (
