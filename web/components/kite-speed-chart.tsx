@@ -19,6 +19,16 @@ interface KiteSession {
   jump?: number;
 }
 
+function computeMA(data: { maxSpeedKts: number }[], window: number) {
+  return data.map((_, i) => {
+    const start = Math.max(0, i - Math.floor(window / 2));
+    const end = Math.min(data.length, i + Math.ceil(window / 2));
+    const slice = data.slice(start, end).filter((d) => d.maxSpeedKts > 0);
+    if (slice.length === 0) return null;
+    return slice.reduce((s, d) => s + d.maxSpeedKts, 0) / slice.length;
+  });
+}
+
 export function KiteSpeedChart({ data }: { data: KiteSession[] }) {
   if (!data || data.length === 0) {
     return (
@@ -28,15 +38,18 @@ export function KiteSpeedChart({ data }: { data: KiteSession[] }) {
     );
   }
 
-  const chartData = data
-    .filter((d) => d.maxSpeedKts > 0)
-    .map((d) => ({
-      ...d,
-      dateLabel: new Date(d.date).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      }),
-    }));
+  const filtered = data.filter((d) => d.maxSpeedKts > 0);
+  const window = Math.min(5, Math.ceil(filtered.length / 4));
+  const ma = computeMA(filtered, window);
+
+  const chartData = filtered.map((d, i) => ({
+    ...d,
+    trend: ma[i] ? Number(ma[i]!.toFixed(1)) : null,
+    dateLabel: new Date(d.date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
+  }));
 
   return (
     <ResponsiveContainer width="100%" height={250}>
@@ -70,14 +83,13 @@ export function KiteSpeedChart({ data }: { data: KiteSession[] }) {
             );
           }}
         />
-        <Scatter dataKey="maxSpeedKts" fill="#22d3ee" fillOpacity={0.8} />
+        <Scatter dataKey="maxSpeedKts" fill="#22d3ee" fillOpacity={0.5} r={4} />
         <Line
-          dataKey="maxSpeedKts"
+          dataKey="trend"
           stroke="#22d3ee"
-          strokeWidth={1}
-          strokeDasharray="3 3"
+          strokeWidth={2}
           dot={false}
-          strokeOpacity={0.4}
+          connectNulls
         />
       </ComposedChart>
     </ResponsiveContainer>

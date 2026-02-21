@@ -380,6 +380,21 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   lap_swimming: <Waves className="h-3.5 w-3.5 text-blue-400" />,
   cycling: <Bike className="h-3.5 w-3.5 text-yellow-400" />,
   e_bike_fitness: <Bike className="h-3.5 w-3.5 text-yellow-400" />,
+  indoor_cardio: <Heart className="h-3.5 w-3.5 text-red-400" />,
+};
+
+const ACTIVITY_BAR_COLORS: Record<string, string> = {
+  running: "bg-green-500/70",
+  strength_training: "bg-orange-500/70",
+  kiteboarding_v2: "bg-cyan-500/70",
+  resort_snowboarding: "bg-blue-400/70",
+  hiking: "bg-emerald-500/70",
+  walking: "bg-emerald-400/70",
+  lap_swimming: "bg-blue-500/70",
+  cycling: "bg-yellow-500/70",
+  e_bike_fitness: "bg-yellow-500/70",
+  indoor_cardio: "bg-red-400/70",
+  other: "bg-violet-400/70",
 };
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -829,15 +844,16 @@ export default async function Home() {
             {mergedCounts.map((a) => {
               const icon = ACTIVITY_ICONS[a.type_key] || <Activity className="h-3.5 w-3.5" />;
               const label = ACTIVITY_LABELS[a.type_key] || a.type_key.replace(/_/g, " ");
-              const pct = totalActivities > 0 ? (a.cnt / totalActivities) * 100 : 0;
+              const pct = totalActivities > 0 ? (a.cnt / mergedCounts[0].cnt) * 100 : 0;
+              const barColor = ACTIVITY_BAR_COLORS[a.type_key] || "bg-primary/60";
               return (
                 <div key={a.type_key} className="flex items-center gap-2 text-sm">
                   {icon}
                   <span className="text-muted-foreground w-14 truncate">{label}</span>
                   <div className="flex-1 h-4 bg-muted rounded-sm overflow-hidden">
                     <div
-                      className="h-full bg-primary/60 rounded-sm"
-                      style={{ width: `${Math.max(pct, 2)}%` }}
+                      className={`h-full ${barColor} rounded-sm`}
+                      style={{ width: `${Math.max(pct, 3)}%` }}
                     />
                   </div>
                   <span className="font-medium w-8 text-right">{a.cnt}</span>
