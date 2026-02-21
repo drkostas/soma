@@ -28,7 +28,7 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <AreaChart data={recent} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+      <AreaChart data={recent} margin={{ top: 5, right: 20, bottom: 5, left: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} vertical={false} />
         <XAxis
           dataKey="date"
@@ -45,8 +45,8 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
         <YAxis
           className="text-[10px]"
           tickLine={false}
-          width={35}
-          tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+          width={45}
+          tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
         />
         <Tooltip
           contentStyle={{
