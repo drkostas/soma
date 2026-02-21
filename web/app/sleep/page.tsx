@@ -5,6 +5,8 @@ import { SleepScoreChart } from "@/components/sleep-score-chart";
 import { RHRChart } from "@/components/rhr-chart";
 import { HRVChart } from "@/components/hrv-chart";
 import { TrainingReadinessChart } from "@/components/training-readiness-chart";
+import { BodyBatteryChart } from "@/components/body-battery-chart";
+import { StressChart } from "@/components/stress-chart";
 import { getDb } from "@/lib/db";
 import {
   Moon,
@@ -147,6 +149,22 @@ async function getTrainingReadiness() {
   return rows;
 }
 
+async function getStressTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->>'averageStressLevel')::int as avg_stress,
+      (raw_json->>'maxStressLevel')::int as max_stress
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'user_summary'
+      AND raw_json->>'averageStressLevel' IS NOT NULL
+      AND (raw_json->>'averageStressLevel')::int > 0
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getBodyBatteryTrend() {
   const sql = getDb();
   const rows = await sql`
@@ -185,7 +203,7 @@ function qualityBadge(quality: string | null) {
 }
 
 export default async function SleepPage() {
-  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness] =
+  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend] =
     await Promise.all([
       getSleepStats(),
       getSleepTrend(),
@@ -195,6 +213,7 @@ export default async function SleepPage() {
       getBodyBatteryTrend(),
       getHRVTrend(),
       getTrainingReadiness(),
+      getStressTrend(),
     ]);
 
   return (
@@ -340,33 +359,13 @@ export default async function SleepPage() {
           </CardHeader>
           <CardContent>
             {bodyBattery.length > 0 ? (
-              <div className="space-y-2">
-                {bodyBattery.slice(-14).map((bb: any) => {
-                  const charged = Number(bb.charged);
-                  const drained = Number(bb.drained);
-                  const net = charged - drained;
-                  return (
-                    <div key={bb.date} className="flex items-center gap-2 text-xs">
-                      <span className="w-12 text-muted-foreground">
-                        {new Date(bb.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </span>
-                      <div className="flex-1 flex h-4 gap-0.5">
-                        <div
-                          className="bg-green-500/60 rounded-l-sm"
-                          style={{ width: `${charged}%` }}
-                        />
-                        <div
-                          className="bg-red-400/60 rounded-r-sm"
-                          style={{ width: `${drained}%` }}
-                        />
-                      </div>
-                      <span className={`w-10 text-right font-medium ${net > 0 ? "text-green-400" : "text-red-400"}`}>
-                        {net > 0 ? "+" : ""}{net}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              <BodyBatteryChart
+                data={(bodyBattery as any[]).map((bb: any) => ({
+                  date: bb.date,
+                  charged: Number(bb.charged),
+                  drained: Number(bb.drained),
+                }))}
+              />
             ) : (
               <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
                 No body battery data
@@ -375,6 +374,57 @@ export default async function SleepPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Stress Trend */}
+      {stressTrend.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Brain className="h-4 w-4 text-yellow-400" />
+              Stress Trend
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              {(() => {
+                const latest = stressTrend[stressTrend.length - 1] as any;
+                const recentAvg = stressTrend.slice(-7).reduce((s: number, d: any) => s + Number(d.avg_stress), 0) / Math.min(stressTrend.length, 7);
+                return (
+                  <>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Today&apos;s Avg</div>
+                      <div className="text-2xl font-bold">{latest?.avg_stress ?? "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">7-Day Avg</div>
+                      <div className="text-2xl font-bold">{Math.round(recentAvg)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Today&apos;s Peak</div>
+                      <div className="text-2xl font-bold">{latest?.max_stress ?? "—"}</div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            <StressChart
+              data={(stressTrend as any[]).map((s: any) => ({
+                date: s.date,
+                avg_stress: Number(s.avg_stress),
+                max_stress: Number(s.max_stress),
+              }))}
+            />
+            <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-1 rounded bg-yellow-400" style={{ display: "inline-block" }} /> Average
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-0.5 rounded bg-red-400/50" style={{ display: "inline-block", borderTop: "1px dashed" }} /> Peak
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* HRV Trend */}
       {hrvTrend.length > 0 && (

@@ -8,6 +8,7 @@ import { HRPaceChart } from "@/components/hr-pace-chart";
 import { WeeklyDistanceChart } from "@/components/weekly-distance-chart";
 import { CadenceStrideChart } from "@/components/cadence-stride-chart";
 import { ClickableRunTable } from "@/components/clickable-run-table";
+import { FitnessScoresChart } from "@/components/fitness-scores-chart";
 import { getDb } from "@/lib/db";
 import {
   Timer,
@@ -18,6 +19,7 @@ import {
   TrendingUp,
   Footprints,
   Activity,
+  Mountain,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -193,6 +195,51 @@ async function getTrainingEffects() {
   return rows;
 }
 
+async function getFitnessScores() {
+  const sql = getDb();
+  const endurance = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->>'overallScore')::int as score,
+      (raw_json->>'classification')::int as classification
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'endurance_score'
+    ORDER BY date ASC
+  `;
+  const hill = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->>'overallScore')::int as score,
+      (raw_json->>'strengthScore')::int as strength,
+      (raw_json->>'enduranceScore')::int as endurance
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'hill_score'
+    ORDER BY date ASC
+  `;
+
+  // Merge by date
+  const dateMap = new Map<string, { endurance: number | null; hill: number | null }>();
+  for (const e of endurance) {
+    dateMap.set(e.date, { endurance: Number(e.score), hill: null });
+  }
+  for (const h of hill) {
+    const existing = dateMap.get(h.date) || { endurance: null, hill: null };
+    existing.hill = Number(h.score);
+    dateMap.set(h.date, existing);
+  }
+
+  const latestEndurance = endurance[endurance.length - 1] || null;
+  const latestHill = hill[hill.length - 1] || null;
+
+  return {
+    trend: Array.from(dateMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, scores]) => ({ date, ...scores })),
+    latestEndurance,
+    latestHill,
+  };
+}
+
 async function getPersonalRecords() {
   const sql = getDb();
 
@@ -286,7 +333,7 @@ async function getRecentRuns() {
 }
 
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
@@ -299,6 +346,7 @@ export default async function RunningPage() {
       getTrainingEffects(),
       getPersonalRecords(),
       getRecentRuns(),
+      getFitnessScores(),
     ]);
 
   return (
@@ -495,6 +543,49 @@ export default async function RunningPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Fitness Scores */}
+      {fitnessScores.trend.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Mountain className="h-4 w-4 text-amber-400" />
+              Fitness Scores
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div>
+                <div className="text-xs text-muted-foreground">Endurance Score</div>
+                <div className="text-2xl font-bold">
+                  {fitnessScores.latestEndurance
+                    ? Number(fitnessScores.latestEndurance.score).toLocaleString()
+                    : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Hill Score</div>
+                <div className="text-2xl font-bold">
+                  {fitnessScores.latestHill?.score ?? "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Hill Strength</div>
+                <div className="text-2xl font-bold">
+                  {(fitnessScores.latestHill as any)?.strength ?? "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Hill Endurance</div>
+                <div className="text-2xl font-bold">
+                  {(fitnessScores.latestHill as any)?.endurance ?? "—"}
+                </div>
+              </div>
+            </div>
+            <FitnessScoresChart data={fitnessScores.trend} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Personal Records */}
       <Card className="mb-6">
