@@ -41,19 +41,20 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
     );
   }
 
-  const ma = movingAverage(data, Math.min(7, Math.ceil(data.length / 5)));
+  // Filter out extreme outliers (walks/warmups > 9 min/km)
+  const filtered = data.filter((d) => d.pace > 2.5 && d.pace < 9);
+  const ma = movingAverage(filtered, Math.min(7, Math.ceil(filtered.length / 5)));
 
-  const chartData = data.map((d, i) => ({
+  const chartData = filtered.map((d, i) => ({
     date: d.date,
     pace: Number(d.pace.toFixed(2)),
     distance: Number(d.distance.toFixed(1)),
     trend: ma[i],
   }));
 
-  // Filter out extreme outliers (walks/warmups) for domain calculation
-  const paces = chartData.map((d) => d.pace).filter((p) => p > 3 && p < 10);
+  const paces = chartData.map((d) => d.pace);
   const minP = Math.floor(Math.min(...paces) - 0.3);
-  const maxP = Math.min(Math.ceil(Math.max(...paces) + 0.3), 10);
+  const maxP = Math.ceil(Math.max(...paces) + 0.3);
 
   return (
     <ResponsiveContainer width="100%" height={300}>
