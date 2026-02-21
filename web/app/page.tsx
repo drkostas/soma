@@ -1,22 +1,21 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
-import { WeightChart } from "@/components/weight-chart";
-import { getDb } from "@/lib/db";
 import { WorkoutFrequencyChart } from "@/components/workout-frequency-chart";
+import { getDb } from "@/lib/db";
 import {
   Footprints,
   Flame,
   HeartPulse,
-  Scale,
   Moon,
   Brain,
   BatteryCharging,
   Activity,
   Dumbbell,
-
-  TrendingDown,
-  TrendingUp,
-  Minus,
+  Wind,
+  Snowflake,
+  Mountain,
+  Zap,
+  Calendar,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -40,7 +39,6 @@ async function getWeeklyAverages() {
       ROUND(AVG(resting_heart_rate)) as avg_rhr,
       ROUND(AVG(avg_stress_level)) as avg_stress,
       ROUND(AVG(active_kilocalories)) as avg_active_cal,
-      ROUND(AVG(body_battery_charged)) as avg_bb_charged,
       COUNT(*) as days_count
     FROM daily_health_summary
     WHERE date >= CURRENT_DATE - 7
@@ -48,49 +46,11 @@ async function getWeeklyAverages() {
   return rows[0] || null;
 }
 
-async function getWeightHistory() {
-  const sql = getDb();
-  const rows = await sql`
-    SELECT date, weight_grams / 1000.0 as weight_kg
-    FROM weight_log
-    WHERE date >= CURRENT_DATE - 30
-    ORDER BY date ASC
-  `;
-  return rows;
-}
-
-async function getLatestWeight() {
-  const sql = getDb();
-  const rows = await sql`
-    SELECT weight_grams / 1000.0 as weight_kg, date
-    FROM weight_log
-    ORDER BY date DESC
-    LIMIT 1
-  `;
-  return rows[0] || null;
-}
-
-async function getWeightDelta() {
-  const sql = getDb();
-  const rows = await sql`
-    WITH latest AS (
-      SELECT weight_grams / 1000.0 as kg FROM weight_log ORDER BY date DESC LIMIT 1
-    ),
-    week_ago AS (
-      SELECT weight_grams / 1000.0 as kg FROM weight_log WHERE date <= CURRENT_DATE - 7 ORDER BY date DESC LIMIT 1
-    )
-    SELECT latest.kg - week_ago.kg as delta_7d
-    FROM latest, week_ago
-  `;
-  return rows[0]?.delta_7d ?? null;
-}
-
 async function getWorkoutStats() {
   const sql = getDb();
   const rows = await sql`
     SELECT
       COUNT(*) as total_workouts,
-      MIN(raw_json->>'start_time') as first_workout,
       MAX(raw_json->>'start_time') as last_workout
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
@@ -108,7 +68,7 @@ async function getWorkoutStats() {
   };
 }
 
-async function getMonthlyFrequency() {
+async function getGymFrequency() {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -118,6 +78,52 @@ async function getMonthlyFrequency() {
     WHERE endpoint_name = 'workout'
     GROUP BY month
     ORDER BY month ASC
+  `;
+  return rows;
+}
+
+async function getRunningStats() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      COUNT(*) as total_runs,
+      SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
+      MAX((raw_json->>'vO2MaxValue')::float) as vo2max
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' = 'running'
+  `;
+  return rows[0] || null;
+}
+
+async function getActivityCounts() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      raw_json->'activityType'->>'typeKey' as type_key,
+      COUNT(*) as cnt
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+    GROUP BY type_key
+    ORDER BY cnt DESC
+  `;
+  return rows;
+}
+
+async function getRecentActivities() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      raw_json->'activityType'->>'typeKey' as type_key,
+      (raw_json->>'startTimeLocal')::text as date,
+      raw_json->>'activityName' as name,
+      (raw_json->>'distance')::float / 1000.0 as distance_km,
+      (raw_json->>'duration')::float / 60.0 as duration_min,
+      (raw_json->>'calories')::float as calories
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+    ORDER BY (raw_json->>'startTimeLocal')::text DESC
+    LIMIT 8
   `;
   return rows;
 }
@@ -162,25 +168,48 @@ async function getLastWorkoutDetail() {
   };
 }
 
-function TrendIcon({ value }: { value: number | null }) {
-  if (value === null) return null;
-  if (value > 0.1) return <TrendingUp className="h-3 w-3 text-red-400" />;
-  if (value < -0.1) return <TrendingDown className="h-3 w-3 text-green-400" />;
-  return <Minus className="h-3 w-3 text-muted-foreground" />;
+const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
+  running: <Footprints className="h-3.5 w-3.5 text-green-400" />,
+  strength_training: <Dumbbell className="h-3.5 w-3.5 text-orange-400" />,
+  kiteboarding_v2: <Wind className="h-3.5 w-3.5 text-cyan-400" />,
+  wind_kite_surfing: <Wind className="h-3.5 w-3.5 text-cyan-400" />,
+  resort_snowboarding: <Snowflake className="h-3.5 w-3.5 text-blue-300" />,
+  resort_skiing_snowboarding_ws: <Snowflake className="h-3.5 w-3.5 text-blue-300" />,
+  hiking: <Mountain className="h-3.5 w-3.5 text-green-400" />,
+};
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  running: "Run",
+  strength_training: "Gym",
+  kiteboarding_v2: "Kite",
+  wind_kite_surfing: "Kite",
+  resort_snowboarding: "Snow",
+  resort_skiing_snowboarding_ws: "Snow",
+  hiking: "Hike",
+  e_bike_fitness: "E-Bike",
+  lap_swimming: "Swim",
+};
+
+function formatDuration(mins: number) {
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 export default async function Home() {
-  const [health, weekly, weightHistory, latestWeight, weightDelta, workouts, monthlyFreq, lastWorkout] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
-      getWeightHistory(),
-      getLatestWeight(),
-      getWeightDelta(),
       getWorkoutStats(),
-      getMonthlyFrequency(),
+      getGymFrequency(),
+      getRunningStats(),
+      getActivityCounts(),
+      getRecentActivities(),
       getLastWorkoutDetail(),
     ]);
+
+  const totalActivities = activityCounts.reduce((s: number, r: any) => s + Number(r.cnt), 0);
 
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
@@ -189,7 +218,7 @@ export default async function Home() {
         <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
         <p className="text-muted-foreground mt-1">
           {health?.date
-            ? `Latest data: ${new Date(health.date).toLocaleDateString("en-US", {
+            ? `Latest: ${new Date(health.date).toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
                 day: "numeric",
@@ -225,15 +254,10 @@ export default async function Home() {
           icon={<HeartPulse className="h-4 w-4 text-red-400" />}
         />
         <StatCard
-          title="Weight"
-          value={latestWeight ? `${Number(latestWeight.weight_kg).toFixed(1)} kg` : "—"}
-          subtitle={
-            weightDelta !== null
-              ? `${weightDelta > 0 ? "+" : ""}${Number(weightDelta).toFixed(1)} kg this week`
-              : undefined
-          }
-          icon={<Scale className="h-4 w-4 text-blue-400" />}
-          trend={weightDelta}
+          title="VO2max"
+          value={runStats?.vo2max ? `${Number(runStats.vo2max)}` : "—"}
+          subtitle="ml/kg/min"
+          icon={<Zap className="h-4 w-4 text-yellow-400" />}
         />
       </div>
 
@@ -265,57 +289,50 @@ export default async function Home() {
           icon={<BatteryCharging className="h-4 w-4 text-green-400" />}
         />
         <StatCard
-          title="HRV"
-          value={health?.hrv_last_night_avg ? `${health.hrv_last_night_avg} ms` : "—"}
-          subtitle={health?.hrv_status ?? undefined}
+          title="Total Activities"
+          value={totalActivities}
+          subtitle={`${Number(runStats?.total_km || 0).toFixed(0)} km running`}
           icon={<Activity className="h-4 w-4 text-purple-400" />}
         />
       </div>
 
-      {/* 7-Day Averages + Workout Summary */}
+      {/* Middle Row: Activity Breakdown + Gym Frequency + Last Workout */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* Activity Breakdown */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              7-Day Averages
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Activity Breakdown
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {weekly ? (
-              <>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Steps</span>
-                  <span className="font-medium">{Number(weekly.avg_steps).toLocaleString()}</span>
+          <CardContent className="space-y-2">
+            {activityCounts.map((a: any) => {
+              const icon = ACTIVITY_ICONS[a.type_key] || <Activity className="h-3.5 w-3.5" />;
+              const label = ACTIVITY_LABELS[a.type_key] || a.type_key;
+              const pct = totalActivities > 0 ? (Number(a.cnt) / totalActivities) * 100 : 0;
+              return (
+                <div key={a.type_key} className="flex items-center gap-2 text-sm">
+                  {icon}
+                  <span className="text-muted-foreground w-14 truncate">{label}</span>
+                  <div className="flex-1 h-4 bg-muted rounded-sm overflow-hidden">
+                    <div
+                      className="h-full bg-primary/60 rounded-sm"
+                      style={{ width: `${Math.max(pct, 2)}%` }}
+                    />
+                  </div>
+                  <span className="font-medium w-8 text-right">{Number(a.cnt)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Sleep</span>
-                  <span className="font-medium">
-                    {weekly.avg_sleep ? `${(Number(weekly.avg_sleep) / 3600).toFixed(1)}h` : "—"}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Resting HR</span>
-                  <span className="font-medium">{weekly.avg_rhr ?? "—"} bpm</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Stress</span>
-                  <span className="font-medium">{weekly.avg_stress ?? "—"}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Active Cal</span>
-                  <span className="font-medium">{Number(weekly.avg_active_cal).toLocaleString()}</span>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">Not enough data</p>
-            )}
+              );
+            })}
           </CardContent>
         </Card>
 
+        {/* Gym Frequency */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Workout Frequency
+              Gym Frequency
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -327,14 +344,15 @@ export default async function Home() {
                 {Number(workouts.count_7d)} this week
               </span>
             </div>
-            <WorkoutFrequencyChart data={monthlyFreq as any} />
+            <WorkoutFrequencyChart data={gymFreq as any} />
           </CardContent>
         </Card>
 
+        {/* Last Workout */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Last Workout
+              Last Gym Session
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -376,15 +394,45 @@ export default async function Home() {
         </Card>
       </div>
 
-      {/* Weight Chart */}
+      {/* Recent Activity Feed */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            Weight Trend (30 days)
+            Recent Activity
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <WeightChart data={weightHistory as any} />
+          <div className="space-y-3">
+            {recentActivities.map((a: any, i: number) => {
+              const icon = ACTIVITY_ICONS[a.type_key] || <Activity className="h-3.5 w-3.5 text-muted-foreground" />;
+              return (
+                <div key={i} className="flex items-center gap-3 text-sm">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted shrink-0">
+                    {icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{a.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(a.date).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground shrink-0">
+                    <div>{Number(a.distance_km).toFixed(1)} km</div>
+                    <div>{formatDuration(Number(a.duration_min))}</div>
+                  </div>
+                  {a.calories && (
+                    <div className="text-xs text-muted-foreground w-14 text-right shrink-0">
+                      {Math.round(Number(a.calories))} cal
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
     </div>
