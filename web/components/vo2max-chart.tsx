@@ -29,6 +29,23 @@ export function VO2MaxChart({ data }: { data: VO2Entry[] }) {
     vo2max: Number(d.vo2max),
   }));
 
+  const spanDays = chartData.length > 1
+    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.date);
+  })() : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={200}>
       <LineChart data={chartData}>
@@ -39,12 +56,11 @@ export function VO2MaxChart({ data }: { data: VO2Entry[] }) {
           tickLine={false}
           tickFormatter={(d) => {
             const date = new Date(d);
-            return date.toLocaleDateString("en-US", {
-              month: "short",
-              year: "2-digit",
-            });
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(0, Math.floor(chartData.length / 6))}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
         <YAxis
           className="text-xs"

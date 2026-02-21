@@ -34,6 +34,18 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
     : 0;
   const longRange = spanDays > 60;
 
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return data
+      .filter((d) => {
+        const key = new Date(d.week).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.week);
+  })() : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={250}>
       <BarChart data={data} margin={{ bottom: 10, left: 0 }}>
@@ -48,7 +60,7 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
               ? d.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
               : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(0, Math.floor(data.length / 6))}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(data.length / 6)) })}
         />
         <YAxis className="text-xs" />
         <ReferenceLine

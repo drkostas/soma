@@ -38,6 +38,23 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
   const hillMax = hillValues.length > 0 ? Math.max(...hillValues) : 100;
   const hillPad = Math.max((hillMax - hillMin) * 0.15, 3);
 
+  const spanDays = chartData.length > 1
+    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.date);
+  })() : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={260}>
       <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
@@ -47,9 +64,11 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
           tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
           tickFormatter={(d: string) => {
             const date = new Date(d);
-            return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(Math.floor(chartData.length / 6), 1)}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis
           yAxisId="endurance"

@@ -56,6 +56,23 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
   const minP = Math.floor(Math.min(...paces) - 0.3);
   const maxP = Math.ceil(Math.max(...paces) + 0.3);
 
+  const spanDays = chartData.length > 1
+    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.date);
+  })() : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={300}>
       <ComposedChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
@@ -65,9 +82,11 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
           tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
           tickFormatter={(d) => {
             const date = new Date(d);
-            return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(Math.floor(chartData.length / 6), 1)}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis
           className="text-[10px]"
