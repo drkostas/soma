@@ -460,14 +460,56 @@ async function getActivityHeatmap() {
     SELECT
       LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
       COUNT(*) as count,
-      array_agg(DISTINCT raw_json->'activityType'->>'typeKey') as types
+      array_agg(DISTINCT raw_json->'activityType'->>'typeKey') as types,
+      json_agg(json_build_object(
+        'activity_id', activity_id::text,
+        'type_key', raw_json->'activityType'->>'typeKey',
+        'name', raw_json->>'activityName'
+      )) as activities
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 182
     GROUP BY date
     ORDER BY date ASC
   `;
-  return rows;
+
+  // Match strength_training activities with Hevy workout IDs
+  const gymDates = new Set<string>();
+  for (const row of rows) {
+    const acts = typeof row.activities === "string" ? JSON.parse(row.activities) : row.activities;
+    for (const a of acts) {
+      if (a.type_key === "strength_training") {
+        gymDates.add(row.date);
+      }
+    }
+  }
+
+  let hevyMap: Record<string, string> = {};
+  if (gymDates.size > 0) {
+    const hevyRows = await sql`
+      SELECT
+        raw_json->>'id' as workout_id,
+        LEFT((raw_json->>'start_time')::text, 10) as day
+      FROM hevy_raw_data
+      WHERE endpoint_name = 'workout'
+      ORDER BY raw_json->>'start_time' DESC
+      LIMIT 200
+    `;
+    for (const r of hevyRows) {
+      if (!hevyMap[r.day]) hevyMap[r.day] = r.workout_id;
+    }
+  }
+
+  return rows.map((row: any) => {
+    const acts = typeof row.activities === "string" ? JSON.parse(row.activities) : row.activities;
+    return {
+      ...row,
+      activities: acts.map((a: any) => ({
+        ...a,
+        workout_id: a.type_key === "strength_training" ? hevyMap[row.date] || null : null,
+      })),
+    };
+  });
 }
 
 async function getLastWorkoutDetail() {
@@ -1162,6 +1204,14 @@ export default async function Home() {
                 date: d.date,
                 count: Number(d.count),
                 types: Array.isArray(d.types) ? d.types : [],
+                activities: Array.isArray(d.activities)
+                  ? d.activities.map((a: any) => ({
+                      activity_id: a.activity_id,
+                      type_key: a.type_key,
+                      name: a.name,
+                      workout_id: a.workout_id || undefined,
+                    }))
+                  : [],
               }))}
             />
           </CardContent>
