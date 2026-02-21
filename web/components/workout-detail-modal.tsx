@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { HRZoneChart } from "@/components/hr-zone-chart";
+import { WorkoutHrTimeline } from "@/components/workout-hr-timeline";
 import { HeartPulse, Flame } from "lucide-react";
 
 interface WorkoutDetailModalProps {
@@ -245,14 +246,24 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                         value={data.garmin.calories ? `${Math.round(data.garmin.calories)}` : "—"}
                       />
                     </div>
-                    {data.garmin.hr_zones && data.garmin.hr_zones.length > 0 && (
+
+                    {data.garmin.hr_timeline && data.garmin.hr_timeline.length > 0 ? (
+                      <WorkoutHrTimeline
+                        hrTimeline={data.garmin.hr_timeline}
+                        exerciseSets={data.garmin.exercise_sets}
+                      />
+                    ) : data.garmin.hr_zones && data.garmin.hr_zones.length > 0 ? (
                       <div>
                         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                           HR Zones
                         </h4>
                         <HRZoneChart zones={data.garmin.hr_zones} />
+                        <p className="text-xs text-muted-foreground mt-2 italic">
+                          Detailed HR data not available for this workout.
+                        </p>
                       </div>
-                    )}
+                    ) : null}
+
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Badge variant="outline" className="text-[10px] h-4 bg-green-500/10 text-green-400 border-green-500/30">
                         Garmin
