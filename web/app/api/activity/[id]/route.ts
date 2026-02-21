@@ -33,6 +33,7 @@ export async function GET(
     cadence: number | null;
     power: number | null;
     respiration: number | null;
+    stride: number | null;
   }> = [];
 
   if (
@@ -60,6 +61,7 @@ export async function GET(
     const cadIdx = keyIndex["directRunCadence"];
     const powerIdx = keyIndex["directPower"];
     const respIdx = keyIndex["directRespirationRate"];
+    const strideIdx = keyIndex["directStrideLength"];
 
     let startTs: number | null = null;
 
@@ -84,6 +86,7 @@ export async function GET(
         cadence: cadIdx != null ? m[cadIdx] ?? null : null,
         power: powerIdx != null ? m[powerIdx] ?? null : null,
         respiration: respIdx != null ? m[respIdx] ?? null : null,
+        stride: strideIdx != null ? m[strideIdx] ?? null : null,
       });
     }
   }

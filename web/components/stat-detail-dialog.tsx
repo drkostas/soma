@@ -214,8 +214,9 @@ export function StatDetailDialog({
               range={range}
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              No data available
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-1">
+              <span>No data available for this period</span>
+              <span className="text-xs">Data may still be syncing from Garmin — try a wider range or check back later</span>
             </div>
           )}
         </div>

@@ -30,20 +30,20 @@ interface DayData {
   activities: ActivityInfo[];
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  running: "bg-green-500",
-  strength_training: "bg-orange-500",
-  kiteboarding_v2: "bg-cyan-500",
-  wind_kite_surfing: "bg-cyan-500",
-  resort_snowboarding: "bg-blue-400",
-  resort_skiing_snowboarding_ws: "bg-blue-400",
-  hiking: "bg-emerald-500",
-  walking: "bg-emerald-400",
-  cycling: "bg-yellow-500",
-  e_bike_fitness: "bg-yellow-500",
-  lap_swimming: "bg-blue-500",
-  indoor_cardio: "bg-red-400",
-  treadmill_running: "bg-green-500",
+const TYPE_HEX_COLORS: Record<string, string> = {
+  running: "#22c55e",
+  strength_training: "#f97316",
+  kiteboarding_v2: "#06b6d4",
+  wind_kite_surfing: "#06b6d4",
+  resort_snowboarding: "#60a5fa",
+  resort_skiing_snowboarding_ws: "#60a5fa",
+  hiking: "#10b981",
+  walking: "#34d399",
+  cycling: "#eab308",
+  e_bike_fitness: "#eab308",
+  lap_swimming: "#3b82f6",
+  indoor_cardio: "#f87171",
+  treadmill_running: "#22c55e",
 };
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -78,10 +78,16 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   treadmill_running: <Footprints className="h-3 w-3 text-green-400" />,
 };
 
-function getColor(types: string[]): string {
-  if (types.length === 0) return "bg-muted/30";
-  if (types.length > 1) return "bg-primary";
-  return TYPE_COLORS[types[0]] || "bg-primary/70";
+function getCellStyle(types: string[], count: number): { backgroundColor: string; opacity: number } | null {
+  if (count === 0) return null; // use CSS class for empty
+  // Opacity scales with count: 1 activity = 0.45, 2 = 0.65, 3+ = 0.85, 4+ = 1.0
+  const opacity = count >= 4 ? 1.0 : count >= 3 ? 0.85 : count >= 2 ? 0.65 : 0.45;
+  if (types.length > 1) {
+    // Multi-type day: use primary color
+    return { backgroundColor: "var(--primary)", opacity };
+  }
+  const color = TYPE_HEX_COLORS[types[0]] || "var(--primary)";
+  return { backgroundColor: color, opacity };
 }
 
 export function ActivityHeatmap({ data }: { data: DayData[] }) {
@@ -239,17 +245,19 @@ export function ActivityHeatmap({ data }: { data: DayData[] }) {
                   <div key={di} className="w-full" style={{ aspectRatio: "1" }} />
                 );
               }
-              const color = cell.count > 0 ? getColor(cell.types) : "bg-muted/20";
+              const cellStyle = getCellStyle(cell.types, cell.count);
               const isClickable = cell.count > 0;
               return (
                 <div
                   key={di}
-                  className={`w-full rounded-[2px] ${color} transition-all ${
+                  className={`w-full rounded-[2px] transition-all ${
+                    !cellStyle ? "bg-muted/20" : ""
+                  } ${
                     isClickable
                       ? "cursor-pointer hover:ring-1 hover:ring-foreground/30 hover:brightness-110"
                       : "hover:bg-muted/40"
                   }`}
-                  style={{ aspectRatio: "1" }}
+                  style={{ aspectRatio: "1", ...(cellStyle || {}) }}
                   title={`${cell.date}: ${
                     cell.count > 0
                       ? `${cell.count} ${cell.count === 1 ? "activity" : "activities"} (${cell.types.join(", ")})`
@@ -264,14 +272,16 @@ export function ActivityHeatmap({ data }: { data: DayData[] }) {
       </div>
 
       {/* Legend row */}
-      <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[10px] text-muted-foreground">
         <span>{totalActive} active days in 6 months</span>
-        <span className="ml-auto flex items-center gap-1">Less</span>
-        <span className="w-[10px] h-[10px] rounded-[2px] bg-muted/20" />
-        <span className="w-[10px] h-[10px] rounded-[2px] bg-primary/40" />
-        <span className="w-[10px] h-[10px] rounded-[2px] bg-primary/70" />
-        <span className="w-[10px] h-[10px] rounded-[2px] bg-primary" />
-        <span>More</span>
+        <span className="ml-auto flex items-center gap-1">
+          {(["running", "strength_training", "cycling", "hiking"] as const).map((t) => (
+            <span key={t} className="flex items-center gap-0.5">
+              <span className="w-[10px] h-[10px] rounded-[2px]" style={{ backgroundColor: TYPE_HEX_COLORS[t], opacity: 0.75 }} />
+              <span>{ACTIVITY_LABELS[t]}</span>
+            </span>
+          ))}
+        </span>
       </div>
 
       {/* Floating menu for multi-activity days */}

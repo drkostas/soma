@@ -20,6 +20,7 @@ interface TimeSeriesPoint {
   cadence: number | null;
   power: number | null;
   respiration: number | null;
+  stride: number | null;
 }
 
 interface ActivityPerformanceChartProps {
@@ -33,6 +34,7 @@ const METRICS = [
   { key: "cadence", label: "Cadence", color: "#f97316", unit: " spm" },
   { key: "power", label: "Power", color: "#a78bfa", unit: " W" },
   { key: "respiration", label: "Breathing", color: "#38bdf8", unit: " br/min" },
+  { key: "stride", label: "Stride", color: "#f472b6", unit: " cm" },
 ] as const;
 
 type MetricKey = (typeof METRICS)[number]["key"];
@@ -73,6 +75,7 @@ interface ChartPoint {
   cadence: number | null;
   power: number | null;
   respiration: number | null;
+  stride: number | null;
 }
 
 function PerformanceTooltip({
@@ -101,7 +104,7 @@ function PerformanceTooltip({
             ? formatPaceValue(val) + m.unit
             : m.key === "elevation"
               ? val.toFixed(0) + m.unit
-              : m.key === "hr" || m.key === "cadence"
+              : m.key === "hr" || m.key === "cadence" || m.key === "stride"
                 ? Math.round(val) + m.unit
                 : val.toFixed(1) + m.unit;
         return (
@@ -151,6 +154,7 @@ export function ActivityPerformanceChart({
       cadence: p.cadence,
       power: p.power,
       respiration: p.respiration,
+      stride: p.stride != null ? Math.round(p.stride * 100) : null,
     }));
     return downsample(converted, 300);
   }, [timeSeries]);
@@ -164,6 +168,7 @@ export function ActivityPerformanceChart({
       cadence: false,
       power: false,
       respiration: false,
+      stride: false,
     };
     for (const p of chartData) {
       if (p.pace != null) result.pace = true;
@@ -172,6 +177,7 @@ export function ActivityPerformanceChart({
       if (p.cadence != null) result.cadence = true;
       if (p.power != null) result.power = true;
       if (p.respiration != null) result.respiration = true;
+      if (p.stride != null) result.stride = true;
     }
     return result;
   }, [chartData]);
@@ -205,6 +211,18 @@ export function ActivityPerformanceChart({
     return [Math.max(min - padding, 0), max + padding] as [number, number];
   }, [chartData, enabled]);
 
+  // Stride domain (dedicated axis for tight spread)
+  const strideDomain = useMemo(() => {
+    const vals = chartData
+      .map((p) => p.stride)
+      .filter((v): v is number => v != null);
+    if (vals.length === 0) return [80, 150] as [number, number];
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const padding = Math.max((max - min) * 0.15, 2);
+    return [Math.floor(min - padding), Math.ceil(max + padding)] as [number, number];
+  }, [chartData]);
+
   // Elevation domain
   const elevDomain = useMemo(() => {
     const vals = chartData
@@ -224,6 +242,7 @@ export function ActivityPerformanceChart({
     enabled.has("power") ||
     enabled.has("respiration");
   const showElevAxis = enabled.has("elevation");
+  const showStrideAxis = enabled.has("stride");
 
   return (
     <div>
@@ -311,10 +330,26 @@ export function ActivityPerformanceChart({
             />
           )}
 
+          {/* Stride Y-axis (dedicated for tight spread) */}
+          {showStrideAxis && (
+            <YAxis
+              yAxisId="stride"
+              orientation={showRightAxis ? "left" : "right"}
+              domain={strideDomain}
+              tick={{ fontSize: 10 }}
+              stroke="#f472b6"
+              tickLine={false}
+              axisLine={false}
+              width={35}
+              tickFormatter={(v: number) => `${v}`}
+            />
+          )}
+
           {/* Fallback hidden axes for metrics that aren't shown but might be toggled */}
           {!showPaceAxis && <YAxis yAxisId="pace" hide />}
           {!showRightAxis && <YAxis yAxisId="right" hide />}
           {!showElevAxis && <YAxis yAxisId="elevation" hide />}
+          {!showStrideAxis && <YAxis yAxisId="stride" hide />}
 
           <Tooltip
             content={<PerformanceTooltip enabled={enabled} />}
@@ -395,6 +430,19 @@ export function ActivityPerformanceChart({
               yAxisId="right"
               dataKey="respiration"
               stroke="#38bdf8"
+              strokeWidth={1.5}
+              dot={false}
+              isAnimationActive={false}
+              connectNulls
+            />
+          )}
+
+          {/* Stride line (dedicated axis for visibility) */}
+          {enabled.has("stride") && (
+            <Line
+              yAxisId="stride"
+              dataKey="stride"
+              stroke="#f472b6"
               strokeWidth={1.5}
               dot={false}
               isAnimationActive={false}
