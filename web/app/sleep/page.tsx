@@ -10,6 +10,8 @@ import { StressChart } from "@/components/stress-chart";
 import { SleepScheduleChart } from "@/components/sleep-schedule-chart";
 import { SpO2Chart } from "@/components/spo2-chart";
 import { RespirationChart } from "@/components/respiration-chart";
+import { TimeRangeSelector } from "@/components/time-range-selector";
+import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 import {
   Moon,
@@ -26,7 +28,7 @@ import {
 
 export const revalidate = 300;
 
-async function getSleepStats() {
+async function getSleepStats(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -42,12 +44,12 @@ async function getSleepStats() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
   `;
   return rows[0] || null;
 }
 
-async function getSleepTrend() {
+async function getSleepTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -59,13 +61,13 @@ async function getSleepTrend() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getSleepScores() {
+async function getSleepScores(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -75,13 +77,13 @@ async function getSleepScores() {
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
       AND raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'value' IS NOT NULL
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getRHRTrend() {
+async function getRHRTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -91,7 +93,7 @@ async function getRHRTrend() {
     WHERE endpoint_name = 'user_summary'
       AND raw_json->>'restingHeartRate' IS NOT NULL
       AND (raw_json->>'restingHeartRate')::int > 0
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows;
@@ -122,7 +124,7 @@ async function getLastNightSleep() {
   return rows[0] || null;
 }
 
-async function getHRVTrend() {
+async function getHRVTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -133,13 +135,13 @@ async function getHRVTrend() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'hrv_data'
       AND raw_json->'hrvSummary'->>'weeklyAvg' IS NOT NULL
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getTrainingReadiness() {
+async function getTrainingReadiness(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -156,13 +158,13 @@ async function getTrainingReadiness() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'training_readiness'
       AND raw_json->0->>'score' IS NOT NULL
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getStressTrend() {
+async function getStressTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -173,13 +175,13 @@ async function getStressTrend() {
     WHERE endpoint_name = 'user_summary'
       AND raw_json->>'averageStressLevel' IS NOT NULL
       AND (raw_json->>'averageStressLevel')::int > 0
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getBodyBatteryTrend() {
+async function getBodyBatteryTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -190,13 +192,13 @@ async function getBodyBatteryTrend() {
     WHERE endpoint_name = 'user_summary'
       AND raw_json->>'bodyBatteryChargedValue' IS NOT NULL
       AND (raw_json->>'bodyBatteryChargedValue')::int > 0
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getRespirationTrend() {
+async function getRespirationTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -208,13 +210,13 @@ async function getRespirationTrend() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'respiration_data'
       AND raw_json->>'avgWakingRespirationValue' IS NOT NULL
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getSpO2Trend() {
+async function getSpO2Trend(cutoff: string) {
   const sql = getDb();
   // Combine sleep_data (historical) with spo2_data (recent, richer)
   // spo2_data wins on overlapping dates via COALESCE
@@ -235,7 +237,7 @@ async function getSpO2Trend() {
       ON s.date = p.date AND p.endpoint_name = 'spo2_data' AND p.raw_json->>'averageSpO2' IS NOT NULL
     WHERE s.endpoint_name = 'sleep_data'
       AND (s.raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
-      AND s.date >= CURRENT_DATE - INTERVAL '12 months'
+      AND s.date >= ${cutoff}
       AND (
         s.raw_json->'dailySleepDTO'->>'averageSpO2Value' IS NOT NULL
         OR p.raw_json->>'averageSpO2' IS NOT NULL
@@ -245,7 +247,7 @@ async function getSpO2Trend() {
   return rows;
 }
 
-async function getSleepSchedule() {
+async function getSleepSchedule(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -256,7 +258,7 @@ async function getSleepSchedule() {
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
       AND raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal' IS NOT NULL
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     ORDER BY date ASC
   `;
   return rows.map((r: any) => {
@@ -273,7 +275,7 @@ async function getSleepSchedule() {
   });
 }
 
-async function getWeekdayWeekendSleep() {
+async function getWeekdayWeekendSleep(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -289,7 +291,7 @@ async function getWeekdayWeekendSleep() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${cutoff}
     GROUP BY day_type
   `;
   const result: Record<string, any> = {};
@@ -297,7 +299,7 @@ async function getWeekdayWeekendSleep() {
   return result;
 }
 
-async function getSleepRegularity() {
+async function getSleepRegularity(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -309,6 +311,7 @@ async function getSleepRegularity() {
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
       AND raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal' IS NOT NULL
+      AND date >= ${cutoff}
     ORDER BY date DESC
     LIMIT 30
   `;
@@ -369,35 +372,42 @@ function qualityBadge(quality: string | null) {
   );
 }
 
-export default async function SleepPage() {
+export default async function SleepPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+  const params = await searchParams;
+  const rangeDays = rangeToDays(params.range);
+  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+
   const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration, spo2Trend, weekdayWeekend, sleepRegularity] =
     await Promise.all([
-      getSleepStats(),
-      getSleepTrend(),
-      getSleepScores(),
-      getRHRTrend(),
+      getSleepStats(cutoff),
+      getSleepTrend(cutoff),
+      getSleepScores(cutoff),
+      getRHRTrend(cutoff),
       getLastNightSleep(),
-      getBodyBatteryTrend(),
-      getHRVTrend(),
-      getTrainingReadiness(),
-      getStressTrend(),
-      getSleepSchedule(),
-      getRespirationTrend(),
-      getSpO2Trend(),
-      getWeekdayWeekendSleep(),
-      getSleepRegularity(),
+      getBodyBatteryTrend(cutoff),
+      getHRVTrend(cutoff),
+      getTrainingReadiness(cutoff),
+      getStressTrend(cutoff),
+      getSleepSchedule(cutoff),
+      getRespirationTrend(cutoff),
+      getSpO2Trend(cutoff),
+      getWeekdayWeekendSleep(cutoff),
+      getSleepRegularity(cutoff),
     ]);
 
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Sleep & Recovery</h1>
-        <p className="text-muted-foreground mt-1">
-          {stats?.total_nights
-            ? `${Number(stats.total_nights)} nights tracked`
-            : "No sleep data yet."}
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Sleep & Recovery</h1>
+          <p className="text-muted-foreground mt-1">
+            {stats?.total_nights
+              ? `${Number(stats.total_nights)} nights tracked`
+              : "No sleep data yet."}
+          </p>
+        </div>
+        <TimeRangeSelector />
       </div>
 
       {/* Stats Row */}

@@ -3,6 +3,8 @@ import { StatCard } from "@/components/stat-card";
 import { MonthlyActivityChart } from "@/components/monthly-activity-chart";
 import { KiteSpeedChart } from "@/components/kite-speed-chart";
 import { PaginatedActivityTable } from "@/components/paginated-activity-table";
+import { TimeRangeSelector } from "@/components/time-range-selector";
+import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 import {
   Wind,
@@ -72,7 +74,7 @@ const SPORT_GROUPS: Record<string, string[]> = {
   Other: ["other", "indoor_cycling"],
 };
 
-async function getActivitySummary() {
+async function getActivitySummary(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -85,13 +87,14 @@ async function getActivitySummary() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training')
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY type_key
     ORDER BY count DESC
   `;
   return rows;
 }
 
-async function getKiteSessions() {
+async function getKiteSessions(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -112,12 +115,13 @@ async function getKiteSessions() {
     LEFT JOIN garmin_activity_raw w ON s.activity_id = w.activity_id AND w.endpoint_name = 'weather'
     WHERE s.endpoint_name = 'summary'
       AND s.raw_json->'activityType'->>'typeKey' IN ('kiteboarding_v2', 'wind_kite_surfing')
+      AND (s.raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (s.raw_json->>'startTimeLocal')::text ASC
   `;
   return rows;
 }
 
-async function getSnowSessions() {
+async function getSnowSessions(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -131,12 +135,13 @@ async function getSnowSessions() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('resort_snowboarding', 'resort_skiing_snowboarding_ws')
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
   return rows;
 }
 
-async function getMonthlyDistribution() {
+async function getMonthlyDistribution(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -146,13 +151,14 @@ async function getMonthlyDistribution() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training')
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY month, type_key
     ORDER BY month ASC
   `;
   return rows;
 }
 
-async function getYearlySportBreakdown() {
+async function getYearlySportBreakdown(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -164,13 +170,14 @@ async function getYearlySportBreakdown() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training')
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY year, type_key
     ORDER BY year DESC, count DESC
   `;
   return rows;
 }
 
-async function getCyclingSessions() {
+async function getCyclingSessions(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -187,12 +194,13 @@ async function getCyclingSessions() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('cycling', 'e_bike_fitness', 'indoor_cycling')
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
   return rows;
 }
 
-async function getTimeBreakdown() {
+async function getTimeBreakdown(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -211,13 +219,14 @@ async function getTimeBreakdown() {
       COUNT(*) as sessions
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY category
     ORDER BY hours DESC
   `;
   return rows;
 }
 
-async function getSwimmingSessions() {
+async function getSwimmingSessions(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -232,12 +241,13 @@ async function getSwimmingSessions() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('lap_swimming', 'swimming', 'open_water_swimming')
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
   return rows;
 }
 
-async function getWalkingSessions() {
+async function getWalkingSessions(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -252,12 +262,13 @@ async function getWalkingSessions() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' = 'walking'
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
   return rows;
 }
 
-async function getAllActivities() {
+async function getAllActivities(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -274,6 +285,7 @@ async function getAllActivities() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training')
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
   return rows;
@@ -313,19 +325,23 @@ function extractResort(name: string): string {
   return name.split(" ")[0];
 }
 
-export default async function ActivitiesPage() {
+export default async function ActivitiesPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+  const params = await searchParams;
+  const rangeDays = rangeToDays(params.range);
+  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+
   const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports, cyclingSessions, timeBreakdown, walkingSessions, swimmingSessions] =
     await Promise.all([
-      getActivitySummary(),
-      getKiteSessions(),
-      getSnowSessions(),
-      getMonthlyDistribution(),
-      getAllActivities(),
-      getYearlySportBreakdown(),
-      getCyclingSessions(),
-      getTimeBreakdown(),
-      getWalkingSessions(),
-      getSwimmingSessions(),
+      getActivitySummary(cutoff),
+      getKiteSessions(cutoff),
+      getSnowSessions(cutoff),
+      getMonthlyDistribution(cutoff),
+      getAllActivities(cutoff),
+      getYearlySportBreakdown(cutoff),
+      getCyclingSessions(cutoff),
+      getTimeBreakdown(cutoff),
+      getWalkingSessions(cutoff),
+      getSwimmingSessions(cutoff),
     ]);
 
   const totalSessions = summary.reduce((s, r) => s + Number(r.count), 0);
@@ -434,11 +450,14 @@ export default async function ActivitiesPage() {
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Activities</h1>
-        <p className="text-muted-foreground mt-1">
-          Kiteboarding, snowboarding, hiking & more
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Activities</h1>
+          <p className="text-muted-foreground mt-1">
+            Kiteboarding, snowboarding, hiking & more
+          </p>
+        </div>
+        <TimeRangeSelector />
       </div>
 
       {/* Overview Stats */}

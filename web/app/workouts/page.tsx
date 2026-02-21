@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db";
 import { VolumeChart } from "@/components/volume-chart";
 import { ExerciseProgressChart } from "@/components/exercise-progress-chart";
 import { ClickableWorkoutList } from "@/components/clickable-workout-list";
+import { TimeRangeSelector } from "@/components/time-range-selector";
+import { rangeToDays } from "@/lib/time-ranges";
 import {
   Dumbbell,
   Clock,
@@ -16,7 +18,7 @@ import {
 
 export const revalidate = 300;
 
-async function getRecentWorkouts() {
+async function getRecentWorkouts(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -43,13 +45,14 @@ async function getRecentWorkouts() {
       LIMIT 1
     ) g ON true
     WHERE h.endpoint_name = 'workout'
+      AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
     ORDER BY h.raw_json->>'start_time' DESC
-    LIMIT 10
+    LIMIT 20
   `;
   return rows;
 }
 
-async function getWeeklyVolume() {
+async function getWeeklyVolume(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH workout_sets AS (
@@ -60,6 +63,7 @@ async function getWeeklyVolume() {
         jsonb_array_elements(raw_json->'exercises') as e,
         jsonb_array_elements(e->'sets') as s
       WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
         AND s->>'type' = 'normal'
         AND (s->>'weight_kg')::float > 0
         AND (s->>'reps')::int > 0
@@ -72,7 +76,7 @@ async function getWeeklyVolume() {
   return rows;
 }
 
-async function getExerciseProgression() {
+async function getExerciseProgression(cutoff: string) {
   const sql = getDb();
   // Get max weight per workout for top compound lifts
   const rows = await sql`
@@ -84,6 +88,7 @@ async function getExerciseProgression() {
       jsonb_array_elements(raw_json->'exercises') as e,
       jsonb_array_elements(e->'sets') as s
     WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
       AND s->>'type' = 'normal'
       AND (s->>'weight_kg')::float > 0
       AND e->>'title' IN (
@@ -117,7 +122,7 @@ async function getWorkoutSummaryStats() {
   return rows[0];
 }
 
-async function getGarminCalorieStats() {
+async function getGarminCalorieStats(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH matched AS (
@@ -133,7 +138,7 @@ async function getGarminCalorieStats() {
         ) as calories
       FROM hevy_raw_data h
       WHERE h.endpoint_name = 'workout'
-        AND (h.raw_json->>'start_time')::timestamp >= CURRENT_DATE - INTERVAL '90 days'
+        AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
     )
     SELECT
       COUNT(*) as total,
@@ -144,7 +149,7 @@ async function getGarminCalorieStats() {
   return rows[0];
 }
 
-async function getTopExercises() {
+async function getTopExercises(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -156,7 +161,7 @@ async function getTopExercises() {
       jsonb_array_elements(raw_json->'exercises') as e,
       jsonb_array_elements(e->'sets') as s
     WHERE endpoint_name = 'workout'
-      AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - INTERVAL '12 months'
+      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
       AND s->>'type' = 'normal'
       AND (s->>'weight_kg')::float > 0
     GROUP BY e->>'title'
@@ -166,7 +171,7 @@ async function getTopExercises() {
   return rows;
 }
 
-async function getProgramSplit() {
+async function getProgramSplit(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -175,6 +180,7 @@ async function getProgramSplit() {
       ROUND(AVG(EXTRACT(EPOCH FROM ((raw_json->>'end_time')::timestamp - (raw_json->>'start_time')::timestamp)) / 60)::numeric) as avg_duration
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
     GROUP BY raw_json->>'title'
     ORDER BY sessions DESC
     LIMIT 6
@@ -213,7 +219,7 @@ async function getExercisePRs() {
   return rows;
 }
 
-async function getMuscleGroupVolume() {
+async function getMuscleGroupVolume(cutoff: string) {
   const sql = getDb();
   // Map exercise titles to muscle groups since Hevy workout data doesn't include muscle_group
   const rows = await sql`
@@ -237,7 +243,7 @@ async function getMuscleGroupVolume() {
         jsonb_array_elements(raw_json->'exercises') as e,
         jsonb_array_elements(e->'sets') as s
       WHERE endpoint_name = 'workout'
-        AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - INTERVAL '6 months'
+        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
         AND s->>'type' = 'normal'
         AND (s->>'weight_kg')::float > 0
         AND (s->>'reps')::int > 0
@@ -254,7 +260,7 @@ async function getMuscleGroupVolume() {
   return rows;
 }
 
-async function getWorkoutFrequencyByWeek() {
+async function getWorkoutFrequencyByWeek(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -263,13 +269,14 @@ async function getWorkoutFrequencyByWeek() {
       ROUND(AVG(EXTRACT(EPOCH FROM ((raw_json->>'end_time')::timestamp - (raw_json->>'start_time')::timestamp)) / 60)::numeric) as avg_duration
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
     GROUP BY week
     ORDER BY week ASC
   `;
   return rows;
 }
 
-async function getMonthlyMuscleVolume() {
+async function getMonthlyMuscleVolume(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH exercise_muscles AS (
@@ -291,7 +298,7 @@ async function getMonthlyMuscleVolume() {
         jsonb_array_elements(raw_json->'exercises') as e,
         jsonb_array_elements(e->'sets') as s
       WHERE endpoint_name = 'workout'
-        AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - INTERVAL '12 months'
+        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
         AND s->>'type' = 'normal'
         AND (s->>'weight_kg')::float > 0
         AND (s->>'reps')::int > 0
@@ -308,7 +315,7 @@ async function getMonthlyMuscleVolume() {
   return rows;
 }
 
-async function getTrainingCalendar() {
+async function getTrainingCalendar(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -316,7 +323,7 @@ async function getTrainingCalendar() {
       raw_json->>'title' as program
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
-      AND (raw_json->>'start_time')::date >= CURRENT_DATE - 90
+      AND (raw_json->>'start_time')::date >= ${cutoff}::date
     ORDER BY day ASC
   `;
   return rows;
@@ -359,21 +366,26 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
   return { totalSets, totalVolume };
 }
 
-export default async function WorkoutsPage() {
+export default async function WorkoutsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+  const params = await searchParams;
+  const rangeDays = rangeToDays(params.range);
+  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  const calCutoff = new Date(Date.now() - Math.min(rangeDays, 365) * 86400000).toISOString().split("T")[0];
+
   const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups, weeklyFreq, monthlyMuscle, calorieStats] =
     await Promise.all([
-      getRecentWorkouts(),
-      getWeeklyVolume(),
-      getExerciseProgression(),
+      getRecentWorkouts(cutoff),
+      getWeeklyVolume(cutoff),
+      getExerciseProgression(cutoff),
       getWorkoutSummaryStats(),
-      getTopExercises(),
-      getProgramSplit(),
+      getTopExercises(cutoff),
+      getProgramSplit(cutoff),
       getExercisePRs(),
-      getTrainingCalendar(),
-      getMuscleGroupVolume(),
-      getWorkoutFrequencyByWeek(),
-      getMonthlyMuscleVolume(),
-      getGarminCalorieStats(),
+      getTrainingCalendar(calCutoff),
+      getMuscleGroupVolume(cutoff),
+      getWorkoutFrequencyByWeek(cutoff),
+      getMonthlyMuscleVolume(cutoff),
+      getGarminCalorieStats(cutoff),
     ]);
 
   const totalWeeks = stats
@@ -387,11 +399,14 @@ export default async function WorkoutsPage() {
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Workouts</h1>
-        <p className="text-muted-foreground mt-1">
-          Training history and progression
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Workouts</h1>
+          <p className="text-muted-foreground mt-1">
+            Training history and progression
+          </p>
+        </div>
+        <TimeRangeSelector />
       </div>
 
       {/* Summary Stats */}
@@ -454,7 +469,7 @@ export default async function WorkoutsPage() {
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {calorieStats?.matched && calorieStats?.total
-                ? `${Number(calorieStats.matched)} of ${Number(calorieStats.total)} matched (90d)`
+                ? `${Number(calorieStats.matched)} of ${Number(calorieStats.total)} matched`
                 : "via Garmin HR"}
             </p>
           </CardContent>
