@@ -21,7 +21,7 @@ interface BodyBatteryPoint {
 export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
   if (data.length === 0) return null;
 
-  const chartData = data.slice(-21).map((d) => ({
+  const chartData = data.slice(-14).map((d) => ({
     date: d.date,
     charged: Number(d.charged),
     drained: -Number(d.drained),
@@ -30,19 +30,23 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: -10 }} stackOffset="sign">
+      <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }} stackOffset="sign">
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(d: string) => {
             const date = new Date(d);
             return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(Math.floor(chartData.length / 6), 1)}
+          interval={Math.max(Math.floor(chartData.length / 5), 1)}
         />
         <YAxis
-          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+          className="text-[10px]"
+          tickLine={false}
+          width={35}
+          tickFormatter={(v: number) => `${v}%`}
         />
         <Tooltip
           contentStyle={{

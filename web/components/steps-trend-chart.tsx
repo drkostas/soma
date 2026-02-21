@@ -23,19 +23,22 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: -15 }}>
+      <BarChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(d: string) => {
             const date = new Date(d);
             return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(Math.floor(recent.length / 7), 1)}
+          interval={Math.max(Math.floor(recent.length / 5), 1)}
         />
         <YAxis
-          tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+          className="text-[10px]"
+          tickLine={false}
+          width={35}
           tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
         />
         <Tooltip
