@@ -4,12 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Activity,
-  Moon,
   Dumbbell,
-  Scale,
+  Footprints,
+  Mountain,
   RefreshCw,
-  Heart,
 } from "lucide-react";
 import {
   Tooltip,
@@ -20,13 +18,10 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Overview" },
+  { href: "/running", icon: Footprints, label: "Running" },
+  { href: "/workouts", icon: Dumbbell, label: "Gym" },
+  { href: "/activities", icon: Mountain, label: "Activities" },
   { href: "/status", icon: RefreshCw, label: "Sync Status" },
-  { href: "/workouts", icon: Dumbbell, label: "Workouts" },
-  // Future pages — shown as disabled
-  { href: "#", icon: Activity, label: "Activity", disabled: true },
-  { href: "#", icon: Moon, label: "Sleep", disabled: true },
-  { href: "#", icon: Heart, label: "Heart", disabled: true },
-  { href: "#", icon: Scale, label: "Weight", disabled: true },
 ];
 
 export function Sidebar() {
@@ -44,23 +39,6 @@ export function Sidebar() {
         {navItems.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
-
-          if (item.disabled) {
-            return (
-              <Tooltip key={item.label} delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground/30 cursor-not-allowed"
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={8}>
-                  {item.label} <span className="text-muted-foreground text-xs ml-1">Soon</span>
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
 
           return (
             <Tooltip key={item.label} delayDuration={0}>

@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -10,31 +10,31 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-interface VolumeEntry {
-  week: string;
-  total_volume: number;
+interface VO2Entry {
+  date: string;
+  vo2max: number;
 }
 
-export function VolumeChart({ data }: { data: VolumeEntry[] }) {
+export function VO2MaxChart({ data }: { data: VO2Entry[] }) {
   if (!data || data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-        No volume data yet.
+      <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+        No VO2max data
       </div>
     );
   }
 
   const chartData = data.map((d) => ({
-    week: d.week,
-    volume: Number(d.total_volume),
+    date: d.date,
+    vo2max: Number(d.vo2max),
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={chartData}>
+    <ResponsiveContainer width="100%" height={200}>
+      <LineChart data={chartData}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
-          dataKey="week"
+          dataKey="date"
           className="text-xs"
           tickFormatter={(d) =>
             new Date(d).toLocaleDateString("en-US", {
@@ -45,18 +45,16 @@ export function VolumeChart({ data }: { data: VolumeEntry[] }) {
         />
         <YAxis
           className="text-xs"
-          tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+          domain={["dataMin - 1", "dataMax + 1"]}
         />
         <Tooltip
-          formatter={(value: any) => [
-            `${Number(value).toLocaleString()} kg`,
-            "Volume",
-          ]}
+          formatter={(value: any) => [`${value} ml/kg/min`, "VO2max"]}
           labelFormatter={(label) =>
-            `Week of ${new Date(label).toLocaleDateString("en-US", {
-              month: "short",
+            new Date(label).toLocaleDateString("en-US", {
+              month: "long",
               day: "numeric",
-            })}`
+              year: "numeric",
+            })
           }
           contentStyle={{
             backgroundColor: "hsl(var(--card))",
@@ -65,12 +63,15 @@ export function VolumeChart({ data }: { data: VolumeEntry[] }) {
             color: "hsl(var(--card-foreground))",
           }}
         />
-        <Bar
-          dataKey="volume"
-          fill="hsl(var(--primary))"
-          radius={[4, 4, 0, 0]}
+        <Line
+          type="monotone"
+          dataKey="vo2max"
+          stroke="#22c55e"
+          strokeWidth={2}
+          dot={{ r: 3 }}
+          activeDot={{ r: 5 }}
         />
-      </BarChart>
+      </LineChart>
     </ResponsiveContainer>
   );
 }
