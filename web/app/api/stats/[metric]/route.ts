@@ -130,15 +130,15 @@ async function fetchSteps(sql: SqlFn, days: number): Promise<MetricResponse> {
   const current = await sql`
     SELECT date::text as date, total_steps as value
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days})
       AND total_steps > 0
     ORDER BY date ASC
   `;
   const previous = await sql`
     SELECT date::text as date, total_steps as value
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days * 2}
-      AND date < CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND date < CURRENT_DATE - make_interval(days => ${days})
       AND total_steps > 0
     ORDER BY date ASC
   `;
@@ -152,15 +152,15 @@ async function fetchCalories(sql: SqlFn, days: number): Promise<MetricResponse> 
   const current = await sql`
     SELECT date::text as date, active_kilocalories as value, bmr_kilocalories as value2
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days})
       AND active_kilocalories > 0
     ORDER BY date ASC
   `;
   const previous = await sql`
     SELECT date::text as date, active_kilocalories as value, bmr_kilocalories as value2
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days * 2}
-      AND date < CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND date < CURRENT_DATE - make_interval(days => ${days})
       AND active_kilocalories > 0
     ORDER BY date ASC
   `;
@@ -174,15 +174,15 @@ async function fetchRHR(sql: SqlFn, days: number): Promise<MetricResponse> {
   const current = await sql`
     SELECT date::text as date, resting_heart_rate as value
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days})
       AND resting_heart_rate > 0
     ORDER BY date ASC
   `;
   const previous = await sql`
     SELECT date::text as date, resting_heart_rate as value
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days * 2}
-      AND date < CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND date < CURRENT_DATE - make_interval(days => ${days})
       AND resting_heart_rate > 0
     ORDER BY date ASC
   `;
@@ -196,15 +196,15 @@ async function fetchSleep(sql: SqlFn, days: number): Promise<MetricResponse> {
   const current = await sql`
     SELECT date::text as date, sleep_time_seconds / 3600.0 as value
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days})
       AND sleep_time_seconds > 0
     ORDER BY date ASC
   `;
   const previous = await sql`
     SELECT date::text as date, sleep_time_seconds / 3600.0 as value
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days * 2}
-      AND date < CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND date < CURRENT_DATE - make_interval(days => ${days})
       AND sleep_time_seconds > 0
     ORDER BY date ASC
   `;
@@ -218,15 +218,15 @@ async function fetchStress(sql: SqlFn, days: number): Promise<MetricResponse> {
   const current = await sql`
     SELECT date::text as date, avg_stress_level as value, max_stress_level as value2
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days})
       AND avg_stress_level > 0
     ORDER BY date ASC
   `;
   const previous = await sql`
     SELECT date::text as date, avg_stress_level as value, max_stress_level as value2
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days * 2}
-      AND date < CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND date < CURRENT_DATE - make_interval(days => ${days})
       AND avg_stress_level > 0
     ORDER BY date ASC
   `;
@@ -240,15 +240,15 @@ async function fetchBodyBattery(sql: SqlFn, days: number): Promise<MetricRespons
   const current = await sql`
     SELECT date::text as date, body_battery_charged as value, body_battery_drained as value2
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days})
       AND body_battery_charged > 0
     ORDER BY date ASC
   `;
   const previous = await sql`
     SELECT date::text as date, body_battery_charged as value, body_battery_drained as value2
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - ${days * 2}
-      AND date < CURRENT_DATE - ${days}
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND date < CURRENT_DATE - make_interval(days => ${days})
       AND body_battery_charged > 0
     ORDER BY date ASC
   `;
@@ -267,7 +267,7 @@ async function fetchVo2max(sql: SqlFn, days: number): Promise<MetricResponse> {
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'vO2MaxValue' IS NOT NULL
-      AND (raw_json->>'startTimeLocal')::date >= CURRENT_DATE - ${days}
+      AND (raw_json->>'startTimeLocal')::date >= CURRENT_DATE - make_interval(days => ${days})
     ORDER BY date ASC
   `;
   const previous = await sql`
@@ -278,8 +278,8 @@ async function fetchVo2max(sql: SqlFn, days: number): Promise<MetricResponse> {
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'vO2MaxValue' IS NOT NULL
-      AND (raw_json->>'startTimeLocal')::date >= CURRENT_DATE - ${days * 2}
-      AND (raw_json->>'startTimeLocal')::date < CURRENT_DATE - ${days}
+      AND (raw_json->>'startTimeLocal')::date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND (raw_json->>'startTimeLocal')::date < CURRENT_DATE - make_interval(days => ${days})
     ORDER BY date ASC
   `;
   return buildResponse(
@@ -295,7 +295,7 @@ async function fetchActivities(sql: SqlFn, days: number): Promise<MetricResponse
       COUNT(*)::int as value
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::date >= CURRENT_DATE - ${days}
+      AND (raw_json->>'startTimeLocal')::date >= CURRENT_DATE - make_interval(days => ${days})
     GROUP BY date
     ORDER BY date ASC
   `;
@@ -305,8 +305,8 @@ async function fetchActivities(sql: SqlFn, days: number): Promise<MetricResponse
       COUNT(*)::int as value
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::date >= CURRENT_DATE - ${days * 2}
-      AND (raw_json->>'startTimeLocal')::date < CURRENT_DATE - ${days}
+      AND (raw_json->>'startTimeLocal')::date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND (raw_json->>'startTimeLocal')::date < CURRENT_DATE - make_interval(days => ${days})
     GROUP BY date
     ORDER BY date ASC
   `;
