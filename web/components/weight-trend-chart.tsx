@@ -1,0 +1,104 @@
+"use client";
+
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
+
+interface WeightPoint {
+  date: string;
+  weight_kg: number;
+  body_fat: number | null;
+}
+
+export function WeightTrendChart({ data }: { data: WeightPoint[] }) {
+  if (data.length === 0) return null;
+
+  const recent = data.slice(-60);
+
+  const weights = recent.map((d) => d.weight_kg).filter((w) => w > 0);
+  const minW = Math.floor(Math.min(...weights) - 1);
+  const maxW = Math.ceil(Math.max(...weights) + 1);
+
+  const fats = recent.map((d) => d.body_fat).filter((f): f is number => f !== null && f > 0);
+  const minF = fats.length > 0 ? Math.floor(Math.min(...fats) - 1) : 15;
+  const maxF = fats.length > 0 ? Math.ceil(Math.max(...fats) + 1) : 25;
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <ComposedChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+          tickFormatter={(d: string) => {
+            const date = new Date(d);
+            return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          }}
+          interval={Math.max(Math.floor(recent.length / 6), 1)}
+        />
+        <YAxis
+          yAxisId="weight"
+          domain={[minW, maxW]}
+          tick={{ fontSize: 9, fill: "hsl(60, 70%, 60%)" }}
+          tickFormatter={(v: number) => `${v}kg`}
+        />
+        <YAxis
+          yAxisId="bf"
+          orientation="right"
+          domain={[minF, maxF]}
+          tick={{ fontSize: 9, fill: "hsl(280, 60%, 65%)" }}
+          tickFormatter={(v: number) => `${v}%`}
+        />
+        <Tooltip
+          contentStyle={{
+            background: "hsl(var(--card))",
+            border: "1px solid hsl(var(--border))",
+            borderRadius: "8px",
+            fontSize: "12px",
+          }}
+          labelFormatter={(d: any) =>
+            new Date(String(d)).toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })
+          }
+          formatter={(value: any, name: any) => {
+            if (name === "weight_kg") return [`${Number(value).toFixed(1)} kg`, "Weight"];
+            if (name === "body_fat") return [`${Number(value).toFixed(1)}%`, "Body Fat"];
+            return [value, name];
+          }}
+        />
+        {fats.length > 0 && (
+          <Area
+            yAxisId="bf"
+            type="monotone"
+            dataKey="body_fat"
+            stroke="hsl(280, 60%, 65%)"
+            fill="hsl(280, 60%, 65%)"
+            fillOpacity={0.15}
+            strokeWidth={1}
+            connectNulls
+            dot={false}
+          />
+        )}
+        <Line
+          yAxisId="weight"
+          type="monotone"
+          dataKey="weight_kg"
+          stroke="hsl(60, 70%, 60%)"
+          strokeWidth={2}
+          dot={false}
+          connectNulls
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
