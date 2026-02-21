@@ -34,9 +34,7 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
   const longRange = spanDays > 60;
 
   const chartData = filtered.map((d) => ({
-      date: new Date(d.date).toLocaleDateString("en-US", longRange
-        ? { month: "short", year: "2-digit" }
-        : { month: "short", day: "numeric" }),
+      date: d.date,
       avg: Number(d.avg_spo2),
       low: d.low_spo2 ? Number(d.low_spo2) : null,
       sleep: d.sleep_spo2 ? Number(d.sleep_spo2) : null,
@@ -46,6 +44,18 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
     [d.avg, d.low, d.sleep].filter((v): v is number => v !== null)
   );
   const minVal = Math.max(Math.floor(Math.min(...allVals) - 2), 80);
+
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.date);
+  })() : undefined;
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -58,7 +68,13 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          interval={Math.max(0, Math.floor(chartData.length / 6))}
+          tickFormatter={(d: string) => {
+            const date = new Date(d);
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          }}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
         <YAxis
           className="text-[10px]"

@@ -211,6 +211,7 @@ async function getFitnessScores() {
       (raw_json->>'classification')::int as classification
     FROM garmin_raw_data
     WHERE endpoint_name = 'endurance_score'
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   const hill = await sql`
@@ -221,6 +222,7 @@ async function getFitnessScores() {
       (raw_json->>'enduranceScore')::int as endurance
     FROM garmin_raw_data
     WHERE endpoint_name = 'hill_score'
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
 
@@ -296,6 +298,7 @@ async function getTrainingLoadTrend() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'training_status'
       AND raw_json->'mostRecentTrainingStatus' IS NOT NULL
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;

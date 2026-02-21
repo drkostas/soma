@@ -33,6 +33,18 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
     : 0;
   const longRange = spanDays > 60;
 
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.date);
+  })() : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={220}>
       <ComposedChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
@@ -46,7 +58,7 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
               ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
               : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(Math.floor(chartData.length / 6), 1)}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis
           className="text-[10px]"

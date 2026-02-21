@@ -41,6 +41,18 @@ export function SleepScoreChart({ data }: { data: ScoreEntry[] }) {
     : 0;
   const longRange = spanDays > 60;
 
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.date);
+  })() : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={200}>
       <AreaChart data={chartData}>
@@ -55,7 +67,7 @@ export function SleepScoreChart({ data }: { data: ScoreEntry[] }) {
               ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
               : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(Math.floor(chartData.length / 6), 1)}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis className="text-xs" domain={[0, 100]} />
         <ReferenceLine y={80} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
