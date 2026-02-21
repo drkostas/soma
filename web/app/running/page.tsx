@@ -178,6 +178,7 @@ async function getCadenceStride() {
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND raw_json->>'averageRunningCadenceInStepsPerMinute' IS NOT NULL
+      AND (raw_json->>'averageRunningCadenceInStepsPerMinute')::float >= 120
       AND (raw_json->>'distance')::float > 1000
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
@@ -673,16 +674,16 @@ async function getSplitAnalysis() {
         (lap->>'distance')::float as distance,
         (lap->>'duration')::float as duration,
         (lap->>'averageHR')::float as avg_hr,
-        (lap->>'averageRunCadence')::float as cadence,
+        (lap->>'averageRunCadence')::float * 2 as cadence,
         (lap->>'averagePower')::float as power
       FROM garmin_activity_raw s,
         jsonb_array_elements(s.raw_json->'lapDTOs') as lap
       WHERE s.endpoint_name = 'splits'
-        AND (lap->>'distance')::float BETWEEN 900 AND 1100
+        AND (lap->>'distance')::float BETWEEN 800 AND 1200
         AND (lap->>'duration')::float > 0
     )
     SELECT
-      lap_index + 1 as km,
+      lap_index as km,
       COUNT(*) as runs,
       AVG(duration / NULLIF(distance / 1000.0, 0) / 60.0) as avg_pace,
       AVG(avg_hr) as avg_hr,
@@ -709,11 +710,11 @@ async function getBestSplits() {
         (lap->>'distance')::float as distance,
         (lap->>'duration')::float as duration,
         (lap->>'averageHR')::float as avg_hr,
-        (lap->>'averageRunCadence')::float as cadence
+        (lap->>'averageRunCadence')::float * 2 as cadence
       FROM garmin_activity_raw s,
         jsonb_array_elements(s.raw_json->'lapDTOs') as lap
       WHERE s.endpoint_name = 'splits'
-        AND (lap->>'distance')::float BETWEEN 900 AND 1100
+        AND (lap->>'distance')::float BETWEEN 800 AND 1200
         AND (lap->>'duration')::float > 0
     ),
     with_pace AS (
@@ -723,7 +724,7 @@ async function getBestSplits() {
     )
     SELECT
       wp.activity_id,
-      wp.lap_index + 1 as km,
+      wp.lap_index as km,
       wp.pace,
       wp.avg_hr,
       wp.cadence,
