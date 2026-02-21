@@ -31,6 +31,8 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   hiking: <Mountain className="h-4 w-4 text-green-400" />,
   e_bike_fitness: <Bike className="h-4 w-4 text-yellow-400" />,
   lap_swimming: <Waves className="h-4 w-4 text-blue-400" />,
+  swimming: <Waves className="h-4 w-4 text-blue-400" />,
+  open_water_swimming: <Waves className="h-4 w-4 text-blue-400" />,
   walking: <PersonStanding className="h-4 w-4 text-emerald-400" />,
   cycling: <Bike className="h-4 w-4 text-yellow-400" />,
   indoor_cardio: <Heart className="h-4 w-4 text-red-400" />,
@@ -47,6 +49,8 @@ const ACTIVITY_LABELS: Record<string, string> = {
   hiking: "Hiking",
   e_bike_fitness: "E-Bike",
   lap_swimming: "Swimming",
+  swimming: "Swimming",
+  open_water_swimming: "Swimming",
   walking: "Walking",
   cycling: "Cycling",
   indoor_cardio: "Cardio",
@@ -60,7 +64,7 @@ const SPORT_GROUPS: Record<string, string[]> = {
   Snowboarding: ["resort_snowboarding", "resort_skiing_snowboarding_ws"],
   Hiking: ["hiking"],
   "E-Bike": ["e_bike_fitness"],
-  Swimming: ["lap_swimming"],
+  Swimming: ["lap_swimming", "swimming", "open_water_swimming"],
   Walking: ["walking"],
   Cycling: ["cycling"],
   Cardio: ["indoor_cardio"],
@@ -193,7 +197,7 @@ async function getTimeBreakdown() {
         WHEN raw_json->'activityType'->>'typeKey' IN ('cycling', 'e_bike_fitness', 'indoor_cycling') THEN 'Cycling'
         WHEN raw_json->'activityType'->>'typeKey' IN ('kiteboarding_v2', 'wind_kite_surfing') THEN 'Kite'
         WHEN raw_json->'activityType'->>'typeKey' IN ('resort_snowboarding', 'resort_skiing_snowboarding_ws') THEN 'Snow'
-        WHEN raw_json->'activityType'->>'typeKey' IN ('lap_swimming', 'swimming') THEN 'Swim'
+        WHEN raw_json->'activityType'->>'typeKey' IN ('lap_swimming', 'swimming', 'open_water_swimming') THEN 'Swim'
         WHEN raw_json->'activityType'->>'typeKey' = 'indoor_cardio' THEN 'Cardio'
         ELSE 'Other'
       END as category,
@@ -481,6 +485,8 @@ export default async function ActivitiesPage() {
           e_bike_fitness: "bg-yellow-500",
           indoor_cardio: "bg-red-400",
           lap_swimming: "bg-blue-500",
+          swimming: "bg-blue-500",
+          open_water_swimming: "bg-blue-500",
           stand_up_paddleboarding_v2: "bg-cyan-300",
           indoor_cycling: "bg-yellow-400",
           other: "bg-violet-400",
