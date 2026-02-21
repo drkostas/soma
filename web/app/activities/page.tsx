@@ -207,6 +207,26 @@ async function getTimeBreakdown() {
   return rows;
 }
 
+async function getWalkingSessions() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      (raw_json->>'startTimeLocal')::text as date,
+      raw_json->>'activityName' as name,
+      (raw_json->>'distance')::float / 1000.0 as distance_km,
+      (raw_json->>'duration')::float / 60.0 as duration_min,
+      COALESCE((raw_json->>'elevationGain')::float, 0) as elev_gain,
+      (raw_json->>'averageHR')::float as avg_hr,
+      (raw_json->>'calories')::float as calories,
+      (raw_json->>'averageSpeed')::float * 3.6 as avg_speed_kmh
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' = 'walking'
+    ORDER BY (raw_json->>'startTimeLocal')::text DESC
+  `;
+  return rows;
+}
+
 async function getAllActivities() {
   const sql = getDb();
   const rows = await sql`
@@ -264,7 +284,7 @@ function extractResort(name: string): string {
 }
 
 export default async function ActivitiesPage() {
-  const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports, cyclingSessions, timeBreakdown] =
+  const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports, cyclingSessions, timeBreakdown, walkingSessions] =
     await Promise.all([
       getActivitySummary(),
       getKiteSessions(),
@@ -274,6 +294,7 @@ export default async function ActivitiesPage() {
       getYearlySportBreakdown(),
       getCyclingSessions(),
       getTimeBreakdown(),
+      getWalkingSessions(),
     ]);
 
   const totalSessions = summary.reduce((s, r) => s + Number(r.count), 0);
@@ -809,6 +830,56 @@ export default async function ActivitiesPage() {
             })()}
           </CardContent>
         </Card>
+      )}
+
+      {/* Walking Section */}
+      {(walkingSessions as any[]).length >= 5 && (
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+            <PersonStanding className="h-5 w-5 text-emerald-400" />
+            Walking
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {(() => {
+              const walks = walkingSessions as any[];
+              const totalDist = walks.reduce((s: number, w: any) => s + Number(w.distance_km || 0), 0);
+              const totalElev = walks.reduce((s: number, w: any) => s + Number(w.elev_gain || 0), 0);
+              const avgDuration = walks.reduce((s: number, w: any) => s + Number(w.duration_min || 0), 0) / walks.length;
+              const totalCal = walks.reduce((s: number, w: any) => s + Number(w.calories || 0), 0);
+              return (
+                <>
+                  <StatCard title="Total Walks" value={walks.length} icon={<PersonStanding className="h-4 w-4 text-emerald-400" />} />
+                  <StatCard title="Total Distance" value={`${totalDist.toFixed(0)} km`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Avg Duration" value={formatDuration(avgDuration)} icon={<Clock className="h-4 w-4 text-green-400" />} />
+                  <StatCard title="Total Elevation" value={`${totalElev.toFixed(0)}m`} icon={<ArrowUp className="h-4 w-4 text-amber-400" />} />
+                </>
+              );
+            })()}
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Recent Walks</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {(walkingSessions as any[]).slice(0, 8).map((w: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-sm border-b border-border/20 pb-2">
+                    <div className="flex items-center gap-2">
+                      <PersonStanding className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="font-medium truncate max-w-[200px]">{w.name || "Walking"}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{Number(w.distance_km).toFixed(1)} km</span>
+                      <span>{formatDuration(Number(w.duration_min))}</span>
+                      {Number(w.elev_gain) > 0 && <span>{Number(w.elev_gain).toFixed(0)}m ↑</span>}
+                      <span className="w-20 text-right">{new Date(w.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Cycling Section */}
