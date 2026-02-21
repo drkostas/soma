@@ -4,6 +4,7 @@ import { WorkoutFrequencyChart } from "@/components/workout-frequency-chart";
 import { ClickableRecentActivity } from "@/components/clickable-recent-activity";
 import { StepsTrendChart } from "@/components/steps-trend-chart";
 import { CalorieTrendChart } from "@/components/calorie-trend-chart";
+import { WeightTrendChart } from "@/components/weight-trend-chart";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -266,7 +267,8 @@ async function getFitnessAge() {
       date::text as date,
       (raw_json->>'fitnessAge')::float as fitness_age,
       (raw_json->>'chronologicalAge')::int as chrono_age,
-      (raw_json->>'achievableFitnessAge')::float as achievable_age
+      (raw_json->>'achievableFitnessAge')::float as achievable_age,
+      raw_json->'components' as components
     FROM garmin_raw_data
     WHERE endpoint_name = 'fitnessage_data'
       AND raw_json->>'fitnessAge' IS NOT NULL
@@ -623,7 +625,7 @@ export default async function Home() {
       </div>
 
       {/* Fitness Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Fitness Age */}
         {fitnessAge && (
           <Card>
@@ -645,16 +647,48 @@ export default async function Home() {
               <div className="text-xs text-muted-foreground mb-3">
                 {(Number(fitnessAge.chrono_age) - Number(fitnessAge.fitness_age)).toFixed(1)} years younger
               </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div className="h-2 bg-muted rounded-full overflow-hidden mb-3">
                 <div
                   className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
                   style={{ width: `${Math.min((Number(fitnessAge.fitness_age) / Number(fitnessAge.chrono_age)) * 100, 100)}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+              <div className="flex justify-between text-[10px] text-muted-foreground mb-4">
                 <span>Best: {Number(fitnessAge.achievable_age).toFixed(1)}</span>
                 <span>Actual: {fitnessAge.chrono_age}</span>
               </div>
+              {/* Components breakdown */}
+              {fitnessAge.components && (() => {
+                const comps = typeof fitnessAge.components === "string"
+                  ? JSON.parse(fitnessAge.components)
+                  : fitnessAge.components;
+                const items = [
+                  { key: "rhr", label: "Resting HR", value: comps.rhr?.value, unit: "bpm", color: "text-red-400" },
+                  { key: "bodyFat", label: "Body Fat", value: comps.bodyFat?.value, unit: "%", target: comps.bodyFat?.targetValue, color: "text-yellow-400" },
+                  { key: "vigorousMinutesAvg", label: "Vigorous Min/wk", value: comps.vigorousMinutesAvg?.value, unit: "min", target: comps.vigorousMinutesAvg?.targetValue, color: "text-orange-400" },
+                  { key: "vigorousDaysAvg", label: "Vigorous Days/wk", value: comps.vigorousDaysAvg?.value, unit: "days", target: comps.vigorousDaysAvg?.targetValue, color: "text-blue-400" },
+                ].filter(c => c.value != null);
+                return (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Components</div>
+                    {items.map((c) => (
+                      <div key={c.key} className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">{c.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${c.color}`}>
+                            {typeof c.value === "number" ? (Number.isInteger(c.value) ? c.value : Number(c.value).toFixed(1)) : c.value} {c.unit}
+                          </span>
+                          {c.target && (
+                            <span className="text-muted-foreground/50">
+                              → {c.target} {c.unit}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         )}
@@ -703,69 +737,39 @@ export default async function Home() {
             </CardContent>
           </Card>
         )}
+      </div>
 
-        {/* Weight Trend */}
-        {(weightTrend as any[]).length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Weight className="h-4 w-4 text-blue-400" />
-                Weight
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+      {/* Body Composition Trend */}
+      {(weightTrend as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Weight className="h-4 w-4 text-blue-400" />
+              Body Composition
               {(() => {
                 const data = (weightTrend as any[]).filter((w: any) => w.weight_kg > 0);
-                if (data.length === 0) return <p className="text-sm text-muted-foreground">No weight data</p>;
+                if (data.length === 0) return null;
                 const latest = data[data.length - 1];
-                const oldest = data[0];
-                const change = Number(latest.weight_kg) - Number(oldest.weight_kg);
-                const recent = data.slice(-10);
-                const maxW = Math.max(...recent.map((d: any) => Number(d.weight_kg)));
-                const minW = Math.min(...recent.map((d: any) => Number(d.weight_kg)));
-                const range = maxW - minW || 1;
                 return (
-                  <>
-                    <div className="flex items-end gap-3 mb-2">
-                      <div className="text-4xl font-bold">
-                        {Number(latest.weight_kg).toFixed(1)}
-                      </div>
-                      <div className="text-sm text-muted-foreground mb-1">kg</div>
-                      {latest.body_fat && (
-                        <div className="text-sm text-muted-foreground mb-1 ml-auto">
-                          {Number(latest.body_fat).toFixed(1)}% BF
-                        </div>
-                      )}
-                    </div>
-                    <div className={`text-xs mb-3 ${change <= 0 ? "text-green-400" : "text-red-400"}`}>
-                      {change >= 0 ? "+" : ""}{change.toFixed(1)} kg since{" "}
-                      {new Date(oldest.date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
-                    </div>
-                    {/* Mini sparkline */}
-                    <div className="flex items-end gap-[2px] h-8">
-                      {recent.map((d: any, i: number) => {
-                        const h = ((Number(d.weight_kg) - minW) / range) * 100;
-                        return (
-                          <div
-                            key={i}
-                            className="flex-1 bg-blue-400/60 rounded-t-sm min-h-[2px]"
-                            style={{ height: `${Math.max(h, 8)}%` }}
-                            title={`${d.date}: ${Number(d.weight_kg).toFixed(1)} kg`}
-                          />
-                        );
-                      })}
-                    </div>
-                    <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                      <span>{new Date(recent[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                      <span>{new Date(recent[recent.length - 1].date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                    </div>
-                  </>
+                  <span className="ml-auto text-xs font-normal">
+                    {Number(latest.weight_kg).toFixed(1)} kg
+                    {latest.body_fat ? ` · ${Number(latest.body_fat).toFixed(1)}% BF` : ""}
+                  </span>
                 );
               })()}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WeightTrendChart
+              data={(weightTrend as any[]).filter((w: any) => w.weight_kg > 0).map((w: any) => ({
+                date: w.date,
+                weight_kg: Number(w.weight_kg),
+                body_fat: w.body_fat ? Number(w.body_fat) : null,
+              }))}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Middle Row: Activity Breakdown + Gym Frequency + Last Workout */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

@@ -506,31 +506,45 @@ export default async function WorkoutsPage() {
       {/* Training Calendar Heatmap — GitHub-style grid */}
       <Card className="mt-6 mb-6">
         <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
             Training Calendar (Last 13 Weeks)
+            <span className="ml-auto text-xs font-normal">
+              {calendar.length} sessions in 90 days
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {(() => {
             const today = new Date();
-            // Build 13 weeks (91 days) aligned to week boundaries
             const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-            // Find the Monday 13 weeks ago
-            const currentDay = today.getDay(); // 0=Sun
+            const currentDay = today.getDay();
             const daysToMon = currentDay === 0 ? 6 : currentDay - 1;
             const thisMon = new Date(today);
             thisMon.setDate(thisMon.getDate() - daysToMon);
             const startMon = new Date(thisMon);
             startMon.setDate(startMon.getDate() - 12 * 7);
 
-            // Build calendarSet for O(1) lookup
             const calSet = new Map<string, string>();
             for (const c of calendar as any[]) {
               calSet.set(String(c.day), c.program);
             }
 
-            // Build weeks array
+            // Color map for programs
+            const programColors: Record<string, string> = {};
+            const palette = [
+              "bg-blue-500", "bg-green-500", "bg-orange-500", "bg-purple-500",
+              "bg-cyan-500", "bg-rose-500", "bg-yellow-500", "bg-emerald-500",
+            ];
+            let colorIdx = 0;
+            for (const c of calendar as any[]) {
+              if (c.program && !programColors[c.program]) {
+                programColors[c.program] = palette[colorIdx % palette.length];
+                colorIdx++;
+              }
+            }
+
             const weeks: { date: string; trained: boolean; program: string | null }[][] = [];
             const d = new Date(startMon);
             while (d <= today) {
@@ -539,7 +553,7 @@ export default async function WorkoutsPage() {
               );
               if (!weeks[weekIdx]) weeks[weekIdx] = [];
               const dateStr = d.toISOString().split("T")[0];
-              const dayOfWeek = d.getDay() === 0 ? 6 : d.getDay() - 1; // Mon=0
+              const dayOfWeek = d.getDay() === 0 ? 6 : d.getDay() - 1;
               weeks[weekIdx][dayOfWeek] = {
                 date: dateStr,
                 trained: calSet.has(dateStr),
@@ -548,7 +562,6 @@ export default async function WorkoutsPage() {
               d.setDate(d.getDate() + 1);
             }
 
-            // Month labels
             const monthLabels: { label: string; colStart: number }[] = [];
             let lastMonth = "";
             for (let w = 0; w < weeks.length; w++) {
@@ -565,7 +578,7 @@ export default async function WorkoutsPage() {
             return (
               <div className="overflow-x-auto">
                 {/* Month labels */}
-                <div className="flex ml-8 mb-1">
+                <div className="flex ml-10 mb-1">
                   {monthLabels.map((ml, i) => {
                     const nextCol = i < monthLabels.length - 1 ? monthLabels[i + 1].colStart : weeks.length;
                     const span = nextCol - ml.colStart;
@@ -573,42 +586,42 @@ export default async function WorkoutsPage() {
                       <div
                         key={`${ml.label}-${ml.colStart}`}
                         className="text-xs text-muted-foreground"
-                        style={{ width: `${span * 16}px` }}
+                        style={{ width: `${span * 18}px` }}
                       >
                         {ml.label}
                       </div>
                     );
                   })}
                 </div>
-                {/* Grid: rows = days of week, columns = weeks */}
                 <div className="flex gap-0">
-                  {/* Day labels */}
-                  <div className="flex flex-col gap-[2px] mr-1">
+                  <div className="flex flex-col gap-[2px] mr-1.5">
                     {dayLabels.map((label, i) => (
-                      <div key={label} className="h-[14px] flex items-center">
+                      <div key={label} className="h-[16px] flex items-center">
                         {i % 2 === 0 ? (
-                          <span className="text-[9px] text-muted-foreground w-6 text-right">{label}</span>
+                          <span className="text-[10px] text-muted-foreground w-7 text-right">{label}</span>
                         ) : (
-                          <span className="w-6" />
+                          <span className="w-7" />
                         )}
                       </div>
                     ))}
                   </div>
-                  {/* Week columns */}
                   {weeks.map((week, wi) => (
                     <div key={wi} className="flex flex-col gap-[2px]">
                       {Array.from({ length: 7 }, (_, di) => {
                         const cell = week?.[di];
-                        if (!cell) return <div key={di} className="w-[14px] h-[14px]" />;
+                        if (!cell) return <div key={di} className="w-[16px] h-[16px]" />;
+                        const color = cell.trained && cell.program
+                          ? programColors[cell.program] || "bg-primary"
+                          : cell.trained
+                            ? "bg-primary"
+                            : "bg-muted/40";
                         return (
                           <div
                             key={di}
-                            className={`w-[14px] h-[14px] rounded-sm ${
-                              cell.trained
-                                ? "bg-primary hover:bg-primary/80"
-                                : "bg-muted/50 hover:bg-muted"
-                            }`}
-                            title={`${cell.date}${cell.program ? `: ${cell.program}` : ""}`}
+                            className={`w-[16px] h-[16px] rounded-sm ${color} ${
+                              cell.trained ? "hover:opacity-80" : "hover:bg-muted/60"
+                            } transition-opacity`}
+                            title={`${cell.date}${cell.program ? ` — ${cell.program}` : ""}`}
                           />
                         );
                       })}
@@ -618,17 +631,37 @@ export default async function WorkoutsPage() {
               </div>
             );
           })()}
-          <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-primary" /> Trained
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-muted/50" /> Rest
-            </span>
-            <span className="ml-auto">
-              {calendar.length} sessions in 90 days
-            </span>
-          </div>
+          {/* Program color legend */}
+          {(() => {
+            const programColors: Record<string, string> = {};
+            const palette = [
+              "bg-blue-500", "bg-green-500", "bg-orange-500", "bg-purple-500",
+              "bg-cyan-500", "bg-rose-500", "bg-yellow-500", "bg-emerald-500",
+            ];
+            let colorIdx = 0;
+            for (const c of calendar as any[]) {
+              if (c.program && !programColors[c.program]) {
+                programColors[c.program] = palette[colorIdx % palette.length];
+                colorIdx++;
+              }
+            }
+            const entries = Object.entries(programColors);
+            if (entries.length === 0) return null;
+            return (
+              <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-muted-foreground">
+                {entries.map(([program, color]) => (
+                  <span key={program} className="flex items-center gap-1">
+                    <span className={`w-3 h-3 rounded-sm ${color}`} />
+                    {program}
+                  </span>
+                ))}
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-sm bg-muted/40" />
+                  Rest
+                </span>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
