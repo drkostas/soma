@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { MonthlyActivityChart } from "@/components/monthly-activity-chart";
 import { KiteSpeedChart } from "@/components/kite-speed-chart";
+import { ClickableActivityTable } from "@/components/clickable-activity-table";
 import { getDb } from "@/lib/db";
 import {
   Wind,
@@ -125,6 +126,7 @@ async function getAllActivities() {
   const sql = getDb();
   const rows = await sql`
     SELECT
+      activity_id::text as activity_id,
       raw_json->'activityType'->>'typeKey' as type_key,
       (raw_json->>'startTimeLocal')::text as date,
       raw_json->>'activityName' as name,
@@ -578,61 +580,19 @@ export default async function ActivitiesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="text-left py-2 font-medium">Date</th>
-                  <th className="text-left py-2 font-medium">Type</th>
-                  <th className="text-left py-2 font-medium">Name</th>
-                  <th className="text-right py-2 font-medium">Distance</th>
-                  <th className="text-right py-2 font-medium">Duration</th>
-                  <th className="text-right py-2 font-medium">HR</th>
-                  <th className="text-right py-2 font-medium">Cal</th>
-                  <th className="text-right py-2 font-medium">Elev</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activities.map((a: any, i: number) => (
-                  <tr key={i} className="border-b border-border/50">
-                    <td className="py-2 text-muted-foreground whitespace-nowrap">
-                      {new Date(a.date).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "2-digit",
-                      })}
-                    </td>
-                    <td className="py-2">
-                      <span className="flex items-center gap-1.5">
-                        {ACTIVITY_ICONS[a.type_key] || null}
-                        <span className="text-xs">
-                          {ACTIVITY_LABELS[a.type_key] || a.type_key}
-                        </span>
-                      </span>
-                    </td>
-                    <td className="py-2 max-w-[200px] truncate">{a.name}</td>
-                    <td className="py-2 text-right">
-                      {Number(a.distance_km).toFixed(1)} km
-                    </td>
-                    <td className="py-2 text-right whitespace-nowrap">
-                      {formatDuration(Number(a.duration_min))}
-                    </td>
-                    <td className="py-2 text-right">
-                      {a.avg_hr ? Math.round(Number(a.avg_hr)) : "—"}
-                    </td>
-                    <td className="py-2 text-right text-muted-foreground">
-                      {a.calories ? Math.round(Number(a.calories)) : "—"}
-                    </td>
-                    <td className="py-2 text-right text-muted-foreground">
-                      {Number(a.elev_gain) > 0
-                        ? `${Number(a.elev_gain).toLocaleString()}m`
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ClickableActivityTable
+            activities={(activities as any[]).map((a: any) => ({
+              activity_id: a.activity_id,
+              type_key: a.type_key,
+              date: a.date,
+              name: a.name,
+              distance_km: Number(a.distance_km),
+              duration_min: Number(a.duration_min),
+              avg_hr: a.avg_hr ? Number(a.avg_hr) : null,
+              calories: a.calories ? Number(a.calories) : null,
+              elev_gain: Number(a.elev_gain),
+            }))}
+          />
         </CardContent>
       </Card>
     </div>

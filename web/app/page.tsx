@@ -253,6 +253,18 @@ const ACTIVITY_LABELS: Record<string, string> = {
   hiking: "Hike",
   e_bike_fitness: "E-Bike",
   lap_swimming: "Swim",
+  walking: "Walk",
+  indoor_cardio: "Cardio",
+  indoor_rowing: "Row",
+  yoga: "Yoga",
+  cycling: "Cycle",
+  elliptical: "Elliptical",
+};
+
+// Merge these activity type_keys into a single group for display
+const MERGE_TYPES: Record<string, string> = {
+  wind_kite_surfing: "kiteboarding_v2",
+  resort_skiing_snowboarding_ws: "resort_snowboarding",
 };
 
 function formatDuration(mins: number) {
@@ -276,7 +288,21 @@ export default async function Home() {
       getTrainingStreak(),
     ]);
 
-  const totalActivities = activityCounts.reduce((s: number, r: any) => s + Number(r.cnt), 0);
+  // Merge duplicate activity types
+  const mergedCounts: { type_key: string; cnt: number }[] = [];
+  const seen = new Set<string>();
+  for (const row of activityCounts) {
+    const canonical = MERGE_TYPES[row.type_key] || row.type_key;
+    if (seen.has(canonical)) {
+      const existing = mergedCounts.find((m) => m.type_key === canonical);
+      if (existing) existing.cnt += Number(row.cnt);
+    } else {
+      seen.add(canonical);
+      mergedCounts.push({ type_key: canonical, cnt: Number(row.cnt) });
+    }
+  }
+  mergedCounts.sort((a, b) => b.cnt - a.cnt);
+  const totalActivities = mergedCounts.reduce((s, r) => s + r.cnt, 0);
 
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
@@ -430,10 +456,10 @@ export default async function Home() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {activityCounts.map((a: any) => {
+            {mergedCounts.map((a) => {
               const icon = ACTIVITY_ICONS[a.type_key] || <Activity className="h-3.5 w-3.5" />;
-              const label = ACTIVITY_LABELS[a.type_key] || a.type_key;
-              const pct = totalActivities > 0 ? (Number(a.cnt) / totalActivities) * 100 : 0;
+              const label = ACTIVITY_LABELS[a.type_key] || a.type_key.replace(/_/g, " ");
+              const pct = totalActivities > 0 ? (a.cnt / totalActivities) * 100 : 0;
               return (
                 <div key={a.type_key} className="flex items-center gap-2 text-sm">
                   {icon}
@@ -444,7 +470,7 @@ export default async function Home() {
                       style={{ width: `${Math.max(pct, 2)}%` }}
                     />
                   </div>
-                  <span className="font-medium w-8 text-right">{Number(a.cnt)}</span>
+                  <span className="font-medium w-8 text-right">{a.cnt}</span>
                 </div>
               );
             })}
