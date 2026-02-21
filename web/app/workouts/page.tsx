@@ -581,19 +581,20 @@ export default async function WorkoutsPage() {
                 return Array.from(mg.values()).reduce((s, v) => s + v, 0);
               }));
 
+              const BAR_HEIGHT = 140;
               return (
                 <div>
-                  <div className="flex items-end gap-[4px] h-36">
+                  <div className="flex items-end gap-[4px]" style={{ height: `${BAR_HEIGHT + 20}px` }}>
                     {months.map((month) => {
                       const mg = monthMap.get(month)!;
                       const total = Array.from(mg.values()).reduce((s, v) => s + v, 0);
-                      const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+                      const barH = maxTotal > 0 ? (total / maxTotal) * BAR_HEIGHT : 0;
                       const monthDate = new Date(month + "-01");
                       const label = monthDate.toLocaleDateString("en-US", { month: "short" });
 
                       return (
-                        <div key={month} className="flex-1 flex flex-col items-center">
-                          <div className="w-full flex flex-col items-stretch rounded-t-sm overflow-hidden" style={{ height: `${Math.max(pct, 4)}%` }}>
+                        <div key={month} className="flex-1 flex flex-col items-center justify-end">
+                          <div className="w-full flex flex-col rounded-t-sm overflow-hidden" style={{ height: `${Math.max(barH, 3)}px` }}>
                             {groups.map((g) => {
                               const vol = mg.get(g) || 0;
                               const volPct = total > 0 ? (vol / total) * 100 : 0;
@@ -601,8 +602,8 @@ export default async function WorkoutsPage() {
                               return (
                                 <div
                                   key={g}
-                                  className={`${mgColors[g] || "bg-gray-500"}`}
-                                  style={{ height: `${volPct}%`, minHeight: volPct > 0 ? "2px" : "0" }}
+                                  className={`${mgColors[g] || "bg-gray-500"} shrink-0`}
+                                  style={{ height: `${volPct}%`, minHeight: "2px" }}
                                   title={`${label}: ${g} ${Math.round(vol).toLocaleString()} kg`}
                                 />
                               );

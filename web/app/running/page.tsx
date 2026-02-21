@@ -443,6 +443,38 @@ async function getDistanceDistribution() {
   return rows;
 }
 
+async function getOverallHRDistribution() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      CASE
+        WHEN (raw_json->>'averageHR')::float < 120 THEN 'Zone 1 (Recovery)'
+        WHEN (raw_json->>'averageHR')::float < 140 THEN 'Zone 2 (Easy)'
+        WHEN (raw_json->>'averageHR')::float < 155 THEN 'Zone 3 (Aerobic)'
+        WHEN (raw_json->>'averageHR')::float < 170 THEN 'Zone 4 (Threshold)'
+        ELSE 'Zone 5 (Max)'
+      END as zone,
+      COUNT(*) as count,
+      ROUND(AVG((raw_json->>'duration')::float / 60)::numeric) as avg_duration,
+      ROUND(AVG((raw_json->>'distance')::float / 1000)::numeric, 1) as avg_km,
+      CASE
+        WHEN (raw_json->>'averageHR')::float < 120 THEN 1
+        WHEN (raw_json->>'averageHR')::float < 140 THEN 2
+        WHEN (raw_json->>'averageHR')::float < 155 THEN 3
+        WHEN (raw_json->>'averageHR')::float < 170 THEN 4
+        ELSE 5
+      END as sort_order
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+      AND raw_json->>'averageHR' IS NOT NULL
+      AND (raw_json->>'distance')::float > 1000
+    GROUP BY zone, sort_order
+    ORDER BY sort_order ASC
+  `;
+  return rows;
+}
+
 async function getMonthlyElevation() {
   const sql = getDb();
   const rows = await sql`
@@ -529,7 +561,7 @@ async function getRecentRuns() {
 }
 
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
@@ -549,6 +581,7 @@ export default async function RunningPage() {
       getYearlyRunningStats(),
       getMonthlyElevation(),
       getRunningConsistency(),
+      getOverallHRDistribution(),
     ]);
 
   return (
@@ -791,6 +824,63 @@ export default async function RunningPage() {
           </Card>
         )}
       </div>
+
+      {/* Overall HR Zone Distribution */}
+      {(hrDistribution as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <HeartPulse className="h-4 w-4 text-red-400" />
+              Training Intensity Distribution (All Runs)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const zones = hrDistribution as any[];
+              const total = zones.reduce((s: number, z: any) => s + Number(z.count), 0);
+              const zoneColors = [
+                "bg-blue-400", "bg-green-400", "bg-yellow-400", "bg-orange-400", "bg-red-400",
+              ];
+              return (
+                <div className="space-y-3">
+                  {/* Stacked bar showing proportion */}
+                  <div className="flex h-6 rounded-full overflow-hidden">
+                    {zones.map((z: any, i: number) => {
+                      const pct = total > 0 ? (Number(z.count) / total) * 100 : 0;
+                      if (pct < 1) return null;
+                      return (
+                        <div
+                          key={z.zone}
+                          className={`${zoneColors[i]} flex items-center justify-center`}
+                          style={{ width: `${pct}%` }}
+                          title={`${z.zone}: ${z.count} runs (${pct.toFixed(0)}%)`}
+                        >
+                          {pct > 8 && <span className="text-[10px] font-bold text-black/70">{pct.toFixed(0)}%</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Zone details */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {zones.map((z: any, i: number) => (
+                      <div key={z.zone} className="text-center">
+                        <div className="flex items-center justify-center gap-1.5 mb-1">
+                          <span className={`w-2.5 h-2.5 rounded-full ${zoneColors[i]}`} />
+                          <span className="text-xs font-medium">{z.zone.split(" ")[0]} {z.zone.split(" ")[1]}</span>
+                        </div>
+                        <div className="text-lg font-bold">{Number(z.count)}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          avg {z.avg_km} km · {z.avg_duration}m
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Cadence & Stride + Training Effect */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

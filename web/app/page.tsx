@@ -326,6 +326,47 @@ async function getTrainingByDayOfWeek() {
   return rows;
 }
 
+async function getRecoverySummary() {
+  const sql = getDb();
+  // Get latest body battery, HRV, and training readiness
+  const [bb, hrv, tr] = await Promise.all([
+    sql`
+      SELECT
+        (raw_json->>'bodyBatteryChargedValue')::int as charged,
+        (raw_json->>'bodyBatteryDrainedValue')::int as drained
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'user_summary'
+        AND raw_json->>'bodyBatteryChargedValue' IS NOT NULL
+        AND (raw_json->>'bodyBatteryChargedValue')::int > 0
+      ORDER BY date DESC LIMIT 1
+    `,
+    sql`
+      SELECT
+        (raw_json->'hrvSummary'->>'weeklyAvg')::int as weekly_avg,
+        (raw_json->'hrvSummary'->>'lastNightAvg')::int as last_night,
+        raw_json->'hrvSummary'->>'status' as status
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'hrv_data'
+        AND raw_json->'hrvSummary'->>'weeklyAvg' IS NOT NULL
+      ORDER BY date DESC LIMIT 1
+    `,
+    sql`
+      SELECT
+        (raw_json->0->>'score')::int as score,
+        raw_json->0->>'level' as level
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'training_readiness'
+        AND raw_json->0->>'score' IS NOT NULL
+      ORDER BY date DESC LIMIT 1
+    `,
+  ]);
+  return {
+    bodyBattery: bb[0] || null,
+    hrv: hrv[0] || null,
+    readiness: tr[0] || null,
+  };
+}
+
 async function getLatestSleep() {
   const sql = getDb();
   const rows = await sql`
@@ -479,7 +520,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep, recovery] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -500,6 +541,7 @@ export default async function Home() {
       getTrainingByDayOfWeek(),
       getTrainingTimeOfDay(),
       getLatestSleep(),
+      getRecoverySummary(),
     ]);
 
   // Merge duplicate activity types
@@ -660,6 +702,69 @@ export default async function Home() {
           })()}
         </CardContent>
       </Card>
+
+      {/* Recovery Summary */}
+      {(recovery.bodyBattery || recovery.hrv || recovery.readiness) && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <BatteryCharging className="h-4 w-4 text-green-400" />
+              Recovery Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {recovery.readiness && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Training Readiness</div>
+                  <div className={`text-2xl font-bold ${
+                    Number(recovery.readiness.score) >= 70 ? "text-green-400" :
+                    Number(recovery.readiness.score) >= 40 ? "text-yellow-400" : "text-red-400"
+                  }`}>
+                    {recovery.readiness.score}
+                  </div>
+                  <div className="text-xs text-muted-foreground capitalize">
+                    {recovery.readiness.level?.toLowerCase().replace(/_/g, " ")}
+                  </div>
+                </div>
+              )}
+              {recovery.bodyBattery && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Body Battery</div>
+                  <div className="text-2xl font-bold">
+                    +{recovery.bodyBattery.charged}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    −{recovery.bodyBattery.drained} drained
+                  </div>
+                </div>
+              )}
+              {recovery.hrv && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">HRV</div>
+                  <div className="text-2xl font-bold">
+                    {recovery.hrv.last_night ?? recovery.hrv.weekly_avg} ms
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Weekly avg: {recovery.hrv.weekly_avg} ms
+                  </div>
+                </div>
+              )}
+              {recovery.hrv?.status && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">HRV Status</div>
+                  <div className={`text-2xl font-bold ${
+                    recovery.hrv.status === "BALANCED" ? "text-green-400" :
+                    recovery.hrv.status === "LOW" ? "text-yellow-400" : "text-blue-400"
+                  }`}>
+                    {recovery.hrv.status.charAt(0) + recovery.hrv.status.slice(1).toLowerCase()}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Steps & Calorie Trends */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
