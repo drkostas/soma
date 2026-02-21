@@ -21,6 +21,10 @@ import {
   Bike,
   Waves,
   PersonStanding,
+  Timer,
+  Weight,
+  Target,
+  Heart,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -240,6 +244,56 @@ async function getStepsTrend() {
   return rows;
 }
 
+async function getFitnessAge() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->>'fitnessAge')::float as fitness_age,
+      (raw_json->>'chronologicalAge')::int as chrono_age,
+      (raw_json->>'achievableFitnessAge')::float as achievable_age
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'fitnessage_data'
+      AND raw_json->>'fitnessAge' IS NOT NULL
+    ORDER BY date DESC
+    LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
+async function getIntensityMinutes() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->>'weekGoal')::int as goal,
+      (raw_json->>'weeklyTotal')::int as weekly_total,
+      (raw_json->>'weeklyModerate')::int as weekly_moderate,
+      (raw_json->>'weeklyVigorous')::int as weekly_vigorous
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'intensity_minutes_data'
+      AND raw_json->>'weekGoal' IS NOT NULL
+    ORDER BY date DESC
+    LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
+async function getWeightTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->'totalAverage'->>'weight')::float / 1000.0 as weight_kg,
+      (raw_json->'totalAverage'->>'bodyFat')::float as body_fat
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'body_composition'
+      AND raw_json->'totalAverage'->>'weight' IS NOT NULL
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getLastWorkoutDetail() {
   const sql = getDb();
   const rows = await sql`
@@ -325,7 +379,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -338,6 +392,9 @@ export default async function Home() {
       getWeeklyTrainingSummary(),
       getTrainingStreak(),
       getStepsTrend(),
+      getFitnessAge(),
+      getIntensityMinutes(),
+      getWeightTrend(),
     ]);
 
   // Merge duplicate activity types
@@ -521,6 +578,151 @@ export default async function Home() {
           </CardContent>
         </Card>
       )}
+
+      {/* Fitness Metrics Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* Fitness Age */}
+        {fitnessAge && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Heart className="h-4 w-4 text-red-400" />
+                Fitness Age
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-3 mb-2">
+                <div className="text-4xl font-bold text-green-400">
+                  {Number(fitnessAge.fitness_age).toFixed(1)}
+                </div>
+                <div className="text-sm text-muted-foreground mb-1">
+                  vs {fitnessAge.chrono_age} actual
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground mb-3">
+                {(Number(fitnessAge.chrono_age) - Number(fitnessAge.fitness_age)).toFixed(1)} years younger
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full"
+                  style={{ width: `${Math.min((Number(fitnessAge.fitness_age) / Number(fitnessAge.chrono_age)) * 100, 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                <span>Best: {Number(fitnessAge.achievable_age).toFixed(1)}</span>
+                <span>Actual: {fitnessAge.chrono_age}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Intensity Minutes */}
+        {intensityMin && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Timer className="h-4 w-4 text-emerald-400" />
+                Weekly Intensity Minutes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-3 mb-2">
+                <div className="text-4xl font-bold">
+                  {intensityMin.weekly_total}
+                </div>
+                <div className="text-sm text-muted-foreground mb-1">
+                  / {intensityMin.goal} min goal
+                </div>
+              </div>
+              <div className="h-3 bg-muted rounded-full overflow-hidden mb-2">
+                <div
+                  className={`h-full rounded-full ${
+                    Number(intensityMin.weekly_total) >= Number(intensityMin.goal)
+                      ? "bg-green-500"
+                      : "bg-emerald-400"
+                  }`}
+                  style={{ width: `${Math.min((Number(intensityMin.weekly_total) / Number(intensityMin.goal)) * 100, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                  Moderate: {intensityMin.weekly_moderate} min
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-orange-400" />
+                  Vigorous: {intensityMin.weekly_vigorous} min
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {Math.round((Number(intensityMin.weekly_total) / Number(intensityMin.goal)) * 100)}% of goal
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Weight Trend */}
+        {(weightTrend as any[]).length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Weight className="h-4 w-4 text-blue-400" />
+                Weight
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const data = (weightTrend as any[]).filter((w: any) => w.weight_kg > 0);
+                if (data.length === 0) return <p className="text-sm text-muted-foreground">No weight data</p>;
+                const latest = data[data.length - 1];
+                const oldest = data[0];
+                const change = Number(latest.weight_kg) - Number(oldest.weight_kg);
+                const recent = data.slice(-10);
+                const maxW = Math.max(...recent.map((d: any) => Number(d.weight_kg)));
+                const minW = Math.min(...recent.map((d: any) => Number(d.weight_kg)));
+                const range = maxW - minW || 1;
+                return (
+                  <>
+                    <div className="flex items-end gap-3 mb-2">
+                      <div className="text-4xl font-bold">
+                        {Number(latest.weight_kg).toFixed(1)}
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-1">kg</div>
+                      {latest.body_fat && (
+                        <div className="text-sm text-muted-foreground mb-1 ml-auto">
+                          {Number(latest.body_fat).toFixed(1)}% BF
+                        </div>
+                      )}
+                    </div>
+                    <div className={`text-xs mb-3 ${change <= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {change >= 0 ? "+" : ""}{change.toFixed(1)} kg since{" "}
+                      {new Date(oldest.date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                    </div>
+                    {/* Mini sparkline */}
+                    <div className="flex items-end gap-[2px] h-8">
+                      {recent.map((d: any, i: number) => {
+                        const h = ((Number(d.weight_kg) - minW) / range) * 100;
+                        return (
+                          <div
+                            key={i}
+                            className="flex-1 bg-blue-400/60 rounded-t-sm min-h-[2px]"
+                            style={{ height: `${Math.max(h, 8)}%` }}
+                            title={`${d.date}: ${Number(d.weight_kg).toFixed(1)} kg`}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                      <span>{new Date(recent[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                      <span>{new Date(recent[recent.length - 1].date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Middle Row: Activity Breakdown + Gym Frequency + Last Workout */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

@@ -20,6 +20,8 @@ import {
   Footprints,
   Activity,
   Mountain,
+  Gauge,
+  BarChart3,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -240,6 +242,38 @@ async function getFitnessScores() {
   };
 }
 
+async function getTrainingStatus() {
+  const sql = getDb();
+  // Training status data is nested under a dynamic device ID key
+  const rows = await sql`
+    WITH status_data AS (
+      SELECT
+        date::text as date,
+        raw_json->'mostRecentTrainingStatus'->'latestTrainingStatusData' as status_map,
+        raw_json->'mostRecentVO2Max'->'generic' as vo2max_data,
+        raw_json->'mostRecentTrainingLoadBalance'->'metricsTrainingLoadBalanceDTOMap' as load_map
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'training_status'
+        AND raw_json->'mostRecentTrainingStatus' IS NOT NULL
+      ORDER BY date DESC
+      LIMIT 1
+    )
+    SELECT
+      sd.date,
+      (SELECT v->>'trainingStatus' FROM jsonb_each(sd.status_map) AS t(k, v) LIMIT 1) as status_code,
+      (SELECT v->>'sport' FROM jsonb_each(sd.status_map) AS t(k, v) LIMIT 1) as sport,
+      (SELECT v->>'trainingStatusFeedbackPhrase' FROM jsonb_each(sd.status_map) AS t(k, v) LIMIT 1) as feedback,
+      (SELECT v->'acuteTrainingLoadDTO'->>'dailyTrainingLoadAcute' FROM jsonb_each(sd.status_map) AS t(k, v) LIMIT 1) as acute_load,
+      (SELECT v->'acuteTrainingLoadDTO'->>'dailyTrainingLoadChronic' FROM jsonb_each(sd.status_map) AS t(k, v) LIMIT 1) as chronic_load,
+      (SELECT v->'acuteTrainingLoadDTO'->>'dailyAcuteChronicWorkloadRatio' FROM jsonb_each(sd.status_map) AS t(k, v) LIMIT 1) as acwr,
+      (SELECT v->'acuteTrainingLoadDTO'->>'acwrStatus' FROM jsonb_each(sd.status_map) AS t(k, v) LIMIT 1) as acwr_status,
+      sd.vo2max_data->>'vo2MaxPreciseValue' as vo2max,
+      (SELECT v->>'trainingBalanceFeedbackPhrase' FROM jsonb_each(sd.load_map) AS t(k, v) LIMIT 1) as load_balance
+    FROM status_data sd
+  `;
+  return rows[0] || null;
+}
+
 async function getPersonalRecords() {
   const sql = getDb();
 
@@ -333,7 +367,7 @@ async function getRecentRuns() {
 }
 
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
@@ -347,6 +381,7 @@ export default async function RunningPage() {
       getPersonalRecords(),
       getRecentRuns(),
       getFitnessScores(),
+      getTrainingStatus(),
     ]);
 
   return (
@@ -543,6 +578,71 @@ export default async function RunningPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Training Status */}
+      {trainingStatus && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-blue-400" />
+              Training Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Status</div>
+                <div className="text-lg font-bold">
+                  {(() => {
+                    const statusMap: Record<string, { label: string; color: string }> = {
+                      "7": { label: "Productive", color: "text-green-400" },
+                      "6": { label: "Maintaining", color: "text-blue-400" },
+                      "5": { label: "Recovery", color: "text-yellow-400" },
+                      "4": { label: "Unproductive", color: "text-orange-400" },
+                      "3": { label: "Detraining", color: "text-red-400" },
+                      "2": { label: "Peaking", color: "text-purple-400" },
+                      "1": { label: "Overreaching", color: "text-red-400" },
+                    };
+                    const s = statusMap[trainingStatus.status_code] || { label: trainingStatus.feedback || "Unknown", color: "text-muted-foreground" };
+                    return <span className={s.color}>{s.label}</span>;
+                  })()}
+                </div>
+                <div className="text-xs text-muted-foreground capitalize">
+                  {trainingStatus.sport?.toLowerCase()}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">VO2 Max</div>
+                <div className="text-lg font-bold">
+                  {trainingStatus.vo2max ? Number(trainingStatus.vo2max).toFixed(1) : "—"}
+                </div>
+                <div className="text-xs text-muted-foreground">ml/kg/min</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Training Load</div>
+                <div className="text-lg font-bold">
+                  {trainingStatus.acute_load ? Math.round(Number(trainingStatus.acute_load)) : "—"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {trainingStatus.chronic_load ? `Chronic: ${Math.round(Number(trainingStatus.chronic_load))}` : ""}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">ACWR</div>
+                <div className="text-lg font-bold">
+                  {trainingStatus.acwr ? Number(trainingStatus.acwr).toFixed(2) : "—"}
+                </div>
+                <div className={`text-xs capitalize ${
+                  trainingStatus.acwr_status === "OPTIMAL" ? "text-green-400" :
+                  trainingStatus.acwr_status === "HIGH" ? "text-yellow-400" : "text-muted-foreground"
+                }`}>
+                  {trainingStatus.acwr_status?.toLowerCase()}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Fitness Scores */}
       {fitnessScores.trend.length > 0 && (
