@@ -29,6 +29,11 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
   const avgKm =
     data.reduce((s, d) => s + d.km, 0) / data.length;
 
+  const spanDays = data.length > 1
+    ? (new Date(data[data.length - 1].week).getTime() - new Date(data[0].week).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
   return (
     <ResponsiveContainer width="100%" height={250}>
       <BarChart data={data} margin={{ bottom: 10, left: 0 }}>
@@ -39,10 +44,9 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
           tickLine={false}
           tickFormatter={(v) => {
             const d = new Date(v);
-            return d.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            });
+            return longRange
+              ? d.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
           interval={Math.max(0, Math.floor(data.length / 6))}
         />

@@ -27,10 +27,16 @@ export function TrainingLoadChart({ data }: { data: TrainingLoadEntry[] }) {
     );
   }
 
-  const chartData = data
-    .filter((d) => d.acute !== null && d.chronic !== null)
-    .map((d) => ({
-      date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+  const filtered = data.filter((d) => d.acute !== null && d.chronic !== null);
+  const spanDays = filtered.length > 1
+    ? (new Date(filtered[filtered.length - 1].date).getTime() - new Date(filtered[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
+  const chartData = filtered.map((d) => ({
+      date: new Date(d.date).toLocaleDateString("en-US", longRange
+        ? { month: "short", year: "2-digit" }
+        : { month: "short", day: "numeric" }),
       acute: Math.round(Number(d.acute)),
       chronic: Math.round(Number(d.chronic)),
       acwr: Number(Number(d.acwr).toFixed(2)),

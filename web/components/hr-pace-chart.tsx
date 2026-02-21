@@ -79,9 +79,9 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
           type="number"
           dataKey="hr"
           name="Heart Rate"
-          className="text-xs"
+          className="text-[10px]"
+          tickLine={false}
           domain={["dataMin - 5", "dataMax + 5"]}
-          label={{ value: "Avg HR (bpm)", angle: -90, position: "insideLeft", className: "text-xs fill-muted-foreground" }}
         />
         <ZAxis type="number" dataKey="distance" range={[30, 160]} />
         <Tooltip
