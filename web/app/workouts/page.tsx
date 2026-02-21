@@ -11,6 +11,7 @@ import {
   Flame,
   Calendar,
   Target,
+  HeartPulse,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -19,15 +20,30 @@ async function getRecentWorkouts() {
   const sql = getDb();
   const rows = await sql`
     SELECT
-      raw_json->>'id' as id,
-      raw_json->>'title' as title,
-      raw_json->>'start_time' as start_time,
-      raw_json->>'end_time' as end_time,
-      jsonb_array_length(raw_json->'exercises') as exercise_count,
-      raw_json->'exercises' as exercises
-    FROM hevy_raw_data
-    WHERE endpoint_name = 'workout'
-    ORDER BY raw_json->>'start_time' DESC
+      h.raw_json->>'id' as id,
+      h.raw_json->>'title' as title,
+      h.raw_json->>'start_time' as start_time,
+      h.raw_json->>'end_time' as end_time,
+      jsonb_array_length(h.raw_json->'exercises') as exercise_count,
+      h.raw_json->'exercises' as exercises,
+      g.avg_hr,
+      g.max_hr,
+      g.garmin_calories
+    FROM hevy_raw_data h
+    LEFT JOIN LATERAL (
+      SELECT
+        (ga.raw_json->>'averageHR')::float as avg_hr,
+        (ga.raw_json->>'maxHR')::float as max_hr,
+        (ga.raw_json->>'calories')::float as garmin_calories
+      FROM garmin_activity_raw ga
+      WHERE ga.endpoint_name = 'summary'
+        AND ga.raw_json->'activityType'->>'typeKey' = 'strength_training'
+        AND ABS(EXTRACT(EPOCH FROM ((h.raw_json->>'start_time')::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp))) <= 900
+      ORDER BY ABS(EXTRACT(EPOCH FROM ((h.raw_json->>'start_time')::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp)))
+      LIMIT 1
+    ) g ON true
+    WHERE h.endpoint_name = 'workout'
+    ORDER BY h.raw_json->>'start_time' DESC
     LIMIT 10
   `;
   return rows;
@@ -97,6 +113,33 @@ async function getWorkoutSummaryStats() {
       WHERE endpoint_name = 'workout'
     )
     SELECT * FROM stats
+  `;
+  return rows[0];
+}
+
+async function getGarminCalorieStats() {
+  const sql = getDb();
+  const rows = await sql`
+    WITH matched AS (
+      SELECT
+        h.raw_json->>'id' as workout_id,
+        (SELECT (ga.raw_json->>'calories')::float
+         FROM garmin_activity_raw ga
+         WHERE ga.endpoint_name = 'summary'
+           AND ga.raw_json->'activityType'->>'typeKey' = 'strength_training'
+           AND ABS(EXTRACT(EPOCH FROM ((h.raw_json->>'start_time')::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp))) <= 900
+         ORDER BY ABS(EXTRACT(EPOCH FROM ((h.raw_json->>'start_time')::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp)))
+         LIMIT 1
+        ) as calories
+      FROM hevy_raw_data h
+      WHERE h.endpoint_name = 'workout'
+        AND (h.raw_json->>'start_time')::timestamp >= CURRENT_DATE - INTERVAL '90 days'
+    )
+    SELECT
+      COUNT(*) as total,
+      COUNT(calories) as matched,
+      ROUND(AVG(calories)::numeric) as avg_calories
+    FROM matched
   `;
   return rows[0];
 }
@@ -312,7 +355,7 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
 }
 
 export default async function WorkoutsPage() {
-  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups, weeklyFreq, monthlyMuscle] =
+  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups, weeklyFreq, monthlyMuscle, calorieStats] =
     await Promise.all([
       getRecentWorkouts(),
       getWeeklyVolume(),
@@ -325,6 +368,7 @@ export default async function WorkoutsPage() {
       getMuscleGroupVolume(),
       getWorkoutFrequencyByWeek(),
       getMonthlyMuscleVolume(),
+      getGarminCalorieStats(),
     ]);
 
   const totalWeeks = stats
@@ -394,26 +438,20 @@ export default async function WorkoutsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Bench PR
+              Avg Calories
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-orange-400" />
+            <HeartPulse className="h-4 w-4 text-red-400" />
           </CardHeader>
           <CardContent>
-            {(() => {
-              const bench = topExercises.find(
-                (e: any) => e.exercise === "Bench Press (Barbell)"
-              );
-              return (
-                <>
-                  <div className="text-2xl font-bold">
-                    {bench ? `${Number(bench.best_weight).toFixed(1)} kg` : "—"}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {bench ? `avg ${Number(bench.avg_weight)} kg` : ""}
-                  </p>
-                </>
-              );
-            })()}
+            <div className="text-2xl font-bold">
+              {calorieStats?.avg_calories ? `${Number(calorieStats.avg_calories)}` : "—"}
+              <span className="text-sm font-normal text-muted-foreground ml-1">kcal</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {calorieStats?.matched && calorieStats?.total
+                ? `${Number(calorieStats.matched)} of ${Number(calorieStats.total)} matched (90d)`
+                : "via Garmin HR"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -718,6 +756,9 @@ export default async function WorkoutsPage() {
                 end_time: w.end_time,
                 exercise_count: Number(w.exercise_count),
                 exercises: typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises,
+                avg_hr: w.avg_hr ? Number(w.avg_hr) : undefined,
+                max_hr: w.max_hr ? Number(w.max_hr) : undefined,
+                garmin_calories: w.garmin_calories ? Number(w.garmin_calories) : undefined,
               }))}
             />
           </CardContent>
