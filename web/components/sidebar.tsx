@@ -21,11 +21,11 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Overview" },
   { href: "/status", icon: RefreshCw, label: "Sync Status" },
+  { href: "/workouts", icon: Dumbbell, label: "Workouts" },
   // Future pages — shown as disabled
   { href: "#", icon: Activity, label: "Activity", disabled: true },
   { href: "#", icon: Moon, label: "Sleep", disabled: true },
   { href: "#", icon: Heart, label: "Heart", disabled: true },
-  { href: "#", icon: Dumbbell, label: "Strength", disabled: true },
   { href: "#", icon: Scale, label: "Weight", disabled: true },
 ];
 
