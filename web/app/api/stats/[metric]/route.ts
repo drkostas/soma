@@ -12,6 +12,7 @@ const VALID_METRICS = [
   "stress",
   "body_battery",
   "activities",
+  "recovery",
 ] as const;
 
 type Metric = (typeof VALID_METRICS)[number];
@@ -123,6 +124,8 @@ async function fetchMetricData(sql: SqlFn, metric: Metric, days: number): Promis
       return fetchVo2max(sql, days);
     case "activities":
       return fetchActivities(sql, days);
+    case "recovery":
+      return fetchRecovery(sql, days);
   }
 }
 
@@ -313,5 +316,27 @@ async function fetchActivities(sql: SqlFn, days: number): Promise<MetricResponse
   return buildResponse(
     current.map((r) => ({ date: r.date, value: Number(r.value) })),
     previous.map((r) => ({ date: r.date, value: Number(r.value) }))
+  );
+}
+
+async function fetchRecovery(sql: SqlFn, days: number): Promise<MetricResponse> {
+  const current = await sql`
+    SELECT date::text as date, body_battery_max as value, hrv_weekly_avg as value2
+    FROM daily_health_summary
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days})
+      AND body_battery_max > 0
+    ORDER BY date ASC
+  `;
+  const previous = await sql`
+    SELECT date::text as date, body_battery_max as value, hrv_weekly_avg as value2
+    FROM daily_health_summary
+    WHERE date >= CURRENT_DATE - make_interval(days => ${days * 2})
+      AND date < CURRENT_DATE - make_interval(days => ${days})
+      AND body_battery_max > 0
+    ORDER BY date ASC
+  `;
+  return buildResponse(
+    current.map((r) => ({ date: r.date, value: Number(r.value), value2: r.value2 ? Number(r.value2) : null })),
+    previous.map((r) => ({ date: r.date, value: Number(r.value), value2: r.value2 ? Number(r.value2) : null }))
   );
 }
