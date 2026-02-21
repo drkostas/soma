@@ -27,13 +27,16 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
     );
   }
 
-  const chartData = data
-    .filter((d) => d.avg_spo2 && Number(d.avg_spo2) > 0)
-    .map((d) => ({
-      date: new Date(d.date).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      }),
+  const filtered = data.filter((d) => d.avg_spo2 && Number(d.avg_spo2) > 0);
+  const spanDays = filtered.length > 1
+    ? (new Date(filtered[filtered.length - 1].date).getTime() - new Date(filtered[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
+  const chartData = filtered.map((d) => ({
+      date: new Date(d.date).toLocaleDateString("en-US", longRange
+        ? { month: "short", year: "2-digit" }
+        : { month: "short", day: "numeric" }),
       avg: Number(d.avg_spo2),
       low: d.low_spo2 ? Number(d.low_spo2) : null,
       sleep: d.sleep_spo2 ? Number(d.sleep_spo2) : null,

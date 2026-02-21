@@ -35,19 +35,26 @@ export function SleepStagesChart({ data }: { data: SleepEntry[] }) {
     Awake: Number((d.awake / 3600).toFixed(1)),
   }));
 
+  const spanDays = chartData.length > 1
+    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={chartData}>
         <XAxis
           dataKey="date"
-          className="text-xs"
-          tickFormatter={(d) =>
-            new Date(d).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })
-          }
+          className="text-[10px]"
+          tickLine={false}
+          tickFormatter={(d) => {
+            const date = new Date(d);
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          }}
           tick={{ fontSize: 10 }}
+          interval={Math.max(Math.floor(chartData.length / 6), 1)}
         />
         <YAxis
           className="text-xs"
