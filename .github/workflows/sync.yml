@@ -1,0 +1,33 @@
+name: Sync Health Data
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch: {}    # Manual trigger from GitHub UI
+  repository_dispatch:
+    types: [sync-trigger]  # Trigger from API route
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: sync
+        run: pip install -e .
+
+      - name: Run sync pipeline (1 day)
+        working-directory: sync
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+          HEVY_API_KEY: ${{ secrets.HEVY_API_KEY }}
+        run: python -m src.pipeline 1
