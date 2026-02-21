@@ -128,6 +128,71 @@ async function getRecentActivities() {
   return rows;
 }
 
+async function getWeeklyTrainingSummary() {
+  const sql = getDb();
+  // This week (Mon-Sun) and last week
+  const rows = await sql`
+    WITH week_data AS (
+      SELECT
+        CASE
+          WHEN (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', CURRENT_DATE)
+          THEN 'this_week'
+          ELSE 'last_week'
+        END as period,
+        raw_json->'activityType'->>'typeKey' as type_key,
+        (raw_json->>'duration')::float / 3600.0 as hours,
+        (raw_json->>'distance')::float / 1000.0 as km,
+        (raw_json->>'calories')::float as cal
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
+    )
+    SELECT
+      period,
+      COUNT(*) as sessions,
+      ROUND(SUM(hours)::numeric, 1) as total_hours,
+      ROUND(SUM(km)::numeric, 0) as total_km,
+      ROUND(SUM(cal)::numeric, 0) as total_cal
+    FROM week_data
+    GROUP BY period
+  `;
+  const result: Record<string, any> = {};
+  for (const r of rows) result[r.period] = r;
+  return result;
+}
+
+async function getTrainingStreak() {
+  const sql = getDb();
+  // Get distinct training dates, count consecutive days back from today
+  const rows = await sql`
+    SELECT DISTINCT LEFT((raw_json->>'startTimeLocal')::text, 10) as day
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+    ORDER BY day DESC
+    LIMIT 90
+  `;
+  if (!rows.length) return 0;
+
+  let streak = 0;
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const days = new Set(rows.map((r: any) => r.day));
+
+  // Check from today backwards
+  const d = new Date(today);
+  // If no activity today, start from yesterday
+  if (!days.has(todayStr)) {
+    d.setDate(d.getDate() - 1);
+  }
+
+  while (days.has(d.toISOString().slice(0, 10))) {
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+
+  return streak;
+}
+
 async function getLastWorkoutDetail() {
   const sql = getDb();
   const rows = await sql`
@@ -197,7 +262,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -207,6 +272,8 @@ export default async function Home() {
       getActivityCounts(),
       getRecentActivities(),
       getLastWorkoutDetail(),
+      getWeeklyTrainingSummary(),
+      getTrainingStreak(),
     ]);
 
   const totalActivities = activityCounts.reduce((s: number, r: any) => s + Number(r.cnt), 0);
@@ -295,6 +362,62 @@ export default async function Home() {
           icon={<Activity className="h-4 w-4 text-purple-400" />}
         />
       </div>
+
+      {/* This Week Training Summary */}
+      <Card className="mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            This Week
+            {streak > 0 && (
+              <span className="ml-auto text-xs font-normal text-primary">
+                {streak}-day training streak
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            const tw = weeklyTraining.this_week;
+            const lw = weeklyTraining.last_week;
+
+            if (!tw) {
+              return <p className="text-sm text-muted-foreground">No training this week yet</p>;
+            }
+
+            const metrics = [
+              { label: "Sessions", value: Number(tw.sessions), prev: lw ? Number(lw.sessions) : null, unit: "" },
+              { label: "Duration", value: Number(tw.total_hours), prev: lw ? Number(lw.total_hours) : null, unit: "h" },
+              { label: "Distance", value: Number(tw.total_km), prev: lw ? Number(lw.total_km) : null, unit: "km" },
+              { label: "Calories", value: Number(tw.total_cal), prev: lw ? Number(lw.total_cal) : null, unit: "kcal" },
+            ];
+
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {metrics.map((m) => {
+                  const diff = m.prev !== null ? ((m.value - m.prev) / Math.max(m.prev, 1)) * 100 : null;
+                  return (
+                    <div key={m.label}>
+                      <div className="text-xs text-muted-foreground">{m.label}</div>
+                      <div className="text-xl font-bold">
+                        {m.unit === "kcal"
+                          ? Math.round(m.value).toLocaleString()
+                          : m.value}
+                        <span className="text-sm font-normal text-muted-foreground ml-1">{m.unit}</span>
+                      </div>
+                      {diff !== null && (
+                        <div className={`text-xs ${diff >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {diff >= 0 ? "+" : ""}{diff.toFixed(0)}% vs last week
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
 
       {/* Middle Row: Activity Breakdown + Gym Frequency + Last Workout */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
