@@ -137,6 +137,47 @@ async function getProgramSplit() {
   return rows;
 }
 
+async function getExercisePRs() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      e->>'title' as exercise,
+      MAX((s->>'weight_kg')::float) as pr_weight,
+      MAX((s->>'reps')::int) FILTER (WHERE (s->>'weight_kg')::float = (
+        SELECT MAX((s2->>'weight_kg')::float)
+        FROM hevy_raw_data h2,
+          jsonb_array_elements(h2.raw_json->'exercises') e2,
+          jsonb_array_elements(e2->'sets') s2
+        WHERE h2.endpoint_name = 'workout' AND e2->>'title' = e->>'title' AND s2->>'type' = 'normal'
+      )) as reps_at_pr
+    FROM hevy_raw_data,
+      jsonb_array_elements(raw_json->'exercises') as e,
+      jsonb_array_elements(e->'sets') as s
+    WHERE endpoint_name = 'workout'
+      AND s->>'type' = 'normal'
+      AND (s->>'weight_kg')::float > 0
+    GROUP BY e->>'title'
+    HAVING MAX((s->>'weight_kg')::float) >= 20
+    ORDER BY MAX((s->>'weight_kg')::float) DESC
+    LIMIT 12
+  `;
+  return rows;
+}
+
+async function getTrainingCalendar() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      (raw_json->>'start_time')::date as day,
+      raw_json->>'title' as program
+    FROM hevy_raw_data
+    WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::date >= CURRENT_DATE - 90
+    ORDER BY day ASC
+  `;
+  return rows;
+}
+
 function formatDuration(startTime: string, endTime: string): string {
   const ms = new Date(endTime).getTime() - new Date(startTime).getTime();
   const min = Math.round(ms / 60000);
@@ -170,7 +211,7 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
 }
 
 export default async function WorkoutsPage() {
-  const [recent, weeklyVolume, progression, stats, topExercises, programSplit] =
+  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar] =
     await Promise.all([
       getRecentWorkouts(),
       getWeeklyVolume(),
@@ -178,6 +219,8 @@ export default async function WorkoutsPage() {
       getWorkoutSummaryStats(),
       getTopExercises(),
       getProgramSplit(),
+      getExercisePRs(),
+      getTrainingCalendar(),
     ]);
 
   const totalWeeks = stats
@@ -389,6 +432,81 @@ export default async function WorkoutsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Training Calendar Heatmap */}
+      <Card className="mt-6 mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Training Calendar (Last 90 Days)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-1">
+            {(() => {
+              const today = new Date();
+              const days: { date: string; trained: boolean; program: string | null }[] = [];
+              for (let i = 89; i >= 0; i--) {
+                const d = new Date(today);
+                d.setDate(d.getDate() - i);
+                const dateStr = d.toISOString().split("T")[0];
+                const match = calendar.find((c: any) => String(c.day) === dateStr);
+                days.push({
+                  date: dateStr,
+                  trained: !!match,
+                  program: match ? (match as any).program : null,
+                });
+              }
+              return days.map((d) => (
+                <div
+                  key={d.date}
+                  className={`w-3 h-3 rounded-sm ${
+                    d.trained
+                      ? "bg-primary"
+                      : "bg-muted"
+                  }`}
+                  title={`${d.date}${d.program ? `: ${d.program}` : ""}`}
+                />
+              ));
+            })()}
+          </div>
+          <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded-sm bg-primary" /> Trained
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded-sm bg-muted" /> Rest
+            </span>
+            <span className="ml-auto">
+              {calendar.length} sessions in 90 days
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Exercise PRs */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-yellow-400" />
+            Personal Records (all exercises)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {exercisePRs.map((pr: any) => (
+              <div key={pr.exercise} className="border border-border/50 rounded-lg p-3">
+                <div className="text-xs text-muted-foreground truncate mb-1">{pr.exercise}</div>
+                <div className="text-lg font-bold">{Number(pr.pr_weight).toFixed(1)} kg</div>
+                {pr.reps_at_pr && (
+                  <div className="text-xs text-muted-foreground">
+                    {pr.reps_at_pr} reps
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
