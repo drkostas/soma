@@ -194,12 +194,11 @@ export function ActivityPerformanceChart({
     return [Math.max(min - 0.3, 0), max + 0.3] as [number, number];
   }, [chartData]);
 
-  // Right Y-axis domain (auto based on enabled non-pace metrics)
+  // Right Y-axis domain (HR / Power / Respiration — NOT cadence)
   const rightDomain = useMemo(() => {
     let allVals: number[] = [];
     for (const p of chartData) {
       if (enabled.has("hr") && p.hr != null) allVals.push(p.hr);
-      if (enabled.has("cadence") && p.cadence != null) allVals.push(p.cadence);
       if (enabled.has("power") && p.power != null) allVals.push(p.power);
       if (enabled.has("respiration") && p.respiration != null)
         allVals.push(p.respiration);
@@ -210,6 +209,18 @@ export function ActivityPerformanceChart({
     const padding = (max - min) * 0.1 || 10;
     return [Math.max(min - padding, 0), max + padding] as [number, number];
   }, [chartData, enabled]);
+
+  // Cadence domain (dedicated axis for tight spread)
+  const cadenceDomain = useMemo(() => {
+    const vals = chartData
+      .map((p) => p.cadence)
+      .filter((v): v is number => v != null);
+    if (vals.length === 0) return [150, 200] as [number, number];
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const padding = Math.max((max - min) * 0.15, 3);
+    return [Math.floor(min - padding), Math.ceil(max + padding)] as [number, number];
+  }, [chartData]);
 
   // Stride domain (dedicated axis for tight spread)
   const strideDomain = useMemo(() => {
@@ -238,10 +249,10 @@ export function ActivityPerformanceChart({
   const showPaceAxis = enabled.has("pace");
   const showRightAxis =
     enabled.has("hr") ||
-    enabled.has("cadence") ||
     enabled.has("power") ||
     enabled.has("respiration");
   const showElevAxis = enabled.has("elevation");
+  const showCadenceAxis = enabled.has("cadence");
   const showStrideAxis = enabled.has("stride");
 
   return (
@@ -330,6 +341,21 @@ export function ActivityPerformanceChart({
             />
           )}
 
+          {/* Cadence Y-axis (dedicated for tight spread) */}
+          {showCadenceAxis && (
+            <YAxis
+              yAxisId="cadence"
+              orientation={showRightAxis ? "left" : "right"}
+              domain={cadenceDomain}
+              tick={{ fontSize: 10 }}
+              stroke="#f97316"
+              tickLine={false}
+              axisLine={false}
+              width={35}
+              tickFormatter={(v: number) => `${v}`}
+            />
+          )}
+
           {/* Stride Y-axis (dedicated for tight spread) */}
           {showStrideAxis && (
             <YAxis
@@ -349,6 +375,7 @@ export function ActivityPerformanceChart({
           {!showPaceAxis && <YAxis yAxisId="pace" hide />}
           {!showRightAxis && <YAxis yAxisId="right" hide />}
           {!showElevAxis && <YAxis yAxisId="elevation" hide />}
+          {!showCadenceAxis && <YAxis yAxisId="cadence" hide />}
           {!showStrideAxis && <YAxis yAxisId="stride" hide />}
 
           <Tooltip
@@ -398,10 +425,10 @@ export function ActivityPerformanceChart({
             />
           )}
 
-          {/* Cadence line */}
+          {/* Cadence line (dedicated axis) */}
           {enabled.has("cadence") && (
             <Line
-              yAxisId="right"
+              yAxisId="cadence"
               dataKey="cadence"
               stroke="#f97316"
               strokeWidth={1.5}
