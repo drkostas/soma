@@ -95,18 +95,24 @@ async function getKiteSessions() {
   const sql = getDb();
   const rows = await sql`
     SELECT
-      raw_json->>'activityName' as name,
-      (raw_json->>'startTimeLocal')::text as date,
-      (raw_json->>'maxSpeed')::float * 1.94384 as max_speed_kts,
-      (raw_json->>'averageSpeed')::float * 1.94384 as avg_speed_kts,
-      (raw_json->>'distance')::float / 1000.0 as distance_km,
-      (raw_json->>'duration')::float / 60.0 as duration_min,
-      (raw_json->>'averageHR')::float as avg_hr,
-      (raw_json->>'calories')::float as calories
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('kiteboarding_v2', 'wind_kite_surfing')
-    ORDER BY (raw_json->>'startTimeLocal')::text ASC
+      s.raw_json->>'activityName' as name,
+      (s.raw_json->>'startTimeLocal')::text as date,
+      (s.raw_json->>'maxSpeed')::float * 1.94384 as max_speed_kts,
+      (s.raw_json->>'averageSpeed')::float * 1.94384 as avg_speed_kts,
+      (s.raw_json->>'distance')::float / 1000.0 as distance_km,
+      (s.raw_json->>'duration')::float / 60.0 as duration_min,
+      (s.raw_json->>'averageHR')::float as avg_hr,
+      (s.raw_json->>'calories')::float as calories,
+      (w.raw_json->>'windSpeed')::float as wind_speed_mps,
+      (w.raw_json->>'windGust')::float as wind_gust_mps,
+      (w.raw_json->>'windDirection')::int as wind_direction,
+      (w.raw_json->'weatherTypeDTO'->>'desc')::text as weather_desc,
+      ROUND(((w.raw_json->>'temp')::float - 32) * 5.0 / 9.0) as temp_c
+    FROM garmin_activity_raw s
+    LEFT JOIN garmin_activity_raw w ON s.activity_id = w.activity_id AND w.endpoint_name = 'weather'
+    WHERE s.endpoint_name = 'summary'
+      AND s.raw_json->'activityType'->>'typeKey' IN ('kiteboarding_v2', 'wind_kite_surfing')
+    ORDER BY (s.raw_json->>'startTimeLocal')::text ASC
   `;
   return rows;
 }
@@ -363,6 +369,11 @@ export default async function ActivitiesPage() {
     durationMin: Number(k.duration_min),
     avgHr: Number(k.avg_hr),
     calories: Number(k.calories),
+    windSpeedKts: k.wind_speed_mps ? Number((Number(k.wind_speed_mps) * 1.94384).toFixed(1)) : null,
+    windGustKts: k.wind_gust_mps ? Number((Number(k.wind_gust_mps) * 1.94384).toFixed(1)) : null,
+    windDirection: k.wind_direction ? Number(k.wind_direction) : null,
+    weatherDesc: k.weather_desc || null,
+    tempC: k.temp_c ? Number(k.temp_c) : null,
   }));
 
   const validKiteSessions = kiteData.filter((k: any) => k.maxSpeedKts > 0);
@@ -383,6 +394,15 @@ export default async function ActivitiesPage() {
   const topSpots = Object.entries(spotCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
+
+  // Wind stats for kite
+  const kiteWithWind = kiteData.filter((k: any) => k.windSpeedKts !== null && k.windSpeedKts > 0);
+  const avgWindSpeed = kiteWithWind.length
+    ? kiteWithWind.reduce((s: number, k: any) => s + k.windSpeedKts, 0) / kiteWithWind.length
+    : 0;
+  const maxWindGust = kiteWithWind.length
+    ? Math.max(...kiteWithWind.map((k: any) => k.windGustKts || 0))
+    : 0;
 
   // Snow stats
   const snowData = snowSessions.map((s: any) => ({
@@ -597,7 +617,7 @@ export default async function ActivitiesPage() {
               </CardContent>
             </Card>
 
-            {/* Spots & Sessions */}
+            {/* Spots & Sessions + Wind */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -671,6 +691,57 @@ export default async function ActivitiesPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Wind Conditions */}
+          {kiteWithWind.length > 0 && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Wind className="h-4 w-4 text-cyan-400" />
+                  Wind Conditions
+                  <span className="ml-auto text-xs font-normal">{kiteWithWind.length} sessions with wind data</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Avg Wind</div>
+                    <div className="text-xl font-bold text-cyan-400">{avgWindSpeed.toFixed(1)} kts</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Max Gust</div>
+                    <div className="text-xl font-bold text-cyan-400">{maxWindGust > 0 ? `${maxWindGust.toFixed(1)} kts` : "N/A"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Sessions w/ Wind</div>
+                    <div className="text-xl font-bold">{kiteWithWind.length}/{kiteData.length}</div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {kiteData
+                    .filter((k: any) => k.windSpeedKts)
+                    .sort((a: any, b: any) => b.date.localeCompare(a.date))
+                    .slice(0, 10)
+                    .map((k: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between text-sm border-b border-border/20 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Wind className="h-3.5 w-3.5 text-cyan-400" />
+                          <span className="font-medium">{k.spot}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>{k.windSpeedKts} kts</span>
+                          {k.windGustKts > 0 && <span className="text-cyan-400">gusts {k.windGustKts}</span>}
+                          {k.tempC !== null && <span>{k.tempC}°C</span>}
+                          <span className="w-20 text-right">
+                            {new Date(k.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
