@@ -8,6 +8,7 @@ import { WeightTrendChart } from "@/components/weight-trend-chart";
 import { ActivityHeatmap } from "@/components/activity-heatmap";
 import { RHRChart } from "@/components/rhr-chart";
 import { StressChart } from "@/components/stress-chart";
+import { ExpandableExerciseList } from "@/components/expandable-exercise-list";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -1272,19 +1273,7 @@ export default async function Home() {
                   <span>{lastWorkout.totalSets} sets</span>
                   <span>{lastWorkout.totalVolume.toLocaleString()} kg</span>
                 </div>
-                <div className="space-y-1">
-                  {lastWorkout.exercises.slice(0, 5).map((name: string, i: number) => (
-                    <div key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-primary shrink-0" />
-                      {name}
-                    </div>
-                  ))}
-                  {lastWorkout.exercises.length > 5 && (
-                    <div className="text-xs text-muted-foreground/50">
-                      +{lastWorkout.exercises.length - 5} more
-                    </div>
-                  )}
-                </div>
+                <ExpandableExerciseList exercises={lastWorkout.exercises} />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">No workouts yet</p>
