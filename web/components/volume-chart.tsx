@@ -72,6 +72,7 @@ export function VolumeChart({ data }: { data: VolumeEntry[] }) {
           tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
         />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           formatter={(value: any) => [
             `${Number(value).toLocaleString()} kg`,
             "Volume",

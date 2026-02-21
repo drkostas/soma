@@ -113,6 +113,14 @@ const METRIC_CONFIG: Record<string, MetricConfig> = {
     color: "#a78bfa",
     unit: "",
   },
+  recovery: {
+    title: "Recovery Status",
+    chart: "area",
+    color: "#4ade80",
+    color2: "#818cf8",
+    unit: "",
+    labels: ["Body Battery Peak", "HRV Weekly Avg"],
+  },
 };
 
 const RANGES: Range[] = ["7d", "30d", "90d", "1y"];
@@ -378,6 +386,7 @@ function MetricChart({
               }
             />
             <Tooltip
+              cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
               labelFormatter={formatDateTooltip}
               formatter={(value: any, name: any) => {
@@ -413,6 +422,7 @@ function MetricChart({
             <XAxis {...commonXAxisProps} />
             <YAxis {...commonYAxisProps} />
             <Tooltip
+              cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
               labelFormatter={formatDateTooltip}
               formatter={(value: any, name: any) => {

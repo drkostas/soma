@@ -248,6 +248,7 @@ function WeeklyChart({
             tickFormatter={(v) => format(v)}
           />
           <Tooltip
+            cursor={{ fill: "var(--muted)", opacity: 0.3 }}
             contentStyle={tooltipStyle}
             formatter={(value: any, name: any) => {
               const label = name === "this_week" ? "This Week" : "Last Week";

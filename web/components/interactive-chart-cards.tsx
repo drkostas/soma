@@ -446,6 +446,7 @@ function TrainingDaysExpanded({
               allowDecimals={false}
             />
             <Tooltip
+              cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
               formatter={(value: any) => [`${value} activities`, "Count"]}
             />
@@ -540,6 +541,7 @@ function TrainingTimeExpanded({ todCounts }: { todCounts: number[] }) {
               allowDecimals={false}
             />
             <Tooltip
+              cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
               labelFormatter={(_: any, payload: any) => {
                 const item = payload?.[0]?.payload;
@@ -644,6 +646,7 @@ function ActivityBreakdownExpanded({
               width={60}
             />
             <Tooltip
+              cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
               formatter={(value: any, _name: any, props: any) => {
                 const pct = totalActivities > 0 ? ((Number(value) / totalActivities) * 100).toFixed(1) : "0";
@@ -769,6 +772,7 @@ function GymFrequencyExpanded({
               allowDecimals={false}
             />
             <Tooltip
+              cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
               labelFormatter={(m: any) => {
                 const [year, month] = String(m).split("-");
@@ -881,6 +885,7 @@ function GymFrequencyMiniChart({ data }: { data: { month: string; workouts: numb
         />
         <YAxis hide />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           formatter={(value: any) => [`${value} workouts`, "Count"]}
           labelFormatter={(m: any) => {
             const [year, month] = String(m).split("-");

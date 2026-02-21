@@ -80,6 +80,7 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
           }}
         />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           content={({ active, payload }) => {
             if (!active || !payload?.[0]) return null;
             const d = payload[0].payload;

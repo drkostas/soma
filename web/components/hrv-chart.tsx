@@ -66,6 +66,7 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
           domain={["auto", "auto"]}
         />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           contentStyle={{
             background: "var(--card)",
             border: "1px solid var(--border)",
