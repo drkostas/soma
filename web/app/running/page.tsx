@@ -9,6 +9,7 @@ import { WeeklyDistanceChart } from "@/components/weekly-distance-chart";
 import { CadenceStrideChart } from "@/components/cadence-stride-chart";
 import { ClickableRunTable } from "@/components/clickable-run-table";
 import { FitnessScoresChart } from "@/components/fitness-scores-chart";
+import { YearlyMileageChart } from "@/components/yearly-mileage-chart";
 import { getDb } from "@/lib/db";
 import {
   Timer,
@@ -446,6 +447,37 @@ export default async function RunningPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Year-over-Year Monthly Mileage */}
+      {(mileage as any[]).length > 12 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-cyan-400" />
+              Year-over-Year Mileage
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const yearMap = new Map<string, Map<number, number>>();
+              for (const m of mileage as any[]) {
+                const [year, month] = m.month.split("-");
+                if (!yearMap.has(year)) yearMap.set(year, new Map());
+                yearMap.get(year)!.set(parseInt(month), Number(Number(m.km).toFixed(1)));
+              }
+              const years = Array.from(yearMap.keys()).sort();
+              const chartData = Array.from({ length: 12 }, (_, i) => {
+                const entry: Record<string, number> = { month: i + 1 };
+                for (const year of years) {
+                  entry[year] = yearMap.get(year)?.get(i + 1) || 0;
+                }
+                return entry;
+              });
+              return <YearlyMileageChart data={chartData} years={years} />;
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Weekly Distance */}
       <Card className="mb-6">
