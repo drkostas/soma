@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClickableStatCards } from "@/components/clickable-stat-cards";
 import { InteractiveChartCards } from "@/components/interactive-chart-cards";
 import { ClickableRecentActivity } from "@/components/clickable-recent-activity";
+import { ClickableRecoveryCard } from "@/components/clickable-recovery-card";
+import { ClickableLastWorkout } from "@/components/clickable-last-workout";
 import { StepsTrendChart } from "@/components/steps-trend-chart";
 import { CalorieTrendChart } from "@/components/calorie-trend-chart";
 import { WeightTrendChart } from "@/components/weight-trend-chart";
@@ -10,6 +12,8 @@ import { RHRChart } from "@/components/rhr-chart";
 import { StressChart } from "@/components/stress-chart";
 import { ExpandableExerciseList } from "@/components/expandable-exercise-list";
 import { InteractiveThisWeek } from "@/components/interactive-this-week";
+import { TimeRangeSelector } from "@/components/time-range-selector";
+import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -83,7 +87,7 @@ async function getWorkoutStats() {
   };
 }
 
-async function getGymFrequency() {
+async function getGymFrequency(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -91,13 +95,14 @@ async function getGymFrequency() {
       COUNT(*) as workouts
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
     GROUP BY month
     ORDER BY month ASC
   `;
   return rows;
 }
 
-async function getRunningStats() {
+async function getRunningStats(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -107,11 +112,12 @@ async function getRunningStats() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
   `;
   return rows[0] || null;
 }
 
-async function getActivityCounts() {
+async function getActivityCounts(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -119,13 +125,14 @@ async function getActivityCounts() {
       COUNT(*) as cnt
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
+      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
     GROUP BY type_key
     ORDER BY cnt DESC
   `;
   return rows;
 }
 
-async function getRecentActivities() {
+async function getRecentActivities(rangeDays: number) {
   const sql = getDb();
   // Get recent Garmin activities (dedup by startTime+name, keep highest-calorie entry)
   const garminRows = await sql`
@@ -140,6 +147,7 @@ async function getRecentActivities() {
         (raw_json->>'calories')::float as calories
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
+        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
       ORDER BY (raw_json->>'startTimeLocal'), raw_json->>'activityName', (raw_json->>'calories')::float DESC
     ) deduped
     ORDER BY date DESC
@@ -240,7 +248,7 @@ async function getTrainingStreak() {
   return streak;
 }
 
-async function getStepsTrend() {
+async function getStepsTrend(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -248,12 +256,13 @@ async function getStepsTrend() {
       total_steps as steps
     FROM daily_health_summary
     WHERE total_steps > 0
+      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getCalorieTrend() {
+async function getCalorieTrend(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -262,6 +271,7 @@ async function getCalorieTrend() {
       bmr_kilocalories as bmr
     FROM daily_health_summary
     WHERE active_kilocalories > 0
+      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
     ORDER BY date ASC
   `;
   return rows;
@@ -303,7 +313,7 @@ async function getIntensityMinutes() {
   return rows[0] || null;
 }
 
-async function getWeightTrend() {
+async function getWeightTrend(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -313,12 +323,13 @@ async function getWeightTrend() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'body_composition'
       AND raw_json->'totalAverage'->>'weight' IS NOT NULL
+      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getTrainingByDayOfWeek() {
+async function getTrainingByDayOfWeek(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -326,6 +337,7 @@ async function getTrainingByDayOfWeek() {
       COUNT(*) as count
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
+      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
     GROUP BY dow
     ORDER BY dow ASC
   `;
@@ -389,7 +401,7 @@ async function getLatestSleep() {
   return rows[0] || null;
 }
 
-async function getStressTrend() {
+async function getStressTrend(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -398,12 +410,13 @@ async function getStressTrend() {
       max_stress_level as max_stress
     FROM daily_health_summary
     WHERE avg_stress_level > 0
+      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getRestingHRTrend() {
+async function getRestingHRTrend(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -411,12 +424,14 @@ async function getRestingHRTrend() {
       resting_heart_rate as rhr
     FROM daily_health_summary
     WHERE resting_heart_rate > 0
+      AND date >= CURRENT_DATE - make_interval(days => ${rangeDays})
     ORDER BY date ASC
   `;
   return rows;
 }
 
-async function getFloorsTrend() {
+async function getFloorsTrend(rangeDays: number) {
+  const floorsDays = Math.min(rangeDays, 90);
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -431,17 +446,17 @@ async function getFloorsTrend() {
       ) as floors_down
     FROM garmin_raw_data
     WHERE endpoint_name = 'floors'
+      AND date >= CURRENT_DATE - make_interval(days => ${floorsDays})
       AND (
         SELECT COALESCE(SUM((elem->2)::float), 0)
         FROM jsonb_array_elements(raw_json->'floorValuesArray') as elem
       ) > 0
-    ORDER BY date DESC
-    LIMIT 14
+    ORDER BY date ASC
   `;
-  return rows.reverse();
+  return rows;
 }
 
-async function getTrainingTimeOfDay() {
+async function getTrainingTimeOfDay(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -449,13 +464,15 @@ async function getTrainingTimeOfDay() {
       COUNT(*) as count
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
+      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${rangeDays})
     GROUP BY hour
     ORDER BY hour ASC
   `;
   return rows;
 }
 
-async function getActivityHeatmap() {
+async function getActivityHeatmap(rangeDays: number) {
+  const heatmapDays = Math.min(rangeDays, 365);
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -469,7 +486,7 @@ async function getActivityHeatmap() {
       )) as activities
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 182
+      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - make_interval(days => ${heatmapDays})
     GROUP BY date
     ORDER BY date ASC
   `;
@@ -517,6 +534,7 @@ async function getLastWorkoutDetail() {
   const sql = getDb();
   const rows = await sql`
     SELECT
+      raw_json->>'id' as workout_id,
       raw_json->>'title' as title,
       raw_json->>'start_time' as start_time,
       raw_json->>'end_time' as end_time,
@@ -544,6 +562,7 @@ async function getLastWorkoutDetail() {
     (new Date(w.end_time).getTime() - new Date(w.start_time).getTime()) / 60000
   );
   return {
+    workoutId: w.workout_id,
     title: w.title,
     date: w.start_time,
     exercises: exerciseNames,
@@ -622,32 +641,39 @@ function formatDuration(mins: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-export default async function Home() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
+  const { range: rangeParam } = await searchParams;
+  const rangeDays = rangeToDays(rangeParam);
+
   const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep, recovery, rhrTrend, stressTrend, floorsTrend] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
       getWorkoutStats(),
-      getGymFrequency(),
-      getRunningStats(),
-      getActivityCounts(),
-      getRecentActivities(),
+      getGymFrequency(rangeDays),
+      getRunningStats(rangeDays),
+      getActivityCounts(rangeDays),
+      getRecentActivities(rangeDays),
       getLastWorkoutDetail(),
       getWeeklyTrainingSummary(),
       getTrainingStreak(),
-      getStepsTrend(),
+      getStepsTrend(rangeDays),
       getFitnessAge(),
       getIntensityMinutes(),
-      getWeightTrend(),
-      getCalorieTrend(),
-      getActivityHeatmap(),
-      getTrainingByDayOfWeek(),
-      getTrainingTimeOfDay(),
+      getWeightTrend(rangeDays),
+      getCalorieTrend(rangeDays),
+      getActivityHeatmap(rangeDays),
+      getTrainingByDayOfWeek(rangeDays),
+      getTrainingTimeOfDay(rangeDays),
       getLatestSleep(),
       getRecoverySummary(),
-      getRestingHRTrend(),
-      getStressTrend(),
-      getFloorsTrend(),
+      getRestingHRTrend(rangeDays),
+      getStressTrend(rangeDays),
+      getFloorsTrend(rangeDays),
     ]);
 
   // Merge duplicate activity types
@@ -669,17 +695,20 @@ export default async function Home() {
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-        <p className="text-muted-foreground mt-1">
-          {health?.date
-            ? `Latest: ${new Date(health.date).toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}`
-            : "No data synced yet."}
-        </p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
+          <p className="text-muted-foreground mt-1">
+            {health?.date
+              ? `Latest: ${new Date(health.date).toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}`
+              : "No data synced yet."}
+          </p>
+        </div>
+        <TimeRangeSelector />
       </div>
 
       {/* Clickable Stat Cards with Detail Dialogs */}
@@ -779,65 +808,67 @@ export default async function Home() {
 
       {/* Recovery Summary */}
       {(recovery.bodyBattery || recovery.hrv || recovery.readiness) && (
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BatteryCharging className="h-4 w-4 text-green-400" />
-              Recovery Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {recovery.readiness && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Training Readiness</div>
-                  <div className={`text-2xl font-bold ${
-                    Number(recovery.readiness.score) >= 70 ? "text-green-400" :
-                    Number(recovery.readiness.score) >= 40 ? "text-yellow-400" : "text-red-400"
-                  }`}>
-                    {recovery.readiness.score}
+        <ClickableRecoveryCard>
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <BatteryCharging className="h-4 w-4 text-green-400" />
+                Recovery Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {recovery.readiness && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Training Readiness</div>
+                    <div className={`text-2xl font-bold ${
+                      Number(recovery.readiness.score) >= 70 ? "text-green-400" :
+                      Number(recovery.readiness.score) >= 40 ? "text-yellow-400" : "text-red-400"
+                    }`}>
+                      {recovery.readiness.score}
+                    </div>
+                    <div className="text-xs text-muted-foreground capitalize">
+                      {recovery.readiness.level?.toLowerCase().replace(/_/g, " ")}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground capitalize">
-                    {recovery.readiness.level?.toLowerCase().replace(/_/g, " ")}
+                )}
+                {recovery.bodyBattery && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Body Battery</div>
+                    <div className="text-2xl font-bold">
+                      +{recovery.bodyBattery.charged}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      −{recovery.bodyBattery.drained} drained
+                    </div>
                   </div>
-                </div>
-              )}
-              {recovery.bodyBattery && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Body Battery</div>
-                  <div className="text-2xl font-bold">
-                    +{recovery.bodyBattery.charged}
+                )}
+                {recovery.hrv && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">HRV</div>
+                    <div className="text-2xl font-bold">
+                      {recovery.hrv.last_night ?? recovery.hrv.weekly_avg} ms
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Weekly avg: {recovery.hrv.weekly_avg} ms
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    −{recovery.bodyBattery.drained} drained
+                )}
+                {recovery.hrv?.status && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">HRV Status</div>
+                    <div className={`text-2xl font-bold ${
+                      recovery.hrv.status === "BALANCED" ? "text-green-400" :
+                      recovery.hrv.status === "LOW" ? "text-yellow-400" : "text-blue-400"
+                    }`}>
+                      {recovery.hrv.status.charAt(0) + recovery.hrv.status.slice(1).toLowerCase()}
+                    </div>
                   </div>
-                </div>
-              )}
-              {recovery.hrv && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">HRV</div>
-                  <div className="text-2xl font-bold">
-                    {recovery.hrv.last_night ?? recovery.hrv.weekly_avg} ms
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Weekly avg: {recovery.hrv.weekly_avg} ms
-                  </div>
-                </div>
-              )}
-              {recovery.hrv?.status && (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">HRV Status</div>
-                  <div className={`text-2xl font-bold ${
-                    recovery.hrv.status === "BALANCED" ? "text-green-400" :
-                    recovery.hrv.status === "LOW" ? "text-yellow-400" : "text-blue-400"
-                  }`}>
-                    {recovery.hrv.status.charAt(0) + recovery.hrv.status.slice(1).toLowerCase()}
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </ClickableRecoveryCard>
       )}
 
       {/* Steps & Calorie Trends */}
@@ -857,7 +888,7 @@ export default async function Home() {
             </CardHeader>
             <CardContent>
               <StepsTrendChart
-                data={(stepsTrend as any[]).slice(-90).map((s: any) => ({
+                data={(stepsTrend as any[]).map((s: any) => ({
                   date: s.date,
                   steps: Number(s.steps),
                 }))}
@@ -881,7 +912,7 @@ export default async function Home() {
             </CardHeader>
             <CardContent>
               <CalorieTrendChart
-                data={(calorieTrend as any[]).slice(-90).map((c: any) => ({
+                data={(calorieTrend as any[]).map((c: any) => ({
                   date: c.date,
                   active: Number(c.active),
                   bmr: Number(c.bmr),
@@ -917,7 +948,6 @@ export default async function Home() {
               <RHRChart
                 data={(rhrTrend as any[])
                   .filter((r: any) => Number(r.rhr) > 0)
-                  .slice(-90)
                   .map((r: any) => ({
                     date: r.date,
                     rhr: Number(r.rhr),
@@ -1106,7 +1136,7 @@ export default async function Home() {
         </Card>
       )}
 
-      {/* Floors Climbed (Last 14 Days) */}
+      {/* Floors Climbed */}
       {(floorsTrend as any[]).length > 0 && (
         <Card className="mb-6">
           <CardHeader className="pb-2">
@@ -1210,15 +1240,15 @@ export default async function Home() {
         totalActivities={totalActivities}
       >
         {/* Last Workout (3rd column in the bottom grid) */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Last Gym Session
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {lastWorkout ? (
-              <>
+        {lastWorkout?.workoutId ? (
+          <ClickableLastWorkout workoutId={lastWorkout.workoutId}>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Last Gym Session
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold">{lastWorkout.title}</span>
                   <span className="text-xs text-muted-foreground">
@@ -1235,12 +1265,42 @@ export default async function Home() {
                   <span>{lastWorkout.totalVolume.toLocaleString()} kg</span>
                 </div>
                 <ExpandableExerciseList exercises={lastWorkout.exercises} />
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">No workouts yet</p>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </ClickableLastWorkout>
+        ) : (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Last Gym Session
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {lastWorkout ? (
+                <>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold">{lastWorkout.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(lastWorkout.date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
+                    <span>{lastWorkout.durationMin}m</span>
+                    <span>{lastWorkout.exercises.length} exercises</span>
+                    <span>{lastWorkout.totalSets} sets</span>
+                    <span>{lastWorkout.totalVolume.toLocaleString()} kg</span>
+                  </div>
+                  <ExpandableExerciseList exercises={lastWorkout.exercises} />
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No workouts yet</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </InteractiveChartCards>
 
       {/* Recent Activity Feed */}
