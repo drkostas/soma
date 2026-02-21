@@ -12,6 +12,7 @@ import { getDb } from "@/lib/db";
 import {
   Moon,
   Sunrise,
+  Wind,
   HeartPulse,
   BatteryCharging,
   Brain,
@@ -183,6 +184,23 @@ async function getBodyBatteryTrend() {
   return rows;
 }
 
+async function getRespirationTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (raw_json->>'avgWakingRespirationValue')::float as awake_resp,
+      (raw_json->>'avgSleepRespirationValue')::float as sleep_resp,
+      (raw_json->>'lowestRespirationValue')::float as low_resp,
+      (raw_json->>'highestRespirationValue')::float as high_resp
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'respiration_data'
+      AND raw_json->>'avgWakingRespirationValue' IS NOT NULL
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getSleepSchedule() {
   const sql = getDb();
   const rows = await sql`
@@ -231,7 +249,7 @@ function qualityBadge(quality: string | null) {
 }
 
 export default async function SleepPage() {
-  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule] =
+  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration] =
     await Promise.all([
       getSleepStats(),
       getSleepTrend(),
@@ -243,6 +261,7 @@ export default async function SleepPage() {
       getTrainingReadiness(),
       getStressTrend(),
       getSleepSchedule(),
+      getRespirationTrend(),
     ]);
 
   return (
@@ -490,6 +509,77 @@ export default async function SleepPage() {
               <span className="flex items-center gap-1">
                 <span className="w-3 h-0.5 rounded bg-red-400/50" style={{ display: "inline-block", borderTop: "1px dashed" }} /> Peak
               </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Respiration */}
+      {(respiration as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Wind className="h-4 w-4 text-sky-400" />
+              Respiration Rate
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const data = (respiration as any[]);
+              const latest = data[data.length - 1];
+              const recent7 = data.slice(-7);
+              const avgSleep = recent7.reduce((s: number, d: any) => s + Number(d.sleep_resp || 0), 0) / recent7.length;
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Awake</div>
+                    <div className="text-2xl font-bold">{latest?.awake_resp ?? "—"}</div>
+                    <div className="text-xs text-muted-foreground">breaths/min</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Sleep</div>
+                    <div className="text-2xl font-bold">{latest?.sleep_resp ?? "—"}</div>
+                    <div className="text-xs text-muted-foreground">breaths/min</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Range</div>
+                    <div className="text-2xl font-bold">{latest?.low_resp}–{latest?.high_resp}</div>
+                    <div className="text-xs text-muted-foreground">breaths/min</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">7-Day Sleep Avg</div>
+                    <div className="text-2xl font-bold">{avgSleep.toFixed(1)}</div>
+                    <div className="text-xs text-muted-foreground">breaths/min</div>
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Mini trend bars for sleep respiration */}
+            <div className="flex items-end gap-[3px] h-16">
+              {(respiration as any[]).slice(-30).map((d: any, i: number) => {
+                const val = Number(d.sleep_resp || 0);
+                const norm = Math.max(((val - 8) / 10) * 100, 5);
+                return (
+                  <div
+                    key={i}
+                    className="flex-1 bg-sky-400/60 rounded-t-sm"
+                    style={{ height: `${Math.min(norm, 100)}%` }}
+                    title={`${d.date}: ${val} breaths/min`}
+                  />
+                );
+              })}
+            </div>
+            <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+              {(() => {
+                const data = (respiration as any[]).slice(-30);
+                return (
+                  <>
+                    <span>{data.length > 0 ? new Date(data[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
+                    <span>Sleep Respiration Trend</span>
+                    <span>{data.length > 0 ? new Date(data[data.length - 1].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
+                  </>
+                );
+              })()}
             </div>
           </CardContent>
         </Card>
