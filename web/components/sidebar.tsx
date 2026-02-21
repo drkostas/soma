@@ -7,6 +7,7 @@ import {
   Dumbbell,
   Footprints,
   Mountain,
+  Moon,
   RefreshCw,
 } from "lucide-react";
 import {
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/running", icon: Footprints, label: "Running" },
   { href: "/workouts", icon: Dumbbell, label: "Gym" },
   { href: "/activities", icon: Mountain, label: "Activities" },
+  { href: "/sleep", icon: Moon, label: "Sleep" },
   { href: "/status", icon: RefreshCw, label: "Sync Status" },
 ];
 
