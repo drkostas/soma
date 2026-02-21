@@ -48,6 +48,13 @@ export function WeightChart({ data }: WeightChartProps) {
             return [`${value.toFixed(1)} kg`, "Weight"];
           }}
           labelFormatter={(label) => new Date(label).toLocaleDateString()}
+          contentStyle={{
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            fontSize: "12px",
+            color: "var(--card-foreground)",
+          }}
         />
         <Line
           type="monotone"

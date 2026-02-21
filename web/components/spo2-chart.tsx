@@ -87,6 +87,7 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
             border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
+            color: "var(--card-foreground)",
           }}
           formatter={(value: any, name: any) => {
             const labels: Record<string, string> = {

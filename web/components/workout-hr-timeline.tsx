@@ -108,7 +108,7 @@ function TimelineTooltip({ active, payload, exerciseSets, exerciseColorMap }: an
   }
 
   return (
-    <div className="bg-card border border-border rounded-lg p-2 text-xs shadow-lg">
+    <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
       {exerciseLabel && (
         <div className="font-medium mb-1">{exerciseLabel}</div>
       )}
@@ -344,7 +344,7 @@ function HrPerSetChart({ hrTimeline, exerciseSets }: WorkoutHrTimelineProps) {
               if (!active || !payload?.[0]) return null;
               const d = payload[0].payload as SetBarData;
               return (
-                <div className="bg-card border border-border rounded-lg p-2 text-xs shadow-lg">
+                <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
                   <div className="font-medium">{d.exercise}</div>
                   {d.weight && d.reps > 0 && <div className="mt-1">{d.weight} kg x {d.reps} reps</div>}
                   {!d.weight && d.reps > 0 && <div className="mt-1">{d.reps} reps</div>}

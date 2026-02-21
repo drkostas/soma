@@ -319,6 +319,7 @@ function MetricChart({
     border: "1px solid var(--border)",
     borderRadius: "8px",
     fontSize: "12px",
+    color: "var(--card-foreground)",
   };
 
   const formatDate = (d: string) => {

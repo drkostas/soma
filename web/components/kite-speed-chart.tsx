@@ -71,7 +71,7 @@ export function KiteSpeedChart({ data }: { data: KiteSession[] }) {
             if (!active || !payload?.[0]) return null;
             const d = payload[0].payload;
             return (
-              <div className="bg-card border border-border rounded-lg p-2 text-xs shadow-lg">
+              <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
                 <div className="font-medium">{d.spot}</div>
                 <div className="text-muted-foreground">
                   {new Date(d.date).toLocaleDateString()}

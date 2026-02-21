@@ -54,6 +54,7 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
             border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
+            color: "var(--card-foreground)",
           }}
           labelFormatter={(d: any) =>
             new Date(String(d)).toLocaleDateString("en-US", {

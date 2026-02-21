@@ -71,6 +71,7 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
             border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
+            color: "var(--card-foreground)",
           }}
           labelFormatter={(d) =>
             new Date(String(d)).toLocaleDateString("en-US", {
