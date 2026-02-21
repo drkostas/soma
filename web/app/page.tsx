@@ -326,6 +326,20 @@ async function getTrainingByDayOfWeek() {
   return rows;
 }
 
+async function getTrainingTimeOfDay() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      EXTRACT(HOUR FROM (raw_json->>'startTimeLocal')::timestamp) as hour,
+      COUNT(*) as count
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+    GROUP BY hour
+    ORDER BY hour ASC
+  `;
+  return rows;
+}
+
 async function getActivityHeatmap() {
   const sql = getDb();
   const rows = await sql`
@@ -449,7 +463,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -468,6 +482,7 @@ export default async function Home() {
       getCalorieTrend(),
       getActivityHeatmap(),
       getTrainingByDayOfWeek(),
+      getTrainingTimeOfDay(),
     ]);
 
   // Merge duplicate activity types
@@ -852,57 +867,125 @@ export default async function Home() {
         </Card>
       )}
 
-      {/* Training Day Distribution */}
-      {(dayOfWeekData as any[]).length > 0 && (
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Training Days
-              <span className="ml-auto text-xs font-normal">
-                Most active: {(() => {
+      {/* Training Day & Time Distribution */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Day of Week */}
+        {(dayOfWeekData as any[]).length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Training Days
+                <span className="ml-auto text-xs font-normal">
+                  Most active: {(() => {
+                    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                    const sorted = [...(dayOfWeekData as any[])].sort((a, b) => Number(b.count) - Number(a.count));
+                    return sorted.length > 0 ? days[Number(sorted[0].dow)] : "";
+                  })()}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-3 h-32">
+                {(() => {
                   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                  const sorted = [...(dayOfWeekData as any[])].sort((a, b) => Number(b.count) - Number(a.count));
-                  return sorted.length > 0 ? days[Number(sorted[0].dow)] : "";
-                })()}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-3 h-32">
-              {(() => {
-                const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                const counts = new Array(7).fill(0);
-                for (const row of dayOfWeekData as any[]) {
-                  counts[Number(row.dow)] = Number(row.count);
-                }
-                const max = Math.max(...counts);
-                const total = counts.reduce((s: number, c: number) => s + c, 0);
-                return counts.map((count, i) => {
-                  const pct = max > 0 ? (count / max) * 100 : 0;
-                  const isMax = count === max;
-                  const sharePct = total > 0 ? ((count / total) * 100).toFixed(0) : "0";
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                      <span className="text-xs font-semibold">{count}</span>
-                      <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
-                        <div
-                          className={`w-full max-w-[40px] rounded-t transition-all ${
-                            isMax ? "bg-primary" : "bg-primary/40"
-                          }`}
-                          style={{ height: `${Math.max(pct, 4)}%` }}
-                          title={`${days[i]}: ${count} activities (${sharePct}%)`}
-                        />
+                  const counts = new Array(7).fill(0);
+                  for (const row of dayOfWeekData as any[]) {
+                    counts[Number(row.dow)] = Number(row.count);
+                  }
+                  const max = Math.max(...counts);
+                  const total = counts.reduce((s: number, c: number) => s + c, 0);
+                  return counts.map((count, i) => {
+                    const pct = max > 0 ? (count / max) * 100 : 0;
+                    const isMax = count === max;
+                    const sharePct = total > 0 ? ((count / total) * 100).toFixed(0) : "0";
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                        <span className="text-xs font-semibold">{count}</span>
+                        <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
+                          <div
+                            className={`w-full max-w-[40px] rounded-t transition-all ${
+                              isMax ? "bg-primary" : "bg-primary/40"
+                            }`}
+                            style={{ height: `${Math.max(pct, 4)}%` }}
+                            title={`${days[i]}: ${count} activities (${sharePct}%)`}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground font-medium">{days[i]}</span>
                       </div>
-                      <span className="text-xs text-muted-foreground font-medium">{days[i]}</span>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                    );
+                  });
+                })()}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Time of Day */}
+        {(timeOfDayData as any[]).length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Timer className="h-4 w-4" />
+                Training Time
+                <span className="ml-auto text-xs font-normal">
+                  Peak: {(() => {
+                    const sorted = [...(timeOfDayData as any[])].sort((a, b) => Number(b.count) - Number(a.count));
+                    if (sorted.length === 0) return "";
+                    const h = Number(sorted[0].hour);
+                    return h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+                  })()}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-[2px] h-32">
+                {(() => {
+                  const counts = new Array(24).fill(0);
+                  for (const row of timeOfDayData as any[]) {
+                    counts[Number(row.hour)] = Number(row.count);
+                  }
+                  const max = Math.max(...counts);
+                  return counts.map((count, h) => {
+                    const pct = max > 0 ? (count / max) * 100 : 0;
+                    const isMax = count === max;
+                    const label = h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`;
+                    const isMorning = h >= 5 && h < 12;
+                    const isAfternoon = h >= 12 && h < 17;
+                    const isEvening = h >= 17 && h < 22;
+                    const color = isMax ? "bg-primary" :
+                      isMorning ? "bg-amber-400/60" :
+                      isAfternoon ? "bg-orange-400/60" :
+                      isEvening ? "bg-indigo-400/60" : "bg-muted-foreground/20";
+                    return (
+                      <div key={h} className="flex-1 flex flex-col items-center gap-0.5">
+                        {count > 0 && pct > 30 && (
+                          <span className="text-[8px] font-medium">{count}</span>
+                        )}
+                        <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
+                          <div
+                            className={`w-full rounded-t-sm transition-all ${color}`}
+                            style={{ height: `${Math.max(pct, count > 0 ? 4 : 0)}%` }}
+                            title={`${label}: ${count} activities`}
+                          />
+                        </div>
+                        {h % 6 === 0 && (
+                          <span className="text-[9px] text-muted-foreground">{label}</span>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground justify-center">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400/60" /> Morning</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-orange-400/60" /> Afternoon</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-indigo-400/60" /> Evening</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Middle Row: Activity Breakdown + Gym Frequency + Last Workout */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
