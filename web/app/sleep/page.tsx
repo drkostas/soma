@@ -143,7 +143,9 @@ async function getTrainingReadiness() {
       (raw_json->0->>'hrvFactorPercent')::int as hrv_pct,
       raw_json->0->>'hrvFactorFeedback' as hrv_feedback,
       (raw_json->0->>'stressHistoryFactorPercent')::int as stress_pct,
-      (raw_json->0->>'acwrFactorPercent')::int as acwr_pct
+      (raw_json->0->>'acwrFactorPercent')::int as acwr_pct,
+      (raw_json->0->>'recoveryTimeFactorPercent')::int as recovery_pct,
+      (raw_json->0->>'sleepHistoryFactorPercent')::int as sleep_history_pct
     FROM garmin_raw_data
     WHERE endpoint_name = 'training_readiness'
       AND raw_json->0->>'score' IS NOT NULL
@@ -954,6 +956,38 @@ export default async function SleepPage() {
                 );
               })()}
             </div>
+            {/* Component Breakdown Bars */}
+            {(() => {
+              const latest = trainingReadiness[trainingReadiness.length - 1] as any;
+              if (!latest) return null;
+              const factors = [
+                { label: "HRV", value: latest.hrv_pct, color: "bg-green-500" },
+                { label: "Stress", value: latest.stress_pct, color: "bg-yellow-500" },
+                { label: "Training Load", value: latest.acwr_pct, color: "bg-blue-500" },
+                { label: "Recovery", value: latest.recovery_pct, color: "bg-purple-500" },
+                { label: "Sleep History", value: latest.sleep_history_pct, color: "bg-indigo-500" },
+                { label: "Sleep Score", value: latest.sleep_score, color: "bg-cyan-500" },
+              ].filter((f) => f.value != null);
+
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 mb-4">
+                  {factors.map((f) => (
+                    <div key={f.label} className="flex items-center gap-2">
+                      <div className="text-[10px] text-muted-foreground w-20 text-right shrink-0">{f.label}</div>
+                      <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${f.color} rounded-full transition-all ${f.value >= 70 ? "opacity-100" : f.value >= 40 ? "opacity-70" : "opacity-50"}`}
+                          style={{ width: `${Math.min(f.value, 100)}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-medium w-8 ${f.value >= 70 ? "text-green-400" : f.value >= 40 ? "text-yellow-400" : "text-red-400"}`}>
+                        {f.value}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <TrainingReadinessChart
               data={(trainingReadiness as any[]).map((tr: any) => ({
                 date: tr.date,
