@@ -34,6 +34,18 @@ export function VolumeChart({ data }: { data: VolumeEntry[] }) {
     : 0;
   const longRange = spanDays > 60;
 
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.week).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.week);
+  })() : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={chartData}>
@@ -48,7 +60,7 @@ export function VolumeChart({ data }: { data: VolumeEntry[] }) {
               ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
               : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(0, Math.floor(chartData.length / 6))}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
         <YAxis
           className="text-xs"
