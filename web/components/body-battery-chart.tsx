@@ -68,6 +68,7 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
           tickFormatter={(v: number) => `${v}`}
         />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           contentStyle={{
             background: "var(--card)",
             border: "1px solid var(--border)",

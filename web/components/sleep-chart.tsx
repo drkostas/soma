@@ -74,6 +74,7 @@ export function SleepStagesChart({ data }: { data: SleepEntry[] }) {
           tick={{ fontSize: 10 }}
         />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           formatter={(value: any, name: any) => [`${value}h`, name]}
           labelFormatter={(label) =>
             new Date(label).toLocaleDateString("en-US", {

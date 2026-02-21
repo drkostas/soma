@@ -75,6 +75,7 @@ export function MonthlyActivityChart({
         />
         <YAxis className="text-xs" allowDecimals={false} />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           content={({ active, payload, label }) => {
             if (!active || !payload?.length) return null;
             const [y, m] = String(label ?? "").split("-");

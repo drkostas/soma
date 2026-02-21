@@ -64,6 +64,7 @@ export function WorkoutFrequencyChart({ data }: { data: FrequencyEntry[] }) {
         />
         <YAxis hide />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           formatter={(value: any) => [`${value} workouts`, "Count"]}
           labelFormatter={(m) => {
             const [year, month] = m.split("-");

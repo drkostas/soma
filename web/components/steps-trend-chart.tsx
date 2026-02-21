@@ -49,6 +49,7 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
           tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
         />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           contentStyle={{
             background: "var(--card)",
             border: "1px solid var(--border)",

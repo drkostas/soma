@@ -71,6 +71,7 @@ export function TrainingReadinessChart({ data }: { data: ReadinessDataPoint[] })
           domain={[0, 100]}
         />
         <Tooltip
+          cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           contentStyle={{
             background: "var(--card)",
             border: "1px solid var(--border)",
