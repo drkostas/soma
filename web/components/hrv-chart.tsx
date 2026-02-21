@@ -48,10 +48,10 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
       <ComposedChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+          tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
           tickFormatter={(d: string) => {
             const date = new Date(d);
             return longRange
@@ -67,8 +67,8 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
         />
         <Tooltip
           contentStyle={{
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
           }}

@@ -51,7 +51,7 @@ export function StressChart({ data }: { data: StressPoint[] }) {
             <stop offset="95%" stopColor="hsl(48, 96%, 53%)" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
         <XAxis
           dataKey="date"
           className="text-[10px]"
@@ -72,8 +72,8 @@ export function StressChart({ data }: { data: StressPoint[] }) {
         />
         <Tooltip
           contentStyle={{
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
           }}

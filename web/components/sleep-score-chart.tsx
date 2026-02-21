@@ -70,7 +70,7 @@ export function SleepScoreChart({ data }: { data: ScoreEntry[] }) {
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis className="text-xs" domain={[0, 100]} />
-        <ReferenceLine y={80} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
+        <ReferenceLine y={80} stroke="var(--muted-foreground)" strokeDasharray="3 3" />
         <Tooltip
           formatter={(value: any) => [`${value}`, "Sleep Score"]}
           labelFormatter={(label) =>
@@ -81,10 +81,10 @@ export function SleepScoreChart({ data }: { data: ScoreEntry[] }) {
             })
           }
           contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            backgroundColor: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
-            color: "hsl(var(--card-foreground))",
+            color: "var(--card-foreground)",
           }}
         />
         <Area

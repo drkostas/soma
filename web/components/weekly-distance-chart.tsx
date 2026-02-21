@@ -70,7 +70,7 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
         <YAxis className="text-xs" />
         <ReferenceLine
           y={avgKm}
-          stroke="hsl(var(--muted-foreground))"
+          stroke="var(--muted-foreground)"
           strokeDasharray="3 3"
           strokeOpacity={0.5}
           label={{
@@ -101,7 +101,7 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
         />
         <Bar
           dataKey="km"
-          fill="hsl(var(--primary))"
+          fill="var(--primary)"
           radius={[2, 2, 0, 0]}
           fillOpacity={0.8}
         />

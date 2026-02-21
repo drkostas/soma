@@ -77,10 +77,10 @@ export function MileageChart({ data }: { data: MileageEntry[] }) {
             return `${months[parseInt(month)]} ${year}`;
           }}
           contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            backgroundColor: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
-            color: "hsl(var(--card-foreground))",
+            color: "var(--card-foreground)",
           }}
         />
         <Bar dataKey="km" radius={[4, 4, 0, 0]}>
@@ -89,8 +89,8 @@ export function MileageChart({ data }: { data: MileageEntry[] }) {
               key={index}
               fill={
                 entry.km === max
-                  ? "hsl(var(--primary))"
-                  : "hsl(var(--muted-foreground) / 0.3)"
+                  ? "var(--primary)"
+                  : "color-mix(in oklch, var(--muted-foreground) 30%, transparent)"
               }
             />
           ))}

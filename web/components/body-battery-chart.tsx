@@ -48,7 +48,7 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
       <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }} stackOffset="sign">
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
         <XAxis
           dataKey="date"
           className="text-[10px]"
@@ -69,8 +69,8 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
         />
         <Tooltip
           contentStyle={{
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
           }}
@@ -86,7 +86,7 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
             return [`${Math.abs(Number(value))}%`, label];
           }}
         />
-        <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" opacity={0.3} />
+        <ReferenceLine y={0} stroke="var(--muted-foreground)" opacity={0.3} />
         <Bar dataKey="charged" stackId="a" radius={[3, 3, 0, 0]}>
           {chartData.map((_, index) => (
             <Cell key={index} fill="hsl(142, 71%, 45%)" opacity={0.6} />

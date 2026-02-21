@@ -56,10 +56,10 @@ export function WorkoutFrequencyChart({ data }: { data: FrequencyEntry[] }) {
             return `${months[parseInt(month)]} ${year}`;
           }}
           contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            backgroundColor: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
-            color: "hsl(var(--card-foreground))",
+            color: "var(--card-foreground)",
           }}
         />
         <Bar dataKey="workouts" radius={[3, 3, 0, 0]}>
@@ -68,8 +68,8 @@ export function WorkoutFrequencyChart({ data }: { data: FrequencyEntry[] }) {
               key={index}
               fill={
                 entry.workouts === max
-                  ? "hsl(var(--primary))"
-                  : "hsl(var(--muted-foreground) / 0.3)"
+                  ? "var(--primary)"
+                  : "color-mix(in oklch, var(--muted-foreground) 30%, transparent)"
               }
             />
           ))}

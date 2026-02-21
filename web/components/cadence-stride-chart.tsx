@@ -100,7 +100,7 @@ export function CadenceStrideChart({
         <Bar
           yAxisId="cadence"
           dataKey="cadence"
-          fill="hsl(var(--primary))"
+          fill="var(--primary)"
           fillOpacity={0.3}
           radius={[2, 2, 0, 0]}
         />

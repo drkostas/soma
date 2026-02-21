@@ -83,10 +83,10 @@ export function SleepStagesChart({ data }: { data: SleepEntry[] }) {
             })
           }
           contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            backgroundColor: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
-            color: "hsl(var(--card-foreground))",
+            color: "var(--card-foreground)",
           }}
         />
         <Legend />

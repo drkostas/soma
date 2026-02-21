@@ -29,7 +29,7 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={180}>
       <AreaChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} vertical={false} />
         <XAxis
           dataKey="date"
           className="text-[10px]"
@@ -50,8 +50,8 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
         />
         <Tooltip
           contentStyle={{
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
           }}
@@ -71,8 +71,8 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
           type="monotone"
           dataKey="bmr"
           stackId="1"
-          stroke="hsl(var(--muted-foreground))"
-          fill="hsl(var(--muted))"
+          stroke="var(--muted-foreground)"
+          fill="var(--muted)"
           fillOpacity={0.3}
           strokeWidth={0}
         />

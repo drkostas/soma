@@ -63,7 +63,7 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
       <AreaChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
         <XAxis
           dataKey="date"
           className="text-[10px]"
@@ -90,8 +90,8 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
         />
         <Tooltip
           contentStyle={{
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
           }}

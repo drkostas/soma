@@ -82,10 +82,10 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <ComposedChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} vertical={false} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+          tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
           tickFormatter={(d) => {
             const date = new Date(d);
             return longRange
@@ -115,8 +115,8 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
             })
           }
           contentStyle={{
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
           }}
