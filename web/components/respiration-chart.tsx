@@ -34,9 +34,7 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
   const longRange = spanDays > 60;
 
   const chartData = filtered.map((d) => ({
-      date: new Date(d.date).toLocaleDateString("en-US", longRange
-        ? { month: "short", year: "2-digit" }
-        : { month: "short", day: "numeric" }),
+      date: d.date,
       sleep: Number(d.sleep_resp),
       awake: d.awake_resp ? Number(d.awake_resp) : null,
       low: d.low_resp ? Number(d.low_resp) : null,
@@ -49,6 +47,18 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
   const minVal = Math.max(Math.floor(Math.min(...allVals) - 2), 0);
   const maxVal = Math.ceil(Math.max(...allVals) + 2);
 
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.date);
+  })() : undefined;
+
   return (
     <ResponsiveContainer width="100%" height={180}>
       <AreaChart
@@ -60,7 +70,13 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          interval={Math.max(0, Math.floor(chartData.length / 6))}
+          tickFormatter={(d: string) => {
+            const date = new Date(d);
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          }}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
         <YAxis
           className="text-[10px]"

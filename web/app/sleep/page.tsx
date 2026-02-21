@@ -42,6 +42,7 @@ async function getSleepStats() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
   `;
   return rows[0] || null;
 }
@@ -58,6 +59,7 @@ async function getSleepTrend() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;
@@ -73,6 +75,7 @@ async function getSleepScores() {
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
       AND raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'value' IS NOT NULL
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;
@@ -88,6 +91,7 @@ async function getRHRTrend() {
     WHERE endpoint_name = 'user_summary'
       AND raw_json->>'restingHeartRate' IS NOT NULL
       AND (raw_json->>'restingHeartRate')::int > 0
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;
@@ -129,6 +133,7 @@ async function getHRVTrend() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'hrv_data'
       AND raw_json->'hrvSummary'->>'weeklyAvg' IS NOT NULL
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;
@@ -151,6 +156,7 @@ async function getTrainingReadiness() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'training_readiness'
       AND raw_json->0->>'score' IS NOT NULL
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;
@@ -167,6 +173,7 @@ async function getStressTrend() {
     WHERE endpoint_name = 'user_summary'
       AND raw_json->>'averageStressLevel' IS NOT NULL
       AND (raw_json->>'averageStressLevel')::int > 0
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;
@@ -183,6 +190,7 @@ async function getBodyBatteryTrend() {
     WHERE endpoint_name = 'user_summary'
       AND raw_json->>'bodyBatteryChargedValue' IS NOT NULL
       AND (raw_json->>'bodyBatteryChargedValue')::int > 0
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;
@@ -200,6 +208,7 @@ async function getRespirationTrend() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'respiration_data'
       AND raw_json->>'avgWakingRespirationValue' IS NOT NULL
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows;
@@ -226,6 +235,7 @@ async function getSpO2Trend() {
       ON s.date = p.date AND p.endpoint_name = 'spo2_data' AND p.raw_json->>'averageSpO2' IS NOT NULL
     WHERE s.endpoint_name = 'sleep_data'
       AND (s.raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND s.date >= CURRENT_DATE - INTERVAL '12 months'
       AND (
         s.raw_json->'dailySleepDTO'->>'averageSpO2Value' IS NOT NULL
         OR p.raw_json->>'averageSpO2' IS NOT NULL
@@ -246,6 +256,7 @@ async function getSleepSchedule() {
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
       AND raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal' IS NOT NULL
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   return rows.map((r: any) => {
@@ -278,6 +289,7 @@ async function getWeekdayWeekendSleep() {
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND date >= CURRENT_DATE - INTERVAL '12 months'
     GROUP BY day_type
   `;
   const result: Record<string, any> = {};

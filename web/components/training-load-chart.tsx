@@ -34,13 +34,24 @@ export function TrainingLoadChart({ data }: { data: TrainingLoadEntry[] }) {
   const longRange = spanDays > 60;
 
   const chartData = filtered.map((d) => ({
-      date: new Date(d.date).toLocaleDateString("en-US", longRange
-        ? { month: "short", year: "2-digit" }
-        : { month: "short", day: "numeric" }),
+      date: d.date,
       acute: Math.round(Number(d.acute)),
       chronic: Math.round(Number(d.chronic)),
       acwr: Number(Number(d.acwr).toFixed(2)),
     }));
+
+  // For long-range data, pick one tick per unique month to avoid duplicate labels
+  const tickDates = longRange ? (() => {
+    const seen = new Set<string>();
+    return chartData
+      .filter((d) => {
+        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((d) => d.date);
+  })() : undefined;
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -50,7 +61,13 @@ export function TrainingLoadChart({ data }: { data: TrainingLoadEntry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          interval={Math.max(0, Math.floor(chartData.length / 6))}
+          tickFormatter={(d: string) => {
+            const date = new Date(d);
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          }}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
         <YAxis className="text-[10px]" tickLine={false} />
         <Tooltip
