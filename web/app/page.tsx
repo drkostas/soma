@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatCard } from "@/components/stat-card";
+import { ClickableStatCards } from "@/components/clickable-stat-cards";
 import { WorkoutFrequencyChart } from "@/components/workout-frequency-chart";
 import { ClickableRecentActivity } from "@/components/clickable-recent-activity";
 import { StepsTrendChart } from "@/components/steps-trend-chart";
@@ -681,76 +681,84 @@ export default async function Home() {
         </p>
       </div>
 
-      {/* Today's Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title="Steps"
-          value={health?.total_steps?.toLocaleString() ?? "—"}
-          subtitle={health?.total_distance_meters
-            ? `${(health.total_distance_meters / 1000).toFixed(1)} km`
-            : undefined}
-          icon={<Footprints className="h-4 w-4 text-muted-foreground" />}
-        />
-        <StatCard
-          title="Active Calories"
-          value={health?.active_kilocalories?.toLocaleString() ?? "—"}
-          subtitle={health?.total_kilocalories
-            ? `${health.total_kilocalories.toLocaleString()} total`
-            : undefined}
-          icon={<Flame className="h-4 w-4 text-orange-400" />}
-        />
-        <StatCard
-          title="Resting HR"
-          value={health?.resting_heart_rate ? `${health.resting_heart_rate}` : "—"}
-          subtitle={health?.min_heart_rate && health?.max_heart_rate
-            ? `Range: ${health.min_heart_rate}–${health.max_heart_rate} bpm`
-            : undefined}
-          icon={<HeartPulse className="h-4 w-4 text-red-400" />}
-        />
-        <StatCard
-          title="VO2max"
-          value={runStats?.vo2max ? `${Number(runStats.vo2max)}` : "—"}
-          subtitle="ml/kg/min"
-          icon={<Zap className="h-4 w-4 text-yellow-400" />}
-        />
-      </div>
-
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title="Sleep"
-          value={(() => {
-            const secs = health?.sleep_time_seconds || latestSleep?.total;
-            return secs ? `${(secs / 3600).toFixed(1)}h` : "—";
-          })()}
-          subtitle={latestSleep?.score ? `Score: ${latestSleep.score}` : undefined}
-          icon={<Moon className="h-4 w-4 text-indigo-400" />}
-        />
-        <StatCard
-          title="Avg Stress"
-          value={health?.avg_stress_level ?? "—"}
-          subtitle={health?.max_stress_level
-            ? `Peak: ${health.max_stress_level}`
-            : undefined}
-          icon={<Brain className="h-4 w-4 text-yellow-400" />}
-        />
-        <StatCard
-          title="Body Battery"
-          value={health?.body_battery_charged
-            ? `+${health.body_battery_charged}`
-            : "—"}
-          subtitle={health?.body_battery_drained
-            ? `−${health.body_battery_drained} drained`
-            : undefined}
-          icon={<BatteryCharging className="h-4 w-4 text-green-400" />}
-        />
-        <StatCard
-          title="Total Activities"
-          value={totalActivities}
-          subtitle={`${Number(runStats?.total_km || 0).toFixed(0)} km running`}
-          icon={<Activity className="h-4 w-4 text-purple-400" />}
-        />
-      </div>
+      {/* Clickable Stat Cards with Detail Dialogs */}
+      <ClickableStatCards
+        primaryCards={[
+          {
+            metric: "steps",
+            title: "Steps",
+            value: health?.total_steps?.toLocaleString() ?? "—",
+            subtitle: health?.total_distance_meters
+              ? `${(health.total_distance_meters / 1000).toFixed(1)} km`
+              : undefined,
+            icon: <Footprints className="h-4 w-4 text-muted-foreground" />,
+          },
+          {
+            metric: "calories",
+            title: "Active Calories",
+            value: health?.active_kilocalories?.toLocaleString() ?? "—",
+            subtitle: health?.total_kilocalories
+              ? `${health.total_kilocalories.toLocaleString()} total`
+              : undefined,
+            icon: <Flame className="h-4 w-4 text-orange-400" />,
+          },
+          {
+            metric: "rhr",
+            title: "Resting HR",
+            value: health?.resting_heart_rate ? `${health.resting_heart_rate}` : "—",
+            subtitle: health?.min_heart_rate && health?.max_heart_rate
+              ? `Range: ${health.min_heart_rate}–${health.max_heart_rate} bpm`
+              : undefined,
+            icon: <HeartPulse className="h-4 w-4 text-red-400" />,
+          },
+          {
+            metric: "vo2max",
+            title: "VO2max",
+            value: runStats?.vo2max ? `${Number(runStats.vo2max)}` : "—",
+            subtitle: "ml/kg/min",
+            icon: <Zap className="h-4 w-4 text-yellow-400" />,
+          },
+        ]}
+        secondaryCards={[
+          {
+            metric: "sleep",
+            title: "Sleep",
+            value: (() => {
+              const secs = health?.sleep_time_seconds || latestSleep?.total;
+              return secs ? `${(secs / 3600).toFixed(1)}h` : "—";
+            })(),
+            subtitle: latestSleep?.score ? `Score: ${latestSleep.score}` : undefined,
+            icon: <Moon className="h-4 w-4 text-indigo-400" />,
+          },
+          {
+            metric: "stress",
+            title: "Avg Stress",
+            value: health?.avg_stress_level ?? "—",
+            subtitle: health?.max_stress_level
+              ? `Peak: ${health.max_stress_level}`
+              : undefined,
+            icon: <Brain className="h-4 w-4 text-yellow-400" />,
+          },
+          {
+            metric: "body_battery",
+            title: "Body Battery",
+            value: health?.body_battery_charged
+              ? `+${health.body_battery_charged}`
+              : "—",
+            subtitle: health?.body_battery_drained
+              ? `−${health.body_battery_drained} drained`
+              : undefined,
+            icon: <BatteryCharging className="h-4 w-4 text-green-400" />,
+          },
+          {
+            metric: "activities",
+            title: "Total Activities",
+            value: totalActivities,
+            subtitle: `${Number(runStats?.total_km || 0).toFixed(0)} km running`,
+            icon: <Activity className="h-4 w-4 text-purple-400" />,
+          },
+        ]}
+      />
 
       {/* This Week Training Summary */}
       <Card className="mb-6">
