@@ -29,7 +29,7 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
   return (
     <ResponsiveContainer width="100%" height={180}>
       <BarChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} vertical={false} />
         <XAxis
           dataKey="date"
           className="text-[10px]"
@@ -50,8 +50,8 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
         />
         <Tooltip
           contentStyle={{
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: "8px",
             fontSize: "12px",
           }}
@@ -64,7 +64,7 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
           }
           formatter={(value: any) => [Number(value).toLocaleString(), "Steps"]}
         />
-        <ReferenceLine y={goal} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" opacity={0.5} />
+        <ReferenceLine y={goal} stroke="var(--muted-foreground)" strokeDasharray="4 4" opacity={0.5} />
         <Bar
           dataKey="steps"
           radius={[2, 2, 0, 0]}

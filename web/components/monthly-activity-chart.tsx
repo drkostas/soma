@@ -84,7 +84,7 @@ export function MonthlyActivityChart({
             key={sport}
             dataKey={sport}
             stackId="a"
-            fill={SPORT_COLORS[sport] || "hsl(var(--primary))"}
+            fill={SPORT_COLORS[sport] || "var(--primary)"}
             radius={sport === sports[sports.length - 1] ? [2, 2, 0, 0] : [0, 0, 0, 0]}
           />
         ))}
