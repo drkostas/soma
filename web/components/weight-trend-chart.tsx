@@ -32,7 +32,7 @@ export function WeightTrendChart({ data }: { data: WeightPoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <ComposedChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+      <ComposedChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
         <XAxis
           dataKey="date"
@@ -46,14 +46,16 @@ export function WeightTrendChart({ data }: { data: WeightPoint[] }) {
         <YAxis
           yAxisId="weight"
           domain={[minW, maxW]}
-          tick={{ fontSize: 9, fill: "hsl(60, 70%, 60%)" }}
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(v: number) => `${v}kg`}
         />
         <YAxis
           yAxisId="bf"
           orientation="right"
           domain={[minF, maxF]}
-          tick={{ fontSize: 9, fill: "hsl(280, 60%, 65%)" }}
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(v: number) => `${v}%`}
         />
         <Tooltip

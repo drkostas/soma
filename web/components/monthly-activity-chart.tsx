@@ -45,7 +45,7 @@ export function MonthlyActivityChart({
 
   return (
     <ResponsiveContainer width="100%" height={250}>
-      <BarChart data={data} margin={{ bottom: 10, left: -10 }}>
+      <BarChart data={data} margin={{ bottom: 10, left: 0 }}>
         <XAxis
           dataKey="month"
           className="text-xs"

@@ -48,7 +48,7 @@ export function YearlyMileageChart({
 
   return (
     <ResponsiveContainer width="100%" height={250}>
-      <LineChart data={data} margin={{ left: -10, right: 10 }}>
+      <LineChart data={data} margin={{ left: 0, right: 10 }}>
         <XAxis
           dataKey="month"
           tickFormatter={(m) => MONTH_LABELS[m - 1] || ""}

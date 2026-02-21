@@ -58,7 +58,7 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <ComposedChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+      <ComposedChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
         <XAxis
           dataKey="date"
@@ -69,7 +69,8 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
           interval={Math.max(Math.floor(chartData.length / 6), 1)}
         />
         <YAxis
-          tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+          className="text-[10px]"
+          tickLine={false}
           reversed
           domain={[minP, maxP]}
           tickFormatter={formatPace}
