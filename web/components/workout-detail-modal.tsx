@@ -89,8 +89,8 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
               <TabsTrigger value="heartrate">Heart Rate</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="h-[calc(100vh-200px)] mt-4">
-              <TabsContent value="exercises" className="space-y-4 pr-4">
+            <ScrollArea className="h-[calc(100vh-180px)] mt-4">
+              <TabsContent value="exercises" className="space-y-4 px-4 pb-8">
                 {exercises.map((ex: any, ei: number) => {
                   const workingSets = ex.sets.filter(
                     (s: any) => s.type === "normal" && s.weight_kg > 0
@@ -153,7 +153,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                 })}
               </TabsContent>
 
-              <TabsContent value="summary" className="space-y-4 pr-4">
+              <TabsContent value="summary" className="space-y-4 px-4 pb-8">
                 <div className="grid grid-cols-2 gap-3">
                   <MetricBox label="Duration" value={`${durationMin}m`} />
                   <MetricBox label="Exercises" value={`${exercises.length}`} />
@@ -228,7 +228,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                 </div>
               </TabsContent>
 
-              <TabsContent value="heartrate" className="space-y-4 pr-4">
+              <TabsContent value="heartrate" className="space-y-4 px-4 pb-8">
                 {data.garmin ? (
                   <>
                     <div className="grid grid-cols-3 gap-3">
