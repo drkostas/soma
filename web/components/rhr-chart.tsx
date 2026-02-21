@@ -48,7 +48,7 @@ export function RHRChart({ data }: { data: RHREntry[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={chartData}>
+      <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
           dataKey="date"

@@ -1442,6 +1442,7 @@ export default async function RunningPage() {
                   {new Date(records.longest.date).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
+                    ...(new Date(records.longest.date).getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}),
                   })}
                 </div>
               </div>
@@ -1457,6 +1458,7 @@ export default async function RunningPage() {
                   {new Date(records.maxHR.date).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
+                    ...(new Date(records.maxHR.date).getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}),
                   })}
                 </div>
               </div>
@@ -1472,6 +1474,7 @@ export default async function RunningPage() {
                   {new Date(records.maxCal.date).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
+                    ...(new Date(records.maxCal.date).getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}),
                   })}
                 </div>
               </div>
