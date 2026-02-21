@@ -40,73 +40,71 @@ export function ExerciseProgressChart({ data }: { data: ProgressEntry[] }) {
     );
   }
 
-  // Pivot data: merge all exercises into date-keyed rows
-  const dateMap = new Map<string, Record<string, number>>();
-  const exercises = new Set<string>();
-
+  // Group by exercise for separate mini charts
+  const byExercise = new Map<string, { date: string; weight: number }[]>();
   for (const row of data) {
-    exercises.add(row.exercise);
-    const key = String(row.workout_date);
-    if (!dateMap.has(key)) {
-      dateMap.set(key, {});
-    }
-    dateMap.get(key)![row.exercise] = Number(row.max_weight);
+    if (!byExercise.has(row.exercise)) byExercise.set(row.exercise, []);
+    byExercise.get(row.exercise)!.push({
+      date: String(row.workout_date),
+      weight: Number(row.max_weight),
+    });
   }
 
-  // Sort by date
-  const sorted = Array.from(dateMap.entries())
-    .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
-    .map(([date, values]) => ({ date, ...values }));
-
-  const exerciseList = Array.from(exercises);
+  const exercises = Array.from(byExercise.keys());
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={sorted}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-        <XAxis
-          dataKey="date"
-          className="text-xs"
-          tickFormatter={(d) =>
-            new Date(d).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })
-          }
-        />
-        <YAxis
-          className="text-xs"
-          tickFormatter={(v) => `${v}kg`}
-        />
-        <Tooltip
-          formatter={(value: any, name: any) => [
-            typeof value === "number" ? `${value.toFixed(1)} kg` : "—",
-            SHORT_NAMES[name] || name,
-          ]}
-          labelFormatter={(label) => new Date(label).toLocaleDateString()}
-          contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px",
-            color: "hsl(var(--card-foreground))",
-          }}
-        />
-        <Legend
-          formatter={(value: string) => SHORT_NAMES[value] || value}
-        />
-        {exerciseList.map((ex) => (
-          <Line
-            key={ex}
-            type="monotone"
-            dataKey={ex}
-            stroke={COLORS[ex] || "#888"}
-            strokeWidth={2}
-            dot={{ r: 2 }}
-            activeDot={{ r: 4 }}
-            connectNulls
-          />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
+    <div className="space-y-4">
+      {exercises.map((exercise) => {
+        const points = byExercise.get(exercise)!.sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        const latest = points[points.length - 1];
+        const first = points[0];
+        const change = latest.weight - first.weight;
+        const color = COLORS[exercise] || "#888";
+        const name = SHORT_NAMES[exercise] || exercise;
+
+        return (
+          <div key={exercise}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                <span className="text-xs font-medium">{name}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-bold">{latest.weight.toFixed(1)} kg</span>
+                <span className={change >= 0 ? "text-green-400" : "text-red-400"}>
+                  {change >= 0 ? "+" : ""}{change.toFixed(1)}
+                </span>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={60}>
+              <LineChart data={points} margin={{ left: 0, right: 0, top: 2, bottom: 0 }}>
+                <Line
+                  type="monotone"
+                  dataKey="weight"
+                  stroke={color}
+                  strokeWidth={1.5}
+                  dot={false}
+                  activeDot={{ r: 3 }}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.[0]) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div className="bg-card border border-border rounded-lg p-1.5 text-xs shadow-lg">
+                        <div>{new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</div>
+                        <div className="font-medium">{d.weight.toFixed(1)} kg</div>
+                      </div>
+                    );
+                  }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })}
+    </div>
   );
 }

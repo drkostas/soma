@@ -395,6 +395,8 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   cycling: <Bike className="h-3.5 w-3.5 text-yellow-400" />,
   e_bike_fitness: <Bike className="h-3.5 w-3.5 text-yellow-400" />,
   indoor_cardio: <Heart className="h-3.5 w-3.5 text-red-400" />,
+  indoor_cycling: <Bike className="h-3.5 w-3.5 text-yellow-400" />,
+  stand_up_paddleboarding_v2: <Waves className="h-3.5 w-3.5 text-cyan-300" />,
 };
 
 const ACTIVITY_BAR_COLORS: Record<string, string> = {
@@ -408,6 +410,8 @@ const ACTIVITY_BAR_COLORS: Record<string, string> = {
   cycling: "bg-yellow-500/70",
   e_bike_fitness: "bg-yellow-500/70",
   indoor_cardio: "bg-red-400/70",
+  indoor_cycling: "bg-yellow-500/70",
+  stand_up_paddleboarding_v2: "bg-cyan-400/70",
   other: "bg-violet-400/70",
 };
 
@@ -427,6 +431,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   yoga: "Yoga",
   cycling: "Cycle",
   elliptical: "Elliptical",
+  stand_up_paddleboarding_v2: "SUP",
 };
 
 // Merge these activity type_keys into a single group for display
@@ -434,6 +439,7 @@ const MERGE_TYPES: Record<string, string> = {
   wind_kite_surfing: "kiteboarding_v2",
   resort_skiing_snowboarding_ws: "resort_snowboarding",
   treadmill_running: "running",
+  indoor_cycling: "cycling",
 };
 
 function formatDuration(mins: number) {
@@ -863,7 +869,7 @@ export default async function Home() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end gap-2 h-20">
+            <div className="flex items-end gap-3 h-32">
               {(() => {
                 const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
                 const counts = new Array(7).fill(0);
@@ -871,22 +877,24 @@ export default async function Home() {
                   counts[Number(row.dow)] = Number(row.count);
                 }
                 const max = Math.max(...counts);
+                const total = counts.reduce((s: number, c: number) => s + c, 0);
                 return counts.map((count, i) => {
                   const pct = max > 0 ? (count / max) * 100 : 0;
                   const isMax = count === max;
+                  const sharePct = total > 0 ? ((count / total) * 100).toFixed(0) : "0";
                   return (
                     <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                      <div className="w-full flex items-end justify-center" style={{ height: "60px" }}>
+                      <span className="text-xs font-semibold">{count}</span>
+                      <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
                         <div
-                          className={`w-full max-w-[32px] rounded-t-sm transition-all ${
+                          className={`w-full max-w-[40px] rounded-t transition-all ${
                             isMax ? "bg-primary" : "bg-primary/40"
                           }`}
                           style={{ height: `${Math.max(pct, 4)}%` }}
-                          title={`${days[i]}: ${count} activities`}
+                          title={`${days[i]}: ${count} activities (${sharePct}%)`}
                         />
                       </div>
-                      <span className="text-[10px] text-muted-foreground">{days[i]}</span>
-                      <span className="text-[10px] font-medium">{count}</span>
+                      <span className="text-xs text-muted-foreground font-medium">{days[i]}</span>
                     </div>
                   );
                 });

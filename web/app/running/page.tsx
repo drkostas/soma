@@ -479,21 +479,23 @@ export default async function RunningPage() {
         </Card>
       )}
 
-      {/* Weekly Distance */}
+      {/* Weekly Distance — last 52 weeks */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
             <Activity className="h-4 w-4 text-primary" />
-            Weekly Distance
+            Weekly Distance (Last Year)
           </CardTitle>
         </CardHeader>
         <CardContent>
           <WeeklyDistanceChart
-            data={(weeklyDist as any[]).map((w: any) => ({
-              week: w.week,
-              km: Number(Number(w.km).toFixed(1)),
-              runs: Number(w.runs),
-            }))}
+            data={(weeklyDist as any[])
+              .slice(-52)
+              .map((w: any) => ({
+                week: w.week,
+                km: Number(Number(w.km).toFixed(1)),
+                runs: Number(w.runs),
+              }))}
           />
         </CardContent>
       </Card>

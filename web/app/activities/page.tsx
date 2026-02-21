@@ -34,6 +34,8 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   walking: <PersonStanding className="h-4 w-4 text-emerald-400" />,
   cycling: <Bike className="h-4 w-4 text-yellow-400" />,
   indoor_cardio: <Heart className="h-4 w-4 text-red-400" />,
+  indoor_cycling: <Bike className="h-4 w-4 text-yellow-400" />,
+  stand_up_paddleboarding_v2: <Waves className="h-4 w-4 text-cyan-300" />,
   other: <Activity className="h-4 w-4 text-muted-foreground" />,
 };
 
