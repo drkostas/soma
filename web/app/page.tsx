@@ -126,19 +126,22 @@ async function getActivityCounts() {
 
 async function getRecentActivities() {
   const sql = getDb();
-  // Get recent Garmin activities
+  // Get recent Garmin activities (dedup by startTime+name, keep highest-calorie entry)
   const garminRows = await sql`
-    SELECT
-      activity_id::text as activity_id,
-      raw_json->'activityType'->>'typeKey' as type_key,
-      (raw_json->>'startTimeLocal')::text as date,
-      raw_json->>'activityName' as name,
-      (raw_json->>'distance')::float / 1000.0 as distance_km,
-      (raw_json->>'duration')::float / 60.0 as duration_min,
-      (raw_json->>'calories')::float as calories
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-    ORDER BY (raw_json->>'startTimeLocal')::text DESC
+    SELECT * FROM (
+      SELECT DISTINCT ON ((raw_json->>'startTimeLocal'), raw_json->>'activityName')
+        activity_id::text as activity_id,
+        raw_json->'activityType'->>'typeKey' as type_key,
+        (raw_json->>'startTimeLocal')::text as date,
+        raw_json->>'activityName' as name,
+        (raw_json->>'distance')::float / 1000.0 as distance_km,
+        (raw_json->>'duration')::float / 60.0 as duration_min,
+        (raw_json->>'calories')::float as calories
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+      ORDER BY (raw_json->>'startTimeLocal'), raw_json->>'activityName', (raw_json->>'calories')::float DESC
+    ) deduped
+    ORDER BY date DESC
     LIMIT 15
   `;
 

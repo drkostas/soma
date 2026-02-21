@@ -74,7 +74,7 @@ export function ExerciseProgressChart({ data }: { data: ProgressEntry[] }) {
               <div className="flex items-center gap-2 text-xs">
                 <span className="font-bold">{latest.weight.toFixed(1)} kg</span>
                 <span className={change >= 0 ? "text-green-400" : "text-red-400"}>
-                  {change >= 0 ? "+" : ""}{change.toFixed(1)}
+                  {change >= 0 ? "+" : ""}{change.toFixed(1)} kg
                 </span>
               </div>
             </div>
