@@ -8,7 +8,6 @@ import {
   Footprints,
   Mountain,
   Moon,
-  RefreshCw,
 } from "lucide-react";
 import {
   Tooltip,
@@ -16,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { SyncButton } from "@/components/sync-button";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Overview" },
@@ -23,7 +23,6 @@ const navItems = [
   { href: "/workouts", icon: Dumbbell, label: "Gym" },
   { href: "/activities", icon: Mountain, label: "Activities" },
   { href: "/sleep", icon: Moon, label: "Sleep" },
-  { href: "/status", icon: RefreshCw, label: "Sync Status" },
 ];
 
 export function Sidebar() {
@@ -66,6 +65,11 @@ export function Sidebar() {
             </Tooltip>
           );
         })}
+
+        {/* Sync button pushed to bottom */}
+        <div className="mt-auto pb-3">
+          <SyncButton />
+        </div>
       </nav>
     </aside>
   );
