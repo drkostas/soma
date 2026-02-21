@@ -345,6 +345,104 @@ async function getPersonalRecords() {
   };
 }
 
+async function getYearlyRunningStats() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      EXTRACT(YEAR FROM (raw_json->>'startTimeLocal')::timestamp)::int as year,
+      COUNT(*) as runs,
+      SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
+      AVG((raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0) as avg_pace,
+      AVG((raw_json->>'averageHR')::float) as avg_hr,
+      MAX((raw_json->>'distance')::float) / 1000.0 as longest_km,
+      SUM((raw_json->>'calories')::float) as total_cal
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+      AND (raw_json->>'distance')::float > 500
+    GROUP BY year
+    ORDER BY year DESC
+  `;
+  return rows;
+}
+
+async function getPaceDistribution() {
+  const sql = getDb();
+  const rows = await sql`
+    WITH paces AS (
+      SELECT
+        (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND (raw_json->>'distance')::float > 1000
+    )
+    SELECT
+      CASE
+        WHEN pace < 4.5 THEN 'Sub 4:30'
+        WHEN pace < 5.0 THEN '4:30-5:00'
+        WHEN pace < 5.5 THEN '5:00-5:30'
+        WHEN pace < 6.0 THEN '5:30-6:00'
+        WHEN pace < 6.5 THEN '6:00-6:30'
+        WHEN pace < 7.0 THEN '6:30-7:00'
+        WHEN pace < 7.5 THEN '7:00-7:30'
+        WHEN pace < 8.0 THEN '7:30-8:00'
+        ELSE '8:00+'
+      END as zone,
+      COUNT(*) as count,
+      CASE
+        WHEN pace < 4.5 THEN 1
+        WHEN pace < 5.0 THEN 2
+        WHEN pace < 5.5 THEN 3
+        WHEN pace < 6.0 THEN 4
+        WHEN pace < 6.5 THEN 5
+        WHEN pace < 7.0 THEN 6
+        WHEN pace < 7.5 THEN 7
+        WHEN pace < 8.0 THEN 8
+        ELSE 9
+      END as sort_order
+    FROM paces
+    GROUP BY zone, sort_order
+    ORDER BY sort_order ASC
+  `;
+  return rows;
+}
+
+async function getDistanceDistribution() {
+  const sql = getDb();
+  const rows = await sql`
+    WITH distances AS (
+      SELECT
+        (raw_json->>'distance')::float / 1000.0 as km
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+    )
+    SELECT
+      CASE
+        WHEN km < 3 THEN 'Under 3k'
+        WHEN km < 5 THEN '3-5k'
+        WHEN km < 8 THEN '5-8k'
+        WHEN km < 10 THEN '8-10k'
+        WHEN km < 15 THEN '10-15k'
+        ELSE '15k+'
+      END as bucket,
+      COUNT(*) as count,
+      CASE
+        WHEN km < 3 THEN 1
+        WHEN km < 5 THEN 2
+        WHEN km < 8 THEN 3
+        WHEN km < 10 THEN 4
+        WHEN km < 15 THEN 5
+        ELSE 6
+      END as sort_order
+    FROM distances
+    GROUP BY bucket, sort_order
+    ORDER BY sort_order ASC
+  `;
+  return rows;
+}
+
 async function getRecentRuns() {
   const sql = getDb();
   const rows = await sql`
@@ -368,7 +466,7 @@ async function getRecentRuns() {
 }
 
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
@@ -383,6 +481,9 @@ export default async function RunningPage() {
       getRecentRuns(),
       getFitnessScores(),
       getTrainingStatus(),
+      getPaceDistribution(),
+      getDistanceDistribution(),
+      getYearlyRunningStats(),
     ]);
 
   return (
@@ -537,6 +638,94 @@ export default async function RunningPage() {
           <HRPaceChart data={hrPaceData as any} />
         </CardContent>
       </Card>
+
+      {/* Pace & Distance Distribution */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Pace Distribution */}
+        {(paceDistribution as any[]).length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Timer className="h-4 w-4 text-green-400" />
+                Pace Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {(() => {
+                  const zones = paceDistribution as any[];
+                  const maxCount = Math.max(...zones.map((z: any) => Number(z.count)));
+                  const total = zones.reduce((s: number, z: any) => s + Number(z.count), 0);
+                  const colors = [
+                    "bg-red-500", "bg-orange-500", "bg-amber-500", "bg-yellow-500",
+                    "bg-lime-500", "bg-green-500", "bg-emerald-500", "bg-teal-500", "bg-cyan-500",
+                  ];
+                  return zones.map((z: any, i: number) => {
+                    const count = Number(z.count);
+                    const pct = (count / maxCount) * 100;
+                    const sharePct = ((count / total) * 100).toFixed(0);
+                    return (
+                      <div key={z.zone} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-20 text-right font-mono">{z.zone}</span>
+                        <div className="flex-1 h-5 bg-muted rounded-sm overflow-hidden">
+                          <div
+                            className={`h-full ${colors[i] || "bg-primary"} rounded-sm`}
+                            style={{ width: `${Math.max(pct, 3)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs w-8 text-right font-medium">{count}</span>
+                        <span className="text-xs w-10 text-right text-muted-foreground">{sharePct}%</span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Distance Distribution */}
+        {(distanceDistribution as any[]).length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-blue-400" />
+                Distance Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {(() => {
+                  const buckets = distanceDistribution as any[];
+                  const maxCount = Math.max(...buckets.map((b: any) => Number(b.count)));
+                  const total = buckets.reduce((s: number, b: any) => s + Number(b.count), 0);
+                  const colors = [
+                    "bg-blue-300", "bg-blue-400", "bg-blue-500", "bg-blue-600", "bg-indigo-500", "bg-violet-500",
+                  ];
+                  return buckets.map((b: any, i: number) => {
+                    const count = Number(b.count);
+                    const pct = (count / maxCount) * 100;
+                    const sharePct = ((count / total) * 100).toFixed(0);
+                    return (
+                      <div key={b.bucket} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-20 text-right font-mono">{b.bucket}</span>
+                        <div className="flex-1 h-5 bg-muted rounded-sm overflow-hidden">
+                          <div
+                            className={`h-full ${colors[i] || "bg-primary"} rounded-sm`}
+                            style={{ width: `${Math.max(pct, 3)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs w-8 text-right font-medium">{count}</span>
+                        <span className="text-xs w-10 text-right text-muted-foreground">{sharePct}%</span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Cadence & Stride + Training Effect */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -794,6 +983,59 @@ export default async function RunningPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Yearly Summary */}
+      {(yearlyStats as any[]).length > 1 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-blue-400" />
+              Year-over-Year Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/50">
+                    <th className="text-left py-2 text-xs font-medium text-muted-foreground">Year</th>
+                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Runs</th>
+                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Distance</th>
+                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Avg Pace</th>
+                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Avg HR</th>
+                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Longest</th>
+                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Calories</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(yearlyStats as any[]).map((y: any, i: number) => {
+                    const prevYear = (yearlyStats as any[])[i + 1];
+                    const kmDiff = prevYear ? Number(y.total_km) - Number(prevYear.total_km) : null;
+                    return (
+                      <tr key={y.year} className="border-b border-border/20 hover:bg-muted/30">
+                        <td className="py-2 font-medium">{y.year}</td>
+                        <td className="py-2 text-right">{Number(y.runs)}</td>
+                        <td className="py-2 text-right">
+                          {Number(y.total_km).toFixed(0)} km
+                          {kmDiff !== null && (
+                            <span className={`ml-1 text-xs ${kmDiff >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {kmDiff >= 0 ? "+" : ""}{kmDiff.toFixed(0)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right font-mono">{y.avg_pace ? formatPace(Number(y.avg_pace)) : "—"}</td>
+                        <td className="py-2 text-right">{y.avg_hr ? Math.round(Number(y.avg_hr)) : "—"}</td>
+                        <td className="py-2 text-right">{Number(y.longest_km).toFixed(1)} km</td>
+                        <td className="py-2 text-right text-muted-foreground">{y.total_cal ? Math.round(Number(y.total_cal)).toLocaleString() : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Runs Table */}
       <Card>

@@ -644,7 +644,7 @@ export default async function Home() {
             </CardHeader>
             <CardContent>
               <StepsTrendChart
-                data={(stepsTrend as any[]).map((s: any) => ({
+                data={(stepsTrend as any[]).slice(-90).map((s: any) => ({
                   date: s.date,
                   steps: Number(s.steps),
                 }))}
@@ -668,7 +668,7 @@ export default async function Home() {
             </CardHeader>
             <CardContent>
               <CalorieTrendChart
-                data={(calorieTrend as any[]).map((c: any) => ({
+                data={(calorieTrend as any[]).slice(-90).map((c: any) => ({
                   date: c.date,
                   active: Number(c.active),
                   bmr: Number(c.bmr),
