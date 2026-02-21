@@ -205,6 +205,21 @@ async function getMuscleGroupVolume() {
   return rows;
 }
 
+async function getWorkoutFrequencyByWeek() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      DATE_TRUNC('week', (raw_json->>'start_time')::timestamp)::date as week,
+      COUNT(*) as workouts,
+      ROUND(AVG(EXTRACT(EPOCH FROM ((raw_json->>'end_time')::timestamp - (raw_json->>'start_time')::timestamp)) / 60)::numeric) as avg_duration
+    FROM hevy_raw_data
+    WHERE endpoint_name = 'workout'
+    GROUP BY week
+    ORDER BY week ASC
+  `;
+  return rows;
+}
+
 async function getTrainingCalendar() {
   const sql = getDb();
   const rows = await sql`
@@ -252,7 +267,7 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
 }
 
 export default async function WorkoutsPage() {
-  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups] =
+  const [recent, weeklyVolume, progression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups, weeklyFreq] =
     await Promise.all([
       getRecentWorkouts(),
       getWeeklyVolume(),
@@ -263,6 +278,7 @@ export default async function WorkoutsPage() {
       getExercisePRs(),
       getTrainingCalendar(),
       getMuscleGroupVolume(),
+      getWorkoutFrequencyByWeek(),
     ]);
 
   const totalWeeks = stats
@@ -388,6 +404,56 @@ export default async function WorkoutsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Weekly Workout Frequency */}
+      {(weeklyFreq as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-blue-400" />
+              Weekly Workout Frequency
+              <span className="ml-auto text-xs font-normal">
+                {(() => {
+                  const recent12 = (weeklyFreq as any[]).slice(-12);
+                  const avg = recent12.reduce((s: number, w: any) => s + Number(w.workouts), 0) / recent12.length;
+                  return `12-week avg: ${avg.toFixed(1)}/week`;
+                })()}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-[2px] h-24">
+              {(weeklyFreq as any[]).slice(-52).map((w: any, i: number) => {
+                const count = Number(w.workouts);
+                const maxW = Math.max(...(weeklyFreq as any[]).slice(-52).map((x: any) => Number(x.workouts)));
+                const pct = maxW > 0 ? (count / maxW) * 100 : 0;
+                const weekDate = new Date(w.week);
+                const label = weekDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                const color = count >= 4 ? "bg-green-500" :
+                  count >= 3 ? "bg-green-400/80" :
+                  count >= 2 ? "bg-primary/60" :
+                  count >= 1 ? "bg-primary/30" : "bg-muted/30";
+                return (
+                  <div key={i} className="flex-1 flex items-end justify-center" style={{ height: "80px" }}>
+                    <div
+                      className={`w-full rounded-t-sm ${color}`}
+                      style={{ height: `${Math.max(pct, count > 0 ? 6 : 0)}%` }}
+                      title={`${label}: ${count} workouts · ${w.avg_duration}m avg`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground justify-center">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary/30" /> 1</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary/60" /> 2</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-green-400/80" /> 3</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-green-500" /> 4+</span>
+              <span className="text-muted-foreground/50 ml-1">workouts/week</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Muscle Group Distribution */}
       {muscleGroups.length > 0 && (

@@ -243,6 +243,29 @@ async function getSleepSchedule() {
   });
 }
 
+async function getWeekdayWeekendSleep() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      CASE
+        WHEN EXTRACT(DOW FROM date) IN (0, 6) THEN 'weekend'
+        ELSE 'weekday'
+      END as day_type,
+      AVG((raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::float) / 3600.0 as avg_hours,
+      AVG((raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'value')::float) as avg_score,
+      AVG((raw_json->'dailySleepDTO'->>'deepSleepSeconds')::float /
+          NULLIF((raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::float, 0) * 100) as avg_deep_pct,
+      COUNT(*) as nights
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'sleep_data'
+      AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+    GROUP BY day_type
+  `;
+  const result: Record<string, any> = {};
+  for (const r of rows) result[r.day_type] = r;
+  return result;
+}
+
 function formatDuration(seconds: number) {
   const h = Math.floor(seconds / 3600);
   const m = Math.round((seconds % 3600) / 60);
@@ -265,7 +288,7 @@ function qualityBadge(quality: string | null) {
 }
 
 export default async function SleepPage() {
-  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration, spo2Trend] =
+  const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration, spo2Trend, weekdayWeekend] =
     await Promise.all([
       getSleepStats(),
       getSleepTrend(),
@@ -279,6 +302,7 @@ export default async function SleepPage() {
       getSleepSchedule(),
       getRespirationTrend(),
       getSpO2Trend(),
+      getWeekdayWeekendSleep(),
     ]);
 
   return (
@@ -436,6 +460,44 @@ export default async function SleepPage() {
               <span className="flex items-center gap-1">
                 <span className="w-3 h-1 rounded" style={{ background: "hsl(40, 80%, 55%)", display: "inline-block" }} /> Wake Time
               </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Weekday vs Weekend Sleep */}
+      {weekdayWeekend.weekday && weekdayWeekend.weekend && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Moon className="h-4 w-4 text-indigo-400" />
+              Weekday vs Weekend Sleep
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: "Avg Duration", weekday: `${Number(weekdayWeekend.weekday.avg_hours).toFixed(1)}h`, weekend: `${Number(weekdayWeekend.weekend.avg_hours).toFixed(1)}h`, diff: Number(weekdayWeekend.weekend.avg_hours) - Number(weekdayWeekend.weekday.avg_hours) },
+                { label: "Avg Score", weekday: Math.round(Number(weekdayWeekend.weekday.avg_score)), weekend: Math.round(Number(weekdayWeekend.weekend.avg_score)), diff: Number(weekdayWeekend.weekend.avg_score) - Number(weekdayWeekend.weekday.avg_score) },
+                { label: "Deep Sleep %", weekday: `${Number(weekdayWeekend.weekday.avg_deep_pct).toFixed(0)}%`, weekend: `${Number(weekdayWeekend.weekend.avg_deep_pct).toFixed(0)}%`, diff: Number(weekdayWeekend.weekend.avg_deep_pct) - Number(weekdayWeekend.weekday.avg_deep_pct) },
+              ].map((metric) => (
+                <div key={metric.label} className="text-center">
+                  <div className="text-xs text-muted-foreground mb-2">{metric.label}</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-lg font-bold">{metric.weekday}</div>
+                      <div className="text-[10px] text-muted-foreground">Weekday</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-bold">{metric.weekend}</div>
+                      <div className="text-[10px] text-muted-foreground">Weekend</div>
+                    </div>
+                  </div>
+                  <div className={`text-xs mt-1 ${metric.diff > 0 ? "text-green-400" : metric.diff < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                    {metric.diff > 0 ? "+" : ""}{typeof metric.diff === "number" ? metric.diff.toFixed(1) : metric.diff} on weekends
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
