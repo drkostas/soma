@@ -207,6 +207,26 @@ async function getTimeBreakdown() {
   return rows;
 }
 
+async function getSwimmingSessions() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      (raw_json->>'startTimeLocal')::text as date,
+      raw_json->>'activityName' as name,
+      (raw_json->>'distance')::float as distance_m,
+      (raw_json->>'duration')::float / 60.0 as duration_min,
+      (raw_json->>'averageHR')::float as avg_hr,
+      (raw_json->>'calories')::float as calories,
+      raw_json->>'averageSwolf' as avg_swolf,
+      raw_json->>'averageStrokeCount' as avg_strokes
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' IN ('lap_swimming', 'swimming', 'open_water_swimming')
+    ORDER BY (raw_json->>'startTimeLocal')::text DESC
+  `;
+  return rows;
+}
+
 async function getWalkingSessions() {
   const sql = getDb();
   const rows = await sql`
@@ -284,7 +304,7 @@ function extractResort(name: string): string {
 }
 
 export default async function ActivitiesPage() {
-  const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports, cyclingSessions, timeBreakdown, walkingSessions] =
+  const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports, cyclingSessions, timeBreakdown, walkingSessions, swimmingSessions] =
     await Promise.all([
       getActivitySummary(),
       getKiteSessions(),
@@ -295,6 +315,7 @@ export default async function ActivitiesPage() {
       getCyclingSessions(),
       getTimeBreakdown(),
       getWalkingSessions(),
+      getSwimmingSessions(),
     ]);
 
   const totalSessions = summary.reduce((s, r) => s + Number(r.count), 0);
@@ -924,6 +945,56 @@ export default async function ActivitiesPage() {
                       <span>{formatDuration(Number(r.duration_min))}</span>
                       {Number(r.avg_speed_kmh) > 0 && <span>{Number(r.avg_speed_kmh).toFixed(0)} km/h</span>}
                       <span className="w-20 text-right">{new Date(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Swimming Section */}
+      {(swimmingSessions as any[]).length >= 3 && (
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+            <Waves className="h-5 w-5 text-blue-400" />
+            Swimming
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {(() => {
+              const swims = swimmingSessions as any[];
+              const totalDist = swims.reduce((s: number, sw: any) => s + Number(sw.distance_m || 0), 0);
+              const avgDist = totalDist / swims.length;
+              const totalDuration = swims.reduce((s: number, sw: any) => s + Number(sw.duration_min || 0), 0);
+              const totalCal = swims.reduce((s: number, sw: any) => s + Number(sw.calories || 0), 0);
+              return (
+                <>
+                  <StatCard title="Total Swims" value={swims.length} icon={<Waves className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Total Distance" value={`${(totalDist / 1000).toFixed(1)} km`} subtitle={`${Math.round(totalDist)}m`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Avg Distance" value={`${Math.round(avgDist)}m`} icon={<Activity className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Total Time" value={`${Math.round(totalDuration / 60)}h`} subtitle={`${Math.round(totalCal).toLocaleString()} kcal`} icon={<Clock className="h-4 w-4 text-blue-400" />} />
+                </>
+              );
+            })()}
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground">All Swim Sessions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {(swimmingSessions as any[]).map((sw: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-sm border-b border-border/20 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Waves className="h-3.5 w-3.5 text-blue-400" />
+                      <span className="font-medium">{sw.name || "Pool Swim"}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{Math.round(Number(sw.distance_m))}m</span>
+                      <span>{Math.round(Number(sw.duration_min))} min</span>
+                      {Number(sw.avg_hr) > 0 && <span>{Math.round(Number(sw.avg_hr))} bpm</span>}
+                      <span className="w-24 text-right">{new Date(sw.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
                     </div>
                   </div>
                 ))}
