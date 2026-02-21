@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ZAxis,
+  Legend,
 } from "recharts";
 
 interface HRPaceEntry {
@@ -25,6 +26,17 @@ function formatPace(mins: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+const YEAR_COLORS: Record<string, string> = {
+  "2026": "#22d3ee",
+  "2025": "#4ade80",
+  "2024": "#facc15",
+  "2023": "#f97316",
+  "2022": "#a78bfa",
+  "2021": "#f472b6",
+  "2020": "#94a3b8",
+  "2019": "#6ee7b7",
+};
+
 export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
   if (!data || data.length === 0) {
     return (
@@ -34,13 +46,21 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
     );
   }
 
-  const chartData = data.map((d) => ({
-    pace: Number(d.pace.toFixed(2)),
-    hr: Math.round(d.hr),
-    distance: Number(d.distance.toFixed(1)),
-    name: d.name,
-    date: d.date,
-  }));
+  // Group by year for color coding
+  const byYear = new Map<string, any[]>();
+  for (const d of data) {
+    const year = d.date.slice(0, 4);
+    if (!byYear.has(year)) byYear.set(year, []);
+    byYear.get(year)!.push({
+      pace: Number(d.pace.toFixed(2)),
+      hr: Math.round(d.hr),
+      distance: Number(d.distance.toFixed(1)),
+      name: d.name,
+      date: d.date,
+    });
+  }
+
+  const years = Array.from(byYear.keys()).sort();
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -64,7 +84,7 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
           domain={["dataMin - 5", "dataMax + 5"]}
           label={{ value: "Avg HR (bpm)", angle: -90, position: "insideLeft", className: "text-xs fill-muted-foreground" }}
         />
-        <ZAxis type="number" dataKey="distance" range={[40, 200]} />
+        <ZAxis type="number" dataKey="distance" range={[30, 160]} />
         <Tooltip
           content={({ active, payload }) => {
             if (!active || !payload?.[0]) return null;
@@ -80,11 +100,20 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
             );
           }}
         />
-        <Scatter
-          data={chartData}
-          fill="hsl(var(--primary))"
-          fillOpacity={0.7}
+        <Legend
+          wrapperStyle={{ fontSize: "11px" }}
+          iconType="circle"
+          iconSize={8}
         />
+        {years.map((year) => (
+          <Scatter
+            key={year}
+            name={year}
+            data={byYear.get(year)}
+            fill={YEAR_COLORS[year] || "#888"}
+            fillOpacity={year === years[years.length - 1] ? 0.8 : 0.4}
+          />
+        ))}
       </ScatterChart>
     </ResponsiveContainer>
   );
