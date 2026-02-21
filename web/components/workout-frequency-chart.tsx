@@ -41,11 +41,11 @@ export function WorkoutFrequencyChart({ data }: { data: FrequencyEntry[] }) {
           tickFormatter={(m) => {
             const [year, month] = m.split("-");
             const mo = parseInt(month);
-            const months = ["", "J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-            if (mo === 1) return `'${year.slice(2)}`;
+            const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            if (mo === 1) return `Jan '${year.slice(2)}`;
             return months[mo];
           }}
-          interval={Math.max(0, Math.floor(chartData.length / 8))}
+          interval={Math.max(0, Math.floor(chartData.length / 6))}
         />
         <YAxis hide />
         <Tooltip
