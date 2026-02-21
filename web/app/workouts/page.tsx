@@ -113,6 +113,7 @@ async function getTopExercises() {
       jsonb_array_elements(raw_json->'exercises') as e,
       jsonb_array_elements(e->'sets') as s
     WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - INTERVAL '12 months'
       AND s->>'type' = 'normal'
       AND (s->>'weight_kg')::float > 0
     GROUP BY e->>'title'
@@ -141,25 +142,29 @@ async function getProgramSplit() {
 async function getExercisePRs() {
   const sql = getDb();
   const rows = await sql`
-    SELECT
-      e->>'title' as exercise,
-      MAX((s->>'weight_kg')::float) as pr_weight,
-      MAX((s->>'reps')::int) FILTER (WHERE (s->>'weight_kg')::float = (
-        SELECT MAX((s2->>'weight_kg')::float)
-        FROM hevy_raw_data h2,
-          jsonb_array_elements(h2.raw_json->'exercises') e2,
-          jsonb_array_elements(e2->'sets') s2
-        WHERE h2.endpoint_name = 'workout' AND e2->>'title' = e->>'title' AND s2->>'type' = 'normal'
-      )) as reps_at_pr
-    FROM hevy_raw_data,
-      jsonb_array_elements(raw_json->'exercises') as e,
-      jsonb_array_elements(e->'sets') as s
-    WHERE endpoint_name = 'workout'
-      AND s->>'type' = 'normal'
-      AND (s->>'weight_kg')::float > 0
-    GROUP BY e->>'title'
-    HAVING MAX((s->>'weight_kg')::float) >= 20
-    ORDER BY MAX((s->>'weight_kg')::float) DESC
+    WITH all_sets AS (
+      SELECT
+        e->>'title' as exercise,
+        (s->>'weight_kg')::float as weight,
+        (s->>'reps')::int as reps
+      FROM hevy_raw_data,
+        jsonb_array_elements(raw_json->'exercises') as e,
+        jsonb_array_elements(e->'sets') as s
+      WHERE endpoint_name = 'workout'
+        AND s->>'type' = 'normal'
+        AND (s->>'weight_kg')::float > 0
+    ),
+    maxes AS (
+      SELECT exercise, MAX(weight) as pr_weight
+      FROM all_sets
+      GROUP BY exercise
+      HAVING MAX(weight) >= 20
+    )
+    SELECT m.exercise, m.pr_weight, MAX(a.reps) as reps_at_pr
+    FROM maxes m
+    JOIN all_sets a ON a.exercise = m.exercise AND a.weight = m.pr_weight
+    GROUP BY m.exercise, m.pr_weight
+    ORDER BY m.pr_weight DESC
     LIMIT 12
   `;
   return rows;
@@ -189,6 +194,7 @@ async function getMuscleGroupVolume() {
         jsonb_array_elements(raw_json->'exercises') as e,
         jsonb_array_elements(e->'sets') as s
       WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - INTERVAL '6 months'
         AND s->>'type' = 'normal'
         AND (s->>'weight_kg')::float > 0
         AND (s->>'reps')::int > 0
@@ -242,6 +248,7 @@ async function getMonthlyMuscleVolume() {
         jsonb_array_elements(raw_json->'exercises') as e,
         jsonb_array_elements(e->'sets') as s
       WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - INTERVAL '12 months'
         AND s->>'type' = 'normal'
         AND (s->>'weight_kg')::float > 0
         AND (s->>'reps')::int > 0

@@ -1171,12 +1171,14 @@ export default async function RunningPage() {
                         <span className="text-xs text-muted-foreground w-10 text-right font-mono">
                           km {s.km}
                         </span>
-                        <div className="flex-1 h-5 bg-muted/30 rounded-sm overflow-hidden relative">
-                          <div
-                            className={`h-full ${barColor} rounded-sm transition-all`}
-                            style={{ width: `${normalizedWidth}%` }}
-                          />
-                          <span className="absolute inset-y-0 right-2 flex items-center text-[10px] font-mono text-muted-foreground">
+                        <div className="flex-1 flex items-center gap-1">
+                          <div className="flex-1 h-5 bg-muted/30 rounded-sm overflow-hidden">
+                            <div
+                              className={`h-full ${barColor} rounded-sm transition-all`}
+                              style={{ width: `${normalizedWidth}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground w-14 text-right shrink-0">
                             {formatPace(pace)}/km
                           </span>
                         </div>

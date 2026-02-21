@@ -40,7 +40,7 @@ export function HRZoneChart({ zones }: { zones: HRZone[] }) {
         const pct = totalSeconds > 0 ? (z.seconds / totalSeconds) * 100 : 0;
         return (
           <div key={z.zone} className="flex items-center gap-2 text-xs">
-            <span className="w-16 text-muted-foreground truncate">
+            <span className="w-24 text-muted-foreground">
               Z{z.zone} {ZONE_NAMES[i] || ""}
             </span>
             <div className="flex-1 h-5 bg-muted rounded-sm overflow-hidden">

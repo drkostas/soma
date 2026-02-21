@@ -63,9 +63,10 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
         <XAxis
           dataKey="date"
           tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
-          tickFormatter={(d) =>
-            new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-          }
+          tickFormatter={(d) => {
+            const date = new Date(d);
+            return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+          }}
           interval={Math.max(Math.floor(chartData.length / 6), 1)}
         />
         <YAxis

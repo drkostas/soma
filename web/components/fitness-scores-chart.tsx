@@ -40,14 +40,14 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+      <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
         <XAxis
           dataKey="date"
           tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
           tickFormatter={(d: string) => {
             const date = new Date(d);
-            return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
           }}
           interval={Math.max(Math.floor(chartData.length / 6), 1)}
         />
@@ -56,14 +56,13 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
           tick={{ fontSize: 10, fill: "hsl(210, 80%, 60%)" }}
           orientation="left"
           domain={[Math.floor(endMin - endPad), Math.ceil(endMax + endPad)]}
-          label={{ value: "Endurance", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(210, 80%, 60%)" } }}
         />
         <YAxis
           yAxisId="hill"
           tick={{ fontSize: 10, fill: "hsl(25, 80%, 55%)" }}
           orientation="right"
           domain={[Math.floor(hillMin - hillPad), Math.ceil(hillMax + hillPad)]}
-          label={{ value: "Hill", angle: 90, position: "insideRight", style: { fontSize: 10, fill: "hsl(25, 80%, 55%)" } }}
+          width={35}
         />
         <Tooltip
           contentStyle={{
