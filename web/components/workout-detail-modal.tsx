@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Sheet,
   SheetContent,
@@ -58,6 +58,25 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
     }
   }
 
+  // Compute avg HR for each Garmin active set from the HR timeline
+  const garminSetAvgHrs = useMemo(() => {
+    if (!data?.garmin?.hr_timeline || !data?.garmin?.exercise_sets) return [];
+    const timeline = data.garmin.hr_timeline as Array<{elapsed_sec: number; hr: number}>;
+    const activeSets = (data.garmin.exercise_sets as Array<any>).filter(
+      (s: any) => s.set_type === "ACTIVE"
+    );
+
+    return activeSets.map((s: any) => {
+      const startSec = s.start_sec;
+      const endSec = s.start_sec + s.duration_sec;
+      const hrInSet = timeline.filter(
+        (p) => p.elapsed_sec >= startSec && p.elapsed_sec <= endSec
+      );
+      if (hrInSet.length === 0) return null;
+      return Math.round(hrInSet.reduce((sum, p) => sum + p.hr, 0) / hrInSet.length);
+    });
+  }, [data]);
+
   return (
     <Sheet open={!!workoutId} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent className="w-full sm:max-w-lg">
@@ -99,64 +118,79 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     <p className="text-sm">No exercise data recorded</p>
                   </div>
                 )}
-                {exercises.map((ex: any, ei: number) => {
-                  const sets = Array.isArray(ex.sets) ? ex.sets : [];
-                  const maxWeight = Math.max(
-                    ...sets.filter((s: any) => s.weight_kg > 0).map((s: any) => s.weight_kg),
-                    0
-                  );
-                  return (
-                    <div key={ei} className="border border-border/50 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="font-medium text-sm">{ex.title}</div>
-                        {ex.muscle_group && (
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {ex.muscle_group}
-                          </Badge>
+                {(() => {
+                  let garminSetIdx = 0;
+                  return exercises.map((ex: any, ei: number) => {
+                    const sets = Array.isArray(ex.sets) ? ex.sets : [];
+                    const maxWeight = Math.max(
+                      ...sets.filter((s: any) => s.weight_kg > 0).map((s: any) => s.weight_kg),
+                      0
+                    );
+                    return (
+                      <div key={ei} className="border border-border/50 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="font-medium text-sm">{ex.title}</div>
+                          {ex.muscle_group && (
+                            <Badge variant="outline" className="text-xs capitalize">
+                              {ex.muscle_group}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          {sets.map((s: any, si: number) => {
+                            const avgHr =
+                              s.type !== "warmup"
+                                ? garminSetAvgHrs[garminSetIdx++] ?? null
+                                : null;
+                            return (
+                              <div
+                                key={si}
+                                className={`flex items-center gap-3 text-xs py-1 ${
+                                  s.type === "warmup"
+                                    ? "text-muted-foreground"
+                                    : ""
+                                }`}
+                              >
+                                <span className="w-6">
+                                  {s.type === "warmup" ? "W" : si + 1 - sets.filter((ss: any, ssi: number) => ssi < si && ss.type === "warmup").length}
+                                </span>
+                                <span className="w-16">
+                                  {s.weight_kg > 0
+                                    ? `${Number(s.weight_kg).toFixed(1)} kg`
+                                    : "BW"}
+                                </span>
+                                <span className="w-10">
+                                  {s.reps > 0 ? `${s.reps} reps` : "—"}
+                                </span>
+                                {s.type === "warmup" && (
+                                  <Badge variant="secondary" className="text-[10px] h-4">
+                                    warmup
+                                  </Badge>
+                                )}
+                                {s.weight_kg === maxWeight && s.type !== "warmup" && maxWeight > 0 && (
+                                  <Badge className="text-[10px] h-4 bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                                    top
+                                  </Badge>
+                                )}
+                                {avgHr != null && (
+                                  <span className="text-[10px] text-red-400 ml-auto flex items-center gap-0.5">
+                                    <HeartPulse className="h-2.5 w-2.5" />
+                                    {avgHr}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {ex.notes && (
+                          <div className="mt-2 text-xs text-muted-foreground italic">
+                            {ex.notes}
+                          </div>
                         )}
                       </div>
-                      <div className="space-y-1">
-                        {sets.map((s: any, si: number) => (
-                          <div
-                            key={si}
-                            className={`flex items-center gap-3 text-xs py-1 ${
-                              s.type === "warmup"
-                                ? "text-muted-foreground"
-                                : ""
-                            }`}
-                          >
-                            <span className="w-6">
-                              {s.type === "warmup" ? "W" : si + 1 - sets.filter((ss: any, ssi: number) => ssi < si && ss.type === "warmup").length}
-                            </span>
-                            <span className="w-16">
-                              {s.weight_kg > 0
-                                ? `${Number(s.weight_kg).toFixed(1)} kg`
-                                : "BW"}
-                            </span>
-                            <span className="w-10">
-                              {s.reps > 0 ? `${s.reps} reps` : "—"}
-                            </span>
-                            {s.type === "warmup" && (
-                              <Badge variant="secondary" className="text-[10px] h-4">
-                                warmup
-                              </Badge>
-                            )}
-                            {s.weight_kg === maxWeight && s.type !== "warmup" && maxWeight > 0 && (
-                              <Badge className="text-[10px] h-4 bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
-                                top
-                              </Badge>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      {ex.notes && (
-                        <div className="mt-2 text-xs text-muted-foreground italic">
-                          {ex.notes}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </TabsContent>
 
               <TabsContent value="summary" className="space-y-4 px-4 pb-8">
