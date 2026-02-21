@@ -43,6 +43,23 @@ export function MonthlyActivityChart({
     );
   }
 
+  const tickMonths = (() => {
+    if (data.length <= 12) return undefined;
+    const seen = new Set<string>();
+    const unique = data.filter((d) => {
+      const [y, m] = String(d.month).split("-");
+      const key = `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m) - 1]} '${y.slice(2)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).map((d) => d.month);
+    if (unique.length > 10) {
+      const step = Math.ceil(unique.length / 10);
+      return unique.filter((_, i) => i % step === 0 || i === unique.length - 1);
+    }
+    return unique;
+  })();
+
   return (
     <ResponsiveContainer width="100%" height={250}>
       <BarChart data={data} margin={{ bottom: 10, left: 0 }}>
@@ -54,6 +71,7 @@ export function MonthlyActivityChart({
             const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
             return `${months[parseInt(m) - 1]} '${y.slice(2)}`;
           }}
+          {...(tickMonths ? { ticks: tickMonths } : {})}
         />
         <YAxis className="text-xs" allowDecimals={false} />
         <Tooltip

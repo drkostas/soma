@@ -334,9 +334,13 @@ function formatDuration(startTime: string, endTime: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    ...(sameYear ? {} : { year: "2-digit" }),
   });
 }
 
