@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { WorkoutFrequencyChart } from "@/components/workout-frequency-chart";
+import { ClickableRecentActivity } from "@/components/clickable-recent-activity";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -112,8 +113,10 @@ async function getActivityCounts() {
 
 async function getRecentActivities() {
   const sql = getDb();
-  const rows = await sql`
+  // Get recent Garmin activities
+  const garminRows = await sql`
     SELECT
+      activity_id::text as activity_id,
       raw_json->'activityType'->>'typeKey' as type_key,
       (raw_json->>'startTimeLocal')::text as date,
       raw_json->>'activityName' as name,
@@ -123,9 +126,36 @@ async function getRecentActivities() {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
-    LIMIT 8
+    LIMIT 12
   `;
-  return rows;
+
+  // Match gym activities with Hevy workout IDs
+  const gymActivityDates = garminRows
+    .filter((r: any) => r.type_key === "strength_training")
+    .map((r: any) => r.date?.slice(0, 10));
+
+  let hevyMap: Record<string, string> = {};
+  if (gymActivityDates.length > 0) {
+    const hevyRows = await sql`
+      SELECT
+        raw_json->>'id' as workout_id,
+        LEFT((raw_json->>'start_time')::text, 10) as day
+      FROM hevy_raw_data
+      WHERE endpoint_name = 'workout'
+      ORDER BY raw_json->>'start_time' DESC
+      LIMIT 20
+    `;
+    for (const r of hevyRows) {
+      hevyMap[r.day] = r.workout_id;
+    }
+  }
+
+  return garminRows.map((r: any) => ({
+    ...r,
+    workout_id: r.type_key === "strength_training"
+      ? hevyMap[r.date?.slice(0, 10)] || null
+      : null,
+  }));
 }
 
 async function getWeeklyTrainingSummary() {
@@ -551,37 +581,18 @@ export default async function Home() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {recentActivities.map((a: any, i: number) => {
-              const icon = ACTIVITY_ICONS[a.type_key] || <Activity className="h-3.5 w-3.5 text-muted-foreground" />;
-              return (
-                <div key={i} className="flex items-center gap-3 text-sm">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted shrink-0">
-                    {icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{a.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(a.date).toLocaleDateString("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </div>
-                  </div>
-                  <div className="text-right text-xs text-muted-foreground shrink-0">
-                    <div>{Number(a.distance_km).toFixed(1)} km</div>
-                    <div>{formatDuration(Number(a.duration_min))}</div>
-                  </div>
-                  {a.calories && (
-                    <div className="text-xs text-muted-foreground w-14 text-right shrink-0">
-                      {Math.round(Number(a.calories))} cal
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <ClickableRecentActivity
+            activities={(recentActivities as any[]).map((a: any) => ({
+              type_key: a.type_key,
+              date: a.date,
+              name: a.name,
+              distance_km: Number(a.distance_km),
+              duration_min: Number(a.duration_min),
+              calories: a.calories ? Number(a.calories) : null,
+              activity_id: a.activity_id,
+              workout_id: a.workout_id || undefined,
+            }))}
+          />
         </CardContent>
       </Card>
     </div>

@@ -3,6 +3,8 @@ import { StatCard } from "@/components/stat-card";
 import { SleepStagesChart } from "@/components/sleep-chart";
 import { SleepScoreChart } from "@/components/sleep-score-chart";
 import { RHRChart } from "@/components/rhr-chart";
+import { HRVChart } from "@/components/hrv-chart";
+import { TrainingReadinessChart } from "@/components/training-readiness-chart";
 import { getDb } from "@/lib/db";
 import {
   Moon,
@@ -415,41 +417,17 @@ export default async function SleepPage() {
                 </div>
               </div>
             </div>
-            <div className="space-y-1.5">
-              {hrvTrend.slice(-21).map((h: any) => {
-                const weekly = Number(h.weekly_avg);
-                const nightly = Number(h.last_night_avg);
-                return (
-                  <div key={h.date} className="flex items-center gap-2 text-xs">
-                    <span className="w-12 text-muted-foreground">
-                      {new Date(h.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                    <div className="flex-1 flex items-center gap-1">
-                      <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden relative">
-                        {nightly > 0 && (
-                          <div
-                            className="absolute h-full bg-emerald-400/60 rounded-full"
-                            style={{ width: `${Math.min((nightly / 120) * 100, 100)}%` }}
-                          />
-                        )}
-                        {weekly > 0 && (
-                          <div
-                            className="absolute h-0.5 top-1/2 -translate-y-1/2 bg-white/40"
-                            style={{ width: `${Math.min((weekly / 120) * 100, 100)}%` }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    <span className="w-16 text-right text-muted-foreground">
-                      {nightly > 0 ? `${nightly}` : "—"} / {weekly > 0 ? weekly : "—"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            <HRVChart
+              data={(hrvTrend as any[]).map((h: any) => ({
+                date: h.date,
+                weekly_avg: Number(h.weekly_avg),
+                last_night_avg: Number(h.last_night_avg),
+                status: h.status,
+              }))}
+            />
             <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400/60" /> Last Night</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-white/40" /> Weekly Avg</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-emerald-400/80" style={{ display: "inline-block" }} /> Weekly Avg</span>
             </div>
           </CardContent>
         </Card>
@@ -501,27 +479,13 @@ export default async function SleepPage() {
                 );
               })()}
             </div>
-            <div className="space-y-1.5">
-              {trainingReadiness.slice(-21).map((tr: any) => {
-                const score = Number(tr.score);
-                const color = score >= 70 ? "bg-green-400" : score >= 40 ? "bg-yellow-400" : "bg-red-400";
-                return (
-                  <div key={tr.date} className="flex items-center gap-2 text-xs">
-                    <span className="w-12 text-muted-foreground">
-                      {new Date(tr.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                    <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${color} rounded-full`}
-                        style={{ width: `${score}%` }}
-                      />
-                    </div>
-                    <span className="w-8 text-right font-medium">{score}</span>
-                    <span className="w-16 text-right text-muted-foreground capitalize">{tr.level?.toLowerCase()}</span>
-                  </div>
-                );
-              })}
-            </div>
+            <TrainingReadinessChart
+              data={(trainingReadiness as any[]).map((tr: any) => ({
+                date: tr.date,
+                score: Number(tr.score),
+                level: tr.level || "",
+              }))}
+            />
           </CardContent>
         </Card>
       )}

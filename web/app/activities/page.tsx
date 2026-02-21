@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { MonthlyActivityChart } from "@/components/monthly-activity-chart";
 import { KiteSpeedChart } from "@/components/kite-speed-chart";
-import { ClickableActivityTable } from "@/components/clickable-activity-table";
+import { PaginatedActivityTable } from "@/components/paginated-activity-table";
 import { getDb } from "@/lib/db";
 import {
   Wind,
@@ -580,7 +580,7 @@ export default async function ActivitiesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ClickableActivityTable
+          <PaginatedActivityTable
             activities={(activities as any[]).map((a: any) => ({
               activity_id: a.activity_id,
               type_key: a.type_key,
