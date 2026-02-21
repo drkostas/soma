@@ -424,7 +424,20 @@ export default async function WorkoutsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <VolumeChart data={weeklyVolume as any} />
+            <VolumeChart data={(() => {
+              const vols = weeklyVolume as any[];
+              if (vols.length <= 52) return vols;
+              // Use last 52 weeks only
+              const recent = vols.slice(-52);
+              // Also cap outliers at 3x median to prevent chart distortion
+              const sorted = [...recent].sort((a, b) => Number(a.total_volume) - Number(b.total_volume));
+              const median = Number(sorted[Math.floor(sorted.length / 2)]?.total_volume || 0);
+              const cap = median * 3;
+              return recent.map(v => ({
+                ...v,
+                total_volume: Math.min(Number(v.total_volume), cap),
+              }));
+            })()} />
           </CardContent>
         </Card>
 
