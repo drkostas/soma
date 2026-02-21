@@ -5,6 +5,7 @@ import { ClickableRecentActivity } from "@/components/clickable-recent-activity"
 import { StepsTrendChart } from "@/components/steps-trend-chart";
 import { CalorieTrendChart } from "@/components/calorie-trend-chart";
 import { WeightTrendChart } from "@/components/weight-trend-chart";
+import { ActivityHeatmap } from "@/components/activity-heatmap";
 import { getDb } from "@/lib/db";
 import {
   Footprints,
@@ -311,6 +312,22 @@ async function getWeightTrend() {
   return rows;
 }
 
+async function getActivityHeatmap() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
+      COUNT(*) as count,
+      array_agg(DISTINCT raw_json->'activityType'->>'typeKey') as types
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 182
+    GROUP BY date
+    ORDER BY date ASC
+  `;
+  return rows;
+}
+
 async function getLastWorkoutDetail() {
   const sql = getDb();
   const rows = await sql`
@@ -396,7 +413,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -413,6 +430,7 @@ export default async function Home() {
       getIntensityMinutes(),
       getWeightTrend(),
       getCalorieTrend(),
+      getActivityHeatmap(),
     ]);
 
   // Merge duplicate activity types
@@ -765,6 +783,32 @@ export default async function Home() {
                 date: w.date,
                 weight_kg: Number(w.weight_kg),
                 body_fat: w.body_fat ? Number(w.body_fat) : null,
+              }))}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Activity Heatmap */}
+      {(heatmapData as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Activity Calendar
+              {streak > 0 && (
+                <span className="ml-auto text-xs font-normal text-primary">
+                  {streak}-day streak
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ActivityHeatmap
+              data={(heatmapData as any[]).map((d: any) => ({
+                date: d.date,
+                count: Number(d.count),
+                types: Array.isArray(d.types) ? d.types : [],
               }))}
             />
           </CardContent>
