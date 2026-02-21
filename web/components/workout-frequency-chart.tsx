@@ -36,13 +36,14 @@ export function WorkoutFrequencyChart({ data }: { data: FrequencyEntry[] }) {
       <BarChart data={chartData}>
         <XAxis
           dataKey="month"
-          className="text-xs"
+          className="text-[10px]"
+          tickLine={false}
           tickFormatter={(m) => {
-            const [, month] = m.split("-");
+            const [year, month] = m.split("-");
             const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            return months[parseInt(month)] || m;
+            return `${months[parseInt(month)]}`;
           }}
-          tick={{ fontSize: 11 }}
+          interval={Math.max(0, Math.floor(chartData.length / 10))}
         />
         <YAxis hide />
         <Tooltip
