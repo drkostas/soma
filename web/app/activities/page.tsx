@@ -532,7 +532,7 @@ export default async function ActivitiesPage() {
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="text-sm font-semibold">{year}</span>
                         <span className="text-xs text-muted-foreground">
-                          {totalCount} sessions · {totalKm.toFixed(0)} km · {totalHrs.toFixed(0)}h
+                          {totalCount} {totalCount === 1 ? "session" : "sessions"} · {totalKm.toFixed(0)} km · {totalHrs.toFixed(0)}h
                         </span>
                       </div>
                       {/* Stacked bar */}
@@ -1048,7 +1048,7 @@ export default async function ActivitiesPage() {
               return (
                 <>
                   <StatCard title="Total Swims" value={swims.length} icon={<Waves className="h-4 w-4 text-blue-400" />} />
-                  <StatCard title="Total Distance" value={`${(totalDist / 1000).toFixed(1)} km`} subtitle={`${Math.round(totalDist)}m`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Total Distance" value={`${(totalDist / 1000).toFixed(1)} km`} subtitle={`${swims.length} sessions`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
                   <StatCard title="Avg Distance" value={`${Math.round(avgDist)}m`} icon={<Activity className="h-4 w-4 text-blue-400" />} />
                   <StatCard title="Total Time" value={`${Math.round(totalDuration / 60)}h`} subtitle={`${Math.round(totalCal).toLocaleString()} kcal`} icon={<Clock className="h-4 w-4 text-blue-400" />} />
                 </>

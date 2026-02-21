@@ -9,6 +9,7 @@ import { BodyBatteryChart } from "@/components/body-battery-chart";
 import { StressChart } from "@/components/stress-chart";
 import { SleepScheduleChart } from "@/components/sleep-schedule-chart";
 import { SpO2Chart } from "@/components/spo2-chart";
+import { RespirationChart } from "@/components/respiration-chart";
 import { getDb } from "@/lib/db";
 import {
   Moon,
@@ -763,32 +764,10 @@ export default async function SleepPage() {
                 </div>
               );
             })()}
-            {/* Mini trend bars for sleep respiration */}
-            <div className="flex items-end gap-[3px] h-16">
-              {(respiration as any[]).slice(-30).map((d: any, i: number) => {
-                const val = Number(d.sleep_resp || 0);
-                const norm = Math.max(((val - 8) / 10) * 100, 5);
-                return (
-                  <div
-                    key={i}
-                    className="flex-1 bg-sky-400/60 rounded-t-sm"
-                    style={{ height: `${Math.min(norm, 100)}%` }}
-                    title={`${d.date}: ${val} breaths/min`}
-                  />
-                );
-              })}
-            </div>
-            <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-              {(() => {
-                const data = (respiration as any[]).slice(-30);
-                return (
-                  <>
-                    <span>{data.length > 0 ? new Date(data[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
-                    <span>Sleep Respiration Trend</span>
-                    <span>{data.length > 0 ? new Date(data[data.length - 1].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
-                  </>
-                );
-              })()}
+            <RespirationChart data={respiration as any[]} />
+            <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-sky-400 inline-block" /> Sleep</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-slate-400 inline-block" style={{ borderTop: "2px dashed" }} /> Awake</span>
             </div>
           </CardContent>
         </Card>
