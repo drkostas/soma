@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { ClickableStatCards } from "@/components/clickable-stat-cards";
 import { InteractiveChartCards } from "@/components/interactive-chart-cards";
 import { ClickableRecentActivity } from "@/components/clickable-recent-activity";
@@ -875,119 +876,81 @@ export default async function HomePage({
       {/* Steps & Calorie Trends */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {(stepsTrend as any[]).length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Footprints className="h-4 w-4" />
-                Daily Steps
-                {weekly?.avg_steps && (
-                  <span className="ml-auto text-xs font-normal">
-                    7-day avg: {Number(weekly.avg_steps).toLocaleString()}
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <StepsTrendChart
-                data={(stepsTrend as any[]).map((s: any) => ({
-                  date: s.date,
-                  steps: Number(s.steps),
-                }))}
-              />
-            </CardContent>
-          </Card>
+          <ExpandableChartCard
+            title="Daily Steps"
+            icon={<Footprints className="h-4 w-4" />}
+            subtitle={weekly?.avg_steps ? `7-day avg: ${Number(weekly.avg_steps).toLocaleString()}` : undefined}
+          >
+            <StepsTrendChart
+              data={(stepsTrend as any[]).map((s: any) => ({
+                date: s.date,
+                steps: Number(s.steps),
+              }))}
+            />
+          </ExpandableChartCard>
         )}
 
         {(calorieTrend as any[]).length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Flame className="h-4 w-4 text-orange-400" />
-                Daily Calories
-                {weekly?.avg_active_cal && (
-                  <span className="ml-auto text-xs font-normal">
-                    7-day active avg: {Number(weekly.avg_active_cal).toLocaleString()} kcal
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CalorieTrendChart
-                data={(calorieTrend as any[]).map((c: any) => ({
-                  date: c.date,
-                  active: Number(c.active),
-                  bmr: Number(c.bmr),
-                }))}
-              />
-            </CardContent>
-          </Card>
+          <ExpandableChartCard
+            title="Daily Calories"
+            icon={<Flame className="h-4 w-4 text-orange-400" />}
+            subtitle={weekly?.avg_active_cal ? `7-day active avg: ${Number(weekly.avg_active_cal).toLocaleString()} kcal` : undefined}
+          >
+            <CalorieTrendChart
+              data={(calorieTrend as any[]).map((c: any) => ({
+                date: c.date,
+                active: Number(c.active),
+                bmr: Number(c.bmr),
+              }))}
+            />
+          </ExpandableChartCard>
         )}
       </div>
 
       {/* RHR + Stress Trends */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {(rhrTrend as any[]).length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <HeartPulse className="h-4 w-4 text-red-400" />
-                Resting Heart Rate
-                {(() => {
-                  const data = (rhrTrend as any[]).filter((r: any) => Number(r.rhr) > 0);
-                  if (data.length === 0) return null;
-                  const latest = Number(data[data.length - 1].rhr);
-                  const avg7d = data.slice(-7).reduce((s: number, r: any) => s + Number(r.rhr), 0) / Math.min(data.length, 7);
-                  return (
-                    <span className="ml-auto text-xs font-normal">
-                      {latest} bpm · avg {Math.round(avg7d)}
-                    </span>
-                  );
-                })()}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+        {(rhrTrend as any[]).length > 0 && (() => {
+          const rhrData = (rhrTrend as any[]).filter((r: any) => Number(r.rhr) > 0);
+          if (rhrData.length === 0) return null;
+          const latest = Number(rhrData[rhrData.length - 1].rhr);
+          const avg7d = rhrData.slice(-7).reduce((s: number, r: any) => s + Number(r.rhr), 0) / Math.min(rhrData.length, 7);
+          return (
+            <ExpandableChartCard
+              title="Resting Heart Rate"
+              icon={<HeartPulse className="h-4 w-4 text-red-400" />}
+              subtitle={`${latest} bpm · avg ${Math.round(avg7d)}`}
+            >
               <RHRChart
-                data={(rhrTrend as any[])
-                  .filter((r: any) => Number(r.rhr) > 0)
-                  .map((r: any) => ({
-                    date: r.date,
-                    rhr: Number(r.rhr),
-                  }))}
+                data={rhrData.map((r: any) => ({
+                  date: r.date,
+                  rhr: Number(r.rhr),
+                }))}
               />
-            </CardContent>
-          </Card>
-        )}
+            </ExpandableChartCard>
+          );
+        })()}
 
-        {(stressTrend as any[]).length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Brain className="h-4 w-4 text-yellow-400" />
-                Stress Trend
-                {(() => {
-                  const data = stressTrend as any[];
-                  if (data.length === 0) return null;
-                  const latest = Number(data[data.length - 1].avg_stress);
-                  const avg7d = data.slice(-7).reduce((s: number, r: any) => s + Number(r.avg_stress), 0) / Math.min(data.length, 7);
-                  return (
-                    <span className="ml-auto text-xs font-normal">
-                      Today: {latest} · avg {Math.round(avg7d)}
-                    </span>
-                  );
-                })()}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+        {(stressTrend as any[]).length > 0 && (() => {
+          const stressData = stressTrend as any[];
+          if (stressData.length === 0) return null;
+          const latest = Number(stressData[stressData.length - 1].avg_stress);
+          const avg7d = stressData.slice(-7).reduce((s: number, r: any) => s + Number(r.avg_stress), 0) / Math.min(stressData.length, 7);
+          return (
+            <ExpandableChartCard
+              title="Stress Trend"
+              icon={<Brain className="h-4 w-4 text-yellow-400" />}
+              subtitle={`Today: ${latest} · avg ${Math.round(avg7d)}`}
+            >
               <StressChart
-                data={(stressTrend as any[]).map((s: any) => ({
+                data={stressData.map((s: any) => ({
                   date: s.date,
                   avg_stress: Number(s.avg_stress),
                   max_stress: Number(s.max_stress),
                 }))}
               />
-            </CardContent>
-          </Card>
-        )}
+            </ExpandableChartCard>
+          );
+        })()}
       </div>
 
       {/* Fitness Metrics Row */}
@@ -1106,36 +1069,28 @@ export default async function HomePage({
       </div>
 
       {/* Body Composition Trend */}
-      {(weightTrend as any[]).length > 0 && (
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Weight className="h-4 w-4 text-blue-400" />
-              Body Composition
-              {(() => {
-                const data = (weightTrend as any[]).filter((w: any) => w.weight_kg > 0);
-                if (data.length === 0) return null;
-                const latest = data[data.length - 1];
-                return (
-                  <span className="ml-auto text-xs font-normal">
-                    {Number(latest.weight_kg).toFixed(1)} kg
-                    {latest.body_fat ? ` · ${Number(latest.body_fat).toFixed(1)}% BF` : ""}
-                  </span>
-                );
-              })()}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+      {(weightTrend as any[]).length > 0 && (() => {
+        const weightData = (weightTrend as any[]).filter((w: any) => w.weight_kg > 0);
+        if (weightData.length === 0) return null;
+        const latest = weightData[weightData.length - 1];
+        const subtitleStr = `${Number(latest.weight_kg).toFixed(1)} kg${latest.body_fat ? ` · ${Number(latest.body_fat).toFixed(1)}% BF` : ""}`;
+        return (
+          <ExpandableChartCard
+            title="Body Composition"
+            icon={<Weight className="h-4 w-4 text-blue-400" />}
+            subtitle={subtitleStr}
+            className="mb-6"
+          >
             <WeightTrendChart
-              data={(weightTrend as any[]).filter((w: any) => w.weight_kg > 0).map((w: any) => ({
+              data={weightData.map((w: any) => ({
                 date: w.date,
                 weight_kg: Number(w.weight_kg),
                 body_fat: w.body_fat ? Number(w.body_fat) : null,
               }))}
             />
-          </CardContent>
-        </Card>
-      )}
+          </ExpandableChartCard>
+        );
+      })()}
 
       {/* Floors Climbed */}
       {(floorsTrend as any[]).length > 0 && (

@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { StatCard } from "@/components/stat-card";
 import { MonthlyActivityChart } from "@/components/monthly-activity-chart";
 import { KiteSpeedChart } from "@/components/kite-speed-chart";
@@ -486,16 +487,12 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
       </div>
 
       {/* Monthly Distribution */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Monthly Activity Distribution
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MonthlyActivityChart data={monthlyData} sports={sports} />
-        </CardContent>
-      </Card>
+      <ExpandableChartCard
+        title="Monthly Activity Distribution"
+        className="mb-6"
+      >
+        <MonthlyActivityChart data={monthlyData} sports={sports} />
+      </ExpandableChartCard>
 
       {/* Yearly Sport Breakdown */}
       {(yearlySports as any[]).length > 0 && (() => {
@@ -634,16 +631,12 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Speed Progression */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Max Speed Progression
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <KiteSpeedChart data={kiteData} />
-              </CardContent>
-            </Card>
+            <ExpandableChartCard
+              title="Max Speed Progression"
+              icon={<Gauge className="h-4 w-4 text-cyan-400" />}
+            >
+              <KiteSpeedChart data={kiteData} />
+            </ExpandableChartCard>
 
             {/* Spots & Sessions + Wind */}
             <Card>

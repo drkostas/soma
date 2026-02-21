@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { Badge } from "@/components/ui/badge";
 import { getDb } from "@/lib/db";
 import { VolumeChart } from "@/components/volume-chart";
@@ -478,48 +479,24 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Weekly Volume */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Flame className="h-4 w-4 text-orange-400" />
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Weekly Volume (kg)
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <VolumeChart data={(() => {
-              const vols = weeklyVolume as any[];
-              if (vols.length <= 52) return vols;
-              // Use last 52 weeks only
-              const recent = vols.slice(-52);
-              // Also cap outliers at 3x median to prevent chart distortion
-              const sorted = [...recent].sort((a, b) => Number(a.total_volume) - Number(b.total_volume));
-              const median = Number(sorted[Math.floor(sorted.length / 2)]?.total_volume || 0);
-              const cap = median * 3;
-              return recent.map(v => ({
-                ...v,
-                total_volume: Math.min(Number(v.total_volume), cap),
-              }));
-            })()} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Weekly Volume (kg)" icon={<Flame className="h-4 w-4 text-orange-400" />}>
+          <VolumeChart data={(() => {
+            const vols = weeklyVolume as any[];
+            if (vols.length <= 52) return vols;
+            const recent = vols.slice(-52);
+            const sorted = [...recent].sort((a, b) => Number(a.total_volume) - Number(b.total_volume));
+            const median = Number(sorted[Math.floor(sorted.length / 2)]?.total_volume || 0);
+            const cap = median * 3;
+            return recent.map(v => ({
+              ...v,
+              total_volume: Math.min(Number(v.total_volume), cap),
+            }));
+          })()} />
+        </ExpandableChartCard>
 
-        {/* Exercise Progression */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-400" />
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Strength Progression (max weight per session)
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ExerciseProgressChart data={progression as any} />
-          </CardContent>
-        </Card>
+        <ExpandableChartCard title="Strength Progression (max weight per session)" icon={<TrendingUp className="h-4 w-4 text-green-400" />}>
+          <ExerciseProgressChart data={progression as any} />
+        </ExpandableChartCard>
       </div>
 
       {/* Weekly Workout Frequency */}
