@@ -1511,6 +1511,9 @@ export default async function RunningPage() {
                         {!isActive && (
                           <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">retired</span>
                         )}
+                        {isActive && pct && pct >= 100 && (
+                          <span className="text-[10px] text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded font-medium">Replace</span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {Number(shoe.runs)} runs · {totalKm.toFixed(0)} km
@@ -1528,7 +1531,11 @@ export default async function RunningPage() {
                       {maxKm ? (
                         <>
                           <span>{totalKm.toFixed(0)} / {maxKm.toFixed(0)} km ({wornPct.toFixed(0)}%)</span>
-                          <span>{Math.max(0, maxKm - totalKm).toFixed(0)} km remaining</span>
+                          <span className={totalKm > maxKm ? "text-red-400" : ""}>
+                            {totalKm > maxKm
+                              ? `${(totalKm - maxKm).toFixed(0)} km over limit`
+                              : `${(maxKm - totalKm).toFixed(0)} km remaining`}
+                          </span>
                         </>
                       ) : (
                         <span>{totalKm.toFixed(0)} km total</span>
