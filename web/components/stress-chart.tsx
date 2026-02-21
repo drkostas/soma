@@ -25,6 +25,11 @@ export function StressChart({ data }: { data: StressPoint[] }) {
     max: Number(d.max_stress),
   }));
 
+  const spanDays = chartData.length > 1
+    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
   return (
     <ResponsiveContainer width="100%" height={200}>
       <AreaChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
@@ -41,7 +46,9 @@ export function StressChart({ data }: { data: StressPoint[] }) {
           tickLine={false}
           tickFormatter={(d: string) => {
             const date = new Date(d);
-            return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
           interval={Math.max(Math.floor(chartData.length / 5), 1)}
         />

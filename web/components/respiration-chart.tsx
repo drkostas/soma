@@ -27,13 +27,16 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
     );
   }
 
-  const chartData = data
-    .filter((d) => d.sleep_resp && Number(d.sleep_resp) > 0)
-    .map((d) => ({
-      date: new Date(d.date).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      }),
+  const filtered = data.filter((d) => d.sleep_resp && Number(d.sleep_resp) > 0);
+  const spanDays = filtered.length > 1
+    ? (new Date(filtered[filtered.length - 1].date).getTime() - new Date(filtered[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
+  const chartData = filtered.map((d) => ({
+      date: new Date(d.date).toLocaleDateString("en-US", longRange
+        ? { month: "short", year: "2-digit" }
+        : { month: "short", day: "numeric" }),
       sleep: Number(d.sleep_resp),
       awake: d.awake_resp ? Number(d.awake_resp) : null,
       low: d.low_resp ? Number(d.low_resp) : null,

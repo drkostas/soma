@@ -43,6 +43,11 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
   // Get last 30 data points
   const recent = chartData.slice(-30);
 
+  const spanDays = recent.length > 1
+    ? (new Date(recent[recent.length - 1].date).getTime() - new Date(recent[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
   return (
     <ResponsiveContainer width="100%" height={220}>
       <AreaChart data={recent} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
@@ -53,7 +58,9 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
           tickLine={false}
           tickFormatter={(d: string) => {
             const date = new Date(d);
-            return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            return longRange
+              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
           interval={Math.max(Math.floor(recent.length / 5), 1)}
         />
