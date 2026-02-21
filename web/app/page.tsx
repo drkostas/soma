@@ -312,6 +312,20 @@ async function getWeightTrend() {
   return rows;
 }
 
+async function getTrainingByDayOfWeek() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      EXTRACT(DOW FROM (raw_json->>'startTimeLocal')::timestamp) as dow,
+      COUNT(*) as count
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+    GROUP BY dow
+    ORDER BY dow ASC
+  `;
+  return rows;
+}
+
 async function getActivityHeatmap() {
   const sql = getDb();
   const rows = await sql`
@@ -429,7 +443,7 @@ function formatDuration(mins: number) {
 }
 
 export default async function Home() {
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData] =
+  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
@@ -447,6 +461,7 @@ export default async function Home() {
       getWeightTrend(),
       getCalorieTrend(),
       getActivityHeatmap(),
+      getTrainingByDayOfWeek(),
     ]);
 
   // Merge duplicate activity types
@@ -827,6 +842,56 @@ export default async function Home() {
                 types: Array.isArray(d.types) ? d.types : [],
               }))}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Training Day Distribution */}
+      {(dayOfWeekData as any[]).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Training Days
+              <span className="ml-auto text-xs font-normal">
+                Most active: {(() => {
+                  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                  const sorted = [...(dayOfWeekData as any[])].sort((a, b) => Number(b.count) - Number(a.count));
+                  return sorted.length > 0 ? days[Number(sorted[0].dow)] : "";
+                })()}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-2 h-20">
+              {(() => {
+                const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                const counts = new Array(7).fill(0);
+                for (const row of dayOfWeekData as any[]) {
+                  counts[Number(row.dow)] = Number(row.count);
+                }
+                const max = Math.max(...counts);
+                return counts.map((count, i) => {
+                  const pct = max > 0 ? (count / max) * 100 : 0;
+                  const isMax = count === max;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                      <div className="w-full flex items-end justify-center" style={{ height: "60px" }}>
+                        <div
+                          className={`w-full max-w-[32px] rounded-t-sm transition-all ${
+                            isMax ? "bg-primary" : "bg-primary/40"
+                          }`}
+                          style={{ height: `${Math.max(pct, 4)}%` }}
+                          title={`${days[i]}: ${count} activities`}
+                        />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{days[i]}</span>
+                      <span className="text-[10px] font-medium">{count}</span>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </CardContent>
         </Card>
       )}
