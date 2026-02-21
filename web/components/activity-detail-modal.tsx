@@ -63,7 +63,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
   return (
     <Sheet open={!!activityId} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent className="w-full sm:max-w-lg">
+      <SheetContent className="w-full sm:max-w-xl">
         <SheetHeader>
           <SheetTitle className="text-lg">
             {loading ? "Loading..." : summary?.activityName || "Activity"}
@@ -95,8 +95,8 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
               <TabsTrigger value="details">Details</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="h-[calc(100vh-200px)] mt-4">
-              <TabsContent value="overview" className="space-y-4 pr-4">
+            <ScrollArea className="h-[calc(100vh-180px)] mt-4">
+              <TabsContent value="overview" className="space-y-4 px-4 pb-8">
                 {/* Key Metrics Grid */}
                 <div className="grid grid-cols-2 gap-3">
                   {summary.distance > 0 && (
@@ -252,7 +252,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                 )}
               </TabsContent>
 
-              <TabsContent value="splits" className="pr-4">
+              <TabsContent value="splits" className="px-4 pb-8">
                 {hasLaps && (
                   <div className="space-y-4">
                     {/* Visual pace bars */}
@@ -368,7 +368,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                 )}
               </TabsContent>
 
-              <TabsContent value="details" className="space-y-4 pr-4">
+              <TabsContent value="details" className="space-y-4 px-4 pb-8">
                 {/* All raw summary fields */}
                 <div className="space-y-1">
                   {Object.entries(summary)
