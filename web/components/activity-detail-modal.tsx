@@ -191,7 +191,10 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                       {weather.windSpeed > 0 && (
                         <div>
                           <span className="text-muted-foreground">Wind: </span>
-                          {weather.windSpeed} mph {weather.windDirectionCompassPoint?.toUpperCase()}
+                          {typeKey.includes("kite") || typeKey.includes("wind")
+                            ? `${(weather.windSpeed * 0.868976).toFixed(1)} kts`
+                            : `${weather.windSpeed} mph`}
+                          {weather.windDirectionCompassPoint && ` ${weather.windDirectionCompassPoint.toUpperCase()}`}
                         </div>
                       )}
                       {weather.weatherTypeDTO?.desc && (
