@@ -9,6 +9,7 @@ import { WeeklyDistanceChart } from "@/components/weekly-distance-chart";
 import { CadenceStrideChart } from "@/components/cadence-stride-chart";
 import { ClickableRunTable } from "@/components/clickable-run-table";
 import { FitnessScoresChart } from "@/components/fitness-scores-chart";
+import { TrainingLoadChart } from "@/components/training-load-chart";
 import { YearlyMileageChart } from "@/components/yearly-mileage-chart";
 import { getDb } from "@/lib/db";
 import {
@@ -144,7 +145,7 @@ async function getHRPaceData() {
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND (raw_json->>'distance')::float > 1000
-      AND raw_json->>'averageHR' IS NOT NULL
+      AND (raw_json->>'averageHR')::float > 60
       AND (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 BETWEEN 3.0 AND 10.0
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
@@ -276,6 +277,28 @@ async function getTrainingStatus() {
     FROM status_data sd
   `;
   return rows[0] || null;
+}
+
+async function getTrainingLoadTrend() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      date::text as date,
+      (SELECT v->'acuteTrainingLoadDTO'->>'dailyTrainingLoadAcute'
+       FROM jsonb_each(raw_json->'mostRecentTrainingStatus'->'latestTrainingStatusData') AS t(k, v)
+       LIMIT 1)::float as acute,
+      (SELECT v->'acuteTrainingLoadDTO'->>'dailyTrainingLoadChronic'
+       FROM jsonb_each(raw_json->'mostRecentTrainingStatus'->'latestTrainingStatusData') AS t(k, v)
+       LIMIT 1)::float as chronic,
+      (SELECT v->'acuteTrainingLoadDTO'->>'dailyAcuteChronicWorkloadRatio'
+       FROM jsonb_each(raw_json->'mostRecentTrainingStatus'->'latestTrainingStatusData') AS t(k, v)
+       LIMIT 1)::float as acwr
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'training_status'
+      AND raw_json->'mostRecentTrainingStatus' IS NOT NULL
+    ORDER BY date ASC
+  `;
+  return rows;
 }
 
 async function getPersonalRecords() {
@@ -709,7 +732,7 @@ async function getBestSplits() {
 }
 
 export default async function RunningPage() {
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution, shoeMileage, splitAnalysis, bestSplits] =
+  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution, shoeMileage, splitAnalysis, bestSplits, trainingLoadTrend] =
     await Promise.all([
       getRunningStats(),
       getPaceHistory(),
@@ -733,6 +756,7 @@ export default async function RunningPage() {
       getShoeMileage(),
       getSplitAnalysis(),
       getBestSplits(),
+      getTrainingLoadTrend(),
     ]);
 
   return (
@@ -1261,6 +1285,30 @@ export default async function RunningPage() {
         </Card>
       )}
 
+      {/* Training Load Trend */}
+      {(trainingLoadTrend as any[]).length > 2 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Activity className="h-4 w-4 text-orange-400" />
+              Training Load Trend
+              <span className="ml-auto text-xs font-normal flex items-center gap-3">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500" />Acute</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" />Chronic</span>
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TrainingLoadChart data={(trainingLoadTrend as any[]).map((d: any) => ({
+              date: d.date,
+              acute: d.acute ? Number(d.acute) : null,
+              chronic: d.chronic ? Number(d.chronic) : null,
+              acwr: d.acwr ? Number(d.acwr) : null,
+            }))} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Fitness Scores */}
       {fitnessScores.trend.length > 0 && (
         <Card className="mb-6">
@@ -1518,13 +1566,13 @@ export default async function RunningPage() {
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Best Week</div>
                 <div className="text-2xl font-bold text-green-400">
-                  {Number(runConsistency.max_runs_week)} runs
+                  {Number(runConsistency.max_runs_week)} {Number(runConsistency.max_runs_week) === 1 ? "run" : "runs"}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Min Week</div>
                 <div className="text-2xl font-bold">
-                  {Number(runConsistency.min_runs_week)} runs
+                  {Number(runConsistency.min_runs_week)} {Number(runConsistency.min_runs_week) === 1 ? "run" : "runs"}
                 </div>
               </div>
               <div>

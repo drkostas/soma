@@ -553,6 +553,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   cycling: "Cycle",
   elliptical: "Elliptical",
   stand_up_paddleboarding_v2: "SUP",
+  other: "Other",
 };
 
 // Merge these activity type_keys into a single group for display
