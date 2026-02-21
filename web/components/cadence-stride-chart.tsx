@@ -30,6 +30,11 @@ export function CadenceStrideChart({
     );
   }
 
+  const spanDays = data.length > 1
+    ? (new Date(data[data.length - 1].date).getTime() - new Date(data[0].date).getTime()) / 86400000
+    : 0;
+  const longRange = spanDays > 60;
+
   return (
     <ResponsiveContainer width="100%" height={250}>
       <ComposedChart data={data} margin={{ bottom: 10, left: 0, right: 10 }}>
@@ -38,36 +43,27 @@ export function CadenceStrideChart({
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(v) =>
-            new Date(v).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })
-          }
+          tickFormatter={(v) => {
+            const d = new Date(v);
+            return longRange
+              ? d.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+              : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          }}
           interval={Math.max(0, Math.floor(data.length / 6))}
         />
         <YAxis
           yAxisId="cadence"
-          className="text-xs"
+          className="text-[10px]"
+          tickLine={false}
           domain={["dataMin - 5", "dataMax + 5"]}
-          label={{
-            value: "spm",
-            angle: -90,
-            position: "insideLeft",
-            className: "text-xs fill-muted-foreground",
-          }}
         />
         <YAxis
           yAxisId="stride"
           orientation="right"
-          className="text-xs"
+          className="text-[10px]"
+          tickLine={false}
           domain={["dataMin - 5", "dataMax + 5"]}
-          label={{
-            value: "cm",
-            angle: 90,
-            position: "insideRight",
-            className: "text-xs fill-muted-foreground",
-          }}
+          width={35}
         />
         <Tooltip
           content={({ active, payload }) => {
