@@ -16,3 +16,8 @@ GARMINTOKENS = Path(
 ).expanduser()
 HEVY_API_KEY = os.environ.get("HEVY_API_KEY", "")
 HEVY_BASE_URL = "https://api.hevyapp.com/v1"
+
+# Strava OAuth2
+STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID", "")
+STRAVA_CLIENT_SECRET = os.environ.get("STRAVA_CLIENT_SECRET", "")
+STRAVA_BASE_URL = "https://www.strava.com/api/v3"
