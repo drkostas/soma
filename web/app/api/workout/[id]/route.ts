@@ -1,6 +1,99 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
+// --- Helpers ---
+
+type HrPoint = { elapsed_sec: number; hr: number };
+
+/** Interpolate HR at a given elapsed-second from the timeline. */
+function interpolateHr(timeline: HrPoint[], targetSec: number): number | null {
+  if (timeline.length === 0) return null;
+  if (targetSec <= timeline[0].elapsed_sec) return timeline[0].hr;
+  if (targetSec >= timeline[timeline.length - 1].elapsed_sec)
+    return timeline[timeline.length - 1].hr;
+  // Find bracketing samples
+  let before = timeline[0];
+  let after = timeline[timeline.length - 1];
+  for (const p of timeline) {
+    if (p.elapsed_sec <= targetSec) before = p;
+    if (p.elapsed_sec >= targetSec && p.elapsed_sec < after.elapsed_sec) after = p;
+  }
+  if (before.elapsed_sec === after.elapsed_sec) return before.hr;
+  const t = (targetSec - before.elapsed_sec) / (after.elapsed_sec - before.elapsed_sec);
+  return before.hr + (after.hr - before.hr) * t;
+}
+
+const EST_SET_SEC = 40;
+const EST_REST_SEC = 25;
+const EST_EX_REST_SEC = 60;
+
+/** Synthesize exercise timing overlay from Hevy data and compute per-set avg HR via interpolation. */
+function synthesizeExerciseSets(
+  timeline: HrPoint[],
+  workout: any,
+): any[] {
+  const totalDuration = timeline[timeline.length - 1].elapsed_sec;
+  const allSets: Array<{ exercise: string; reps: number; weight: number; type: string }> = [];
+  for (const ex of workout.exercises) {
+    for (const s of ex.sets) {
+      allSets.push({
+        exercise: ex.title || "Unknown",
+        reps: s.reps || 0,
+        weight: s.weight_kg || 0,
+        type: s.type === "warmup" ? "warmup" : "normal",
+      });
+    }
+  }
+  if (allSets.length === 0) return [];
+
+  const rawTotal = allSets.length * EST_SET_SEC +
+    (allSets.length - 1) * EST_REST_SEC +
+    (workout.exercises.length - 1) * (EST_EX_REST_SEC - EST_REST_SEC);
+  const scale = rawTotal > 0 ? totalDuration / rawTotal : 1;
+
+  const synthSets: any[] = [];
+  let cursor = 0;
+  let prevExercise = "";
+  for (const s of allSets) {
+    if (prevExercise && s.exercise !== prevExercise) {
+      cursor += EST_EX_REST_SEC * scale;
+    } else if (prevExercise) {
+      cursor += EST_REST_SEC * scale;
+    }
+    const setDur = EST_SET_SEC * scale;
+    synthSets.push({
+      exercise: s.exercise,
+      start_sec: Math.round(cursor),
+      duration_sec: Math.round(setDur),
+      reps: s.reps,
+      weight: s.weight,
+      set_type: s.type === "warmup" ? "WARMUP" : "ACTIVE",
+    });
+    cursor += setDur;
+    prevExercise = s.exercise;
+  }
+
+  // Compute per-set avg HR via interpolation at set midpoint
+  let setIdx = 0;
+  for (const ex of workout.exercises) {
+    for (const s of ex.sets) {
+      if (setIdx < synthSets.length) {
+        const synth = synthSets[setIdx];
+        const midpoint = synth.start_sec + synth.duration_sec / 2;
+        const hr = interpolateHr(timeline, midpoint);
+        if (hr !== null) {
+          s.avg_hr = Math.round(hr);
+        }
+      }
+      setIdx++;
+    }
+  }
+
+  return synthSets;
+}
+
+// --- Route Handler ---
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -121,74 +214,9 @@ export async function GET(
       }));
     }
 
-    // Always synthesize exercise overlay from Hevy data for consistent naming & 1:1 set mapping
+    // Synthesize exercise overlay from Hevy data + compute per-set HR via interpolation
     if (garmin.hr_timeline?.length > 0 && workout.exercises.length > 0) {
-      const totalDuration = garmin.hr_timeline[garmin.hr_timeline.length - 1].elapsed_sec;
-      const allSets: Array<{ exercise: string; reps: number; weight: number; type: string }> = [];
-      for (const ex of workout.exercises) {
-        for (const s of ex.sets) {
-          allSets.push({
-            exercise: ex.title || "Unknown",
-            reps: s.reps || 0,
-            weight: s.weight_kg || 0,
-            type: s.type === "warmup" ? "warmup" : "normal",
-          });
-        }
-      }
-      if (allSets.length > 0) {
-        // Estimate ~40s per working set, ~25s rest between sets, ~60s rest between exercises
-        const EST_SET_SEC = 40;
-        const EST_REST_SEC = 25;
-        const EST_EX_REST_SEC = 60;
-        const rawTotal = allSets.length * EST_SET_SEC +
-          (allSets.length - 1) * EST_REST_SEC +
-          (workout.exercises.length - 1) * (EST_EX_REST_SEC - EST_REST_SEC);
-        const scale = rawTotal > 0 ? totalDuration / rawTotal : 1;
-
-        const synthSets: any[] = [];
-        let cursor = 0;
-        let prevExercise = "";
-        for (const s of allSets) {
-          // Advance cursor for rest gaps (no REST entries needed)
-          if (prevExercise && s.exercise !== prevExercise) {
-            cursor += EST_EX_REST_SEC * scale;
-          } else if (prevExercise) {
-            cursor += EST_REST_SEC * scale;
-          }
-          const setDur = EST_SET_SEC * scale;
-          synthSets.push({
-            exercise: s.exercise,
-            start_sec: Math.round(cursor),
-            duration_sec: Math.round(setDur),
-            reps: s.reps,
-            weight: s.weight,
-            set_type: s.type === "warmup" ? "WARMUP" : "ACTIVE",
-          });
-          cursor += setDur;
-          prevExercise = s.exercise;
-        }
-        garmin.exercise_sets = synthSets;
-
-        // Compute per-set avg HR and embed in each Hevy exercise set
-        const timeline = garmin.hr_timeline as Array<{elapsed_sec: number; hr: number}>;
-        let setIdx = 0;
-        for (const ex of workout.exercises) {
-          for (const s of ex.sets) {
-            if (setIdx < synthSets.length) {
-              const synth = synthSets[setIdx];
-              const hrInRange = timeline.filter(
-                (p) => p.elapsed_sec >= synth.start_sec && p.elapsed_sec <= synth.start_sec + synth.duration_sec
-              );
-              if (hrInRange.length > 0) {
-                s.avg_hr = Math.round(
-                  hrInRange.reduce((sum, p) => sum + p.hr, 0) / hrInRange.length
-                );
-              }
-            }
-            setIdx++;
-          }
-        }
-      }
+      garmin.exercise_sets = synthesizeExerciseSets(garmin.hr_timeline, workout);
     }
   } else if (enrichedHr) {
     // Enrichment data exists but no Garmin activity link — show HR/calories + timeline
@@ -206,71 +234,9 @@ export async function GET(
         hr,
       }));
 
-      // Synthesize exercise overlay + per-set HR (same as primary path)
+      // Synthesize exercise overlay + per-set HR via interpolation
       if (workout.exercises.length > 0) {
-        const totalDuration = garmin.hr_timeline[garmin.hr_timeline.length - 1].elapsed_sec;
-        const allSets: Array<{ exercise: string; reps: number; weight: number; type: string }> = [];
-        for (const ex of workout.exercises) {
-          for (const s of ex.sets) {
-            allSets.push({
-              exercise: ex.title || "Unknown",
-              reps: s.reps || 0,
-              weight: s.weight_kg || 0,
-              type: s.type === "warmup" ? "warmup" : "normal",
-            });
-          }
-        }
-        if (allSets.length > 0) {
-          const EST_SET_SEC = 40;
-          const EST_REST_SEC = 25;
-          const EST_EX_REST_SEC = 60;
-          const rawTotal = allSets.length * EST_SET_SEC +
-            (allSets.length - 1) * EST_REST_SEC +
-            (workout.exercises.length - 1) * (EST_EX_REST_SEC - EST_REST_SEC);
-          const scale = rawTotal > 0 ? totalDuration / rawTotal : 1;
-
-          const synthSets: any[] = [];
-          let cursor = 0;
-          let prevExercise = "";
-          for (const s of allSets) {
-            if (prevExercise && s.exercise !== prevExercise) {
-              cursor += EST_EX_REST_SEC * scale;
-            } else if (prevExercise) {
-              cursor += EST_REST_SEC * scale;
-            }
-            const setDur = EST_SET_SEC * scale;
-            synthSets.push({
-              exercise: s.exercise,
-              start_sec: Math.round(cursor),
-              duration_sec: Math.round(setDur),
-              reps: s.reps,
-              weight: s.weight,
-              set_type: s.type === "warmup" ? "WARMUP" : "ACTIVE",
-            });
-            cursor += setDur;
-            prevExercise = s.exercise;
-          }
-          garmin.exercise_sets = synthSets;
-
-          const timeline = garmin.hr_timeline;
-          let setIdx = 0;
-          for (const ex of workout.exercises) {
-            for (const s of ex.sets) {
-              if (setIdx < synthSets.length) {
-                const synth = synthSets[setIdx];
-                const hrInRange = timeline.filter(
-                  (p: any) => p.elapsed_sec >= synth.start_sec && p.elapsed_sec <= synth.start_sec + synth.duration_sec
-                );
-                if (hrInRange.length > 0) {
-                  s.avg_hr = Math.round(
-                    hrInRange.reduce((sum: number, p: any) => sum + p.hr, 0) / hrInRange.length
-                  );
-                }
-              }
-              setIdx++;
-            }
-          }
-        }
+        garmin.exercise_sets = synthesizeExerciseSets(garmin.hr_timeline, workout);
       }
     }
   }

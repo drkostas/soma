@@ -128,6 +128,9 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     ...sets.filter((s: any) => s.weight_kg > 0).map((s: any) => s.weight_kg),
                     0
                   );
+                  const normalSets = sets.filter((s: any) => s.type !== "warmup");
+                  const setsAtMax = normalSets.filter((s: any) => s.weight_kg === maxWeight);
+                  const showTopBadge = maxWeight > 0 && setsAtMax.length < normalSets.length;
                   return (
                     <div key={ei} className="border border-border/50 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
@@ -142,11 +145,12 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                         {sets.map((s: any, si: number) => (
                           <div
                             key={si}
-                            className={`flex items-center gap-3 text-xs py-1 ${
+                            className={`flex items-center gap-3 text-xs py-1 px-1.5 -mx-1.5 rounded transition-colors ${
                               s.type === "warmup"
-                                ? "text-muted-foreground"
-                                : ""
+                                ? "text-muted-foreground hover:bg-accent/10"
+                                : "hover:bg-accent/10"
                             }`}
+                            title={s.avg_hr != null ? `Estimated HR: ${s.avg_hr} bpm` : undefined}
                           >
                             <span className="w-6">
                               {s.type === "warmup" ? "W" : si + 1 - sets.filter((ss: any, ssi: number) => ssi < si && ss.type === "warmup").length}
@@ -156,7 +160,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                                 ? formatWeight(s.weight_kg, unit)
                                 : "BW"}
                             </span>
-                            <span className="w-10">
+                            <span className="w-14 whitespace-nowrap">
                               {s.reps > 0 ? `${s.reps} reps` : "—"}
                             </span>
                             {s.type === "warmup" && (
@@ -164,7 +168,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                                 warmup
                               </Badge>
                             )}
-                            {s.weight_kg === maxWeight && s.type !== "warmup" && maxWeight > 0 && (
+                            {showTopBadge && s.weight_kg === maxWeight && s.type !== "warmup" && (
                               <Badge className="text-[10px] h-4 bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
                                 top
                               </Badge>
