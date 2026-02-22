@@ -64,10 +64,8 @@ const DEFAULT_ZONES: HrZone[] = [
   { zone: 5, seconds: 0, low: 160, high: 220 },
 ];
 
-// Fixed YAxis width for consistent alignment with exercise bar
 const Y_AXIS_WIDTH = 36;
 const CHART_MARGIN = { top: 5, right: 10, bottom: 0, left: 0 };
-// Exercise bar left offset = YAxis width + left margin
 const BAR_LEFT = Y_AXIS_WIDTH + CHART_MARGIN.left;
 
 // --- Utilities ---
@@ -109,6 +107,10 @@ interface ExerciseBlock {
   sets: ExerciseSet[];
 }
 
+interface ExtendedBlock extends ExerciseBlock {
+  fillEnd: number;
+}
+
 function groupExerciseBlocks(sets: ExerciseSet[], colorMap: Map<string, string>): ExerciseBlock[] {
   const blocks: ExerciseBlock[] = [];
   let current: ExerciseBlock | null = null;
@@ -137,7 +139,7 @@ function groupExerciseBlocks(sets: ExerciseSet[], colorMap: Map<string, string>)
 
 // --- Custom Tooltip ---
 
-function UnifiedTooltip({ active, payload, exerciseSets, zones }: any) {
+function UnifiedTooltip({ active, payload, zones, extendedBlocks }: any) {
   if (!active || !payload?.[0]) return null;
   const point = payload[0].payload;
   const elapsedSec = point.elapsed_sec;
@@ -148,47 +150,43 @@ function UnifiedTooltip({ active, payload, exerciseSets, zones }: any) {
   let setInfo = "";
   let weightReps = "";
 
-  if (exerciseSets) {
-    const workingSets = exerciseSets.filter(
-      (s: ExerciseSet) => s.set_type === "ACTIVE" || s.set_type === "WARMUP"
-    );
-    const totalByExercise: Record<string, number> = {};
-    for (const s of workingSets) {
-      const name = s.exercise || "Unknown";
-      totalByExercise[name] = (totalByExercise[name] || 0) + 1;
-    }
-
-    const setCountByExercise: Record<string, number> = {};
-    for (const s of workingSets) {
-      const name = s.exercise || "Unknown";
-      setCountByExercise[name] = (setCountByExercise[name] || 0) + 1;
-      if (elapsedSec >= s.start_sec && elapsedSec <= s.start_sec + s.duration_sec) {
-        exerciseName = s.exercise || "Unknown";
-        const isWarmup = s.set_type === "WARMUP";
-        setInfo = isWarmup
-          ? "Warmup"
-          : `Set ${setCountByExercise[name]}/${totalByExercise[name]}`;
-        if (s.weight > 0) {
-          weightReps = `${s.weight} kg \u00d7 ${s.reps} reps`;
-        } else if (s.reps > 0) {
-          weightReps = `${s.reps} reps`;
-        }
+  if (extendedBlocks && extendedBlocks.length > 0) {
+    // Find which extended block covers this time (no gaps between exercises)
+    let matchedBlock: ExtendedBlock | null = null;
+    for (const block of extendedBlocks) {
+      if (elapsedSec >= block.startSec && elapsedSec < block.fillEnd) {
+        matchedBlock = block;
         break;
       }
     }
 
-    // If hovering in a gap, show the nearest exercise for context
-    if (!exerciseName && workingSets.length > 0) {
-      let closest: ExerciseSet | null = null;
+    if (matchedBlock) {
+      exerciseName = matchedBlock.exercise;
+      const setsInBlock: ExerciseSet[] = matchedBlock.sets || [];
+
+      // Find nearest set within this block
+      let closestSet: ExerciseSet | null = null;
       let minDist = Infinity;
-      for (const s of workingSets) {
+      for (const s of setsInBlock) {
         const mid = s.start_sec + s.duration_sec / 2;
         const dist = Math.abs(elapsedSec - mid);
-        if (dist < minDist) { minDist = dist; closest = s; }
+        if (dist < minDist) { minDist = dist; closestSet = s; }
       }
-      if (closest) {
-        exerciseName = closest.exercise || "Unknown";
-        setInfo = "Rest";
+
+      if (closestSet) {
+        const isWarmup = closestSet.set_type === "WARMUP";
+        if (isWarmup) {
+          setInfo = "Warmup";
+        } else {
+          const workingSets = setsInBlock.filter((s) => s.set_type !== "WARMUP");
+          const workingIdx = workingSets.indexOf(closestSet);
+          setInfo = `Set ${workingIdx + 1}/${workingSets.length}`;
+        }
+        if (closestSet.weight > 0) {
+          weightReps = `${closestSet.weight} kg \u00d7 ${closestSet.reps} reps`;
+        } else if (closestSet.reps > 0) {
+          weightReps = `${closestSet.reps} reps`;
+        }
       }
     }
   }
@@ -227,6 +225,7 @@ function UnifiedTooltip({ active, payload, exerciseSets, zones }: any) {
 
 export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: WorkoutHrTimelineProps) {
   const [hoveredTime, setHoveredTime] = useState<number | null>(null);
+  const [selectedBlockIdx, setSelectedBlockIdx] = useState<number | null>(null);
   const [hoveredGanttBlock, setHoveredGanttBlock] = useState<{
     block: ExerciseBlock;
     x: number;
@@ -245,15 +244,23 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
     [exerciseSets, exerciseColorMap]
   );
 
-  const activeSets = useMemo(
-    () => (exerciseSets || []).filter((s) => s.set_type === "ACTIVE" || s.set_type === "WARMUP"),
-    [exerciseSets]
-  );
+  const totalDuration =
+    hrTimeline.length > 0 ? hrTimeline[hrTimeline.length - 1].elapsed_sec : 0;
+
+  // Extended blocks: each exercise fills from its start to the next exercise's start (no gaps)
+  const extendedBlocks: ExtendedBlock[] = useMemo(() => {
+    if (exerciseBlocks.length === 0 || totalDuration === 0) return [];
+    return exerciseBlocks.map((block, i) => ({
+      ...block,
+      fillEnd: i < exerciseBlocks.length - 1
+        ? exerciseBlocks[i + 1].startSec
+        : totalDuration,
+    }));
+  }, [exerciseBlocks, totalDuration]);
 
   const hrs = hrTimeline.map((p) => p.hr);
   const dataMinHr = Math.min(...hrs);
   const dataMaxHr = Math.max(...hrs);
-  // Round to nice tick boundaries
   const yMin = Math.floor(Math.max(dataMinHr - 10, 40) / 10) * 10;
   const yMax = Math.ceil(Math.min(dataMaxHr + 10, 220) / 10) * 10;
 
@@ -264,9 +271,6 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
     for (let v = yMin; v <= yMax; v += step) ticks.push(v);
     return ticks;
   }, [yMin, yMax]);
-
-  const totalDuration =
-    hrTimeline.length > 0 ? hrTimeline[hrTimeline.length - 1].elapsed_sec : 0;
 
   const visibleZones = zones.filter((z) => z.high >= yMin && z.low <= yMax);
 
@@ -306,24 +310,6 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
     return map;
   }, [exerciseBlocks, hrTimeline, exerciseSets]);
 
-  // Set boundary times for reference lines on chart
-  const setBoundaries = useMemo(() => {
-    if (activeSets.length === 0) return [];
-    const boundaries: Array<{ time: number; color: string; isExerciseBoundary: boolean }> = [];
-    for (let i = 0; i < activeSets.length - 1; i++) {
-      const s = activeSets[i];
-      const next = activeSets[i + 1];
-      const boundaryTime = s.start_sec + s.duration_sec;
-      const sameExercise = s.exercise === next.exercise;
-      boundaries.push({
-        time: boundaryTime,
-        color: exerciseColorMap.get(s.exercise || "") || "#888",
-        isExerciseBoundary: !sameExercise,
-      });
-    }
-    return boundaries;
-  }, [activeSets, exerciseColorMap]);
-
   const handleMouseMove = useCallback((state: any) => {
     if (state?.activePayload?.[0]) {
       setHoveredTime(state.activePayload[0].payload.elapsed_sec);
@@ -334,10 +320,10 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
     setHoveredTime(null);
   }, []);
 
-  const hoveredBlock =
-    hoveredTime != null
-      ? exerciseBlocks.find((b) => hoveredTime >= b.startSec && hoveredTime <= b.endSec)
-      : null;
+  // Hovered block index (from chart hover - uses extended blocks for full coverage)
+  const hoveredBlockIdx = hoveredTime != null
+    ? extendedBlocks.findIndex((b) => hoveredTime >= b.startSec && hoveredTime < b.fillEnd)
+    : -1;
 
   return (
     <div>
@@ -362,34 +348,59 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
             </linearGradient>
           </defs>
 
-          {/* Exercise fills (vertical bands) */}
-          {activeSets.map((s, i) => (
+          {/* Exercise fills — per extended block, covering full timeline with no gaps */}
+          {extendedBlocks.map((block, i) => (
             <ReferenceArea
-              key={`set-${i}`}
-              x1={s.start_sec}
-              x2={s.start_sec + s.duration_sec}
-              fill={exerciseColorMap.get(s.exercise || "") || "#888"}
+              key={`block-${i}`}
+              x1={block.startSec}
+              x2={block.fillEnd}
+              fill={block.color}
               fillOpacity={
-                hoveredBlock && s.exercise === hoveredBlock.exercise ? 0.25 : 0.15
+                selectedBlockIdx === i ? 0.35
+                : hoveredBlockIdx === i ? 0.25
+                : 0.15
               }
-              ifOverflow="hidden"
               stroke="none"
             />
           ))}
 
-          {/* Set boundary lines within exercises */}
-          {setBoundaries.map((b, i) => (
+          {/* Exercise boundary lines (white, solid — between different exercises) */}
+          {extendedBlocks.slice(1).map((block, i) => (
             <ReferenceLine
-              key={`setbound-${i}`}
-              x={b.time}
-              stroke={b.color}
-              strokeDasharray={b.isExerciseBoundary ? undefined : "3 3"}
-              strokeOpacity={b.isExerciseBoundary ? 0.4 : 0.25}
-              strokeWidth={b.isExerciseBoundary ? 1 : 0.5}
+              key={`exbound-${i}`}
+              x={block.startSec}
+              stroke="rgba(255,255,255,0.7)"
+              strokeWidth={1.5}
             />
           ))}
 
-          {/* Zone boundary lines (dashes) */}
+          {/* Set boundary lines (white, dashed — between sets within an exercise) */}
+          {extendedBlocks.flatMap((block, bi) =>
+            block.sets.slice(0, -1).map((s, si) => (
+              <ReferenceLine
+                key={`setline-${bi}-${si}`}
+                x={s.start_sec + s.duration_sec}
+                stroke="rgba(255,255,255,0.4)"
+                strokeDasharray="3 3"
+                strokeWidth={0.75}
+              />
+            ))
+          )}
+
+          {/* Selected block highlight overlay */}
+          {selectedBlockIdx !== null && extendedBlocks[selectedBlockIdx] && (
+            <ReferenceArea
+              x1={extendedBlocks[selectedBlockIdx].startSec}
+              x2={extendedBlocks[selectedBlockIdx].fillEnd}
+              fill="white"
+              fillOpacity={0.08}
+              stroke="rgba(255,255,255,0.6)"
+              strokeWidth={1.5}
+              strokeDasharray="4 2"
+            />
+          )}
+
+          {/* Zone boundary lines (horizontal dashes) */}
           {visibleZones.slice(0, -1).map((z) => (
             <ReferenceLine
               key={`zline-${z.zone}`}
@@ -436,7 +447,7 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
           />
           <Tooltip
             cursor={{ stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }}
-            content={<UnifiedTooltip exerciseSets={exerciseSets} zones={zones} />}
+            content={<UnifiedTooltip zones={zones} extendedBlocks={extendedBlocks} />}
           />
           <Area
             type="monotone"
@@ -460,18 +471,21 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
           {exerciseBlocks.map((block, i) => {
             const left = (block.startSec / totalDuration) * 100;
             const width = ((block.endSec - block.startSec) / totalDuration) * 100;
-            const isHovered = hoveredBlock === block || hoveredGanttBlock?.block === block;
+            const isSelected = selectedBlockIdx === i;
+            const isHovered = hoveredBlockIdx === i || hoveredGanttBlock?.block === block;
 
             return (
               <div
                 key={i}
-                className="absolute top-0 bottom-0 rounded-sm overflow-hidden flex items-center transition-opacity duration-100 cursor-pointer"
+                className="absolute top-0 bottom-0 rounded-sm overflow-hidden flex items-center transition-all duration-100 cursor-pointer"
                 style={{
                   left: `${left}%`,
                   width: `${width}%`,
                   backgroundColor: block.color,
-                  opacity: isHovered ? 0.95 : 0.55,
+                  opacity: isSelected ? 1 : isHovered ? 0.95 : 0.55,
+                  boxShadow: isSelected ? "0 0 0 1.5px rgba(255,255,255,0.8)" : "none",
                 }}
+                onClick={() => setSelectedBlockIdx(isSelected ? null : i)}
                 onMouseEnter={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setHoveredGanttBlock({
