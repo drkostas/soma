@@ -32,7 +32,10 @@ def _get_stale_dates(max_lookback: int = 14) -> list[date]:
             cur.execute(
                 """
                 SELECT date,
-                       COALESCE(jsonb_array_length(raw_json->'heartRateValues'), 0) as pts
+                       CASE WHEN jsonb_typeof(raw_json->'heartRateValues') = 'array'
+                            THEN jsonb_array_length(raw_json->'heartRateValues')
+                            ELSE 0
+                       END as pts
                 FROM garmin_raw_data
                 WHERE endpoint_name = 'heart_rates'
                   AND date >= CURRENT_DATE - %s
