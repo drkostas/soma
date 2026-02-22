@@ -23,11 +23,11 @@ jobs:
         working-directory: sync
         run: pip install -e .
 
-      - name: Run sync pipeline (1 day)
+      - name: Run sync pipeline (smart — auto-detects stale dates)
         working-directory: sync
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
           HEVY_API_KEY: ${{ secrets.HEVY_API_KEY }}
-        run: python -m src.pipeline 1
+        run: python -m src.pipeline

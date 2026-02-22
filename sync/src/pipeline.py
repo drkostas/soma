@@ -12,11 +12,64 @@ from activity_replacer import enrich_new_workouts
 from db import get_connection, log_sync
 from config import HEVY_API_KEY
 
+# A full day of Garmin daily HR data has ~700-720 points (midnight to midnight).
+# Anything below this threshold is considered incomplete / needs re-sync.
+_MIN_COMPLETE_HR_POINTS = 650
 
-def run_pipeline(days: int = 7):
-    """Run the complete sync + parse pipeline for the last N days."""
+
+def _get_stale_dates(max_lookback: int = 14) -> list[date]:
+    """Find dates that need re-syncing due to incomplete daily HR data.
+
+    Walks backwards from yesterday looking for the most recent date with
+    complete HR data (650+ points). Returns all dates from the first
+    incomplete one through today.
+
+    Today is always included (day isn't over yet).
+    """
+    today = date.today()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT date,
+                       COALESCE(jsonb_array_length(raw_json->'heartRateValues'), 0) as pts
+                FROM garmin_raw_data
+                WHERE endpoint_name = 'heart_rates'
+                  AND date >= CURRENT_DATE - %s
+                  AND date < CURRENT_DATE
+                ORDER BY date DESC
+                """,
+                (max_lookback,),
+            )
+            # Walk backwards from yesterday — find first complete day
+            for row in cur.fetchall():
+                if row[1] >= _MIN_COMPLETE_HR_POINTS:
+                    # This day is complete. Sync from the next day to today.
+                    days_back = (today - row[0]).days
+                    return [today - timedelta(days=i) for i in range(days_back)]
+            # No complete day found in the lookback window
+            return [today - timedelta(days=i) for i in range(max_lookback)]
+
+
+def run_pipeline(days: int | None = None):
+    """Run the complete sync + parse pipeline.
+
+    If days is None (default), automatically determines which dates need
+    re-syncing by checking for incomplete daily HR data. If an explicit
+    number of days is passed, syncs that fixed range instead.
+    """
+    today = date.today()
+
+    if days is not None:
+        dates_to_sync = [today - timedelta(days=i) for i in range(days)]
+        mode = f"fixed ({days} days)"
+    else:
+        dates_to_sync = _get_stale_dates()
+        mode = f"smart ({len(dates_to_sync)} days, oldest: {dates_to_sync[-1].isoformat()})"
+
     print(f"=== Soma Sync Pipeline ===")
-    print(f"Syncing last {days} days...\n")
+    print(f"Mode: {mode}")
+    print(f"Dates: {', '.join(d.isoformat() for d in dates_to_sync)}\n")
 
     total_raw = 0
     total_parsed = 0
@@ -27,15 +80,12 @@ def run_pipeline(days: int = 7):
     client = init_garmin()
     print("Authenticated successfully.\n")
 
-    today = date.today()
-
     with get_connection() as conn:
         log_sync(conn, "full_pipeline", "running")
 
-    for i in range(days):
-        sync_date = today - timedelta(days=i)
+    for idx, sync_date in enumerate(dates_to_sync):
         date_str = sync_date.isoformat()
-        print(f"[{i+1}/{days}] {date_str}")
+        print(f"[{idx+1}/{len(dates_to_sync)}] {date_str}")
 
         # Daily health endpoints
         try:
@@ -85,12 +135,13 @@ def run_pipeline(days: int = 7):
     with get_connection() as conn:
         log_sync(conn, "full_pipeline", "success", total)
 
+    n = len(dates_to_sync)
     print(f"\n=== Pipeline Complete ===")
     print(f"Garmin daily records: {total_raw}")
     print(f"Activity detail records: {total_activities}")
-    print(f"Days parsed: {total_parsed}/{days}")
+    print(f"Days parsed: {total_parsed}/{n}")
 
 
 if __name__ == "__main__":
-    days = int(sys.argv[1]) if len(sys.argv) > 1 else 7
+    days = int(sys.argv[1]) if len(sys.argv) > 1 else None
     run_pipeline(days)
