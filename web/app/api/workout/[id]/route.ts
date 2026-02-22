@@ -107,6 +107,7 @@ export async function GET(
     garmin = {
       avg_hr: enrichedHr.avg_hr,
       max_hr: enrichedHr.max_hr,
+      min_hr: enrichmentMinHr,
       calories: enrichedHr.calories,
       hr_zones: hrZones,
     };
@@ -227,6 +228,7 @@ export async function GET(
     garmin = {
       avg_hr: enrichedHr.avg_hr,
       max_hr: enrichedHr.max_hr,
+      min_hr: enrichmentMinHr,
       calories: enrichedHr.calories,
       hr_zones: null,
     };

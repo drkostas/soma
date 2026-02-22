@@ -292,18 +292,26 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
               <TabsContent value="heartrate" className="space-y-4 px-4 pb-8">
                 {data.garmin ? (
                   <>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-4 gap-2">
                       <MetricBox
                         label="Avg HR"
-                        value={data.garmin.avg_hr ? `${Math.round(data.garmin.avg_hr)} bpm` : "—"}
+                        value={data.garmin.avg_hr ? `${Math.round(data.garmin.avg_hr)}` : "—"}
+                        suffix="bpm"
                       />
                       <MetricBox
                         label="Max HR"
-                        value={data.garmin.max_hr ? `${Math.round(data.garmin.max_hr)} bpm` : "—"}
+                        value={data.garmin.max_hr ? `${Math.round(data.garmin.max_hr)}` : "—"}
+                        suffix="bpm"
+                      />
+                      <MetricBox
+                        label="Min HR"
+                        value={data.garmin.min_hr ? `${Math.round(data.garmin.min_hr)}` : "—"}
+                        suffix="bpm"
                       />
                       <MetricBox
                         label="Calories"
                         value={data.garmin.calories ? `${Math.round(data.garmin.calories)}` : "—"}
+                        suffix="kcal"
                       />
                     </div>
 
@@ -311,6 +319,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                       <WorkoutHrTimeline
                         hrTimeline={data.garmin.hr_timeline}
                         exerciseSets={data.garmin.exercise_sets}
+                        hrZones={data.garmin.hr_zones}
                       />
                     ) : data.garmin.hr_zones && data.garmin.hr_zones.length > 0 ? (
                       <div>
@@ -347,11 +356,14 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
   );
 }
 
-function MetricBox({ label, value }: { label: string; value: string }) {
+function MetricBox({ label, value, suffix }: { label: string; value: string; suffix?: string }) {
   return (
-    <div className="border border-border/50 rounded-lg p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-lg font-bold mt-0.5">{value}</div>
+    <div className="border border-border/50 rounded-lg p-2.5">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-lg font-bold mt-0.5 leading-tight">
+        {value}
+        {suffix && <span className="text-xs font-normal text-muted-foreground ml-1">{suffix}</span>}
+      </div>
     </div>
   );
 }

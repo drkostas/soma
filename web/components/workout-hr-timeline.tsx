@@ -1,18 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   ComposedChart,
   Area,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   ReferenceArea,
-  BarChart,
-  Bar,
-  Cell,
+  ReferenceLine,
 } from "recharts";
 
 // --- Types ---
@@ -31,9 +28,17 @@ interface ExerciseSet {
   set_type: string;
 }
 
+interface HrZone {
+  zone: number;
+  seconds: number;
+  low: number;
+  high: number;
+}
+
 interface WorkoutHrTimelineProps {
   hrTimeline: HrPoint[];
   exerciseSets?: ExerciseSet[];
+  hrZones?: HrZone[];
 }
 
 // --- Constants ---
@@ -43,38 +48,44 @@ const EXERCISE_COLORS = [
   "#facc15", "#38bdf8", "#ef4444", "#34d399", "#fb923c",
 ];
 
+const ZONE_CONFIG: Record<number, { color: string; label: string }> = {
+  1: { color: "#9ca3af", label: "Warm Up" },
+  2: { color: "#60a5fa", label: "Easy" },
+  3: { color: "#4ade80", label: "Aerobic" },
+  4: { color: "#f97316", label: "Threshold" },
+  5: { color: "#ef4444", label: "Maximum" },
+};
+
+const DEFAULT_ZONES: HrZone[] = [
+  { zone: 1, seconds: 0, low: 0, high: 104 },
+  { zone: 2, seconds: 0, low: 105, high: 119 },
+  { zone: 3, seconds: 0, low: 120, high: 139 },
+  { zone: 4, seconds: 0, low: 140, high: 159 },
+  { zone: 5, seconds: 0, low: 160, high: 220 },
+];
+
+// Fixed YAxis width for consistent alignment with exercise bar
+const Y_AXIS_WIDTH = 36;
+const CHART_MARGIN = { top: 5, right: 10, bottom: 0, left: 0 };
+// Exercise bar left offset = YAxis width + left margin
+const BAR_LEFT = Y_AXIS_WIDTH + CHART_MARGIN.left;
+
 // --- Utilities ---
+
+function formatElapsed(sec: number): string {
+  const m = Math.floor(sec / 60);
+  return `${m}m`;
+}
 
 function formatCategory(cat: string | null): string {
   if (!cat) return "Unknown";
-  // If already mixed case (e.g. Hevy exercise titles), return as-is
   if (cat !== cat.toUpperCase() && cat !== cat.toLowerCase()) return cat;
-  // Convert UPPER_SNAKE_CASE or lower_snake_case to Title Case
   return cat
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(" ");
 }
 
-function formatElapsed(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  if (m >= 60) {
-    const h = Math.floor(m / 60);
-    const rm = m % 60;
-    return `${h}:${rm.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  }
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function getZoneColor(hr: number): string {
-  if (hr < 120) return "#4ade80"; // Z1-2 green
-  if (hr < 140) return "#facc15"; // Z3 yellow
-  if (hr < 160) return "#f97316"; // Z4 orange
-  return "#ef4444";               // Z5 red
-}
-
-// Build color mapping: exercise category -> color (based on first appearance order)
 function buildExerciseColorMap(sets: ExerciseSet[]): Map<string, string> {
   const map = new Map<string, string>();
   let colorIdx = 0;
@@ -87,49 +98,152 @@ function buildExerciseColorMap(sets: ExerciseSet[]): Map<string, string> {
   return map;
 }
 
-// --- Custom Tooltip for Timeline ---
+function getZoneInfo(hr: number, zones: HrZone[]): { zone: number; label: string; color: string } {
+  for (const z of zones) {
+    if (hr >= z.low && hr <= z.high) {
+      const config = ZONE_CONFIG[z.zone] || { color: "#888", label: `Zone ${z.zone}` };
+      return { zone: z.zone, ...config };
+    }
+  }
+  return { zone: 0, label: "", color: "#888" };
+}
 
-function TimelineTooltip({ active, payload, exerciseSets, exerciseColorMap }: any) {
+// --- Exercise Block Grouping ---
+
+interface ExerciseBlock {
+  exercise: string;
+  color: string;
+  startSec: number;
+  endSec: number;
+  sets: ExerciseSet[];
+}
+
+function groupExerciseBlocks(sets: ExerciseSet[], colorMap: Map<string, string>): ExerciseBlock[] {
+  const blocks: ExerciseBlock[] = [];
+  let current: ExerciseBlock | null = null;
+
+  for (const s of sets) {
+    if (s.set_type === "REST") continue;
+    const name = s.exercise || "Unknown";
+
+    if (current && name === current.exercise) {
+      current.endSec = s.start_sec + s.duration_sec;
+      current.sets.push(s);
+    } else {
+      if (current) blocks.push(current);
+      current = {
+        exercise: name,
+        color: colorMap.get(name) || "#888",
+        startSec: s.start_sec,
+        endSec: s.start_sec + s.duration_sec,
+        sets: [s],
+      };
+    }
+  }
+  if (current) blocks.push(current);
+  return blocks;
+}
+
+// --- Custom Tooltip ---
+
+function UnifiedTooltip({ active, payload, exerciseSets, zones }: any) {
   if (!active || !payload?.[0]) return null;
   const point = payload[0].payload;
   const elapsedSec = point.elapsed_sec;
   const hr = point.hr;
+  const zoneInfo = getZoneInfo(hr, zones);
 
-  // Find which exercise set this point falls in
-  let exerciseLabel = "";
+  let exerciseName = "";
+  let setInfo = "";
+  let weightReps = "";
+  let isRest = false;
+
   if (exerciseSets) {
-    const workingSets = exerciseSets.filter((s: ExerciseSet) => s.set_type === "ACTIVE" || s.set_type === "WARMUP");
-    let setCount: Record<string, number> = {};
+    const workingSets = exerciseSets.filter(
+      (s: ExerciseSet) => s.set_type === "ACTIVE" || s.set_type === "WARMUP"
+    );
+    const totalByExercise: Record<string, number> = {};
     for (const s of workingSets) {
       const name = s.exercise || "Unknown";
-      setCount[name] = (setCount[name] || 0) + 1;
+      totalByExercise[name] = (totalByExercise[name] || 0) + 1;
+    }
+
+    const setCountByExercise: Record<string, number> = {};
+    for (const s of workingSets) {
+      const name = s.exercise || "Unknown";
+      setCountByExercise[name] = (setCountByExercise[name] || 0) + 1;
       if (elapsedSec >= s.start_sec && elapsedSec <= s.start_sec + s.duration_sec) {
-        const prefix = s.set_type === "WARMUP" ? "Warmup" : `Set ${setCount[name]}`;
-        exerciseLabel = `${formatCategory(s.exercise)} - ${prefix}`;
+        exerciseName = formatCategory(s.exercise);
+        const isWarmup = s.set_type === "WARMUP";
+        setInfo = isWarmup
+          ? "Warmup"
+          : `Set ${setCountByExercise[name]}/${totalByExercise[name]}`;
+        if (s.weight > 0) {
+          weightReps = `${s.weight} kg \u00d7 ${s.reps} reps`;
+        } else if (s.reps > 0) {
+          weightReps = `${s.reps} reps`;
+        }
         break;
       }
+    }
+
+    if (!exerciseName) {
+      const rest = exerciseSets.find(
+        (s: ExerciseSet) =>
+          s.set_type === "REST" &&
+          elapsedSec >= s.start_sec &&
+          elapsedSec <= s.start_sec + s.duration_sec
+      );
+      if (rest) isRest = true;
     }
   }
 
   return (
-    <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
-      {exerciseLabel && (
-        <div className="font-medium mb-1">{exerciseLabel}</div>
-      )}
-      <div className="flex items-center gap-1.5">
-        <span style={{ color: getZoneColor(hr) }} className="font-bold">{hr} bpm</span>
+    <div className="bg-card text-card-foreground border border-border rounded-lg p-2.5 text-xs shadow-lg min-w-[140px]">
+      <div className="flex items-center gap-2">
+        <span className="text-base font-bold" style={{ color: zoneInfo.color }}>
+          {hr}
+        </span>
+        <span className="text-muted-foreground">bpm</span>
+        {zoneInfo.label && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+            style={{ backgroundColor: zoneInfo.color + "20", color: zoneInfo.color }}
+          >
+            Z{zoneInfo.zone}
+          </span>
+        )}
       </div>
-      <div className="text-muted-foreground">{formatElapsed(elapsedSec)} elapsed</div>
+
+      {exerciseName && (
+        <div className="border-t border-border/50 pt-1.5 mt-1.5 space-y-0.5">
+          <div className="font-medium">{exerciseName}</div>
+          {setInfo && <div className="text-muted-foreground">{setInfo}</div>}
+          {weightReps && <div>{weightReps}</div>}
+        </div>
+      )}
+      {isRest && <div className="text-muted-foreground mt-1">Rest</div>}
+
+      <div className="text-muted-foreground mt-1">{formatElapsed(elapsedSec)}</div>
     </div>
   );
 }
 
-// --- View A: HR Timeline ---
+// --- Main Component ---
 
-function HrTimelineChart({ hrTimeline, exerciseSets }: WorkoutHrTimelineProps) {
+export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: WorkoutHrTimelineProps) {
+  const [hoveredTime, setHoveredTime] = useState<number | null>(null);
+
+  const zones = hrZones && hrZones.length > 0 ? hrZones : DEFAULT_ZONES;
+
   const exerciseColorMap = useMemo(
     () => (exerciseSets ? buildExerciseColorMap(exerciseSets) : new Map()),
     [exerciseSets]
+  );
+
+  const exerciseBlocks = useMemo(
+    () => (exerciseSets ? groupExerciseBlocks(exerciseSets, exerciseColorMap) : []),
+    [exerciseSets, exerciseColorMap]
   );
 
   const activeSets = useMemo(
@@ -137,74 +251,82 @@ function HrTimelineChart({ hrTimeline, exerciseSets }: WorkoutHrTimelineProps) {
     [exerciseSets]
   );
 
-  const restSets = useMemo(
-    () => (exerciseSets || []).filter((s) => s.set_type === "REST"),
-    [exerciseSets]
-  );
-
-  // Compute HR range for Y axis
   const hrs = hrTimeline.map((p) => p.hr);
-  const minHr = Math.max(Math.min(...hrs) - 10, 40);
-  const maxHr = Math.min(Math.max(...hrs) + 10, 220);
+  const dataMinHr = Math.min(...hrs);
+  const dataMaxHr = Math.max(...hrs);
+  const yMin = Math.max(dataMinHr - 10, 40);
+  const yMax = Math.min(dataMaxHr + 10, 220);
 
-  // Build gradient stops for zone-based area fill
-  const gradientId = "hrZoneGradient";
+  const totalDuration =
+    hrTimeline.length > 0 ? hrTimeline[hrTimeline.length - 1].elapsed_sec : 0;
 
-  // Compute gradient stops from the data range
-  const zoneStops = useMemo(() => {
-    const range = maxHr - minHr;
-    if (range <= 0) return [];
-    // Zone boundaries as fraction of Y axis (inverted because SVG gradient goes top to bottom)
-    const thresholds = [
-      { hr: 160, color: "#ef4444" }, // Z5 red - top
-      { hr: 140, color: "#f97316" }, // Z4 orange
-      { hr: 120, color: "#facc15" }, // Z3 yellow
-      { hr: 0,   color: "#4ade80" }, // Z1-2 green - bottom
-    ];
+  const visibleZones = zones.filter((z) => z.high >= yMin && z.low <= yMax);
 
-    const stops: { offset: string; color: string }[] = [];
-    for (const t of thresholds) {
-      const offset = 1 - (t.hr - minHr) / range;
-      const clampedOffset = Math.max(0, Math.min(1, offset));
-      stops.push({ offset: `${(clampedOffset * 100).toFixed(1)}%`, color: t.color });
+  const handleMouseMove = useCallback((state: any) => {
+    if (state?.activePayload?.[0]) {
+      setHoveredTime(state.activePayload[0].payload.elapsed_sec);
     }
-    return stops;
-  }, [minHr, maxHr]);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredTime(null);
+  }, []);
+
+  const hoveredBlock =
+    hoveredTime != null
+      ? exerciseBlocks.find((b) => hoveredTime >= b.startSec && hoveredTime <= b.endSec)
+      : null;
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={240}>
-        <ComposedChart data={hrTimeline} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              {zoneStops.map((s, i) => (
-                <stop key={i} offset={s.offset} stopColor={s.color} stopOpacity={0.35} />
-              ))}
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+      {/* HR Chart */}
+      <ResponsiveContainer width="100%" height={200}>
+        <ComposedChart
+          data={hrTimeline}
+          margin={CHART_MARGIN}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        >
+          {/* Zone background bands */}
+          {visibleZones.map((z) => {
+            const config = ZONE_CONFIG[z.zone];
+            if (!config) return null;
+            return (
+              <ReferenceArea
+                key={`zone-${z.zone}`}
+                y1={Math.max(z.low, yMin)}
+                y2={Math.min(z.high, yMax)}
+                fill={config.color}
+                fillOpacity={0.06}
+                ifOverflow="hidden"
+                stroke="none"
+              />
+            );
+          })}
 
-          {/* Rest period bands (gray, behind everything) */}
-          {restSets.map((s, i) => (
-            <ReferenceArea
-              key={`rest-${i}`}
-              x1={s.start_sec}
-              x2={s.start_sec + s.duration_sec}
-              fill="#6b7280"
-              fillOpacity={0.08}
-              ifOverflow="hidden"
-            />
-          ))}
-
-          {/* Exercise set bands (colored) */}
+          {/* Subtle exercise fills (vertical bands) */}
           {activeSets.map((s, i) => (
             <ReferenceArea
               key={`set-${i}`}
               x1={s.start_sec}
               x2={s.start_sec + s.duration_sec}
               fill={exerciseColorMap.get(s.exercise || "") || "#888"}
-              fillOpacity={0.15}
+              fillOpacity={
+                hoveredBlock && s.exercise === hoveredBlock.exercise ? 0.18 : 0.08
+              }
               ifOverflow="hidden"
+              stroke="none"
+            />
+          ))}
+
+          {/* Zone boundary lines (subtle dashes) */}
+          {visibleZones.slice(0, -1).map((z) => (
+            <ReferenceLine
+              key={`zline-${z.zone}`}
+              y={z.high}
+              stroke={ZONE_CONFIG[z.zone]?.color || "#888"}
+              strokeDasharray="4 4"
+              strokeOpacity={0.2}
             />
           ))}
 
@@ -212,217 +334,114 @@ function HrTimelineChart({ hrTimeline, exerciseSets }: WorkoutHrTimelineProps) {
             dataKey="elapsed_sec"
             className="text-[10px]"
             tickLine={false}
+            axisLine={false}
             tickFormatter={formatElapsed}
             interval="preserveStartEnd"
-            minTickGap={40}
+            minTickGap={50}
           />
           <YAxis
+            width={Y_AXIS_WIDTH}
             className="text-[10px]"
-            domain={[minHr, maxHr]}
+            domain={[yMin, yMax]}
             tickLine={false}
+            axisLine={false}
             tickFormatter={(v: number) => `${v}`}
           />
           <Tooltip
-            content={
-              <TimelineTooltip
-                exerciseSets={exerciseSets}
-                exerciseColorMap={exerciseColorMap}
-              />
-            }
+            cursor={{ stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }}
+            content={<UnifiedTooltip exerciseSets={exerciseSets} zones={zones} />}
           />
           <Area
             type="monotone"
             dataKey="hr"
-            stroke="#f87171"
+            stroke="rgba(255,255,255,0.85)"
             strokeWidth={1.5}
-            fill={`url(#${gradientId})`}
+            fill="rgba(255,255,255,0.04)"
             dot={false}
-            activeDot={{ r: 3, fill: "#f87171" }}
+            activeDot={{ r: 3, fill: "#fff", stroke: "rgba(255,255,255,0.5)" }}
             isAnimationActive={false}
           />
         </ComposedChart>
       </ResponsiveContainer>
 
-      {/* Exercise Legend */}
-      {exerciseColorMap.size > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 px-1">
-          {Array.from(exerciseColorMap.entries()).map(([cat, color]) => (
-            <div key={cat} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+      {/* Exercise Gantt Bar */}
+      {exerciseBlocks.length > 0 && totalDuration > 0 && (
+        <div
+          className="relative h-8 mt-0.5"
+          style={{ marginLeft: BAR_LEFT, marginRight: CHART_MARGIN.right }}
+        >
+          {exerciseBlocks.map((block, i) => {
+            const left = (block.startSec / totalDuration) * 100;
+            const width = ((block.endSec - block.startSec) / totalDuration) * 100;
+            const isHovered = hoveredBlock === block;
+
+            return (
               <div
-                className="w-2.5 h-2.5 rounded-sm shrink-0"
-                style={{ backgroundColor: color, opacity: 0.7 }}
-              />
-              <span>{formatCategory(cat)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+                key={i}
+                className="absolute top-0 bottom-0 rounded-sm overflow-hidden flex items-center transition-opacity duration-100"
+                style={{
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  backgroundColor: block.color,
+                  opacity: isHovered ? 0.95 : 0.55,
+                }}
+              >
+                {/* Set dividers */}
+                {block.sets.length > 1 &&
+                  block.sets.slice(1).map((s, si) => {
+                    const setOffset =
+                      ((s.start_sec - block.startSec) / (block.endSec - block.startSec)) * 100;
+                    return (
+                      <div
+                        key={si}
+                        className="absolute top-1 bottom-1"
+                        style={{
+                          left: `${setOffset}%`,
+                          width: 1,
+                          backgroundColor: "rgba(0,0,0,0.3)",
+                        }}
+                      />
+                    );
+                  })}
 
-// --- View B: HR per Set Bar Chart ---
+                {/* Exercise name */}
+                <span
+                  className="text-[9px] font-medium text-white truncate px-1 relative z-10"
+                  style={{ textShadow: "0 1px 2px rgba(0,0,0,0.6)" }}
+                >
+                  {formatCategory(block.exercise)}
+                </span>
+              </div>
+            );
+          })}
 
-interface SetBarData {
-  label: string;
-  exercise: string;
-  avgHr: number;
-  peakHr: number;
-  reps: number;
-  weight: number | null;
-  color: string;
-}
-
-function HrPerSetChart({ hrTimeline, exerciseSets }: WorkoutHrTimelineProps) {
-  const exerciseColorMap = useMemo(
-    () => (exerciseSets ? buildExerciseColorMap(exerciseSets) : new Map()),
-    [exerciseSets]
-  );
-
-  const barData: SetBarData[] = useMemo(() => {
-    if (!exerciseSets) return [];
-    const workingSets = exerciseSets.filter((s) => s.set_type === "ACTIVE" || s.set_type === "WARMUP");
-    const setCountByExercise: Record<string, number> = {};
-
-    return workingSets.map((s) => {
-      const name = s.exercise || "Unknown";
-      setCountByExercise[name] = (setCountByExercise[name] || 0) + 1;
-      const setNum = setCountByExercise[name];
-
-      // Find HR points within this set's time window
-      const startSec = s.start_sec;
-      const endSec = s.start_sec + s.duration_sec;
-      const hrInSet = hrTimeline.filter(
-        (p) => p.elapsed_sec >= startSec && p.elapsed_sec <= endSec
-      );
-
-      const avgHr =
-        hrInSet.length > 0
-          ? Math.round(hrInSet.reduce((sum, p) => sum + p.hr, 0) / hrInSet.length)
-          : 0;
-      const peakHr =
-        hrInSet.length > 0 ? Math.max(...hrInSet.map((p) => p.hr)) : 0;
-
-      return {
-        label: `${formatCategory(name).split(" ").map(w => w[0]).join("")} ${setNum}`,
-        exercise: formatCategory(name),
-        avgHr,
-        peakHr,
-        reps: s.reps,
-        weight: s.weight,
-        color: exerciseColorMap.get(name) || "#888",
-      };
-    });
-  }, [hrTimeline, exerciseSets, exerciseColorMap]);
-
-  if (barData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
-        No exercise set data available
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <ResponsiveContainer width="100%" height={240}>
-        <BarChart data={barData} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis
-            dataKey="label"
-            className="text-[10px]"
-            tickLine={false}
-            interval={0}
-            angle={-45}
-            textAnchor="end"
-            height={50}
-          />
-          <YAxis
-            className="text-[10px]"
-            tickLine={false}
-            domain={["dataMin - 10", "dataMax + 10"]}
-            tickFormatter={(v: number) => `${v}`}
-          />
-          <Tooltip
-            cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-            content={({ active, payload }) => {
-              if (!active || !payload?.[0]) return null;
-              const d = payload[0].payload as SetBarData;
-              return (
-                <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
-                  <div className="font-medium">{d.exercise}</div>
-                  {d.weight && d.reps > 0 && <div className="mt-1">{d.weight} kg x {d.reps} reps</div>}
-                  {!d.weight && d.reps > 0 && <div className="mt-1">{d.reps} reps</div>}
-                  <div className={d.weight ? "" : "mt-1"}>Avg HR: {d.avgHr} bpm</div>
-                  <div>Peak HR: {d.peakHr} bpm</div>
-                </div>
-              );
-            }}
-          />
-          <Bar dataKey="avgHr" radius={[3, 3, 0, 0]} isAnimationActive={false}>
-            {barData.map((entry, idx) => (
-              <Cell key={idx} fill={entry.color} fillOpacity={0.75} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-
-      {/* Exercise Legend */}
-      {exerciseColorMap.size > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 px-1">
-          {Array.from(exerciseColorMap.entries()).map(([cat, color]) => (
-            <div key={cat} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <div
-                className="w-2.5 h-2.5 rounded-sm shrink-0"
-                style={{ backgroundColor: color, opacity: 0.7 }}
-              />
-              <span>{formatCategory(cat)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- Main Component ---
-
-export function WorkoutHrTimeline({ hrTimeline, exerciseSets }: WorkoutHrTimelineProps) {
-  const [view, setView] = useState<"timeline" | "per-set">("timeline");
-  const hasSetData = exerciseSets && exerciseSets.length > 0;
-
-  return (
-    <div>
-      {/* View toggle */}
-      {hasSetData && (
-        <div className="flex gap-1 mb-3">
-          <button
-            onClick={() => setView("timeline")}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-              view === "timeline"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            HR Timeline
-          </button>
-          <button
-            onClick={() => setView("per-set")}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-              view === "per-set"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            HR per Set
-          </button>
+          {/* Hover crosshair on exercise bar */}
+          {hoveredTime != null && (
+            <div
+              className="absolute top-0 bottom-0 w-px bg-white/30 pointer-events-none"
+              style={{ left: `${(hoveredTime / totalDuration) * 100}%` }}
+            />
+          )}
         </div>
       )}
 
-      {view === "timeline" ? (
-        <HrTimelineChart hrTimeline={hrTimeline} exerciseSets={exerciseSets} />
-      ) : (
-        <HrPerSetChart hrTimeline={hrTimeline} exerciseSets={exerciseSets} />
+      {/* Compact zone legend */}
+      {visibleZones.length > 0 && (
+        <div className="flex gap-3 mt-2 px-1">
+          {visibleZones.map((z) => {
+            const config = ZONE_CONFIG[z.zone];
+            if (!config) return null;
+            return (
+              <div key={z.zone} className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                <div
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: config.color }}
+                />
+                <span>Z{z.zone} {config.label}</span>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
