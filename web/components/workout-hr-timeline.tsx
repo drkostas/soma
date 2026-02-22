@@ -334,6 +334,7 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
           margin={CHART_MARGIN}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
+          onClick={() => setSelectedBlockIdx(null)}
         >
           <defs>
             <linearGradient id="hrZoneGradient" x1="0" y1="0" x2="0" y2="1">
