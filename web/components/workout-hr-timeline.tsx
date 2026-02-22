@@ -156,7 +156,6 @@ function UnifiedTooltip({ active, payload, exerciseSets, zones }: any) {
   let exerciseName = "";
   let setInfo = "";
   let weightReps = "";
-  let isRest = false;
 
   if (exerciseSets) {
     const workingSets = exerciseSets.filter(
@@ -173,7 +172,7 @@ function UnifiedTooltip({ active, payload, exerciseSets, zones }: any) {
       const name = s.exercise || "Unknown";
       setCountByExercise[name] = (setCountByExercise[name] || 0) + 1;
       if (elapsedSec >= s.start_sec && elapsedSec <= s.start_sec + s.duration_sec) {
-        exerciseName = formatCategory(s.exercise);
+        exerciseName = s.exercise || "Unknown";
         const isWarmup = s.set_type === "WARMUP";
         setInfo = isWarmup
           ? "Warmup"
@@ -187,14 +186,19 @@ function UnifiedTooltip({ active, payload, exerciseSets, zones }: any) {
       }
     }
 
-    if (!exerciseName) {
-      const rest = exerciseSets.find(
-        (s: ExerciseSet) =>
-          s.set_type === "REST" &&
-          elapsedSec >= s.start_sec &&
-          elapsedSec <= s.start_sec + s.duration_sec
-      );
-      if (rest) isRest = true;
+    // If hovering in a gap, show the nearest exercise for context
+    if (!exerciseName && workingSets.length > 0) {
+      let closest: ExerciseSet | null = null;
+      let minDist = Infinity;
+      for (const s of workingSets) {
+        const mid = s.start_sec + s.duration_sec / 2;
+        const dist = Math.abs(elapsedSec - mid);
+        if (dist < minDist) { minDist = dist; closest = s; }
+      }
+      if (closest) {
+        exerciseName = closest.exercise || "Unknown";
+        setInfo = "Rest";
+      }
     }
   }
 
@@ -222,7 +226,6 @@ function UnifiedTooltip({ active, payload, exerciseSets, zones }: any) {
           {weightReps && <div>{weightReps}</div>}
         </div>
       )}
-      {isRest && <div className="text-muted-foreground mt-1">Rest</div>}
 
       <div className="text-muted-foreground mt-1">{formatElapsed(elapsedSec)}</div>
     </div>
@@ -409,7 +412,7 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
                   className="text-[9px] font-medium text-white truncate px-1 relative z-10"
                   style={{ textShadow: "0 1px 2px rgba(0,0,0,0.6)" }}
                 >
-                  {formatCategory(block.exercise)}
+                  {block.exercise}
                 </span>
               </div>
             );
