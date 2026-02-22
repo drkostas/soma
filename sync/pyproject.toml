@@ -8,6 +8,7 @@ dependencies = [
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
     "requests>=2.31",
+    "fit-tool>=0.9.15",
 ]
 
 [project.optional-dependencies]
