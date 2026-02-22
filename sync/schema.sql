@@ -203,3 +203,66 @@ CREATE TABLE IF NOT EXISTS backfill_progress (
     status              VARCHAR(20) DEFAULT 'pending',
     updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ===================
+-- PLATFORM CREDENTIALS
+-- ===================
+
+CREATE TABLE IF NOT EXISTS platform_credentials (
+    platform        VARCHAR(50) PRIMARY KEY,
+    auth_type       VARCHAR(20) NOT NULL,
+    credentials     JSONB NOT NULL DEFAULT '{}',
+    connected_at    TIMESTAMPTZ,
+    expires_at      TIMESTAMPTZ,
+    status          VARCHAR(20) DEFAULT 'disconnected'
+);
+
+-- ===================
+-- SYNC RULES
+-- ===================
+
+CREATE TABLE IF NOT EXISTS sync_rules (
+    id              SERIAL PRIMARY KEY,
+    source_platform VARCHAR(50) NOT NULL,
+    activity_type   VARCHAR(50) DEFAULT '*',
+    preprocessing   TEXT[] DEFAULT '{}',
+    destinations    JSONB NOT NULL,
+    enabled         BOOLEAN DEFAULT true,
+    priority        INTEGER DEFAULT 0,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ===================
+-- ACTIVITY SYNC LOG
+-- ===================
+
+CREATE TABLE IF NOT EXISTS activity_sync_log (
+    id              BIGSERIAL PRIMARY KEY,
+    source_platform VARCHAR(50) NOT NULL,
+    source_id       VARCHAR(200) NOT NULL,
+    destination     VARCHAR(50) NOT NULL,
+    destination_id  VARCHAR(200),
+    rule_id         INTEGER REFERENCES sync_rules(id),
+    status          VARCHAR(20) NOT NULL,
+    error_message   TEXT,
+    processed_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_log_source ON activity_sync_log(source_platform, source_id);
+CREATE INDEX IF NOT EXISTS idx_sync_log_dest ON activity_sync_log(destination, destination_id);
+
+-- ===================
+-- LAYER 1: RAW DATA (Strava)
+-- ===================
+
+CREATE TABLE IF NOT EXISTS strava_raw_data (
+    id              BIGSERIAL PRIMARY KEY,
+    strava_id       BIGINT NOT NULL,
+    endpoint_name   VARCHAR(100) NOT NULL,
+    raw_json        JSONB NOT NULL,
+    synced_at       TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(strava_id, endpoint_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_strava_raw_id ON strava_raw_data(strava_id);
+CREATE INDEX IF NOT EXISTS idx_strava_raw_endpoint ON strava_raw_data(endpoint_name);
