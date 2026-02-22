@@ -32,31 +32,51 @@ export async function GET(
       : [],
   };
 
-  // Try to find matching Garmin strength training activity
-  const garminRows = await sql`
-    SELECT
-      ga.activity_id,
-      (ga.raw_json->>'averageHR')::float as avg_hr,
-      (ga.raw_json->>'maxHR')::float as max_hr,
-      (ga.raw_json->>'calories')::float as calories,
-      ga.raw_json->>'startTimeGMT' as start_gmt
-    FROM garmin_activity_raw ga
-    WHERE ga.endpoint_name = 'summary'
-      AND ga.raw_json->'activityType'->>'typeKey' = 'strength_training'
-      AND ABS(EXTRACT(EPOCH FROM (${workout.start_time}::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp))) <= 900
-    ORDER BY ABS(EXTRACT(EPOCH FROM (${workout.start_time}::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp)))
+  // Look up enrichment data (primary) or fall back to fuzzy timestamp match
+  const enrichmentRows = await sql`
+    SELECT hevy_id, garmin_activity_id, avg_hr, max_hr, calories
+    FROM workout_enrichment
+    WHERE hevy_id = ${id}
     LIMIT 1
   `;
 
+  let garminActivityId: number | null = null;
+  let enrichedHr: { avg_hr: number | null; max_hr: number | null; calories: number | null } | null = null;
+
+  if (enrichmentRows.length > 0) {
+    const e = enrichmentRows[0];
+    garminActivityId = e.garmin_activity_id;
+    enrichedHr = { avg_hr: e.avg_hr, max_hr: e.max_hr, calories: e.calories };
+  } else {
+    // Fallback: fuzzy timestamp match
+    const garminRows = await sql`
+      SELECT
+        ga.activity_id,
+        (ga.raw_json->>'averageHR')::float as avg_hr,
+        (ga.raw_json->>'maxHR')::float as max_hr,
+        (ga.raw_json->>'calories')::float as calories
+      FROM garmin_activity_raw ga
+      WHERE ga.endpoint_name = 'summary'
+        AND ga.raw_json->'activityType'->>'typeKey' = 'strength_training'
+        AND ABS(EXTRACT(EPOCH FROM (${workout.start_time}::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp))) <= 21600
+      ORDER BY ABS(EXTRACT(EPOCH FROM (${workout.start_time}::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp)))
+      LIMIT 1
+    `;
+    if (garminRows.length > 0) {
+      const m = garminRows[0];
+      garminActivityId = m.activity_id;
+      enrichedHr = { avg_hr: m.avg_hr, max_hr: m.max_hr, calories: m.calories };
+    }
+  }
+
   let garmin: Record<string, any> | null = null;
-  if (garminRows.length > 0) {
-    const match = garminRows[0];
+  if (garminActivityId && enrichedHr) {
     // Fetch HR zones for the matched activity
     const zoneRows = await sql`
       SELECT raw_json
       FROM garmin_activity_raw
       WHERE endpoint_name = 'hr_zones'
-        AND activity_id = ${match.activity_id}
+        AND activity_id = ${garminActivityId}
       LIMIT 1
     `;
 
@@ -77,9 +97,9 @@ export async function GET(
     }
 
     garmin = {
-      avg_hr: match.avg_hr,
-      max_hr: match.max_hr,
-      calories: match.calories,
+      avg_hr: enrichedHr.avg_hr,
+      max_hr: enrichedHr.max_hr,
+      calories: enrichedHr.calories,
       hr_zones: hrZones,
     };
 
@@ -87,7 +107,7 @@ export async function GET(
     const detailsRows = await sql`
       SELECT raw_json
       FROM garmin_activity_raw
-      WHERE activity_id = ${match.activity_id}
+      WHERE activity_id = ${garminActivityId}
         AND endpoint_name = 'details'
       LIMIT 1
     `;
@@ -116,17 +136,27 @@ export async function GET(
     const setsRows = await sql`
       SELECT raw_json
       FROM garmin_activity_raw
-      WHERE activity_id = ${match.activity_id}
+      WHERE activity_id = ${garminActivityId}
         AND endpoint_name = 'exercise_sets'
       LIMIT 1
     `;
+
+    // Get activity start time for exercise set offset calculation
+    const summaryRows = await sql`
+      SELECT raw_json->>'startTimeGMT' as start_gmt
+      FROM garmin_activity_raw
+      WHERE activity_id = ${garminActivityId}
+        AND endpoint_name = 'summary'
+      LIMIT 1
+    `;
+    const activityStartGmt = summaryRows.length > 0 ? summaryRows[0].start_gmt : null;
 
     let hasGarminSets = false;
     if (setsRows.length > 0) {
       const setsData = setsRows[0].raw_json;
       const exerciseSets = setsData?.exerciseSets;
-      if (Array.isArray(exerciseSets) && exerciseSets.length > 0) {
-        const activityStartMs = new Date(match.start_gmt).getTime();
+      if (Array.isArray(exerciseSets) && exerciseSets.length > 0 && activityStartGmt) {
+        const activityStartMs = new Date(activityStartGmt).getTime();
         garmin.exercise_sets = exerciseSets.map((s: any) => ({
           exercise: s.exercises?.[0]?.category || null,
           start_sec: Math.round((new Date(s.startTime).getTime() - activityStartMs) / 1000),
@@ -204,6 +234,14 @@ export async function GET(
         garmin.exercise_sets = synthSets;
       }
     }
+  } else if (enrichedHr) {
+    // Enrichment data exists but no Garmin activity link — show HR/calories only
+    garmin = {
+      avg_hr: enrichedHr.avg_hr,
+      max_hr: enrichedHr.max_hr,
+      calories: enrichedHr.calories,
+      hr_zones: null,
+    };
   }
 
   return NextResponse.json({ ...workout, garmin });

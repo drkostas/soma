@@ -29,22 +29,11 @@ async function getRecentWorkouts(cutoff: string) {
       h.raw_json->>'end_time' as end_time,
       jsonb_array_length(h.raw_json->'exercises') as exercise_count,
       h.raw_json->'exercises' as exercises,
-      g.avg_hr,
-      g.max_hr,
-      g.garmin_calories
+      we.avg_hr,
+      we.max_hr,
+      we.calories as garmin_calories
     FROM hevy_raw_data h
-    LEFT JOIN LATERAL (
-      SELECT
-        (ga.raw_json->>'averageHR')::float as avg_hr,
-        (ga.raw_json->>'maxHR')::float as max_hr,
-        (ga.raw_json->>'calories')::float as garmin_calories
-      FROM garmin_activity_raw ga
-      WHERE ga.endpoint_name = 'summary'
-        AND ga.raw_json->'activityType'->>'typeKey' = 'strength_training'
-        AND ABS(EXTRACT(EPOCH FROM ((h.raw_json->>'start_time')::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp))) <= 900
-      ORDER BY ABS(EXTRACT(EPOCH FROM ((h.raw_json->>'start_time')::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp)))
-      LIMIT 1
-    ) g ON true
+    LEFT JOIN workout_enrichment we ON we.hevy_id = h.raw_json->>'id'
     WHERE h.endpoint_name = 'workout'
       AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
     ORDER BY h.raw_json->>'start_time' DESC
@@ -126,26 +115,14 @@ async function getWorkoutSummaryStats() {
 async function getGarminCalorieStats(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
-    WITH matched AS (
-      SELECT
-        h.raw_json->>'id' as workout_id,
-        (SELECT (ga.raw_json->>'calories')::float
-         FROM garmin_activity_raw ga
-         WHERE ga.endpoint_name = 'summary'
-           AND ga.raw_json->'activityType'->>'typeKey' = 'strength_training'
-           AND ABS(EXTRACT(EPOCH FROM ((h.raw_json->>'start_time')::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp))) <= 900
-         ORDER BY ABS(EXTRACT(EPOCH FROM ((h.raw_json->>'start_time')::timestamp - (ga.raw_json->>'startTimeGMT')::timestamp)))
-         LIMIT 1
-        ) as calories
-      FROM hevy_raw_data h
-      WHERE h.endpoint_name = 'workout'
-        AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
-    )
     SELECT
       COUNT(*) as total,
-      COUNT(calories) as matched,
-      ROUND(AVG(calories)::numeric) as avg_calories
-    FROM matched
+      COUNT(we.calories) as matched,
+      ROUND(AVG(we.calories)::numeric) as avg_calories
+    FROM hevy_raw_data h
+    LEFT JOIN workout_enrichment we ON we.hevy_id = h.raw_json->>'id'
+    WHERE h.endpoint_name = 'workout'
+      AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
   `;
   return rows[0];
 }
