@@ -8,6 +8,7 @@ from garmin_sync import sync_day, sync_activities_for_date, sync_activity_detail
 from hevy_sync import sync_all_workouts
 from hevy_client import HevyClient
 from parsers import process_day
+from activity_replacer import enrich_new_workouts
 from db import get_connection, log_sync
 from config import HEVY_API_KEY
 
@@ -70,6 +71,14 @@ def run_pipeline(days: int = 7):
         print(f"  Hevy: {hevy_count} workouts saved")
     except Exception as e:
         print(f"  Hevy sync error: {e}")
+
+    # --- Auto-enrich new/stale workouts ---
+    print(f"\nEnriching workouts with HR & calorie data...")
+    try:
+        enriched = enrich_new_workouts()
+        print(f"  Enriched: {enriched} workouts")
+    except Exception as e:
+        print(f"  Enrichment error: {e}")
 
     # --- Log completion ---
     total = total_raw + total_activities

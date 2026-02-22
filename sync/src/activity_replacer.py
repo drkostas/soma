@@ -470,7 +470,182 @@ def _rename_all_activities(args):
 
 
 # ---------------------------------------------------------------------------
-# Enrich-only mode
+# Incremental auto-enrichment (called by pipeline)
+# ---------------------------------------------------------------------------
+
+def enrich_new_workouts() -> int:
+    """Incrementally enrich new or stale Hevy workouts.
+
+    Called automatically at the end of each sync pipeline run.
+
+    1. Finds Hevy workouts with no enrichment row (new)
+    2. Finds workouts with fallback HR (avg_N/static) — retries in case
+       Garmin daily HR data has arrived since last run
+    3. Resolves HR from Garmin daily monitoring
+    4. Computes calories via Keytel formula
+    5. Saves enrichment data
+    6. Matches to Garmin activities
+
+    Returns count of newly enriched/updated workouts.
+    """
+    from fit_generator import _calc_calories, _parse_timestamp
+
+    with get_connection() as conn:
+        workouts = get_all_hevy_workouts(conn)
+
+    if not workouts:
+        print("  No Hevy workouts found")
+        return 0
+
+    # Find which ones already have enrichment
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT hevy_id, hr_source, garmin_activity_id FROM workout_enrichment")
+            existing = {row[0]: {"hr_source": row[1], "garmin_activity_id": row[2]}
+                        for row in cur.fetchall()}
+
+    # New workouts (not in enrichment table)
+    new_workouts = [w for w in workouts if w["hevy_id"] not in existing]
+    # Stale workouts (used fallback HR, might now have real Garmin daily data)
+    stale_workouts = [
+        w for w in workouts
+        if w["hevy_id"] in existing and existing[w["hevy_id"]]["hr_source"] != "daily"
+    ]
+
+    to_enrich = new_workouts + stale_workouts
+    if not to_enrich:
+        print("  All workouts already enriched with real HR data")
+        return 0
+
+    print(f"  {len(new_workouts)} new, {len(stale_workouts)} stale (retrying for real HR)")
+
+    # Get recent real HR averages for fallback calculation
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT avg_hr FROM workout_enrichment
+                   WHERE hr_source = 'daily' AND avg_hr >= %s
+                   ORDER BY workout_date DESC LIMIT %s""",
+                (_MIN_EXERCISE_HR, _FALLBACK_HR_WINDOW),
+            )
+            recent_hr_avgs: list[float] = [row[0] for row in cur.fetchall()]
+
+    # Build Garmin startTimeGMT lookup for timezone-offset correction
+    garmin_start_times: dict[int, str] = {}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT activity_id, raw_json->>'startTimeGMT' AS start_gmt,
+                       raw_json->>'duration' AS duration
+                FROM garmin_activity_raw
+                WHERE endpoint_name = 'summary'
+                  AND raw_json->'activityType'->>'typeKey' = 'strength_training'
+            """)
+            for row in cur.fetchall():
+                garmin_start_times[row[0]] = (row[1], float(row[2]) if row[2] else None)
+
+    enriched = 0
+    for w in to_enrich:
+        try:
+            with get_connection() as conn:
+                hw = w["hevy_workout"]
+                old_info = existing.get(w["hevy_id"])
+                old_source = old_info["hr_source"] if old_info else None
+                garmin_aid = old_info["garmin_activity_id"] if old_info else None
+
+                # For stale workouts with a Garmin activity, try using the Garmin
+                # startTimeGMT to correct the HR search window (fixes timezone offset)
+                hr_samples = []
+                hr_source = ""
+                if old_source and garmin_aid and garmin_aid in garmin_start_times:
+                    gmt_str, g_duration = garmin_start_times[garmin_aid]
+                    if gmt_str:
+                        # Build corrected UTC start/end from Garmin timestamps
+                        hevy_start = hw.get("start_time", "")
+                        hevy_end = hw.get("end_time", "")
+                        if hevy_start and hevy_end:
+                            hevy_dur = (_parse_timestamp(hevy_end) - _parse_timestamp(hevy_start)).total_seconds()
+                        else:
+                            hevy_dur = g_duration or 3600
+                        garmin_start_utc = gmt_str.replace(" ", "T") + "+00:00"
+                        garmin_end_dt = _parse_timestamp(garmin_start_utc) + timedelta(seconds=hevy_dur)
+                        garmin_end_utc = garmin_end_dt.isoformat()
+
+                        hr_samples = get_daily_hr_for_window(conn, garmin_start_utc, garmin_end_utc)
+                        if hr_samples:
+                            avg = sum(hr_samples) / len(hr_samples)
+                            if avg >= _MIN_EXERCISE_HR:
+                                hr_source = "daily"
+                            else:
+                                hr_samples = []  # resting HR, discard
+
+                # Fall back to standard resolution (Hevy timestamps)
+                if not hr_samples:
+                    hr_samples, hr_source = resolve_hr_samples(conn, hw, recent_hr_avgs)
+
+                # For stale workouts, only update if we now have better data
+                if old_source and hr_source == old_source:
+                    continue  # no improvement, skip
+
+                # Need start/end times for calorie calculation
+                start = hw.get("start_time", "")
+                end = hw.get("end_time", "")
+                if not start or not end:
+                    continue
+
+                start_dt = _parse_timestamp(start)
+                end_dt = _parse_timestamp(end)
+                duration_s = (end_dt - start_dt).total_seconds()
+                calories = _calc_calories(hr_samples, duration_s, start_dt.year)
+
+                # Count exercises and sets
+                exercises = hw.get("exercises", [])
+                exercise_count = len(exercises)
+                total_sets = sum(len(ex.get("sets", [])) for ex in exercises)
+
+                avg_hr = round(sum(hr_samples) / len(hr_samples)) if hr_samples else None
+
+                upsert_workout_enrichment(
+                    conn,
+                    hevy_id=w["hevy_id"],
+                    hr_source=hr_source,
+                    avg_hr=avg_hr,
+                    max_hr=max(hr_samples) if hr_samples else None,
+                    min_hr=min(hr_samples) if hr_samples else None,
+                    hr_samples=hr_samples,
+                    hr_sample_count=len(hr_samples),
+                    calories=calories,
+                    duration_s=duration_s,
+                    exercise_count=exercise_count,
+                    total_sets=total_sets,
+                    hevy_title=w.get("hevy_title"),
+                    workout_date=w.get("date"),
+                    status="enriched",
+                )
+                enriched += 1
+
+                # Keep recent_hr_avgs up to date for fallback calculation
+                if hr_source == "daily" and avg_hr and avg_hr >= _MIN_EXERCISE_HR:
+                    recent_hr_avgs.insert(0, float(avg_hr))
+
+                label = "NEW" if not old_source else f"UPDATED ({old_source} -> {hr_source})"
+                print(
+                    f"    {label}: {w['hevy_title']} ({w['date']}) "
+                    f"- {hr_source}, avg_hr={avg_hr}, {calories} kcal"
+                )
+        except Exception as e:
+            print(f"    ERROR enriching {w.get('hevy_id', '?')}: {e}")
+
+    # Match to Garmin activities for any enriched workouts
+    if enriched > 0:
+        print("  Matching to Garmin activities...")
+        _populate_garmin_ids()
+
+    return enriched
+
+
+# ---------------------------------------------------------------------------
+# Enrich-only mode (full re-enrichment, CLI only)
 # ---------------------------------------------------------------------------
 
 def _enrich_all_workouts(args):
