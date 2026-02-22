@@ -4,7 +4,14 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Check, ChevronRight, Loader2, Trash2 } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { AlertTriangle, Check, ChevronRight, Eye, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Activity {
@@ -43,6 +50,221 @@ function formatTime(ts: string): string {
   const d = new Date(ts + "Z");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     + " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatSpeed(mps: number): string {
+  if (!mps) return "—";
+  const kph = mps * 3.6;
+  return `${kph.toFixed(1)} km/h`;
+}
+
+function formatPace(mps: number): string {
+  if (!mps) return "—";
+  const minPerKm = 1000 / mps / 60;
+  const m = Math.floor(minPerKm);
+  const s = Math.round((minPerKm - m) * 60);
+  return `${m}:${s.toString().padStart(2, "0")} /km`;
+}
+
+function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between py-1.5 border-b border-border/30 last:border-0">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm font-mono">{value}</span>
+    </div>
+  );
+}
+
+function ActivityDetailSheet({
+  activityId,
+  open,
+  onOpenChange,
+}: {
+  activityId: number | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [detail, setDetail] = useState<Record<string, any> | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!activityId || !open) return;
+    setLoading(true);
+    setDetail(null);
+    fetch(`/api/activity/${activityId}`)
+      .then((r) => r.json())
+      .then((d) => setDetail(d))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [activityId, open]);
+
+  const summary = detail?.summary;
+  const splits = detail?.splits;
+  const hrZones = detail?.hr_zones;
+  const weather = detail?.weather;
+  const gear = detail?.gear;
+  const exerciseSets = detail?.exercise_sets;
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[420px] sm:max-w-[420px] overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="text-base">
+            {summary?.activityName || `Activity ${activityId}`}
+          </SheetTitle>
+          <SheetDescription>
+            {summary?.activityType?.typeKey?.replace(/_/g, " ") || "Activity"} — ID {activityId}
+          </SheetDescription>
+        </SheetHeader>
+
+        {loading && (
+          <div className="flex items-center justify-center py-12 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Loading details...
+          </div>
+        )}
+
+        {!loading && !summary && (
+          <div className="text-center py-12 text-muted-foreground text-sm">
+            No detail data available for this activity.
+          </div>
+        )}
+
+        {!loading && summary && (
+          <div className="space-y-5 px-4 pb-6">
+            {/* Core Metrics */}
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Summary</h4>
+              <DetailRow label="Start Time" value={summary.startTimeLocal ? formatTime(summary.startTimeLocal) : undefined} />
+              <DetailRow label="Duration" value={summary.duration ? formatDuration(summary.duration) : undefined} />
+              <DetailRow label="Distance" value={summary.distance ? formatDistance(summary.distance) : undefined} />
+              <DetailRow label="Calories" value={summary.calories ? `${Math.round(summary.calories)} kcal` : undefined} />
+              <DetailRow label="Avg Speed" value={summary.averageSpeed ? formatSpeed(summary.averageSpeed) : undefined} />
+              <DetailRow label="Max Speed" value={summary.maxSpeed ? formatSpeed(summary.maxSpeed) : undefined} />
+              {summary.averageSpeed > 0 && summary.distance > 1000 && (
+                <DetailRow label="Avg Pace" value={formatPace(summary.averageSpeed)} />
+              )}
+              <DetailRow label="Elevation Gain" value={summary.elevationGain ? `${Math.round(summary.elevationGain)} m` : undefined} />
+              <DetailRow label="Avg HR" value={summary.averageHR ? `${Math.round(summary.averageHR)} bpm` : undefined} />
+              <DetailRow label="Max HR" value={summary.maxHR ? `${Math.round(summary.maxHR)} bpm` : undefined} />
+              {summary.averageSwolf != null && (
+                <DetailRow label="Avg SWOLF" value={String(Math.round(summary.averageSwolf))} />
+              )}
+            </div>
+
+            {/* HR Zones */}
+            {hrZones && Array.isArray(hrZones) && hrZones.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">HR Zones</h4>
+                {hrZones.map((z: any, i: number) => (
+                  <div key={i} className="flex items-center gap-2 py-1">
+                    <span className="text-xs text-muted-foreground w-14">
+                      Z{z.zoneNumber ?? i + 1}
+                    </span>
+                    <div className="flex-1 h-3 bg-accent rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary/70 rounded-full"
+                        style={{ width: `${Math.min(100, ((z.secsInZone || 0) / (summary.duration || 1)) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-mono w-12 text-right">
+                      {formatDuration(z.secsInZone || 0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Splits */}
+            {splits && Array.isArray(splits.lapDTOs) && splits.lapDTOs.length > 1 && (
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Splits ({splits.lapDTOs.length})
+                </h4>
+                <div className="grid grid-cols-[40px_1fr_1fr_1fr] gap-1 text-xs">
+                  <span className="text-muted-foreground font-medium">#</span>
+                  <span className="text-muted-foreground font-medium">Distance</span>
+                  <span className="text-muted-foreground font-medium">Time</span>
+                  <span className="text-muted-foreground font-medium">Pace</span>
+                  {splits.lapDTOs.map((lap: any, i: number) => (
+                    <div key={i} className="contents">
+                      <span className="font-mono text-muted-foreground">{i + 1}</span>
+                      <span className="font-mono">{formatDistance(lap.distance || 0)}</span>
+                      <span className="font-mono">{formatDuration(lap.duration || 0)}</span>
+                      <span className="font-mono">
+                        {lap.averageSpeed ? formatPace(lap.averageSpeed) : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Exercise Sets (strength) */}
+            {exerciseSets?.exerciseSets && Array.isArray(exerciseSets.exerciseSets) && exerciseSets.exerciseSets.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Exercises ({exerciseSets.exerciseSets.length} sets)
+                </h4>
+                {exerciseSets.exerciseSets.slice(0, 20).map((set: any, i: number) => (
+                  <div key={i} className="flex justify-between text-xs py-1 border-b border-border/20 last:border-0">
+                    <span className="text-muted-foreground truncate max-w-[200px]">
+                      {set.exercises?.[0]?.category?.replace(/_/g, " ") || `Set ${i + 1}`}
+                    </span>
+                    <span className="font-mono">
+                      {set.exercises?.[0]?.sets?.[0]?.weight
+                        ? `${set.exercises[0].sets[0].weight}kg × ${set.exercises[0].sets[0].repetitionCount}`
+                        : formatDuration(set.duration || 0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Weather */}
+            {weather && (
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Weather</h4>
+                <DetailRow label="Conditions" value={weather.weatherTypeDTO?.desc} />
+                <DetailRow label="Temperature" value={weather.temp != null ? `${Math.round((weather.temp - 32) * 5 / 9)}°C / ${Math.round(weather.temp)}°F` : undefined} />
+                <DetailRow label="Wind" value={weather.windSpeed != null ? `${(weather.windSpeed * 3.6).toFixed(0)} km/h` : undefined} />
+                {weather.windGust != null && weather.windGust > weather.windSpeed && (
+                  <DetailRow label="Gusts" value={`${(weather.windGust * 3.6).toFixed(0)} km/h`} />
+                )}
+              </div>
+            )}
+
+            {/* Gear */}
+            {gear && Array.isArray(gear) && gear.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Gear</h4>
+                {gear.map((g: any, i: number) => (
+                  <div key={i} className="text-sm py-1">
+                    {g.displayName || g.customMakeModel || "Unknown gear"}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Available Endpoints */}
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Available Data</h4>
+              <div className="flex flex-wrap gap-1">
+                {Object.keys(detail)
+                  .filter((k) => k !== "time_series" && detail[k] != null)
+                  .map((k) => (
+                    <Badge key={k} variant="outline" className="text-[10px]">
+                      {k.replace(/_/g, " ")}
+                    </Badge>
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
 }
 
 // Auto-pick the "better" value for each field
@@ -107,6 +329,7 @@ export function DuplicateResolver() {
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(0);
+  const [sheetActivityId, setSheetActivityId] = useState<number | null>(null);
 
   const fetchDuplicates = useCallback(async () => {
     setLoading(true);
@@ -243,18 +466,26 @@ export function DuplicateResolver() {
         {/* Column headers */}
         <div className="grid grid-cols-[120px_1fr_1fr] gap-2 pb-1 border-b border-border">
           <span />
-          <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+          <button
+            onClick={() => setSheetActivityId(pair.a.id)}
+            className="text-xs font-medium text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors text-left"
+          >
+            <Eye className="h-3 w-3" />
             Activity A
             {pair.a.detailEndpoints > pair.b.detailEndpoints && (
               <Badge variant="secondary" className="text-[10px] px-1 py-0">more data</Badge>
             )}
-          </div>
-          <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+          </button>
+          <button
+            onClick={() => setSheetActivityId(pair.b.id)}
+            className="text-xs font-medium text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors text-left"
+          >
+            <Eye className="h-3 w-3" />
             Activity B
             {pair.b.detailEndpoints > pair.a.detailEndpoints && (
               <Badge variant="secondary" className="text-[10px] px-1 py-0">more data</Badge>
             )}
-          </div>
+          </button>
         </div>
 
         {/* Field rows */}
@@ -293,6 +524,12 @@ export function DuplicateResolver() {
             Skip <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         </div>
+
+        <ActivityDetailSheet
+          activityId={sheetActivityId}
+          open={sheetActivityId !== null}
+          onOpenChange={(open) => { if (!open) setSheetActivityId(null); }}
+        />
       </CardContent>
     </Card>
   );
