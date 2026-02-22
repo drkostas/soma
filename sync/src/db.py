@@ -207,3 +207,116 @@ def get_all_enrichments(conn, limit: int | None = None) -> list[dict]:
             sql += f" LIMIT {int(limit)}"
         cur.execute(sql)
         return cur.fetchall()
+
+
+# ============================
+# STRAVA & SYNC RULE HELPERS
+# ============================
+
+
+def upsert_strava_raw(conn, strava_id: int, endpoint: str, data):
+    """Store raw Strava API response. Upsert on (strava_id, endpoint_name)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO strava_raw_data (strava_id, endpoint_name, raw_json)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (strava_id, endpoint_name)
+            DO UPDATE SET raw_json = EXCLUDED.raw_json, synced_at = NOW()
+            """,
+            (strava_id, endpoint, json.dumps(data) if isinstance(data, (dict, list)) else data),
+        )
+
+
+def upsert_platform_credentials(conn, platform: str, auth_type: str, credentials: dict, expires_at=None):
+    """Insert or update platform credentials. Upsert on (platform)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO platform_credentials (platform, auth_type, credentials, expires_at, status, connected_at)
+            VALUES (%s, %s, %s, %s, 'active', NOW())
+            ON CONFLICT (platform)
+            DO UPDATE SET auth_type = EXCLUDED.auth_type,
+                         credentials = EXCLUDED.credentials,
+                         expires_at = EXCLUDED.expires_at,
+                         status = 'active',
+                         connected_at = NOW()
+            """,
+            (platform, auth_type, json.dumps(credentials) if isinstance(credentials, dict) else credentials, expires_at),
+        )
+
+
+def get_platform_credentials(conn, platform: str) -> dict | None:
+    """Get credentials for a platform. Returns dict or None."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT platform, auth_type, credentials, expires_at, status "
+            "FROM platform_credentials WHERE platform = %s",
+            (platform,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        creds = row[2]
+        if isinstance(creds, str):
+            creds = json.loads(creds)
+        return {
+            "platform": row[0],
+            "auth_type": row[1],
+            "credentials": creds,
+            "expires_at": row[3],
+            "status": row[4],
+        }
+
+
+def get_sync_rules(conn, source_platform: str = None, enabled_only: bool = True) -> list[dict]:
+    """Get sync rules with optional filters. Returns list of dicts."""
+    clauses = []
+    params = []
+    if source_platform:
+        clauses.append("source_platform = %s")
+        params.append(source_platform)
+    if enabled_only:
+        clauses.append("enabled = TRUE")
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            f"SELECT * FROM sync_rules{where} ORDER BY priority DESC",
+            params,
+        )
+        return cur.fetchall()
+
+
+def log_activity_sync(
+    conn,
+    source_platform: str,
+    source_id: str,
+    destination: str,
+    destination_id: str = None,
+    rule_id: int = None,
+    status: str = "sent",
+    error_message: str = None,
+):
+    """Record that an activity was synced (or attempted)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO activity_sync_log
+                (source_platform, source_id, destination, destination_id, rule_id, status, error_message)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (source_platform, source_id, destination, destination_id, rule_id, status, error_message),
+        )
+
+
+def was_already_synced(conn, source_platform: str, source_id: str, destination: str) -> bool:
+    """Check if an activity was already successfully synced to a destination."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*) FROM activity_sync_log
+            WHERE source_platform = %s AND source_id = %s AND destination = %s AND status = 'sent'
+            """,
+            (source_platform, source_id, destination),
+        )
+        return cur.fetchone()[0] > 0
