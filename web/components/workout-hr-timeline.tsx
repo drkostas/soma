@@ -183,7 +183,7 @@ function UnifiedTooltip({ active, payload, zones, extendedBlocks }: any) {
           setInfo = `Set ${workingIdx + 1}/${workingSets.length}`;
         }
         if (closestSet.weight > 0) {
-          weightReps = `${closestSet.weight} kg \u00d7 ${closestSet.reps} reps`;
+          weightReps = `${Math.round(closestSet.weight * 10) / 10} kg \u00d7 ${closestSet.reps} reps`;
         } else if (closestSet.reps > 0) {
           weightReps = `${closestSet.reps} reps`;
         }
@@ -356,9 +356,10 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
               x2={block.fillEnd}
               fill={block.color}
               fillOpacity={
-                selectedBlockIdx === i ? 0.35
-                : hoveredBlockIdx === i ? 0.25
-                : 0.15
+                selectedBlockIdx === i ? 0.50
+                : selectedBlockIdx !== null ? 0.08
+                : hoveredBlockIdx === i ? 0.35
+                : 0.25
               }
               stroke="none"
             />
@@ -393,10 +394,9 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
               x1={extendedBlocks[selectedBlockIdx].startSec}
               x2={extendedBlocks[selectedBlockIdx].fillEnd}
               fill="white"
-              fillOpacity={0.08}
-              stroke="rgba(255,255,255,0.6)"
-              strokeWidth={1.5}
-              strokeDasharray="4 2"
+              fillOpacity={0.12}
+              stroke="rgba(255,255,255,0.8)"
+              strokeWidth={2}
             />
           )}
 
@@ -429,12 +429,13 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
 
           <XAxis
             dataKey="elapsed_sec"
+            type="number"
+            domain={[0, 'dataMax']}
             className="text-[10px]"
             tickLine={false}
             axisLine={false}
             tickFormatter={formatElapsed}
-            interval="preserveStartEnd"
-            minTickGap={50}
+            tickCount={6}
           />
           <YAxis
             width={Y_AXIS_WIDTH}
@@ -455,6 +456,7 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
             stroke="url(#hrZoneGradient)"
             strokeWidth={2}
             fill="url(#hrZoneGradientFill)"
+            fillOpacity={0.15}
             dot={false}
             activeDot={{ r: 3, fill: "#fff", stroke: "rgba(255,255,255,0.5)" }}
             isAnimationActive={false}
@@ -482,7 +484,7 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
                   left: `${left}%`,
                   width: `${width}%`,
                   backgroundColor: block.color,
-                  opacity: isSelected ? 1 : isHovered ? 0.95 : 0.55,
+                  opacity: isSelected ? 1 : selectedBlockIdx !== null ? 0.3 : isHovered ? 0.95 : 0.55,
                   boxShadow: isSelected ? "0 0 0 1.5px rgba(255,255,255,0.8)" : "none",
                 }}
                 onClick={() => setSelectedBlockIdx(isSelected ? null : i)}
@@ -551,11 +553,11 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
             {(() => {
               const weights = hoveredGanttBlock.block.sets
                 .filter((s) => s.weight > 0)
-                .map((s) => s.weight);
+                .map((s) => Math.round(s.weight * 10) / 10);
               if (weights.length === 0) return <div>Bodyweight</div>;
               const min = Math.min(...weights);
               const max = Math.max(...weights);
-              return <div>{min === max ? `${min} kg` : `${min}-${max} kg`}</div>;
+              return <div>{min === max ? `${min} kg` : `${min}–${max} kg`}</div>;
             })()}
             <div>
               {formatElapsed(hoveredGanttBlock.block.startSec)} – {formatElapsed(hoveredGanttBlock.block.endSec)}
