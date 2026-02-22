@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from config import DATABASE_URL
-from db import get_connection
+from db import get_connection, upsert_workout_enrichment, get_outlier_workouts
 from fit_generator import generate_fit
 
 # ---------------------------------------------------------------------------
@@ -244,6 +244,34 @@ def _extract_activity_id(upload_resp) -> int | None:
 
 
 # ---------------------------------------------------------------------------
+# Enrichment persistence
+# ---------------------------------------------------------------------------
+
+def _save_enrichment(conn, workout: dict, hr_samples: list[int], hr_source: str,
+                     fit_info: dict, garmin_activity_id: int | None = None,
+                     status: str = "enriched"):
+    """Persist enrichment data to the workout_enrichment table."""
+    upsert_workout_enrichment(
+        conn,
+        hevy_id=workout["hevy_id"],
+        garmin_activity_id=garmin_activity_id,
+        hr_source=hr_source,
+        avg_hr=fit_info.get("avg_hr"),
+        max_hr=max(hr_samples) if hr_samples else None,
+        min_hr=min(hr_samples) if hr_samples else None,
+        hr_samples=hr_samples,
+        hr_sample_count=len(hr_samples),
+        calories=fit_info.get("calories"),
+        duration_s=fit_info.get("duration_s"),
+        exercise_count=fit_info.get("exercises"),
+        total_sets=fit_info.get("total_sets"),
+        hevy_title=workout.get("hevy_title"),
+        workout_date=workout.get("date"),
+        status=status,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Core orchestration
 # ---------------------------------------------------------------------------
 
@@ -254,6 +282,7 @@ def process_workout(
     garmin_client=None,
     dry_run: bool = False,
     fit_dir: str = DEFAULT_FIT_DIR,
+    enrich_only: bool = False,
 ) -> dict:
     """Process a single Hevy workout: generate FIT and upload.
 
@@ -284,6 +313,18 @@ def process_workout(
             f"{fit_result['calories']} kcal"
         )
 
+        # Save enrichment to DB (before upload, so data is preserved even on upload failure)
+        with get_connection() as conn:
+            _save_enrichment(conn, workout, hr_samples, hr_source, fit_result,
+                             status="enriched")
+
+        if enrich_only:
+            result["status"] = "enriched"
+            # Clean up FIT file since we're not uploading
+            if os.path.exists(fit_path):
+                os.remove(fit_path)
+            return result
+
         if dry_run:
             result["status"] = "dry_run"
             print(f"  DRY RUN - skipping upload for {hevy_id}")
@@ -311,6 +352,14 @@ def process_workout(
                 print(f"  Warning: could not rename activity: {e}")
         elif hevy_title:
             print(f"  Warning: could not extract activity ID from upload response")
+
+        # Update enrichment with Garmin activity ID
+        with get_connection() as conn:
+            upsert_workout_enrichment(
+                conn, hevy_id,
+                garmin_activity_id=new_id,
+                status="uploaded",
+            )
 
         result["status"] = "uploaded"
         print(f"  Successfully uploaded activity for {hevy_id}")
@@ -421,6 +470,235 @@ def _rename_all_activities(args):
 
 
 # ---------------------------------------------------------------------------
+# Enrich-only mode
+# ---------------------------------------------------------------------------
+
+def _enrich_all_workouts(args):
+    """Re-compute HR and calories for all workouts and save to DB.
+
+    Also populates garmin_activity_id by matching timestamps with Garmin activities.
+    """
+    with get_connection() as conn:
+        workouts = get_all_hevy_workouts(conn)
+
+    print(f"Found {len(workouts)} Hevy workouts to enrich")
+
+    # Resolve HR for all workouts
+    print("Resolving heart rate data...")
+    with get_connection() as conn:
+        recent_hr_avgs: list[float] = []
+        workout_hr: list[tuple[list[int], str]] = []
+
+        for w in workouts:
+            hw = w["hevy_workout"]
+            start = hw.get("start_time", "")
+            end = hw.get("end_time", "")
+            if start and end:
+                hr = get_daily_hr_for_window(conn, start, end)
+            else:
+                hr = []
+
+            if hr:
+                avg = sum(hr) / len(hr)
+                if avg >= _MIN_EXERCISE_HR:
+                    recent_hr_avgs.append(avg)
+                    workout_hr.append((hr, "daily"))
+                else:
+                    workout_hr.append(([], ""))
+            else:
+                workout_hr.append(([], ""))
+
+        for i, (hr, source) in enumerate(workout_hr):
+            if source == "":
+                hr, source = resolve_hr_samples(
+                    conn, workouts[i]["hevy_workout"], recent_hr_avgs
+                )
+                workout_hr[i] = (hr, source)
+
+    with_hr = sum(1 for _, s in workout_hr if s == "daily")
+    print(f"  {with_hr} with real HR, {len(workouts) - with_hr} using fallback\n")
+
+    # Process each workout (enrich-only, no upload)
+    os.makedirs(args.fit_dir, exist_ok=True)
+    for i, workout in enumerate(workouts):
+        hr_samples, hr_source = workout_hr[i]
+        print(f"[{i+1}/{len(workouts)}] {workout['hevy_title']} ({workout['date']})")
+        process_workout(
+            workout,
+            hr_samples=hr_samples,
+            hr_source=hr_source,
+            enrich_only=True,
+            fit_dir=args.fit_dir,
+        )
+
+    # Now populate garmin_activity_ids by matching timestamps
+    print("\nPopulating Garmin activity IDs...")
+    _populate_garmin_ids()
+
+    print("\nEnrichment complete!")
+
+
+def _populate_garmin_ids():
+    """Match enrichment rows to Garmin activities by timestamp and update garmin_activity_id.
+
+    Uses a two-pass approach:
+      1. Exact match (+-60s) on timestamp
+      2. Fuzzy match within +-6h to handle Hevy local-time-as-UTC offset
+    """
+    with get_connection() as conn:
+        workouts = get_all_hevy_workouts(conn)
+
+    # Build hevy_id -> datetime lookup
+    hevy_dts: dict[str, datetime] = {}
+    for w in workouts:
+        hw = w["hevy_workout"]
+        start = hw.get("start_time", "")
+        if start:
+            hevy_dts[w["hevy_id"]] = datetime.fromisoformat(start).replace(tzinfo=None)
+
+    # Build garmin (datetime, activity_id) list from DB
+    garmin_activities: list[tuple[datetime, int]] = []
+    garmin_by_time: dict[str, int] = {}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT activity_id, raw_json->>'startTimeGMT' AS start_gmt
+                FROM garmin_activity_raw
+                WHERE endpoint_name = 'summary'
+                  AND raw_json->'activityType'->>'typeKey' = 'strength_training'
+            """)
+            for row in cur.fetchall():
+                gmt_str = row[1]
+                garmin_by_time[gmt_str] = row[0]
+                garmin_activities.append(
+                    (datetime.strptime(gmt_str, "%Y-%m-%d %H:%M:%S"), row[0])
+                )
+
+    matched = 0
+    fuzzy_window = timedelta(hours=6)
+    with get_connection() as conn:
+        for hevy_id, hdt in hevy_dts.items():
+            htime_str = hdt.strftime("%Y-%m-%d %H:%M:%S")
+            garmin_id = garmin_by_time.get(htime_str)
+
+            # Pass 1: exact +-60s
+            if not garmin_id:
+                for offset_s in range(-60, 61):
+                    candidate = (hdt + timedelta(seconds=offset_s)).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    if candidate in garmin_by_time:
+                        garmin_id = garmin_by_time[candidate]
+                        break
+
+            # Pass 2: closest within +-6h (handles Hevy local-time offset)
+            if not garmin_id:
+                candidates = [
+                    (aid, gdt) for gdt, aid in garmin_activities
+                    if abs(gdt - hdt) <= fuzzy_window
+                ]
+                if candidates:
+                    garmin_id = min(candidates, key=lambda x: abs(x[1] - hdt))[0]
+
+            if garmin_id:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """UPDATE workout_enrichment
+                           SET garmin_activity_id = %s, status = 'uploaded', updated_at = NOW()
+                           WHERE hevy_id = %s""",
+                        (garmin_id, hevy_id),
+                    )
+                matched += 1
+
+    print(f"  Matched {matched}/{len(hevy_dts)} workouts to Garmin activities")
+
+
+# ---------------------------------------------------------------------------
+# Fix-outliers mode
+# ---------------------------------------------------------------------------
+
+def _fix_outlier_workouts(args):
+    """Find workouts with resting-level daily HR, delete from Garmin, re-upload."""
+    from garmin_client import init_garmin, rate_limited_call
+
+    with get_connection() as conn:
+        outliers = get_outlier_workouts(conn, max_avg_hr=_MIN_EXERCISE_HR)
+
+    if not outliers:
+        print("No calorie outlier workouts found!")
+        return
+
+    print(f"Found {len(outliers)} outlier workouts to fix:")
+    for o in outliers:
+        print(f"  {o['hevy_title']} ({o['workout_date']}) - avg_hr={o['avg_hr']}, "
+              f"calories={o['calories']}, garmin_id={o['garmin_activity_id']}")
+
+    garmin_client = init_garmin()
+
+    # Re-fetch full workout data
+    with get_connection() as conn:
+        all_workouts = get_all_hevy_workouts(conn)
+    workout_lookup = {w["hevy_id"]: w for w in all_workouts}
+
+    # Resolve HR with the threshold applied (will get avg_N instead of bad daily)
+    fixed = 0
+    for o in outliers:
+        hevy_id = o["hevy_id"]
+        workout = workout_lookup.get(hevy_id)
+        if not workout:
+            print(f"  Workout {hevy_id} not found in DB, skipping")
+            continue
+
+        garmin_id = o["garmin_activity_id"]
+        print(f"\nFixing: {o['hevy_title']} ({o['workout_date']})")
+
+        # Delete from Garmin if we have the activity ID
+        if garmin_id:
+            try:
+                print(f"  Deleting Garmin activity {garmin_id}...")
+                rate_limited_call(garmin_client.delete_activity, str(garmin_id))
+            except Exception as e:
+                print(f"  Warning: could not delete activity {garmin_id}: {e}")
+
+        # Re-resolve HR (threshold will reject the bad daily HR)
+        with get_connection() as conn:
+            # Get recent avgs from enrichment table (excluding this workout)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT avg_hr FROM workout_enrichment
+                       WHERE hr_source = 'daily' AND avg_hr >= %s AND hevy_id != %s
+                       ORDER BY workout_date DESC LIMIT %s""",
+                    (_MIN_EXERCISE_HR, hevy_id, _FALLBACK_HR_WINDOW),
+                )
+                recent_avgs = [row[0] for row in cur.fetchall()]
+
+            hr_samples, hr_source = resolve_hr_samples(
+                conn, workout["hevy_workout"], recent_avgs
+            )
+
+        print(f"  New HR: {hr_source}, avg={sum(hr_samples)//len(hr_samples)} bpm")
+
+        # Re-upload
+        os.makedirs(args.fit_dir, exist_ok=True)
+        result = process_workout(
+            workout,
+            hr_samples=hr_samples,
+            hr_source=hr_source,
+            garmin_client=garmin_client,
+            fit_dir=args.fit_dir,
+        )
+
+        if result["status"] == "uploaded":
+            fixed += 1
+            # Clean up FIT file
+            fit_path = result.get("fit_path")
+            if fit_path and os.path.exists(fit_path):
+                os.remove(fit_path)
+
+    print(f"\nOutlier fix summary: {fixed}/{len(outliers)} fixed")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -455,6 +733,16 @@ def main():
         help="Only rename existing Garmin activities to match Hevy titles (no upload)",
     )
     parser.add_argument(
+        "--enrich-only",
+        action="store_true",
+        help="Re-compute HR/calories for all workouts and save to DB (no upload)",
+    )
+    parser.add_argument(
+        "--fix-outliers",
+        action="store_true",
+        help="Fix calorie outlier workouts (delete from Garmin and re-upload)",
+    )
+    parser.add_argument(
         "--backup-dir",
         default=DEFAULT_BACKUP_DIR,
         help=f"Directory for manifest (default: {DEFAULT_BACKUP_DIR})",
@@ -466,12 +754,21 @@ def main():
     )
     args = parser.parse_args()
 
-    if not args.test_one and not args.batch and not args.rename_only:
-        parser.error("Must specify --test-one HEVY_ID, --batch, or --rename-only")
+    modes = [args.test_one, args.batch, args.rename_only, args.enrich_only, args.fix_outliers]
+    if not any(modes):
+        parser.error("Must specify --test-one, --batch, --rename-only, --enrich-only, or --fix-outliers")
 
-    # Handle rename-only mode
+    # Handle special modes
     if args.rename_only:
         _rename_all_activities(args)
+        return
+
+    if args.enrich_only:
+        _enrich_all_workouts(args)
+        return
+
+    if args.fix_outliers:
+        _fix_outlier_workouts(args)
         return
 
     # Fetch workouts

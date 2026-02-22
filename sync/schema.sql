@@ -155,6 +155,42 @@ CREATE TABLE IF NOT EXISTS garmin_profile_raw (
 );
 
 -- ===================
+-- LAYER 2: WORKOUT ENRICHMENT
+-- ===================
+
+CREATE TABLE IF NOT EXISTS workout_enrichment (
+    id                  BIGSERIAL PRIMARY KEY,
+    hevy_id             VARCHAR(100) NOT NULL UNIQUE,
+    garmin_activity_id  BIGINT,
+
+    -- HR data
+    hr_source           VARCHAR(20) NOT NULL,
+    avg_hr              INTEGER,
+    max_hr              INTEGER,
+    min_hr              INTEGER,
+    hr_samples          JSONB,
+    hr_sample_count     INTEGER,
+
+    -- Calories
+    calories            INTEGER,
+
+    -- Workout timing
+    duration_s          FLOAT,
+    exercise_count      INTEGER,
+    total_sets          INTEGER,
+
+    -- Metadata
+    hevy_title          VARCHAR(500),
+    workout_date        DATE,
+    status              VARCHAR(20) NOT NULL DEFAULT 'enriched',
+    processed_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_enrichment_date ON workout_enrichment(workout_date);
+CREATE INDEX IF NOT EXISTS idx_enrichment_garmin ON workout_enrichment(garmin_activity_id);
+
+-- ===================
 -- BACKFILL TRACKING
 -- ===================
 
