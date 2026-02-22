@@ -34,7 +34,7 @@ export async function GET(
 
   // Look up enrichment data (primary) or fall back to fuzzy timestamp match
   const enrichmentRows = await sql`
-    SELECT hevy_id, garmin_activity_id, avg_hr, max_hr, calories
+    SELECT hevy_id, garmin_activity_id, avg_hr, max_hr, calories, hr_samples, duration_s, min_hr
     FROM workout_enrichment
     WHERE hevy_id = ${id}
     LIMIT 1
@@ -42,11 +42,19 @@ export async function GET(
 
   let garminActivityId: number | null = null;
   let enrichedHr: { avg_hr: number | null; max_hr: number | null; calories: number | null } | null = null;
+  let enrichmentHrSamples: number[] | null = null;
+  let enrichmentDuration: number | null = null;
+  let enrichmentMinHr: number | null = null;
 
   if (enrichmentRows.length > 0) {
     const e = enrichmentRows[0];
     garminActivityId = e.garmin_activity_id;
     enrichedHr = { avg_hr: e.avg_hr, max_hr: e.max_hr, calories: e.calories };
+    enrichmentMinHr = e.min_hr;
+    enrichmentDuration = e.duration_s;
+    if (e.hr_samples) {
+      enrichmentHrSamples = Array.isArray(e.hr_samples) ? e.hr_samples : [];
+    }
   } else {
     // Fallback: fuzzy timestamp match
     const garminRows = await sql`
@@ -103,52 +111,32 @@ export async function GET(
       hr_zones: hrZones,
     };
 
-    // Fetch HR time-series from activity details
-    const detailsRows = await sql`
-      SELECT raw_json
-      FROM garmin_activity_raw
-      WHERE activity_id = ${garminActivityId}
-        AND endpoint_name = 'details'
-      LIMIT 1
-    `;
-
-    if (detailsRows.length > 0) {
-      const details = detailsRows[0].raw_json;
-      const descriptors: any[] = details.metricDescriptors || [];
-      const hrIdx = descriptors.find((d: any) => d.key === "directHeartRate")?.metricsIndex;
-      const tsIdx = descriptors.find((d: any) => d.key === "directTimestamp")?.metricsIndex;
-
-      if (hrIdx !== undefined && tsIdx !== undefined) {
-        const metrics: any[] = details.activityDetailMetrics || [];
-        if (metrics.length > 0) {
-          const startTs = metrics[0].metrics[tsIdx];
-          garmin.hr_timeline = metrics
-            .filter((m: any) => m.metrics[hrIdx] > 0)
-            .map((m: any) => ({
-              elapsed_sec: Math.round((m.metrics[tsIdx] - startTs) / 1000),
-              hr: m.metrics[hrIdx],
-            }));
-        }
-      }
+    // Build HR timeline from enrichment hr_samples (our DB, not Garmin API)
+    if (enrichmentHrSamples && enrichmentHrSamples.length > 0 && enrichmentDuration) {
+      const interval = enrichmentDuration / enrichmentHrSamples.length;
+      garmin.hr_timeline = enrichmentHrSamples.map((hr: number, i: number) => ({
+        elapsed_sec: Math.round(i * interval),
+        hr,
+      }));
     }
 
-    // Fetch exercise sets from Garmin
-    const setsRows = await sql`
+    // Fetch exercise sets from Garmin raw data
+    const setsRows = garminActivityId ? await sql`
       SELECT raw_json
       FROM garmin_activity_raw
       WHERE activity_id = ${garminActivityId}
         AND endpoint_name = 'exercise_sets'
       LIMIT 1
-    `;
+    ` : [];
 
     // Get activity start time for exercise set offset calculation
-    const summaryRows = await sql`
+    const summaryRows = garminActivityId ? await sql`
       SELECT raw_json->>'startTimeGMT' as start_gmt
       FROM garmin_activity_raw
       WHERE activity_id = ${garminActivityId}
         AND endpoint_name = 'summary'
       LIMIT 1
-    `;
+    ` : [];
     const activityStartGmt = summaryRows.length > 0 ? summaryRows[0].start_gmt : null;
 
     let hasGarminSets = false;
@@ -235,13 +223,20 @@ export async function GET(
       }
     }
   } else if (enrichedHr) {
-    // Enrichment data exists but no Garmin activity link — show HR/calories only
+    // Enrichment data exists but no Garmin activity link — show HR/calories + timeline
     garmin = {
       avg_hr: enrichedHr.avg_hr,
       max_hr: enrichedHr.max_hr,
       calories: enrichedHr.calories,
       hr_zones: null,
     };
+    if (enrichmentHrSamples && enrichmentHrSamples.length > 0 && enrichmentDuration) {
+      const interval = enrichmentDuration / enrichmentHrSamples.length;
+      garmin.hr_timeline = enrichmentHrSamples.map((hr: number, i: number) => ({
+        elapsed_sec: Math.round(i * interval),
+        hr,
+      }));
+    }
   }
 
   return NextResponse.json({ ...workout, garmin });
