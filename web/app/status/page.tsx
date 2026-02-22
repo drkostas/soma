@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { getDb } from "@/lib/db";
+import { DuplicateResolver } from "@/components/duplicate-resolver";
 import {
   RefreshCw,
   CheckCircle2,
@@ -151,6 +152,11 @@ export default async function StatusPage() {
         <p className="text-muted-foreground mt-1">
           Data pipeline progress and coverage
         </p>
+      </div>
+
+      {/* Duplicate Activities */}
+      <div className="mb-8">
+        <DuplicateResolver />
       </div>
 
       {/* Backfill Progress Cards */}
