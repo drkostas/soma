@@ -121,45 +121,8 @@ export async function GET(
       }));
     }
 
-    // Fetch exercise sets from Garmin raw data
-    const setsRows = garminActivityId ? await sql`
-      SELECT raw_json
-      FROM garmin_activity_raw
-      WHERE activity_id = ${garminActivityId}
-        AND endpoint_name = 'exercise_sets'
-      LIMIT 1
-    ` : [];
-
-    // Get activity start time for exercise set offset calculation
-    const summaryRows = garminActivityId ? await sql`
-      SELECT raw_json->>'startTimeGMT' as start_gmt
-      FROM garmin_activity_raw
-      WHERE activity_id = ${garminActivityId}
-        AND endpoint_name = 'summary'
-      LIMIT 1
-    ` : [];
-    const activityStartGmt = summaryRows.length > 0 ? summaryRows[0].start_gmt : null;
-
-    let hasGarminSets = false;
-    if (setsRows.length > 0) {
-      const setsData = setsRows[0].raw_json;
-      const exerciseSets = setsData?.exerciseSets;
-      if (Array.isArray(exerciseSets) && exerciseSets.length > 0 && activityStartGmt) {
-        const activityStartMs = new Date(activityStartGmt).getTime();
-        garmin.exercise_sets = exerciseSets.map((s: any) => ({
-          exercise: s.exercises?.[0]?.category || null,
-          start_sec: Math.round((new Date(s.startTime).getTime() - activityStartMs) / 1000),
-          duration_sec: Math.round(s.duration),
-          reps: s.repetitionCount,
-          weight: s.weight,
-          set_type: s.setType,
-        }));
-        hasGarminSets = true;
-      }
-    }
-
-    // Synthesize exercise overlay from Hevy data when Garmin sets unavailable
-    if (!hasGarminSets && garmin.hr_timeline?.length > 0 && workout.exercises.length > 0) {
+    // Always synthesize exercise overlay from Hevy data for consistent naming & 1:1 set mapping
+    if (garmin.hr_timeline?.length > 0 && workout.exercises.length > 0) {
       const totalDuration = garmin.hr_timeline[garmin.hr_timeline.length - 1].elapsed_sec;
       const allSets: Array<{ exercise: string; reps: number; weight: number; type: string }> = [];
       for (const ex of workout.exercises) {
@@ -186,27 +149,11 @@ export async function GET(
         let cursor = 0;
         let prevExercise = "";
         for (const s of allSets) {
-          // Add extra rest when switching exercises
+          // Advance cursor for rest gaps (no REST entries needed)
           if (prevExercise && s.exercise !== prevExercise) {
             cursor += EST_EX_REST_SEC * scale;
-            synthSets.push({
-              exercise: null,
-              start_sec: Math.round(cursor - EST_EX_REST_SEC * scale),
-              duration_sec: Math.round(EST_EX_REST_SEC * scale),
-              reps: 0,
-              weight: 0,
-              set_type: "REST",
-            });
           } else if (prevExercise) {
             cursor += EST_REST_SEC * scale;
-            synthSets.push({
-              exercise: null,
-              start_sec: Math.round(cursor - EST_REST_SEC * scale),
-              duration_sec: Math.round(EST_REST_SEC * scale),
-              reps: 0,
-              weight: 0,
-              set_type: "REST",
-            });
           }
           const setDur = EST_SET_SEC * scale;
           synthSets.push({
@@ -221,6 +168,26 @@ export async function GET(
           prevExercise = s.exercise;
         }
         garmin.exercise_sets = synthSets;
+
+        // Compute per-set avg HR and embed in each Hevy exercise set
+        const timeline = garmin.hr_timeline as Array<{elapsed_sec: number; hr: number}>;
+        let setIdx = 0;
+        for (const ex of workout.exercises) {
+          for (const s of ex.sets) {
+            if (setIdx < synthSets.length) {
+              const synth = synthSets[setIdx];
+              const hrInRange = timeline.filter(
+                (p) => p.elapsed_sec >= synth.start_sec && p.elapsed_sec <= synth.start_sec + synth.duration_sec
+              );
+              if (hrInRange.length > 0) {
+                s.avg_hr = Math.round(
+                  hrInRange.reduce((sum, p) => sum + p.hr, 0) / hrInRange.length
+                );
+              }
+            }
+            setIdx++;
+          }
+        }
       }
     }
   } else if (enrichedHr) {
@@ -238,6 +205,73 @@ export async function GET(
         elapsed_sec: Math.round(i * interval),
         hr,
       }));
+
+      // Synthesize exercise overlay + per-set HR (same as primary path)
+      if (workout.exercises.length > 0) {
+        const totalDuration = garmin.hr_timeline[garmin.hr_timeline.length - 1].elapsed_sec;
+        const allSets: Array<{ exercise: string; reps: number; weight: number; type: string }> = [];
+        for (const ex of workout.exercises) {
+          for (const s of ex.sets) {
+            allSets.push({
+              exercise: ex.title || "Unknown",
+              reps: s.reps || 0,
+              weight: s.weight_kg || 0,
+              type: s.type === "warmup" ? "warmup" : "normal",
+            });
+          }
+        }
+        if (allSets.length > 0) {
+          const EST_SET_SEC = 40;
+          const EST_REST_SEC = 25;
+          const EST_EX_REST_SEC = 60;
+          const rawTotal = allSets.length * EST_SET_SEC +
+            (allSets.length - 1) * EST_REST_SEC +
+            (workout.exercises.length - 1) * (EST_EX_REST_SEC - EST_REST_SEC);
+          const scale = rawTotal > 0 ? totalDuration / rawTotal : 1;
+
+          const synthSets: any[] = [];
+          let cursor = 0;
+          let prevExercise = "";
+          for (const s of allSets) {
+            if (prevExercise && s.exercise !== prevExercise) {
+              cursor += EST_EX_REST_SEC * scale;
+            } else if (prevExercise) {
+              cursor += EST_REST_SEC * scale;
+            }
+            const setDur = EST_SET_SEC * scale;
+            synthSets.push({
+              exercise: s.exercise,
+              start_sec: Math.round(cursor),
+              duration_sec: Math.round(setDur),
+              reps: s.reps,
+              weight: s.weight,
+              set_type: s.type === "warmup" ? "WARMUP" : "ACTIVE",
+            });
+            cursor += setDur;
+            prevExercise = s.exercise;
+          }
+          garmin.exercise_sets = synthSets;
+
+          const timeline = garmin.hr_timeline;
+          let setIdx = 0;
+          for (const ex of workout.exercises) {
+            for (const s of ex.sets) {
+              if (setIdx < synthSets.length) {
+                const synth = synthSets[setIdx];
+                const hrInRange = timeline.filter(
+                  (p: any) => p.elapsed_sec >= synth.start_sec && p.elapsed_sec <= synth.start_sec + synth.duration_sec
+                );
+                if (hrInRange.length > 0) {
+                  s.avg_hr = Math.round(
+                    hrInRange.reduce((sum: number, p: any) => sum + p.hr, 0) / hrInRange.length
+                  );
+                }
+              }
+              setIdx++;
+            }
+          }
+        }
+      }
     }
   }
 
