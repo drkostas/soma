@@ -9,7 +9,6 @@ import {
   Mountain,
   Moon,
   Activity,
-  ShieldCheck,
 } from "lucide-react";
 import {
   Tooltip,
@@ -25,7 +24,6 @@ const navItems = [
   { href: "/workouts", icon: Dumbbell, label: "Gym" },
   { href: "/activities", icon: Mountain, label: "Activities" },
   { href: "/sleep", icon: Moon, label: "Sleep" },
-  { href: "/review", icon: ShieldCheck, label: "Review" },
   { href: "/status", icon: Activity, label: "Status" },
 ];
 

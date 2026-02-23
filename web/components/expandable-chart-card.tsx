@@ -15,9 +15,8 @@ interface ExpandableChartCardProps {
   title: string;
   subtitle?: string | React.ReactNode;
   icon?: React.ReactNode;
-  /** Additional className for grid/layout positioning */
   className?: string;
-  children: React.ReactNode;
+  children: React.ReactNode | ((props: { expanded: boolean }) => React.ReactNode);
 }
 
 export function ExpandableChartCard({
@@ -28,6 +27,9 @@ export function ExpandableChartCard({
   children,
 }: ExpandableChartCardProps) {
   const [open, setOpen] = useState(false);
+
+  const renderChildren = (expanded: boolean) =>
+    typeof children === "function" ? children({ expanded }) : children;
 
   return (
     <>
@@ -47,7 +49,7 @@ export function ExpandableChartCard({
             <Maximize2 className="h-3.5 w-3.5 ml-auto opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
           </CardTitle>
         </CardHeader>
-        <CardContent>{children}</CardContent>
+        <CardContent>{renderChildren(false)}</CardContent>
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -61,7 +63,7 @@ export function ExpandableChartCard({
               <DialogDescription>{subtitle}</DialogDescription>
             )}
           </DialogHeader>
-          <div className="mt-2">{children}</div>
+          <div className="mt-2">{renderChildren(true)}</div>
         </DialogContent>
       </Dialog>
     </>
