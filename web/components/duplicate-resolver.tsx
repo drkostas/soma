@@ -322,6 +322,28 @@ function FieldRow({
   );
 }
 
+// Persist skipped duplicate pairs in localStorage
+const SKIPPED_KEY = "soma:skipped-duplicates";
+
+function getSkippedPairs(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SKIPPED_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function pairKey(a: number, b: number): string {
+  return `${Math.min(a, b)}-${Math.max(a, b)}`;
+}
+
+function addSkippedPair(a: number, b: number) {
+  const skipped = getSkippedPairs();
+  skipped.add(pairKey(a, b));
+  localStorage.setItem(SKIPPED_KEY, JSON.stringify([...skipped]));
+}
+
 export function DuplicateResolver() {
   const [pairs, setPairs] = useState<DupPair[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -336,9 +358,14 @@ export function DuplicateResolver() {
     try {
       const res = await fetch("/api/duplicates");
       const data = await res.json();
-      setPairs(data.pairs || []);
-      if (data.pairs?.length > 0) {
-        setSelections(autoSelect(data.pairs[0].a, data.pairs[0].b));
+      // Filter out previously skipped pairs
+      const skipped = getSkippedPairs();
+      const filtered = (data.pairs || []).filter(
+        (p: DupPair) => !skipped.has(pairKey(p.a.id, p.b.id))
+      );
+      setPairs(filtered);
+      if (filtered.length > 0) {
+        setSelections(autoSelect(filtered[0].a, filtered[0].b));
       }
     } catch {
       // silently fail
@@ -362,7 +389,12 @@ export function DuplicateResolver() {
     }
   };
 
-  const handleSkip = () => goNext();
+  const handleSkip = () => {
+    if (pair) {
+      addSkippedPair(pair.a.id, pair.b.id);
+    }
+    goNext();
+  };
 
   const handleResolve = async () => {
     if (!pair) return;
