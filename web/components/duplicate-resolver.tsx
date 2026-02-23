@@ -356,8 +356,8 @@ export function DuplicateResolver() {
 
   const goNext = () => {
     const next = currentIndex + 1;
+    setCurrentIndex(next);
     if (next < pairs.length) {
-      setCurrentIndex(next);
       setSelections(autoSelect(pairs[next].a, pairs[next].b));
     }
   };

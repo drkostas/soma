@@ -13,6 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { HRZoneChart } from "@/components/hr-zone-chart";
 import { WorkoutHrTimeline } from "@/components/workout-hr-timeline";
 import { HeartPulse, Flame, Dumbbell } from "lucide-react";
+import { MuscleBodyMap } from "./muscle-body-map";
+import { getExerciseMuscles, ALL_MUSCLE_GROUPS, type MuscleGroup } from "@/lib/muscle-groups";
 
 const KG_TO_LBS = 2.20462;
 
@@ -70,6 +72,32 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
         totalReps += s.reps;
         totalVolume += s.weight_kg * s.reps;
       }
+    }
+  }
+
+  // Compute per-muscle volumes for body map
+  const muscleVolumes: Record<string, { primary: number; secondary: number; total: number }> = {};
+  for (const mg of ALL_MUSCLE_GROUPS) {
+    muscleVolumes[mg] = { primary: 0, secondary: 0, total: 0 };
+  }
+  for (const ex of exercises) {
+    const mapping = getExerciseMuscles(ex.title || "");
+    let exVol = 0;
+    const exSets = Array.isArray(ex.sets) ? ex.sets : [];
+    for (const s of exSets) {
+      if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
+        exVol += s.weight_kg * s.reps;
+      }
+    }
+    if (exVol === 0) exVol = 1; // bodyweight exercises still show up
+    for (const mg of mapping.primary) {
+      muscleVolumes[mg].primary += exVol;
+      muscleVolumes[mg].total += exVol;
+    }
+    for (const mg of mapping.secondary) {
+      const contrib = exVol * 0.33;
+      muscleVolumes[mg].secondary += contrib;
+      muscleVolumes[mg].total += contrib;
     }
   }
 
@@ -219,24 +247,12 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                   )}
                 </div>
 
-                {/* Muscle groups used */}
+                {/* Muscle Activation Body Map */}
                 <div>
                   <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                    Muscle Groups
+                    Muscles Trained
                   </h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {Array.from(
-                      new Set(
-                        exercises
-                          .map((e: any) => e.muscle_group)
-                          .filter(Boolean)
-                      )
-                    ).map((mg: any) => (
-                      <Badge key={mg} variant="outline" className="text-xs capitalize">
-                        {mg}
-                      </Badge>
-                    ))}
-                  </div>
+                  <MuscleBodyMap volumes={muscleVolumes} compact />
                 </div>
 
                 {/* Per-exercise volume breakdown */}

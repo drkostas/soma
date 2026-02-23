@@ -155,33 +155,70 @@ async function getRecentActivities(cutoff: string) {
     LIMIT 15
   `;
 
-  // Match gym activities with Hevy workout IDs
-  const gymActivityDates = garminRows
-    .filter((r: any) => r.type_key === "strength_training")
-    .map((r: any) => r.date?.slice(0, 10));
+  // Get all recent Hevy workouts (to match gym activities AND find Hevy-only workouts)
+  const hevyRows = await sql`
+    SELECT
+      raw_json->>'id' as workout_id,
+      raw_json->>'title' as title,
+      raw_json->>'start_time' as start_time,
+      raw_json->>'end_time' as end_time
+    FROM hevy_raw_data
+    WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
+    ORDER BY raw_json->>'start_time' DESC
+    LIMIT 20
+  `;
 
-  let hevyMap: Record<string, string> = {};
-  if (gymActivityDates.length > 0) {
-    const hevyRows = await sql`
-      SELECT
-        raw_json->>'id' as workout_id,
-        LEFT((raw_json->>'start_time')::text, 10) as day
-      FROM hevy_raw_data
-      WHERE endpoint_name = 'workout'
-      ORDER BY raw_json->>'start_time' DESC
-      LIMIT 20
-    `;
-    for (const r of hevyRows) {
-      hevyMap[r.day] = r.workout_id;
+  // Build map of Hevy workouts by date for matching
+  const hevyMap: Record<string, { workout_id: string; title: string; start_time: string; end_time: string }> = {};
+  for (const r of hevyRows) {
+    const day = (r as any).start_time?.slice(0, 10);
+    if (day) hevyMap[day] = r as any;
+  }
+
+  // Find Garmin gym activity dates to detect Hevy-only workouts
+  const garminGymDates = new Set(
+    garminRows
+      .filter((r: any) => r.type_key === "strength_training")
+      .map((r: any) => r.date?.slice(0, 10))
+  );
+
+  // Attach Hevy workout IDs to Garmin gym activities
+  const merged = garminRows.map((r: any) => ({
+    ...r,
+    workout_id: r.type_key === "strength_training"
+      ? hevyMap[r.date?.slice(0, 10)]?.workout_id || null
+      : null,
+  }));
+
+  // Add Hevy-only workouts (no matching Garmin activity on that date)
+  for (const h of hevyRows) {
+    const day = h.start_time?.slice(0, 10);
+    if (day && !garminGymDates.has(day)) {
+      const start = new Date(h.start_time);
+      const end = h.end_time ? new Date(h.end_time) : start;
+      const durationMin = (end.getTime() - start.getTime()) / 60000;
+      merged.push({
+        activity_id: null,
+        type_key: "strength_training",
+        date: h.start_time,
+        name: h.title || "Workout",
+        distance_km: 0,
+        duration_min: durationMin > 0 ? durationMin : 0,
+        calories: null,
+        workout_id: h.workout_id,
+      });
     }
   }
 
-  return garminRows.map((r: any) => ({
-    ...r,
-    workout_id: r.type_key === "strength_training"
-      ? hevyMap[r.date?.slice(0, 10)] || null
-      : null,
-  }));
+  // Sort by date descending and limit
+  merged.sort((a: any, b: any) => {
+    const da = new Date(a.date).getTime();
+    const db = new Date(b.date).getTime();
+    return db - da;
+  });
+
+  return merged.slice(0, 15);
 }
 
 async function getWeeklyTrainingSummary() {
