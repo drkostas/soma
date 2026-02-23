@@ -87,7 +87,7 @@ async function getConnectionData() {
     `,
     sql`
       SELECT source_platform, destination, status, COUNT(*)::int as count,
-             MAX(synced_at) as last_sync
+             MAX(processed_at) as last_sync
       FROM activity_sync_log
       GROUP BY source_platform, destination, status
       ORDER BY last_sync DESC NULLS LAST
