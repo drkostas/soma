@@ -9,7 +9,9 @@ from hevy_sync import sync_all_workouts
 from hevy_client import HevyClient
 from parsers import process_day
 from activity_replacer import enrich_new_workouts
-from db import get_connection, log_sync
+from strava_client import StravaClient
+from strava_sync import sync_recent_activities, sync_activity_details as strava_sync_activity_details
+from db import get_connection, log_sync, get_platform_credentials, upsert_platform_credentials
 from config import HEVY_API_KEY
 
 # A full day of Garmin daily HR data has ~700-720 points (midnight to midnight).
@@ -52,6 +54,59 @@ def _get_stale_dates(max_lookback: int = 14) -> list[date]:
                     return [today - timedelta(days=i) for i in range(days_back)]
             # No complete day found in the lookback window
             return [today - timedelta(days=i) for i in range(max_lookback)]
+
+
+def _sync_strava():
+    """Sync Strava activities if credentials are configured."""
+    with get_connection() as conn:
+        creds = get_platform_credentials(conn, "strava")
+    if not creds or creds["status"] != "active":
+        print("Strava: not connected, skipping.")
+        return
+
+    tokens = creds["credentials"]
+    client = StravaClient(
+        access_token=tokens["access_token"],
+        refresh_token=tokens["refresh_token"],
+    )
+
+    # Refresh token if needed (also updates client in-place)
+    try:
+        new_tokens = client.refresh_tokens()
+        # Persist refreshed tokens
+        with get_connection() as conn:
+            upsert_platform_credentials(
+                conn, "strava", "oauth2",
+                {**tokens, "access_token": new_tokens["access_token"],
+                 "refresh_token": new_tokens["refresh_token"]},
+                expires_at=new_tokens.get("expires_at"),
+            )
+    except Exception as e:
+        print(f"Strava: token refresh failed: {e}")
+        return
+
+    # Pull recent activities
+    print("Syncing Strava activities...")
+    count = sync_recent_activities(client)
+    print(f"  Strava: {count} activities synced.")
+
+    # Fetch details for activities that don't have them yet
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT strava_id FROM strava_raw_data
+                WHERE endpoint_name = 'activity'
+                  AND strava_id NOT IN (
+                    SELECT strava_id FROM strava_raw_data WHERE endpoint_name = 'detail'
+                  )
+                ORDER BY synced_at DESC
+                LIMIT 20
+            """)
+            new_ids = [row[0] for row in cur.fetchall()]
+    if new_ids:
+        print(f"  Fetching details for {len(new_ids)} new activities...")
+        for aid in new_ids:
+            strava_sync_activity_details(client, aid)
 
 
 def run_pipeline(days: int | None = None):
@@ -124,6 +179,12 @@ def run_pipeline(days: int | None = None):
         print(f"  Hevy: {hevy_count} workouts saved")
     except Exception as e:
         print(f"  Hevy sync error: {e}")
+
+    # --- Strava ---
+    try:
+        _sync_strava()
+    except Exception as e:
+        print(f"Strava sync error (non-fatal): {e}")
 
     # --- Auto-enrich new/stale workouts ---
     print(f"\nEnriching workouts with HR & calorie data...")
