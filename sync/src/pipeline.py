@@ -1,5 +1,6 @@
 """Full sync pipeline: fetch from Garmin + Hevy -> store raw -> parse to structured."""
 
+import json
 import sys
 from datetime import date, timedelta
 
@@ -9,9 +10,10 @@ from hevy_sync import sync_all_workouts
 from hevy_client import HevyClient
 from parsers import process_day
 from activity_replacer import enrich_new_workouts
+from router import execute_routes
 from strava_client import StravaClient
 from strava_sync import sync_recent_activities, sync_activity_details as strava_sync_activity_details
-from db import get_connection, log_sync, get_platform_credentials, upsert_platform_credentials
+from db import get_connection, log_sync, get_platform_credentials, upsert_platform_credentials, get_sync_rules
 from config import HEVY_API_KEY
 
 # A full day of Garmin daily HR data has ~700-720 points (midnight to midnight).
@@ -109,6 +111,70 @@ def _sync_strava():
             strava_sync_activity_details(client, aid)
 
 
+def _route_enriched_workouts(strava_client=None) -> int:
+    """Route recently enriched Hevy workouts to configured destinations.
+
+    Looks up enabled sync rules for hevy, queries for enriched workouts
+    from the last 24 hours that haven't been synced to strava yet, and
+    dispatches each through execute_routes.
+
+    Returns the count of successfully routed activities.
+    """
+    with get_connection() as conn:
+        rules = get_sync_rules(conn, source_platform="hevy", enabled_only=True)
+
+    if not rules:
+        print("  No hevy routing rules configured, skipping.")
+        return 0
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT we.hevy_id, we.hevy_title, h.raw_json, we.hr_samples
+                FROM workout_enrichment we
+                JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
+                WHERE we.status IN ('enriched', 'uploaded')
+                  AND we.updated_at >= NOW() - INTERVAL '24 hours'
+                  AND we.hevy_id NOT IN (
+                    SELECT source_id FROM activity_sync_log
+                    WHERE source_platform = 'hevy' AND destination = 'strava' AND status = 'sent'
+                  )
+                ORDER BY we.workout_date DESC
+            """)
+            rows = cur.fetchall()
+
+    if not rows:
+        print("  No enriched workouts to route.")
+        return 0
+
+    routed = 0
+    for hevy_id, hevy_title, raw_json, hr_samples in rows:
+        raw = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+        workout = {
+            "hevy_id": hevy_id,
+            "hevy_title": hevy_title,
+            "hevy_workout": raw,
+        }
+
+        results = execute_routes(
+            rules=rules,
+            source_platform="hevy",
+            activity_type="strength",
+            workout=workout,
+            hr_samples=hr_samples,
+            strava_client=strava_client,
+        )
+
+        for r in results:
+            if r["status"] == "sent":
+                print(f"  Routed {hevy_id} ({hevy_title}) -> {r['destination']} OK")
+                routed += 1
+            else:
+                print(f"  Route {hevy_id} -> {r['destination']} FAILED: {r.get('error')}")
+
+    return routed
+
+
 def run_pipeline(days: int | None = None):
     """Run the complete sync + parse pipeline.
 
@@ -193,6 +259,23 @@ def run_pipeline(days: int | None = None):
         print(f"  Enriched: {enriched} workouts")
     except Exception as e:
         print(f"  Enrichment error: {e}")
+
+    # --- Route enriched workouts to destinations ---
+    print(f"\nRouting enriched workouts...")
+    try:
+        strava_client_for_routing = None
+        with get_connection() as conn:
+            strava_creds = get_platform_credentials(conn, "strava")
+        if strava_creds and strava_creds["status"] == "active":
+            tokens = strava_creds["credentials"]
+            strava_client_for_routing = StravaClient(
+                access_token=tokens["access_token"],
+                refresh_token=tokens["refresh_token"],
+            )
+        route_count = _route_enriched_workouts(strava_client=strava_client_for_routing)
+        print(f"  Routed: {route_count} activities")
+    except Exception as e:
+        print(f"  Routing error (non-fatal): {e}")
 
     # --- Log completion ---
     total = total_raw + total_activities
