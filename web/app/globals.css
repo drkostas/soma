@@ -125,3 +125,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes flowDash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
