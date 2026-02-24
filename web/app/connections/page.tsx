@@ -5,6 +5,7 @@ import { ConnectionActions } from "@/components/connection-actions";
 import { SyncRulesManager } from "@/components/sync-rules-manager";
 import { SyncFlowDiagram } from "@/components/sync-flow-diagram";
 import { PipelineOperations } from "@/components/pipeline-operations";
+import { ActivitySyncManager, type MergedActivity, type ActivitySource } from "@/components/activity-sync-manager";
 import {
   CheckCircle2,
   XCircle,
@@ -175,6 +176,150 @@ async function getPageData() {
     { table_name: "Sleep Detail (L2)", record_count: sleep[0]?.count ?? 0 },
   ];
 
+  // Syncable activities (last 30 days from Garmin + Hevy)
+  const [garminActivities, hevyActivities] = await Promise.all([
+    sql`
+      SELECT ga.activity_id::text AS source_id,
+             'garmin' AS source_platform,
+             ga.raw_json->>'activityName' AS name,
+             ga.raw_json->'activityType'->>'typeKey' AS activity_type,
+             ga.raw_json->>'startTimeGMT' AS start_time,
+             (ga.raw_json->>'duration')::numeric AS duration,
+             (ga.raw_json->>'distance')::numeric AS distance,
+             ga.raw_json->>'manufacturer' AS manufacturer,
+             asl.status AS sync_status,
+             asl.destination_id,
+             asl.processed_at AS synced_at
+      FROM garmin_activity_raw ga
+      LEFT JOIN activity_sync_log asl
+        ON asl.source_platform = 'garmin'
+        AND asl.source_id = ga.activity_id::text
+        AND asl.destination = 'strava'
+        AND asl.status IN ('sent', 'external')
+      WHERE ga.endpoint_name = 'summary'
+        AND ga.raw_json->>'startTimeGMT' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
+      ORDER BY ga.raw_json->>'startTimeGMT' DESC
+    `,
+    sql`
+      SELECT h.hevy_id AS source_id,
+             'hevy' AS source_platform,
+             h.raw_json->>'title' AS name,
+             'strength' AS activity_type,
+             h.raw_json->>'start_time' AS start_time,
+             EXTRACT(EPOCH FROM (
+               (h.raw_json->>'end_time')::timestamptz - (h.raw_json->>'start_time')::timestamptz
+             ))::numeric AS duration,
+             NULL::numeric AS distance,
+             NULL::text AS manufacturer,
+             asl.status AS sync_status,
+             asl.destination_id,
+             asl.processed_at AS synced_at
+      FROM hevy_raw_data h
+      LEFT JOIN activity_sync_log asl
+        ON asl.source_platform = 'hevy'
+        AND asl.source_id = h.hevy_id
+        AND asl.destination = 'strava'
+        AND asl.status IN ('sent', 'external')
+      WHERE h.endpoint_name = 'workout'
+        AND h.raw_json->>'start_time' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
+      ORDER BY h.raw_json->>'start_time' DESC
+    `,
+  ]);
+
+  // Merge Garmin + Hevy activities by timestamp (±120s) into unified rows
+  type RawActivity = {
+    source_id: string;
+    source_platform: string;
+    name: string;
+    activity_type: string;
+    start_time: string;
+    duration: number | null;
+    distance: number | null;
+    manufacturer: string | null;
+    sync_status: string | null;
+    destination_id: string | null;
+    synced_at: string | null;
+  };
+  const garminList = garminActivities as unknown as RawActivity[];
+  const hevyList = hevyActivities as unknown as RawActivity[];
+
+  function parseEpoch(ts: string | null): number {
+    if (!ts) return 0;
+    const d = new Date(ts.includes("T") ? ts : ts.replace(" ", "T") + "Z");
+    return d.getTime() / 1000;
+  }
+
+  const mergedActivities: MergedActivity[] = [];
+  const matchedGarminIds = new Set<string>();
+
+  // For each Hevy workout, find a Garmin match within ±120s
+  for (const hevy of hevyList) {
+    const hevyEpoch = parseEpoch(hevy.start_time);
+    let bestMatch: RawActivity | null = null;
+    let bestDiff = Infinity;
+
+    for (const garmin of garminList) {
+      const diff = Math.abs(parseEpoch(garmin.start_time) - hevyEpoch);
+      if (diff <= 120 && diff < bestDiff) {
+        bestDiff = diff;
+        bestMatch = garmin;
+      }
+    }
+
+    const sources: ActivitySource[] = [
+      { platform: "hevy", source_id: hevy.source_id, manufacturer: null },
+    ];
+    if (bestMatch) {
+      sources.push({
+        platform: "garmin",
+        source_id: bestMatch.source_id,
+        manufacturer: bestMatch.manufacturer,
+      });
+      matchedGarminIds.add(bestMatch.source_id);
+    }
+
+    // Determine sync status from either source
+    const syncStatus = hevy.sync_status || bestMatch?.sync_status || null;
+    const syncedFrom = hevy.sync_status ? "hevy" : bestMatch?.sync_status ? "garmin" : null;
+
+    mergedActivities.push({
+      name: hevy.name,
+      activity_type: hevy.activity_type,
+      start_time: hevy.start_time,
+      duration: hevy.duration,
+      distance: bestMatch?.distance || hevy.distance,
+      sources,
+      sync_status: syncStatus as MergedActivity["sync_status"],
+      destination_id: hevy.destination_id || bestMatch?.destination_id || null,
+      synced_at: hevy.synced_at || bestMatch?.synced_at || null,
+      synced_from: syncedFrom as MergedActivity["synced_from"],
+    });
+  }
+
+  // Add unmatched Garmin activities
+  for (const garmin of garminList) {
+    if (matchedGarminIds.has(garmin.source_id)) continue;
+    mergedActivities.push({
+      name: garmin.name,
+      activity_type: garmin.activity_type,
+      start_time: garmin.start_time,
+      duration: garmin.duration,
+      distance: garmin.distance,
+      sources: [{
+        platform: "garmin",
+        source_id: garmin.source_id,
+        manufacturer: garmin.manufacturer,
+      }],
+      sync_status: garmin.sync_status as MergedActivity["sync_status"],
+      destination_id: garmin.destination_id,
+      synced_at: garmin.synced_at,
+      synced_from: garmin.sync_status ? "garmin" : null,
+    });
+  }
+
+  // Sort by start_time descending
+  mergedActivities.sort((a, b) => (b.start_time || "").localeCompare(a.start_time || ""));
+
   return {
     credentials: credentials as unknown as PlatformCredential[],
     rules: rules as unknown as SyncRule[],
@@ -183,6 +328,7 @@ async function getPageData() {
     backfillProgress: backfillProgress as unknown as BackfillProgress[],
     dataCounts,
     syncRunLogs: syncRunLogs as unknown as any[],
+    mergedActivities,
   };
 }
 
@@ -219,7 +365,7 @@ function StatusBadge({ status, hint }: { status: string; hint?: string }) {
 }
 
 export default async function ConnectionsPage() {
-  const { credentials, rules, syncLog, syncServiceStatus, backfillProgress, dataCounts, syncRunLogs } =
+  const { credentials, rules, syncLog, syncServiceStatus, backfillProgress, dataCounts, syncRunLogs, mergedActivities } =
     await getPageData();
 
   const credMap = Object.fromEntries(
@@ -389,7 +535,15 @@ export default async function ConnectionsPage() {
         })}
       </div>
 
-      {/* Section 4: Sync Rules + Activity Log (side by side) */}
+      {/* Section 4: Activity Sync Manager */}
+      <div className="mb-8">
+        <ActivitySyncManager
+          activities={mergedActivities}
+          stravaConnected={getPlatformStatus("strava").isConnected}
+        />
+      </div>
+
+      {/* Section 5: Sync Rules + Activity Log (side by side) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
         <div className="lg:col-span-2">
           <SyncRulesManager initialRules={rules} />
@@ -439,7 +593,7 @@ export default async function ConnectionsPage() {
         </div>
       </div>
 
-      {/* Section 5: Pipeline Operations */}
+      {/* Section 6: Pipeline Operations */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Pipeline Operations</CardTitle>

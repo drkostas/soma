@@ -234,12 +234,15 @@ def _extract_activity_id(upload_resp) -> int | None:
       detailedImportResult.successes[0].internalId
     """
     try:
-        data = upload_resp.json()
+        data = upload_resp.json() if hasattr(upload_resp, 'json') else upload_resp
         successes = data.get("detailedImportResult", {}).get("successes", [])
         if successes:
             return successes[0]["internalId"]
-    except Exception:
-        pass
+        # Log on failure for debugging
+        print(f"    Warning: upload response has no successes: {str(data)[:200]}")
+    except Exception as e:
+        resp_str = str(upload_resp)[:200] if upload_resp else "None"
+        print(f"    Warning: could not parse upload response ({e}): {resp_str}")
     return None
 
 
@@ -353,13 +356,23 @@ def process_workout(
         elif hevy_title:
             print(f"  Warning: could not extract activity ID from upload response")
 
-        # Update enrichment with Garmin activity ID
+        # Update enrichment status (direct UPDATE avoids INSERT NOT NULL issues)
         with get_connection() as conn:
-            upsert_workout_enrichment(
-                conn, hevy_id,
-                garmin_activity_id=new_id,
-                status="uploaded",
-            )
+            with conn.cursor() as cur:
+                if new_id:
+                    cur.execute(
+                        """UPDATE workout_enrichment
+                           SET garmin_activity_id = %s, status = 'uploaded', updated_at = NOW()
+                           WHERE hevy_id = %s""",
+                        (new_id, hevy_id),
+                    )
+                else:
+                    cur.execute(
+                        """UPDATE workout_enrichment
+                           SET status = 'uploaded', updated_at = NOW()
+                           WHERE hevy_id = %s""",
+                        (hevy_id,),
+                    )
 
         result["status"] = "uploaded"
         print(f"  Successfully uploaded activity for {hevy_id}")

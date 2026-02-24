@@ -9,6 +9,7 @@ import time
 
 from db import get_connection, log_activity_sync
 from fit_generator import generate_fit
+from strava_description import generate_description, compute_prs
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _MAX_UPLOAD_POLLS = 5
 _POLL_INTERVAL_S = 3
+
+
+def _build_enrichment(workout: dict, hr_samples: list[int] | None) -> dict:
+    """Build enrichment dict from workout_enrichment table for description generation."""
+    hevy_id = workout["hevy_id"]
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT avg_hr, max_hr, calories, duration_s FROM workout_enrichment WHERE hevy_id = %s",
+                (hevy_id,),
+            )
+            row = cur.fetchone()
+    if row:
+        return {"avg_hr": row[0], "max_hr": row[1], "calories": row[2], "duration_s": row[3]}
+    return {}
 
 
 def push_workout_to_strava(
@@ -62,7 +78,11 @@ def push_workout_to_strava(
             output_path=fit_path,
         )
 
-        # 2. Upload to Strava
+        # 2. Generate description
+        enrichment = _build_enrichment(workout, hr_samples)
+        description = generate_description(hevy_id, hevy_workout, enrichment, hr_samples)
+
+        # 3. Upload to Strava
         logger.info("Uploading FIT file for workout %s to Strava", hevy_id)
         upload_result = client.upload_activity(
             fit_path=fit_path,
@@ -74,7 +94,7 @@ def push_workout_to_strava(
         activity_id = upload_result.get("activity_id")
         error = None
 
-        # 3. Poll for activity_id if not immediately available
+        # 4. Poll for activity_id if not immediately available
         if not activity_id:
             for poll in range(_MAX_UPLOAD_POLLS):
                 time.sleep(_POLL_INTERVAL_S)
@@ -86,18 +106,25 @@ def push_workout_to_strava(
                 if activity_id or error:
                     break
             else:
-                # Exhausted all polls without activity_id or error
                 if not activity_id and not error:
                     error = f"Upload polling timed out after {_MAX_UPLOAD_POLLS} attempts"
 
-        # 4. Determine final status
+        # 5. Determine final status
         if error:
             status = "error"
             activity_id = None
         else:
             status = "sent"
 
-        # 5. Log the sync
+        # 6. Update Strava activity with description
+        if activity_id and description:
+            try:
+                client.update_activity(activity_id, description=description)
+                logger.info("Updated Strava activity %s with description", activity_id)
+            except Exception as desc_err:
+                logger.warning("Failed to set description on Strava %s: %s", activity_id, desc_err)
+
+        # 7. Log the sync
         with get_connection() as conn:
             log_activity_sync(
                 conn,
@@ -143,7 +170,7 @@ def push_workout_to_strava(
         }
 
     finally:
-        # 6. Clean up temp FIT files
+        # 8. Clean up temp FIT files
         if fit_path and os.path.exists(fit_path):
             try:
                 os.remove(fit_path)

@@ -226,11 +226,7 @@ function UnifiedTooltip({ active, payload, zones, extendedBlocks }: any) {
 export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: WorkoutHrTimelineProps) {
   const [hoveredTime, setHoveredTime] = useState<number | null>(null);
   const [selectedBlockIdx, setSelectedBlockIdx] = useState<number | null>(null);
-  const [hoveredGanttBlock, setHoveredGanttBlock] = useState<{
-    block: ExerciseBlock;
-    x: number;
-    y: number;
-  } | null>(null);
+  // hoveredGanttBlock removed — replaced with inline label style
 
   const zones = hrZones && hrZones.length > 0 ? hrZones : DEFAULT_ZONES;
 
@@ -465,110 +461,50 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
         </ComposedChart>
       </ResponsiveContainer>
 
-      {/* Exercise Gantt Bar */}
+      {/* Exercise Labels (matching image style) */}
       {exerciseBlocks.length > 0 && totalDuration > 0 && (
         <div
-          className="relative h-8 mt-0.5"
+          className="flex mt-2"
           style={{ marginLeft: BAR_LEFT, marginRight: CHART_MARGIN.right }}
         >
           {exerciseBlocks.map((block, i) => {
-            const left = (block.startSec / totalDuration) * 100;
-            const width = ((block.endSec - block.startSec) / totalDuration) * 100;
+            const width = ((block.endSec - (i > 0 ? exerciseBlocks[i - 1].endSec : 0)) / totalDuration) * 100;
+            const workingSets = block.sets.filter(s => s.set_type !== "REST" && s.set_type !== "WARMUP").length;
             const isSelected = selectedBlockIdx === i;
-            const isHovered = hoveredBlockIdx === i || hoveredGanttBlock?.block === block;
+            const isHovered = hoveredBlockIdx === i;
+            const dimmed = selectedBlockIdx !== null && !isSelected;
 
             return (
               <div
                 key={i}
-                className="absolute top-0 bottom-0 rounded-sm overflow-hidden flex items-center transition-all duration-100 cursor-pointer"
+                className="flex flex-col items-center cursor-pointer transition-opacity duration-100 px-0.5"
                 style={{
-                  left: `${left}%`,
                   width: `${width}%`,
-                  backgroundColor: block.color,
-                  opacity: isSelected ? 1 : selectedBlockIdx !== null ? 0.3 : isHovered ? 0.95 : 0.55,
-                  boxShadow: isSelected ? "0 0 0 1.5px rgba(255,255,255,0.8)" : "none",
+                  opacity: dimmed ? 0.35 : 1,
                 }}
                 onClick={() => setSelectedBlockIdx(isSelected ? null : i)}
-                onMouseEnter={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setHoveredGanttBlock({
-                    block,
-                    x: rect.left + rect.width / 2,
-                    y: rect.top,
-                  });
-                }}
-                onMouseLeave={() => setHoveredGanttBlock(null)}
               >
-                {/* Set dividers */}
-                {block.sets.length > 1 &&
-                  block.sets.slice(1).map((s, si) => {
-                    const setOffset =
-                      ((s.start_sec - block.startSec) / (block.endSec - block.startSec)) * 100;
-                    return (
-                      <div
-                        key={si}
-                        className="absolute top-1 bottom-1"
-                        style={{
-                          left: `${setOffset}%`,
-                          width: 1,
-                          backgroundColor: "rgba(0,0,0,0.3)",
-                        }}
-                      />
-                    );
-                  })}
-
-                {/* Exercise name */}
-                <span
-                  className="text-[9px] font-medium text-white truncate px-1 relative z-10"
-                  style={{ textShadow: "0 1px 2px rgba(0,0,0,0.6)" }}
-                >
+                <div
+                  className="w-2 h-2 rounded-full mb-1 shrink-0"
+                  style={{
+                    backgroundColor: block.color,
+                    boxShadow: isSelected || isHovered ? `0 0 6px ${block.color}` : "none",
+                  }}
+                />
+                <span className="text-[10px] leading-tight text-center text-muted-foreground line-clamp-2">
                   {block.exercise}
                 </span>
+                <span className="text-[9px] text-muted-foreground/60">
+                  {workingSets} sets
+                </span>
+                {blockAvgHrs.has(i) && (
+                  <span className="text-[9px] text-red-400/70">
+                    {blockAvgHrs.get(i)} bpm
+                  </span>
+                )}
               </div>
             );
           })}
-
-          {/* Hover crosshair on exercise bar */}
-          {hoveredTime != null && (
-            <div
-              className="absolute top-0 bottom-0 w-px bg-white/30 pointer-events-none"
-              style={{ left: `${(hoveredTime / totalDuration) * 100}%` }}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Gantt bar hover tooltip */}
-      {hoveredGanttBlock && (
-        <div
-          className="fixed z-50 bg-card text-card-foreground border border-border rounded-lg p-2.5 text-xs shadow-lg pointer-events-none"
-          style={{
-            left: hoveredGanttBlock.x,
-            top: hoveredGanttBlock.y - 8,
-            transform: "translate(-50%, -100%)",
-          }}
-        >
-          <div className="font-medium text-sm mb-1">{hoveredGanttBlock.block.exercise}</div>
-          <div className="space-y-0.5 text-muted-foreground">
-            <div>{hoveredGanttBlock.block.sets.length} sets</div>
-            {(() => {
-              const weights = hoveredGanttBlock.block.sets
-                .filter((s) => s.weight > 0)
-                .map((s) => Math.round(s.weight * 10) / 10);
-              if (weights.length === 0) return <div>Bodyweight</div>;
-              const min = Math.min(...weights);
-              const max = Math.max(...weights);
-              return <div>{min === max ? `${min} kg` : `${min}–${max} kg`}</div>;
-            })()}
-            <div>
-              {formatElapsed(hoveredGanttBlock.block.startSec)} – {formatElapsed(hoveredGanttBlock.block.endSec)}
-            </div>
-            {blockAvgHrs.has(exerciseBlocks.indexOf(hoveredGanttBlock.block)) && (
-              <div className="text-red-400">
-                Avg HR: {blockAvgHrs.get(exerciseBlocks.indexOf(hoveredGanttBlock.block))} bpm
-              </div>
-            )}
-          </div>
         </div>
       )}
 
