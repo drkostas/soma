@@ -315,7 +315,7 @@ def was_already_synced(conn, source_platform: str, source_id: str, destination: 
         cur.execute(
             """
             SELECT COUNT(*) FROM activity_sync_log
-            WHERE source_platform = %s AND source_id = %s AND destination = %s AND status = 'sent'
+            WHERE source_platform = %s AND source_id = %s AND destination = %s AND status IN ('sent', 'external')
             """,
             (source_platform, source_id, destination),
         )

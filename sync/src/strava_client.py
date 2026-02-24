@@ -125,6 +125,50 @@ class StravaClient:
         time.sleep(API_CALL_DELAY)
         return resp.json()
 
+    def create_activity(self, name, sport_type, start_date_local, elapsed_time,
+                        description=None, distance=None):
+        """Create a manual activity on Strava (metadata only, no file upload).
+
+        Parameters
+        ----------
+        name: Activity name.
+        sport_type: Strava sport type (e.g. "Run", "Ride", "WeightTraining").
+        start_date_local: ISO 8601 datetime string.
+        elapsed_time: Duration in seconds.
+        description: Optional description.
+        distance: Optional distance in meters.
+        """
+        self.ensure_token_fresh()
+        data = {
+            "name": name,
+            "sport_type": sport_type,
+            "start_date_local": start_date_local,
+            "elapsed_time": int(elapsed_time),
+            "type": sport_type,
+        }
+        if description:
+            data["description"] = description
+        if distance:
+            data["distance"] = float(distance)
+        url = f"{self.base_url}/activities"
+        resp = self.session.post(url, data=data, timeout=30)
+        resp.raise_for_status()
+        time.sleep(API_CALL_DELAY)
+        return resp.json()
+
+    def update_activity(self, activity_id, **kwargs):
+        """Update an existing activity (description, name, sport_type, etc.).
+
+        Supported kwargs: name, description, sport_type, type, gear_id,
+        trainer, commute, hide_from_home.
+        """
+        self.ensure_token_fresh()
+        url = f"{self.base_url}/activities/{activity_id}"
+        resp = self.session.put(url, data=kwargs, timeout=30)
+        resp.raise_for_status()
+        time.sleep(API_CALL_DELAY)
+        return resp.json()
+
     def check_upload_status(self, upload_id):
         """Check the processing status of an upload."""
         return self._get(f"/uploads/{upload_id}")

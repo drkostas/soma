@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { HRZoneChart } from "@/components/hr-zone-chart";
 import { WorkoutHrTimeline } from "@/components/workout-hr-timeline";
-import { HeartPulse, Flame, Dumbbell } from "lucide-react";
+import { HeartPulse, Flame, Dumbbell, Download } from "lucide-react";
 import { MuscleBodyMap } from "./muscle-body-map";
 import { getExerciseMuscles, ALL_MUSCLE_GROUPS, type MuscleGroup } from "@/lib/muscle-groups";
 
@@ -129,10 +129,11 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
         {!loading && data && (
           <Tabs defaultValue="exercises" className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <TabsList className="grid grid-cols-3 flex-1">
+              <TabsList className="grid grid-cols-4 flex-1">
               <TabsTrigger value="exercises">Exercises</TabsTrigger>
               <TabsTrigger value="summary">Summary</TabsTrigger>
-              <TabsTrigger value="heartrate">Heart Rate</TabsTrigger>
+              <TabsTrigger value="heartrate">HR</TabsTrigger>
+              <TabsTrigger value="image">Image</TabsTrigger>
               </TabsList>
               <button
                 onClick={() => setUnit((u) => (u === "kg" ? "lbs" : "kg"))}
@@ -340,6 +341,30 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     <HeartPulse className="h-8 w-8 opacity-30" />
                     <p className="text-sm">No heart rate data</p>
                     <p className="text-xs">No matching Garmin activity found</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="image" className="px-4 pb-8">
+                {workoutId && (
+                  <div className="space-y-3">
+                    <div className="relative rounded-lg overflow-hidden border border-border/50 bg-black">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/workout/${workoutId}/image`}
+                        alt={`${data?.title || "Workout"} summary`}
+                        className="w-full h-auto"
+                        loading="lazy"
+                      />
+                    </div>
+                    <a
+                      href={`/api/workout/${workoutId}/image`}
+                      download={`${(data?.title || "workout").replace(/\s+/g, "-").toLowerCase()}.png`}
+                      className="flex items-center justify-center gap-1.5 w-full py-2 rounded-md text-xs font-medium border border-border bg-muted/50 hover:bg-accent/50 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download Image
+                    </a>
                   </div>
                 )}
               </TabsContent>

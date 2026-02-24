@@ -6,6 +6,7 @@ import logging
 
 from db import was_already_synced
 from strava_push import push_workout_to_strava
+from garmin_push import push_garmin_activity_to_strava
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ def execute_routes(
     hr_samples: list[int] | None,
     strava_client=None,
     conn=None,
+    garmin_client=None,
 ) -> list[dict]:
     """Evaluate routing rules against a workout and dispatch to push connectors.
 
@@ -71,6 +73,8 @@ def execute_routes(
         Optional StravaClient instance for Strava destinations.
     conn:
         Optional DB connection for anti-loop checks.
+    garmin_client:
+        Optional Garmin client for downloading FIT files (needed for garmin→strava).
 
     Returns
     -------
@@ -81,13 +85,20 @@ def execute_routes(
     if not matched:
         return []
 
-    source_id = workout.get("hevy_id") or workout.get("activity_id") or ""
+    source_id = workout.get("hevy_id") or workout.get("activity_id") or str(workout.get("source_id", ""))
     results: list[dict] = []
 
     for rule in matched:
         rule_id = rule["id"]
-        for dest in rule["destinations"]:
-            destination = dest["platform"]
+        destinations = rule["destinations"]
+        # destinations is a dict like {"strava": {"enabled": true}}
+        dest_items = (
+            destinations.items() if isinstance(destinations, dict)
+            else [(d["platform"], d) for d in destinations]
+        )
+        for destination, dest_config in dest_items:
+            if isinstance(dest_config, dict) and not dest_config.get("enabled", True):
+                continue
 
             if not should_sync(source_platform, destination, conn=conn, source_id=source_id):
                 logger.info(
@@ -97,9 +108,15 @@ def execute_routes(
                 continue
 
             if destination == "strava" and strava_client is not None:
-                push_result = push_workout_to_strava(
-                    strava_client, workout, hr_samples, rule_id=rule_id,
-                )
+                if source_platform == "garmin":
+                    push_result = push_garmin_activity_to_strava(
+                        strava_client, int(source_id),
+                        garmin_client=garmin_client, conn=conn, rule_id=rule_id,
+                    )
+                else:
+                    push_result = push_workout_to_strava(
+                        strava_client, workout, hr_samples, rule_id=rule_id,
+                    )
                 results.append({
                     "destination": destination,
                     "rule_id": rule_id,
