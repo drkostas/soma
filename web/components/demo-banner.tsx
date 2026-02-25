@@ -1,3 +1,5 @@
+export const DEMO_URL = "https://soma-demo.vercel.app";
+
 export function DemoBanner({ repoUrl }: { repoUrl: string }) {
   return (
     <div className="fixed left-16 right-0 top-0 z-50 flex items-center justify-center gap-3 bg-primary/10 px-4 py-1.5 text-xs text-primary backdrop-blur-sm border-b border-primary/20">
