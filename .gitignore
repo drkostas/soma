@@ -36,3 +36,5 @@ tokens/
 logs/
 *.log
 .history/
+# Strava backfill working data
+sync/strava_backfill_data/
