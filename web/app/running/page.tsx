@@ -432,6 +432,7 @@ async function getYearlyRunningStats() {
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND (raw_json->>'distance')::float > 500
+      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - INTERVAL '10 years'
     GROUP BY year
     ORDER BY year DESC
   `;
