@@ -13,7 +13,7 @@ from activity_replacer import enrich_new_workouts
 from router import execute_routes
 from strava_client import StravaClient
 from strava_sync import sync_recent_activities, sync_activity_details as strava_sync_activity_details
-from db import get_connection, log_sync, get_platform_credentials, upsert_platform_credentials, get_sync_rules
+from db import get_connection, log_sync, update_sync_log, get_platform_credentials, upsert_platform_credentials, get_sync_rules, log_activity_sync
 from config import HEVY_API_KEY
 
 # A full day of Garmin daily HR data has ~700-720 points (midnight to midnight).
@@ -91,8 +91,9 @@ def _sync_strava():
                 expires_at=expires_dt,
             )
     except Exception as e:
-        print(f"Strava: token refresh failed: {e}")
-        return
+        print(f"  Strava: token refresh failed: {e}")
+        print("  Strava sync skipped (non-fatal).")
+        return None
 
     # Pull recent activities
     print("Syncing Strava activities...")
@@ -142,11 +143,6 @@ def _route_enriched_workouts(strava_client=None) -> int:
                 JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
                 WHERE we.status IN ('enriched', 'uploaded')
                   AND we.updated_at >= NOW() - INTERVAL '24 hours'
-                  AND we.hevy_id NOT IN (
-                    SELECT source_id FROM activity_sync_log
-                    WHERE source_platform = 'hevy' AND destination = 'strava'
-                      AND status IN ('sent', 'external')
-                  )
                 ORDER BY we.workout_date DESC
             """)
             rows = cur.fetchall()
@@ -164,14 +160,16 @@ def _route_enriched_workouts(strava_client=None) -> int:
             "hevy_workout": raw,
         }
 
-        results = execute_routes(
-            rules=rules,
-            source_platform="hevy",
-            activity_type="strength",
-            workout=workout,
-            hr_samples=hr_samples,
-            strava_client=strava_client,
-        )
+        with get_connection() as conn:
+            results = execute_routes(
+                rules=rules,
+                source_platform="hevy",
+                activity_type="strength",
+                workout=workout,
+                hr_samples=hr_samples,
+                strava_client=strava_client,
+                conn=conn,
+            )
 
         for r in results:
             if r["status"] == "sent":
@@ -214,17 +212,101 @@ def _enrich_garmin_activity(garmin_client, garmin_activity_id: int, hevy_id: str
         print(f"    Image skipped ({e})")
 
 
+def _backfill_garmin_enrichment(garmin_client) -> int:
+    """Set name/description/image on Garmin activities that were uploaded but
+    didn't get enriched (e.g. because activity ID wasn't available at upload time).
+
+    Only runs when a hevy → garmin sync rule exists. Checks for 'uploaded'
+    workouts that have a garmin_activity_id but were never enriched (tracked
+    via garmin_enriched flag).
+    """
+    from garmin_client import rate_limited_call
+
+    # Check for hevy → garmin sync rules
+    with get_connection() as conn:
+        rules = get_sync_rules(conn, source_platform="hevy", enabled_only=True)
+    garmin_rules = [
+        r for r in rules
+        if "garmin" in (r.get("destinations") or {})
+    ]
+    if not garmin_rules:
+        print("  No hevy → garmin rules configured, skipping backfill.")
+        return 0
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT we.hevy_id, we.hevy_title, we.garmin_activity_id,
+                       h.raw_json, we.hr_samples, we.hr_source,
+                       we.avg_hr, we.max_hr, we.calories, we.duration_s
+                FROM workout_enrichment we
+                JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
+                WHERE we.status = 'uploaded'
+                  AND we.garmin_activity_id IS NOT NULL
+                  AND COALESCE(we.garmin_enriched, false) = false
+                ORDER BY we.workout_date DESC
+                LIMIT 10
+            """)
+            rows = cur.fetchall()
+
+    if not rows:
+        return 0
+
+    count = 0
+    for hevy_id, hevy_title, garmin_id, raw_json, hr_samples, hr_source, avg_hr, max_hr, calories, duration_s in rows:
+        raw = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+        print(f"  Backfilling Garmin enrichment for {hevy_title} (garmin:{garmin_id})...")
+
+        try:
+            # Rename
+            rate_limited_call(garmin_client.set_activity_name, garmin_id, hevy_title)
+            print(f"    Renamed to '{hevy_title}'")
+        except Exception as e:
+            print(f"    Rename failed: {e}")
+
+        # Description + image
+        enrichment = {"avg_hr": avg_hr, "max_hr": max_hr, "calories": calories, "duration_s": duration_s}
+        _enrich_garmin_activity(
+            garmin_client, int(garmin_id), hevy_id,
+            raw, enrichment, hr_samples, hr_source or "unknown",
+        )
+
+        # Mark as enriched
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE workout_enrichment SET garmin_enriched = true WHERE hevy_id = %s",
+                    (hevy_id,),
+                )
+        count += 1
+
+    print(f"  Backfilled {count} Garmin activities")
+    return count
+
+
 def _upload_enriched_to_garmin(garmin_client) -> int:
     """Upload enriched Hevy workouts to Garmin Connect.
 
-    First matches any already-uploaded workouts to Garmin activities (409 prevention).
-    Then uploads remaining 'enriched' workouts: generates FIT, uploads, renames,
-    and adds description + image.
+    Only runs when a hevy → garmin sync rule exists. First matches any
+    already-uploaded workouts to Garmin activities (409 prevention).
+    Then uploads remaining 'enriched' workouts: generates FIT, uploads,
+    renames, and adds description + image.
 
     Returns count of successfully uploaded workouts.
     """
     import os
     from activity_replacer import process_workout, _populate_garmin_ids, DEFAULT_FIT_DIR
+
+    # Check for hevy → garmin sync rules
+    with get_connection() as conn:
+        rules = get_sync_rules(conn, source_platform="hevy", enabled_only=True)
+    garmin_rules = [
+        r for r in rules
+        if "garmin" in (r.get("destinations") or {})
+    ]
+    if not garmin_rules:
+        print("  No hevy → garmin rules configured, skipping upload.")
+        return 0
 
     # Match already-uploaded workouts first (prevents 409 on re-upload)
     _populate_garmin_ids()
@@ -238,6 +320,11 @@ def _upload_enriched_to_garmin(garmin_client) -> int:
                 FROM workout_enrichment we
                 JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
                 WHERE we.status = 'enriched'
+                  AND we.hevy_id NOT IN (
+                    SELECT source_id FROM activity_sync_log
+                    WHERE source_platform = 'hevy' AND destination = 'garmin'
+                      AND status IN ('sent', 'external')
+                  )
                 ORDER BY we.workout_date DESC
             """)
             rows = cur.fetchall()
@@ -273,7 +360,7 @@ def _upload_enriched_to_garmin(garmin_client) -> int:
             if fit_path and os.path.exists(fit_path):
                 os.remove(fit_path)
 
-            # Add description + image to the new Garmin activity
+            # Add name, description + image to the new Garmin activity
             garmin_id = result.get("new_activity_id")
             if garmin_id:
                 enrichment = {
@@ -286,6 +373,21 @@ def _upload_enriched_to_garmin(garmin_client) -> int:
                     garmin_client, int(garmin_id), hevy_id,
                     raw, enrichment, hr_samples, hr_source or "unknown",
                 )
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE workout_enrichment SET garmin_enriched = true WHERE hevy_id = %s",
+                            (hevy_id,),
+                        )
+                    log_activity_sync(
+                        conn,
+                        source_platform="hevy",
+                        source_id=hevy_id,
+                        destination="garmin",
+                        destination_id=str(garmin_id),
+                        rule_id=garmin_rules[0]["id"],
+                        status="sent",
+                    )
         else:
             error_msg = result.get("error", "")
             if "409" in str(error_msg):
@@ -294,8 +396,11 @@ def _upload_enriched_to_garmin(garmin_client) -> int:
             else:
                 print(f"    Failed: {error_msg or result['status']}")
 
-    # Final pass to match any 409 uploads
+    # Final pass to match any 409 uploads or async-processed uploads
     _populate_garmin_ids()
+
+    # Backfill name/description/image for workouts that got matched after upload
+    _backfill_garmin_enrichment(garmin_client)
 
     return uploaded
 
@@ -391,18 +496,18 @@ def run_pipeline(days: int | None = None):
     print(f"Dates: {', '.join(d.isoformat() for d in dates_to_sync)}\n")
 
     with get_connection() as conn:
-        log_sync(conn, "full_pipeline", "running")
+        log_id = log_sync(conn, "full_pipeline", "running")
 
     try:
-        _run_pipeline_inner(dates_to_sync)
+        _run_pipeline_inner(dates_to_sync, log_id=log_id)
     except Exception as e:
         print(f"\n!!! Pipeline crashed: {e}")
         with get_connection() as conn:
-            log_sync(conn, "full_pipeline", "error", error=str(e))
+            update_sync_log(conn, log_id, "error", error=str(e))
         raise
 
 
-def _run_pipeline_inner(dates_to_sync: list):
+def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
     """Inner pipeline logic, wrapped by run_pipeline for error handling."""
     total_raw = 0
     total_parsed = 0
@@ -512,8 +617,12 @@ def _run_pipeline_inner(dates_to_sync: list):
 
     # --- Log completion ---
     total = total_raw + total_activities
-    with get_connection() as conn:
-        log_sync(conn, "full_pipeline", "success", total)
+    if log_id:
+        with get_connection() as conn:
+            update_sync_log(conn, log_id, "success", total)
+    else:
+        with get_connection() as conn:
+            log_sync(conn, "full_pipeline", "success", total)
 
     n = len(dates_to_sync)
     print(f"\n=== Pipeline Complete ===")
