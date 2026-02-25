@@ -143,6 +143,7 @@ def _route_enriched_workouts(strava_client=None) -> int:
                 JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
                 WHERE we.status IN ('enriched', 'uploaded')
                   AND we.updated_at >= NOW() - INTERVAL '24 hours'
+                  AND we.workout_date >= CURRENT_DATE - INTERVAL '7 days'
                 ORDER BY we.workout_date DESC
             """)
             rows = cur.fetchall()
