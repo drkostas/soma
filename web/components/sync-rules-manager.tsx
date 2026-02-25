@@ -39,6 +39,7 @@ const ACTIVITY_TYPE_OPTIONS = [
 const DESTINATION_OPTIONS = [
   { value: "strava", label: "Strava" },
   { value: "garmin", label: "Garmin" },
+  { value: "telegram", label: "Telegram" },
 ];
 
 export function SyncRulesManager({ initialRules }: SyncRulesManagerProps) {
@@ -222,7 +223,11 @@ export function SyncRulesManager({ initialRules }: SyncRulesManagerProps) {
             {rules.map((rule) => (
               <div
                 key={rule.id}
-                className="flex items-center justify-between rounded-lg border border-border px-4 py-3"
+                className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-opacity ${
+                  rule.enabled
+                    ? "border-border"
+                    : "border-border/50 opacity-50"
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <button

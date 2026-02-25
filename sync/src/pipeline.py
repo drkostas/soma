@@ -14,7 +14,7 @@ from router import execute_routes
 from strava_client import StravaClient
 from strava_sync import sync_recent_activities, sync_activity_details as strava_sync_activity_details
 from db import get_connection, log_sync, update_sync_log, get_platform_credentials, upsert_platform_credentials, get_sync_rules, log_activity_sync
-from config import HEVY_API_KEY
+from config import get_hevy_api_key
 
 # A full day of Garmin daily HR data has ~700-720 points (midnight to midnight).
 # Anything below this threshold is considered incomplete / needs re-sync.
@@ -551,7 +551,7 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
     # --- Hevy workouts (page 1 only = latest 10) ---
     print(f"\nSyncing recent Hevy workouts...")
     try:
-        hevy = HevyClient(HEVY_API_KEY)
+        hevy = HevyClient(get_hevy_api_key())
         hevy_count = sync_all_workouts(hevy, start_page=1, page_size=10)
         print(f"  Hevy: {hevy_count} workouts saved")
     except Exception as e:

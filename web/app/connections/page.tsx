@@ -162,7 +162,12 @@ async function getPageData() {
       `,
     ]);
 
-  const telegramConfigured = !!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID;
+  // Telegram: check DB credentials first, fallback to env vars
+  const telegramCred = (credentials as unknown as PlatformCredential[]).find(
+    (c) => c.platform === "telegram" && c.status === "active"
+  );
+  const telegramConfigured = !!telegramCred ||
+    (!!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID);
 
   // Data count queries
   const [garminDaily, garminActivity, garminProfile, hevy, healthSummary, weight, sleep] =
@@ -398,12 +403,12 @@ export default async function ConnectionsPage() {
       return { isConnected: false, badgeStatus: "planned" as const, detail: null };
     }
 
-    // Telegram: env-var-based connection status
+    // Telegram: check DB credentials or env vars
     if (platform === "telegram") {
       return {
         isConnected: telegramConfigured,
         badgeStatus: telegramConfigured ? "sync-service" as const : "disconnected" as const,
-        detail: telegramConfigured ? { name: null, date: null } : null,
+        detail: telegramConfigured ? { name: "Bot configured", date: cred?.connected_at ?? null } : null,
       };
     }
 
@@ -495,9 +500,9 @@ export default async function ConnectionsPage() {
         <SyncFlowDiagram platforms={flowPlatforms} rules={rules} />
       </div>
 
-      {/* Section 3: Platform Cards */}
+      {/* Section 3: Platform Cards (hide "planned" — they show in flow diagram) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {platforms.map((platform) => {
+        {platforms.filter((p) => platformConfig[p].connectionType !== "planned").map((platform) => {
           const config = platformConfig[platform];
           const { isConnected, badgeStatus, detail } = getPlatformStatus(platform);
           const Icon = config.icon;
@@ -538,7 +543,7 @@ export default async function ConnectionsPage() {
                         )}
                       </div>
                     ) : config.connectionType === "planned" ? (
-                      <p className="text-xs">{config.connectionHint}</p>
+                      <p className="text-xs text-muted-foreground/50">Not yet available</p>
                     ) : (
                       <p>Not connected</p>
                     )}
@@ -591,15 +596,18 @@ export default async function ConnectionsPage() {
                         <span className="capitalize truncate">{entry.destination}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] capitalize ${
+                          entry.status === "error" ? "text-red-400" : "text-muted-foreground"
+                        }`}>{entry.status}</span>
                         <Badge
                           variant={
-                            entry.status === "synced"
+                            entry.status === "sent" || entry.status === "synced"
                               ? "default"
-                              : entry.status === "pending"
+                              : entry.status === "external"
                                 ? "secondary"
                                 : "outline"
                           }
-                          className="text-xs"
+                          className={`text-xs ${entry.status === "error" ? "border-red-500/50 text-red-400" : ""}`}
                         >
                           {entry.count}
                         </Badge>
