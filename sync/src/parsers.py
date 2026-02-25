@@ -78,10 +78,12 @@ def parse_sleep(raw_data: dict) -> dict | None:
 
 def parse_hrv(raw_data: dict) -> dict:
     """Extract HRV fields from hrv_data raw JSON."""
+    # HRV data is nested under hrvSummary
+    summary = raw_data.get("hrvSummary", raw_data)
     return {
-        "hrv_weekly_avg": raw_data.get("weeklyAvg"),
-        "hrv_last_night_avg": raw_data.get("lastNightAvg"),
-        "hrv_status": raw_data.get("status"),
+        "hrv_weekly_avg": summary.get("weeklyAvg"),
+        "hrv_last_night_avg": summary.get("lastNightAvg"),
+        "hrv_status": summary.get("status"),
     }
 
 
@@ -164,6 +166,12 @@ def process_day(sync_date: date):
             if "hrv_data" in raw_by_endpoint and raw_by_endpoint["hrv_data"]:
                 hrv = parse_hrv(raw_by_endpoint["hrv_data"])
                 parsed.update(hrv)
+
+            # Merge sleep duration from sleep_data if user_summary lacks it
+            if not parsed.get("sleep_time_seconds") and "sleep_data" in raw_by_endpoint:
+                sleep = parse_sleep(raw_by_endpoint["sleep_data"])
+                if sleep and sleep.get("total_sleep_seconds"):
+                    parsed["sleep_time_seconds"] = sleep["total_sleep_seconds"]
 
             upsert_daily_health(conn, parsed)
 
