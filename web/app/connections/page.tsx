@@ -535,12 +535,16 @@ export default async function ConnectionsPage() {
                             <span className="text-foreground font-medium">{detail.name}</span>
                           </p>
                         )}
-                        {detail.date && (
-                          <p className="text-xs">
-                            {config.connectionType === "sync-service" ? "Last synced" : "Connected"}{" "}
-                            {new Date(detail.date).toLocaleDateString()}
-                          </p>
-                        )}
+                        <p className="text-xs">
+                          {detail.date ? (
+                            <>
+                              {config.connectionType === "sync-service" ? "Last synced" : "Connected"}{" "}
+                              {new Date(detail.date).toLocaleDateString()}
+                            </>
+                          ) : (
+                            config.connectionType === "sync-service" ? "Configured" : "Connected"
+                          )}
+                        </p>
                       </div>
                     ) : config.connectionType === "planned" ? (
                       <p className="text-xs text-muted-foreground/50">Not yet available</p>
@@ -569,8 +573,8 @@ export default async function ConnectionsPage() {
       </div>
 
       {/* Section 5: Sync Rules + Activity Log (side by side) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <div>
           <SyncRulesManager initialRules={rules} />
         </div>
         <div>
