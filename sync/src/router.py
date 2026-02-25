@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from db import was_already_synced
+from db import was_already_synced, get_connection, log_activity_sync
 from strava_push import push_workout_to_strava
 from garmin_push import push_garmin_activity_to_strava
 
@@ -123,6 +123,39 @@ def execute_routes(
                     "status": push_result["status"],
                     "strava_activity_id": push_result.get("strava_activity_id"),
                     "error": push_result.get("error"),
+                })
+            elif destination == "telegram":
+                from telegram_notify import send_workout_image, is_configured
+                if not is_configured():
+                    logger.warning("Telegram not configured, skipping rule %s", rule_id)
+                    continue
+                ok = send_workout_image(
+                    hevy_id=workout.get("hevy_id", source_id),
+                    title=workout.get("hevy_title", "Workout"),
+                    workout_date=str(workout.get("date", "")),
+                )
+                status = "sent" if ok else "error"
+                # Log to activity_sync_log for dedup
+                try:
+                    with get_connection() as log_conn:
+                        log_activity_sync(
+                            log_conn,
+                            source_platform=source_platform,
+                            source_id=source_id,
+                            destination="telegram",
+                            destination_id="telegram",
+                            rule_id=rule_id,
+                            status=status,
+                            error_message=None if ok else "Telegram send failed",
+                        )
+                except Exception as log_err:
+                    logger.warning("Failed to log telegram sync: %s", log_err)
+                results.append({
+                    "destination": destination,
+                    "rule_id": rule_id,
+                    "status": status,
+                    "strava_activity_id": None,
+                    "error": None if ok else "Telegram send failed",
                 })
             else:
                 logger.warning(

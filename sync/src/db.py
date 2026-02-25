@@ -39,14 +39,33 @@ def upsert_raw_data(conn, sync_date: date, endpoint: str, data: dict):
 
 
 def log_sync(conn, sync_type: str, status: str, records: int = 0, error: str = None):
-    """Write an entry to the sync_log table."""
+    """Write an entry to the sync_log table. Returns the row id."""
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO sync_log (sync_type, status, records_synced, error_message, completed_at)
             VALUES (%s, %s, %s, %s, CASE WHEN %s IN ('success', 'error') THEN NOW() ELSE NULL END)
+            RETURNING id
             """,
             (sync_type, status, records, error, status),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+def update_sync_log(conn, log_id: int, status: str, records: int = 0, error: str = None):
+    """Update an existing sync_log row (e.g. running → success/error)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE sync_log
+            SET status = %s,
+                records_synced = %s,
+                error_message = %s,
+                completed_at = CASE WHEN %s IN ('success', 'error') THEN NOW() ELSE completed_at END
+            WHERE id = %s
+            """,
+            (status, records, error, status, log_id),
         )
 
 
