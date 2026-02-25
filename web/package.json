@@ -16,6 +16,7 @@
     "lucide-react": "^0.575.0",
     "motion": "^12.34.3",
     "next": "16.1.6",
+    "next-auth": "^5.0.0-beta.30",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-body-highlighter": "^2.0.5",
