@@ -1,4 +1,4 @@
-export const DEMO_URL = "https://soma-demo.vercel.app";
+export const DEMO_URL = "https://soma-demo.gkos.dev";
 
 export function DemoBanner({ repoUrl }: { repoUrl: string }) {
   return (
