@@ -18,6 +18,7 @@ import {
   Route,
   Activity,
   Database,
+  Send,
 } from "lucide-react";
 
 export const revalidate = 30;
@@ -54,6 +55,13 @@ const platformConfig: Record<
     icon: Bike,
     connectionType: "oauth",
     connectionHint: "Connect via OAuth",
+  },
+  telegram: {
+    label: "Telegram",
+    description: "Workout card images sent to your phone",
+    icon: Send,
+    connectionType: "sync-service",
+    connectionHint: "Managed by sync service",
   },
   surfr: {
     label: "Surfr",
@@ -153,6 +161,8 @@ async function getPageData() {
         SELECT * FROM sync_log ORDER BY started_at DESC LIMIT 10
       `,
     ]);
+
+  const telegramConfigured = !!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID;
 
   // Data count queries
   const [garminDaily, garminActivity, garminProfile, hevy, healthSummary, weight, sleep] =
@@ -329,6 +339,7 @@ async function getPageData() {
     dataCounts,
     syncRunLogs: syncRunLogs as unknown as any[],
     mergedActivities,
+    telegramConfigured,
   };
 }
 
@@ -365,7 +376,7 @@ function StatusBadge({ status, hint }: { status: string; hint?: string }) {
 }
 
 export default async function ConnectionsPage() {
-  const { credentials, rules, syncLog, syncServiceStatus, backfillProgress, dataCounts, syncRunLogs, mergedActivities } =
+  const { credentials, rules, syncLog, syncServiceStatus, backfillProgress, dataCounts, syncRunLogs, mergedActivities, telegramConfigured } =
     await getPageData();
 
   const credMap = Object.fromEntries(
@@ -376,7 +387,7 @@ export default async function ConnectionsPage() {
     syncServiceStatus.map((s) => [s.platform, s])
   );
 
-  const platforms = ["garmin", "hevy", "strava", "surfr"];
+  const platforms = ["garmin", "hevy", "strava", "telegram", "surfr"];
 
   function getPlatformStatus(platform: string) {
     const config = platformConfig[platform];
@@ -385,6 +396,15 @@ export default async function ConnectionsPage() {
 
     if (config.connectionType === "planned") {
       return { isConnected: false, badgeStatus: "planned" as const, detail: null };
+    }
+
+    // Telegram: env-var-based connection status
+    if (platform === "telegram") {
+      return {
+        isConnected: telegramConfigured,
+        badgeStatus: telegramConfigured ? "sync-service" as const : "disconnected" as const,
+        detail: telegramConfigured ? { name: null, date: null } : null,
+      };
     }
 
     if (config.connectionType === "oauth") {
