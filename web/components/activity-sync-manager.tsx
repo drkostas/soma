@@ -139,21 +139,10 @@ function SyncStatusBadge({
     ? `https://www.strava.com/activities/${destinationId}`
     : null;
 
-  if (status === "sent") {
+  if (status === "sent" || status === "external") {
     const badge = (
       <Badge variant="default" className="bg-green-600 text-xs gap-1 cursor-pointer">
         <CheckCircle2 className="h-3 w-3" />
-        Synced
-      </Badge>
-    );
-    return stravaUrl ? (
-      <a href={stravaUrl} target="_blank" rel="noopener noreferrer">{badge}</a>
-    ) : badge;
-  }
-  if (status === "external") {
-    const badge = (
-      <Badge variant="default" className="bg-blue-600 text-xs gap-1 cursor-pointer">
-        <Globe className="h-3 w-3" />
         On Strava
       </Badge>
     );
@@ -261,7 +250,7 @@ function ActivityRow({
   const isExternal = activity.sync_status === "external";
   const isSentByUs = activity.sync_status === "sent";
   const canSync = stravaConnected && !activity.sync_status && !syncing;
-  const canResync = stravaConnected && isExternal && !syncing;
+  const canResync = false; // All synced activities show same "On Strava" badge
 
   const activeSource = activity.sources.find((s) => s.platform === selectedSource)
     || activity.sources[0];
