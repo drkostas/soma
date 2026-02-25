@@ -7,6 +7,10 @@
   Garmin · Hevy · Strava — one self-hosted dashboard, your data, your server.</p>
   <br>
 
+  **[Live Demo →](https://soma-demo.gkos.dev)**
+
+  <br>
+
   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdrkostas%2Fsoma&root-directory=web&env=DATABASE_URL,STRAVA_CLIENT_ID,STRAVA_CLIENT_SECRET,NEXT_PUBLIC_BASE_URL&envDescription=See%20the%20setup%20guide&envLink=https%3A%2F%2Fgithub.com%2Fdrkostas%2Fsoma%23setup)
 
   <br>
