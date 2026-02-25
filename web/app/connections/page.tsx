@@ -93,8 +93,10 @@ interface SyncRule {
 interface SyncLogEntry {
   source_platform: string;
   destination: string;
-  status: string;
-  count: number;
+  total: number;
+  sent_count: number;
+  external_count: number;
+  error_count: number;
   last_sync: string;
 }
 
@@ -138,12 +140,16 @@ async function getPageData() {
         ORDER BY priority DESC, id
       `,
       sql`
-        SELECT source_platform, destination, status, COUNT(*)::int as count,
+        SELECT source_platform, destination,
+               COUNT(*)::int as total,
+               COUNT(*) FILTER (WHERE status = 'sent')::int as sent_count,
+               COUNT(*) FILTER (WHERE status = 'external')::int as external_count,
+               COUNT(*) FILTER (WHERE status = 'error')::int as error_count,
                MAX(processed_at) as last_sync
         FROM activity_sync_log
-        GROUP BY source_platform, destination, status
+        GROUP BY source_platform, destination
         ORDER BY last_sync DESC NULLS LAST
-        LIMIT 20
+        LIMIT 10
       `,
       sql`
         SELECT 'garmin' as platform,
@@ -405,10 +411,12 @@ export default async function ConnectionsPage() {
 
     // Telegram: check DB credentials or env vars
     if (platform === "telegram") {
+      const telegramLog = syncLog.find((l) => l.destination === "telegram");
+      const telegramDate = telegramLog?.last_sync ?? cred?.connected_at ?? null;
       return {
         isConnected: telegramConfigured,
         badgeStatus: telegramConfigured ? "sync-service" as const : "disconnected" as const,
-        detail: telegramConfigured ? { name: "Bot configured", date: cred?.connected_at ?? null } : null,
+        detail: telegramConfigured ? { name: "Bot configured", date: telegramDate } : null,
       };
     }
 
@@ -589,35 +597,33 @@ export default async function ConnectionsPage() {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {syncLog.slice(0, 8).map((entry, i) => (
-                    <div
-                      key={`${entry.source_platform}-${entry.destination}-${entry.status}-${i}`}
-                      className="flex items-center justify-between text-sm py-1.5 border-b border-border/50 last:border-0"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="capitalize font-medium truncate">{entry.source_platform}</span>
-                        <span className="text-muted-foreground">&rarr;</span>
-                        <span className="capitalize truncate">{entry.destination}</span>
+                  {syncLog.slice(0, 8).map((entry) => {
+                    const synced = entry.sent_count + entry.external_count;
+                    return (
+                      <div
+                        key={`${entry.source_platform}-${entry.destination}`}
+                        className="flex items-center justify-between text-sm py-1.5 border-b border-border/50 last:border-0"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="capitalize font-medium truncate">{entry.source_platform}</span>
+                          <span className="text-muted-foreground">&rarr;</span>
+                          <span className="capitalize truncate">{entry.destination}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {synced > 0 && (
+                            <Badge variant="default" className="text-xs">
+                              {synced}
+                            </Badge>
+                          )}
+                          {entry.error_count > 0 && (
+                            <Badge variant="outline" className="text-xs border-red-500/50 text-red-400">
+                              {entry.error_count} errors
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-[10px] capitalize ${
-                          entry.status === "error" ? "text-red-400" : "text-muted-foreground"
-                        }`}>{entry.status}</span>
-                        <Badge
-                          variant={
-                            entry.status === "sent" || entry.status === "synced"
-                              ? "default"
-                              : entry.status === "external"
-                                ? "secondary"
-                                : "outline"
-                          }
-                          className={`text-xs ${entry.status === "error" ? "border-red-500/50 text-red-400" : ""}`}
-                        >
-                          {entry.count}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

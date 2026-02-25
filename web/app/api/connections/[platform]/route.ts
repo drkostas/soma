@@ -12,6 +12,13 @@ const PLATFORM_FIELDS: Record<string, string[]> = {
   garmin: ["email", "password"],
 };
 
+// Map field keys to env var names for fallback detection
+const FIELD_ENV_VARS: Record<string, Record<string, string>> = {
+  garmin: { email: "GARMIN_EMAIL", password: "GARMIN_PASSWORD" },
+  hevy: { api_key: "HEVY_API_KEY" },
+  telegram: { bot_token: "TELEGRAM_BOT_TOKEN", chat_id: "TELEGRAM_CHAT_ID" },
+};
+
 function maskValue(val: string): string {
   if (!val || val.length <= 6) return "••••••";
   return val.slice(0, 3) + "•".repeat(Math.min(val.length - 6, 10)) + val.slice(-3);
@@ -32,21 +39,36 @@ export async function GET(
     const rows = await sql`
       SELECT credentials, status FROM platform_credentials WHERE platform = ${platform}
     `;
-    if (rows.length === 0) {
-      return NextResponse.json({ configured: false, fields: {} });
-    }
 
-    const creds = rows[0].credentials as Record<string, string> | null;
+    const creds = rows.length > 0 ? (rows[0].credentials as Record<string, string> | null) : null;
     const fields = PLATFORM_FIELDS[platform] || [];
+    const envVars = FIELD_ENV_VARS[platform] || {};
     const masked: Record<string, string | null> = {};
+    const sources: Record<string, "database" | "environment"> = {};
+    let allFieldsSet = true;
+
     for (const f of fields) {
-      const val = creds?.[f];
-      masked[f] = val ? maskValue(val) : null;
+      const dbVal = creds?.[f];
+      if (dbVal) {
+        masked[f] = maskValue(dbVal);
+        sources[f] = "database";
+      } else {
+        const envVar = envVars[f];
+        const envVal = envVar ? process.env[envVar] : undefined;
+        if (envVal) {
+          masked[f] = maskValue(envVal);
+          sources[f] = "environment";
+        } else {
+          masked[f] = null;
+          allFieldsSet = false;
+        }
+      }
     }
 
     return NextResponse.json({
-      configured: rows[0].status === "active" && fields.every((f) => !!creds?.[f]),
+      configured: allFieldsSet,
       fields: masked,
+      sources,
     });
   } catch (err) {
     console.error("Error fetching platform credentials:", err);

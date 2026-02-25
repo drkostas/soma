@@ -78,6 +78,7 @@ export function CredentialsDialog({
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [maskedValues, setMaskedValues] = useState<Record<string, string | null>>({});
+  const [fieldSources, setFieldSources] = useState<Record<string, string>>({});
   const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -90,11 +91,12 @@ export function CredentialsDialog({
       setSaved(false);
       setError(null);
       setValues({});
-      // Fetch current masked values
+      // Fetch current masked values and sources
       fetch(`/api/connections/${platform}`)
         .then((r) => r.json())
         .then((data) => {
           setMaskedValues(data.fields || {});
+          setFieldSources(data.sources || {});
         })
         .catch(() => {});
     }
@@ -205,7 +207,13 @@ export function CredentialsDialog({
                   </button>
                 )}
               </div>
-              {field.helpText && (
+              {fieldSources[field.key] === "environment" && !values[field.key] && (
+                <p className="text-xs text-blue-400">Set via environment variable</p>
+              )}
+              {fieldSources[field.key] === "database" && !values[field.key] && (
+                <p className="text-xs text-green-400">Stored in database</p>
+              )}
+              {field.helpText && !fieldSources[field.key] && (
                 <p className="text-xs text-muted-foreground">{field.helpText}</p>
               )}
             </div>
