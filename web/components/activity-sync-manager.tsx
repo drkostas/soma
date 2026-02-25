@@ -6,11 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   Footprints,
   Dumbbell,
   Bike,
@@ -22,10 +17,7 @@ import {
   Minus,
   Loader2,
   ExternalLink,
-  Globe,
-  Download,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export interface ActivitySource {
   platform: "garmin" | "hevy";
@@ -165,95 +157,24 @@ function SyncStatusBadge({
   );
 }
 
-function GarminLink({ activityId }: { activityId: string }) {
-  return (
-    <a
-      href={`https://connect.garmin.com/modern/activity/${activityId}`}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      <Badge variant="outline" className="text-xs gap-1 cursor-pointer hover:bg-accent">
-        <ExternalLink className="h-3 w-3" />
-        Garmin
-      </Badge>
-    </a>
-  );
-}
-
-function SourceToggle({
-  sources,
-  selected,
-  onSelect,
-  locked,
-  lockedSource,
-}: {
-  sources: ActivitySource[];
-  selected: "garmin" | "hevy";
-  onSelect: (p: "garmin" | "hevy") => void;
-  locked: boolean;
-  lockedSource: string | null;
-}) {
-  if (sources.length === 1) {
-    return (
-      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-        {sources[0].platform === "garmin" ? "Garmin" : "Hevy"}
-      </Badge>
-    );
-  }
-
-  return (
-    <div className="flex shrink-0">
-      {sources.map((s) => {
-        const isSelected = locked ? s.platform === lockedSource : s.platform === selected;
-        const label = s.platform === "garmin" ? "Garmin" : "Hevy";
-        return (
-          <button
-            key={s.platform}
-            disabled={locked}
-            onClick={() => onSelect(s.platform)}
-            className={cn(
-              "text-[10px] px-2 py-0.5 border transition-colors",
-              s.platform === sources[0].platform ? "rounded-l-md border-r-0" : "rounded-r-md",
-              isSelected
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-transparent text-muted-foreground border-border hover:bg-muted",
-              locked && "opacity-60 cursor-default"
-            )}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function ActivityRow({
   activity,
   stravaConnected,
   onSync,
   syncing,
-  selectedSource,
-  onSourceChange,
 }: {
   activity: MergedActivity;
   stravaConnected: boolean;
   onSync: (platform: "garmin" | "hevy", sourceId: string, force?: boolean) => void;
   syncing: boolean;
-  selectedSource: "garmin" | "hevy";
-  onSourceChange: (p: "garmin" | "hevy") => void;
 }) {
   const Icon = activityTypeIcons[activity.activity_type] || Zap;
   const typeLabel = activityTypeLabels[activity.activity_type] || activity.activity_type;
   const dist = formatDistance(activity.distance);
 
-  const isExternal = activity.sync_status === "external";
-  const isSentByUs = activity.sync_status === "sent";
   const canSync = stravaConnected && !activity.sync_status && !syncing;
-  const canResync = false; // All synced activities show same "On Strava" badge
-
-  const activeSource = activity.sources.find((s) => s.platform === selectedSource)
-    || activity.sources[0];
+  const activeSource = getDefaultSource(activity);
+  const activeSourceObj = activity.sources.find((s) => s.platform === activeSource) || activity.sources[0];
 
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-border/50 last:border-0">
@@ -266,13 +187,11 @@ function ActivityRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium truncate">{activity.name}</span>
-          <SourceToggle
-            sources={activity.sources}
-            selected={selectedSource}
-            onSelect={onSourceChange}
-            locked={isSentByUs}
-            lockedSource={activity.synced_from}
-          />
+          {activity.sources.map((s) => (
+            <Badge key={s.platform} variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+              {s.platform === "garmin" ? "Garmin" : "Hevy"}
+            </Badge>
+          ))}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
           <span>{typeLabel}</span>
@@ -289,27 +208,8 @@ function ActivityRow({
         </div>
       </div>
 
-      {/* Links + sync status */}
+      {/* Sync status */}
       <div className="flex items-center gap-2 shrink-0">
-        {activity.sources.find((s) => s.platform === "hevy") && (
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <a
-                href={`/api/workout/${activity.sources.find((s) => s.platform === "hevy")!.source_id}/image`}
-                download={`${activity.name.replace(/\s+/g, "-").toLowerCase()}.png`}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-accent/50 transition-colors"
-              >
-                <Download className="h-3.5 w-3.5 text-muted-foreground" />
-              </a>
-            </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={4}>
-              <p className="text-xs">Download workout image</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {activity.sources.find((s) => s.platform === "garmin" && !/^[a-f0-9-]{36}$/.test(s.source_id)) && (
-          <GarminLink activityId={activity.sources.find((s) => s.platform === "garmin")!.source_id} />
-        )}
         <SyncStatusBadge
           status={activity.sync_status}
           destinationId={activity.destination_id}
@@ -320,29 +220,11 @@ function ActivityRow({
             variant="outline"
             size="sm"
             className="h-7 text-xs gap-1"
-            onClick={() => onSync(activeSource.platform, activeSource.source_id)}
+            onClick={() => onSync(activeSourceObj.platform, activeSourceObj.source_id)}
           >
             <ExternalLink className="h-3 w-3" />
             Strava
           </Button>
-        )}
-        {canResync && (
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1 text-muted-foreground"
-                onClick={() => onSync(activeSource.platform, activeSource.source_id, true)}
-              >
-                <ExternalLink className="h-3 w-3" />
-                Re-sync
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={4}>
-              <p className="text-xs max-w-[200px]">Push from {activeSource.platform === "garmin" ? "Garmin" : "Hevy"} to Strava (creates a new activity)</p>
-            </TooltipContent>
-          </Tooltip>
         )}
         {syncing && (
           <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
@@ -362,8 +244,6 @@ export function ActivitySyncManager({
   const [localStatuses, setLocalStatuses] = useState<
     Record<string, "pending" | "sent" | "error">
   >({});
-  // Track selected source per activity (keyed by start_time since merged rows don't have a single ID)
-  const [sourceSelections, setSourceSelections] = useState<Record<string, "garmin" | "hevy">>({});
 
   function activityKey(a: MergedActivity): string {
     return a.sources.map((s) => `${s.platform}:${s.source_id}`).sort().join("|");
@@ -500,7 +380,6 @@ export function ActivitySyncManager({
                     const key = activityKey(activity);
                     const effectiveStatus = getEffectiveStatus(activity);
                     const effectiveActivity = { ...activity, sync_status: effectiveStatus };
-                    const selected = sourceSelections[key] || getDefaultSource(activity);
                     return (
                       <ActivityRow
                         key={key}
@@ -508,10 +387,6 @@ export function ActivitySyncManager({
                         stravaConnected={stravaConnected}
                         onSync={handleSync}
                         syncing={isSyncing(activity)}
-                        selectedSource={selected}
-                        onSourceChange={(p) =>
-                          setSourceSelections((prev) => ({ ...prev, [key]: p }))
-                        }
                       />
                     );
                   })}
