@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export default auth((req) => {
   // Demo mode: no auth required
-  if (process.env.DEMO_MODE === "true") return NextResponse.next();
+  if (process.env.DEMO_MODE?.trim() === "true") return NextResponse.next();
 
   const { pathname } = req.nextUrl;
 
