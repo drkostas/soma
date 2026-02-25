@@ -101,9 +101,15 @@ Set **Root Directory → `web`** in Vercel, then add:
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | Neon connection string |
-| `STRAVA_CLIENT_ID` | From your Strava API settings |
-| `STRAVA_CLIENT_SECRET` | From your Strava API settings |
+| `AUTH_SECRET` | Random 32-char string (`openssl rand -base64 32`) |
+| `GITHUB_CLIENT_ID` | From your [GitHub OAuth app](https://github.com/settings/developers) |
+| `GITHUB_CLIENT_SECRET` | From your GitHub OAuth app |
+| `GITHUB_OWNER_USERNAME` | Your GitHub username (only this account gets access) |
 | `NEXT_PUBLIC_BASE_URL` | Your Vercel URL |
+| `STRAVA_CLIENT_ID` | From your Strava API settings *(optional)* |
+| `STRAVA_CLIENT_SECRET` | From your Strava API settings *(optional)* |
+
+**GitHub OAuth app setup:** go to [github.com/settings/developers](https://github.com/settings/developers) → New OAuth App → set **Authorization callback URL** to `https://your-app.vercel.app/api/auth/callback/github`.
 
 Then visit `/connections` to complete Strava OAuth.
 
