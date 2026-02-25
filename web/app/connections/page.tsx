@@ -338,8 +338,8 @@ async function getPageData() {
     });
   }
 
-  // Sort by start_time descending
-  mergedActivities.sort((a, b) => (b.start_time || "").localeCompare(a.start_time || ""));
+  // Sort by start_time descending (use parseEpoch to handle mixed Garmin/Hevy timestamp formats)
+  mergedActivities.sort((a, b) => parseEpoch(b.start_time) - parseEpoch(a.start_time));
 
   return {
     credentials: credentials as unknown as PlatformCredential[],
