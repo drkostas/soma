@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { NextResponse } from "next/server";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 /* ---------- helpers ---------- */
 
