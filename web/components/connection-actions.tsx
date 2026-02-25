@@ -4,6 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Unplug, Link as LinkIcon } from "lucide-react";
+import { CredentialsDialog } from "@/components/credentials-dialog";
+
+const platformLabels: Record<string, string> = {
+  garmin: "Garmin Connect",
+  hevy: "Hevy",
+  telegram: "Telegram",
+};
 
 interface ConnectionActionsProps {
   platform: string;
@@ -55,6 +62,17 @@ export function ConnectionActions({ platform, isConnected, connectionType }: Con
         <LinkIcon className="h-4 w-4" />
         Connect
       </Button>
+    );
+  }
+
+  // Sync-service platforms get a Configure/Settings button
+  if (connectionType === "sync-service" && platformLabels[platform]) {
+    return (
+      <CredentialsDialog
+        platform={platform}
+        platformLabel={platformLabels[platform]}
+        isConfigured={isConnected}
+      />
     );
   }
 

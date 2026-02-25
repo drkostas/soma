@@ -12,7 +12,7 @@ from garminconnect import (
 )
 from garth.exc import GarthHTTPError
 
-from config import GARMIN_EMAIL, GARMIN_PASSWORD, GARMINTOKENS
+from config import GARMINTOKENS, get_garmin_credentials
 
 # Delay between API calls to avoid rate limiting (seconds)
 API_CALL_DELAY = 1.0
@@ -29,16 +29,17 @@ def init_garmin() -> Garmin:
         pass
 
     # Attempt 2: Fresh login with credentials
-    if not GARMIN_EMAIL or not GARMIN_PASSWORD:
+    email, password = get_garmin_credentials()
+    if not email or not password:
         raise RuntimeError(
-            "No cached tokens and GARMIN_EMAIL/GARMIN_PASSWORD not set. "
-            "Cannot authenticate with Garmin Connect."
+            "No cached tokens and Garmin credentials not set. "
+            "Configure via Sync Hub settings or GARMIN_EMAIL/GARMIN_PASSWORD env vars."
         )
 
     # Temporarily unset GARMINTOKENS so login() doesn't try to load from it
     saved = os.environ.pop("GARMINTOKENS", None)
     try:
-        client = Garmin(email=GARMIN_EMAIL, password=GARMIN_PASSWORD)
+        client = Garmin(email=email, password=password)
         client.login()
     finally:
         if saved is not None:

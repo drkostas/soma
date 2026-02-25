@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Watch, Dumbbell, Bike, Wind, Zap, ChevronRight, ChevronDown } from "lucide-react";
+import { Watch, Dumbbell, Bike, Wind, Zap, ChevronRight, ChevronDown, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -33,6 +33,7 @@ const platformIcons: Record<string, React.ComponentType<{ className?: string }>>
   garmin: Watch,
   hevy: Dumbbell,
   strava: Bike,
+  telegram: Send,
   surfr: Wind,
 };
 
@@ -40,6 +41,7 @@ const platformLabels: Record<string, string> = {
   garmin: "Garmin",
   hevy: "Hevy",
   strava: "Strava",
+  telegram: "Telegram",
   surfr: "Surfr",
 };
 
@@ -174,19 +176,22 @@ export function SyncFlowDiagram({ platforms, rules }: SyncFlowDiagramProps) {
   const platformMap = Object.fromEntries(platforms.map((p) => [p.platform, p]));
 
   const sources = ["garmin", "hevy"];
-  const destinations = ["strava", "garmin"];
+  const destinations = ["strava", "garmin", "telegram"];
 
-  // Build per-destination rule badges
+  // Build per-destination rule badges (deduplicated by activity type)
   function getRuleBadgesForDest(dest: string) {
     const matching = rules.filter((r) => {
       const dests = Object.keys(r.destinations);
       return dests.includes(dest);
     });
     if (matching.length === 0) return null;
-    return matching.map((r) => ({
-      label: activityTypeLabels[r.activity_type] || r.activity_type,
-      enabled: r.enabled,
-    }));
+    // Deduplicate by activity type — if any rule for that type is enabled, badge is enabled
+    const byType = new Map<string, boolean>();
+    for (const r of matching) {
+      const label = activityTypeLabels[r.activity_type] || r.activity_type;
+      byType.set(label, (byType.get(label) ?? false) || r.enabled);
+    }
+    return Array.from(byType.entries()).map(([label, enabled]) => ({ label, enabled }));
   }
 
   // Count active rules for a destination
@@ -219,44 +224,79 @@ export function SyncFlowDiagram({ platforms, rules }: SyncFlowDiagramProps) {
         </div>
         <div /> {/* empty: dests col */}
 
-        {/* Row 1: Garmin → Hub → Strava */}
-        <div
-          className="justify-self-end"
-          onMouseEnter={() => setHovered("garmin-src")}
-          onMouseLeave={() => setHovered(null)}
-        >
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <div>
-                <FlowNode
-                  label={platformLabels.garmin}
-                  icon={platformIcons.garmin}
-                  isConnected={!!platformMap.garmin?.isConnected}
-                  subtitle="Health, Activities"
-                  dimmed={isDimmed("garmin-src")}
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="left" sideOffset={4}>
-              <p className="text-xs">
-                {connectionTypeLabels[platformMap.garmin?.connectionType ?? "planned"]}
-                {" · Last sync: "}
-                {formatLastSync(platformMap.garmin?.lastSync ?? null)}
-              </p>
-            </TooltipContent>
-          </Tooltip>
+        {/* Sources column — spans all 3 content rows, vertically centered */}
+        <div className="row-span-3 flex flex-col justify-center gap-3 justify-self-end">
+          <div
+            onMouseEnter={() => setHovered("garmin-src")}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <div>
+                  <FlowNode
+                    label={platformLabels.garmin}
+                    icon={platformIcons.garmin}
+                    isConnected={!!platformMap.garmin?.isConnected}
+                    subtitle="Health, Activities"
+                    dimmed={isDimmed("garmin-src")}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="left" sideOffset={4}>
+                <p className="text-xs">
+                  {connectionTypeLabels[platformMap.garmin?.connectionType ?? "planned"]}
+                  {" · Last sync: "}
+                  {formatLastSync(platformMap.garmin?.lastSync ?? null)}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <div
+            onMouseEnter={() => setHovered("hevy-src")}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <div>
+                  <FlowNode
+                    label={platformLabels.hevy}
+                    icon={platformIcons.hevy}
+                    isConnected={!!platformMap.hevy?.isConnected}
+                    subtitle="Workouts"
+                    dimmed={isDimmed("hevy-src")}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="left" sideOffset={4}>
+                <p className="text-xs">
+                  {connectionTypeLabels[platformMap.hevy?.connectionType ?? "planned"]}
+                  {" · Last sync: "}
+                  {formatLastSync(platformMap.hevy?.lastSync ?? null)}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
 
-        <ArrowLine
-          isActive={!!platformMap.garmin?.isConnected}
-          badges={sourceDataTypes.garmin.map((d) => ({ label: d, enabled: true }))}
-          tooltipText="Raw data ingestion (automatic when connected)"
-          dimmed={isDimmed("garmin-src")}
-        />
+        {/* Ingest arrows column — spans all 3 content rows, vertically centered */}
+        <div className="row-span-3 flex flex-col justify-center gap-3">
+          <ArrowLine
+            isActive={!!platformMap.garmin?.isConnected}
+            badges={sourceDataTypes.garmin.map((d) => ({ label: d, enabled: true }))}
+            tooltipText="Raw data ingestion (automatic when connected)"
+            dimmed={isDimmed("garmin-src")}
+          />
+          <ArrowLine
+            isActive={!!platformMap.hevy?.isConnected}
+            badges={sourceDataTypes.hevy.map((d) => ({ label: d, enabled: true }))}
+            tooltipText="Raw data ingestion (automatic when connected)"
+            dimmed={isDimmed("hevy-src")}
+          />
+        </div>
 
-        {/* Hub spans 2 rows */}
+        {/* Hub — spans all 3 content rows, centered */}
         <div
-          className="row-span-2 justify-self-center self-center"
+          className="row-span-3 justify-self-center self-center"
           onMouseEnter={() => setHovered("hub")}
           onMouseLeave={() => setHovered(null)}
         >
@@ -272,6 +312,7 @@ export function SyncFlowDiagram({ platforms, rules }: SyncFlowDiagramProps) {
           </Tooltip>
         </div>
 
+        {/* Row 1: Strava sync arrow + destination */}
         <ArrowLine
           isActive={!!platformMap.strava?.isConnected && activeRuleCount("strava") > 0}
           badges={getRuleBadgesForDest("strava") ?? [{ label: "No rules", enabled: false }]}
@@ -295,7 +336,7 @@ export function SyncFlowDiagram({ platforms, rules }: SyncFlowDiagramProps) {
                   label={platformLabels.strava}
                   icon={platformIcons.strava}
                   isConnected={!!platformMap.strava?.isConnected}
-                  subtitle={`${activeRuleCount("strava")} active rules`}
+                  subtitle={`${activeRuleCount("strava")} active rule${activeRuleCount("strava") === 1 ? "" : "s"}`}
                   dimmed={isDimmed("strava-dest")}
                 />
               </div>
@@ -310,43 +351,7 @@ export function SyncFlowDiagram({ platforms, rules }: SyncFlowDiagramProps) {
           </Tooltip>
         </div>
 
-        {/* Row 2: Hevy → Hub → Garmin (dest) */}
-        <div
-          className="justify-self-end"
-          onMouseEnter={() => setHovered("hevy-src")}
-          onMouseLeave={() => setHovered(null)}
-        >
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <div>
-                <FlowNode
-                  label={platformLabels.hevy}
-                  icon={platformIcons.hevy}
-                  isConnected={!!platformMap.hevy?.isConnected}
-                  subtitle="Workouts"
-                  dimmed={isDimmed("hevy-src")}
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="left" sideOffset={4}>
-              <p className="text-xs">
-                {connectionTypeLabels[platformMap.hevy?.connectionType ?? "planned"]}
-                {" · Last sync: "}
-                {formatLastSync(platformMap.hevy?.lastSync ?? null)}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-
-        <ArrowLine
-          isActive={!!platformMap.hevy?.isConnected}
-          badges={sourceDataTypes.hevy.map((d) => ({ label: d, enabled: true }))}
-          tooltipText="Raw data ingestion (automatic when connected)"
-          dimmed={isDimmed("hevy-src")}
-        />
-
-        {/* Hub already placed with row-span-2 */}
-
+        {/* Row 2: Garmin sync arrow + destination */}
         <ArrowLine
           isActive={!!platformMap.garmin?.isConnected && activeRuleCount("garmin") > 0}
           badges={getRuleBadgesForDest("garmin") ?? [{ label: "No rules", enabled: false }]}
@@ -370,7 +375,7 @@ export function SyncFlowDiagram({ platforms, rules }: SyncFlowDiagramProps) {
                   label={platformLabels.garmin}
                   icon={platformIcons.garmin}
                   isConnected={!!platformMap.garmin?.isConnected}
-                  subtitle={`${activeRuleCount("garmin")} active rules`}
+                  subtitle={`${activeRuleCount("garmin")} active rule${activeRuleCount("garmin") === 1 ? "" : "s"}`}
                   dimmed={isDimmed("garmin-dest")}
                 />
               </div>
@@ -380,6 +385,45 @@ export function SyncFlowDiagram({ platforms, rules }: SyncFlowDiagramProps) {
                 {connectionTypeLabels[platformMap.garmin?.connectionType ?? "planned"]}
                 {" · "}
                 {activeRuleCount("garmin")} active rule(s)
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
+        {/* Row 3: Telegram sync arrow + destination */}
+        <ArrowLine
+          isActive={!!platformMap.telegram?.isConnected && activeRuleCount("telegram") > 0}
+          badges={getRuleBadgesForDest("telegram") ?? [{ label: "No rules", enabled: false }]}
+          tooltipText={
+            activeRuleCount("telegram") > 0
+              ? `${activeRuleCount("telegram")} active rule(s) sending to Telegram`
+              : "No sync rules configured for Telegram"
+          }
+          dimmed={isDimmed("telegram-dest")}
+        />
+
+        <div
+          className="justify-self-start"
+          onMouseEnter={() => setHovered("telegram-dest")}
+          onMouseLeave={() => setHovered(null)}
+        >
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <div>
+                <FlowNode
+                  label={platformLabels.telegram}
+                  icon={platformIcons.telegram}
+                  isConnected={!!platformMap.telegram?.isConnected}
+                  subtitle={`${activeRuleCount("telegram")} active rule${activeRuleCount("telegram") === 1 ? "" : "s"}`}
+                  dimmed={isDimmed("telegram-dest")}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={4}>
+              <p className="text-xs">
+                Workout card images
+                {" · "}
+                {activeRuleCount("telegram")} active rule(s)
               </p>
             </TooltipContent>
           </Tooltip>
