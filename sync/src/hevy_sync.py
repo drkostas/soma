@@ -54,6 +54,18 @@ def sync_all_workouts(client: HevyClient, start_page: int = 1, page_size: int = 
         print(f"  Page {page}/{page_count} — {len(workouts)} workouts ({saved} saved this run)")
 
         if page >= page_count:
+            # All pages fetched — mark complete
+            try:
+                with get_connection() as conn:
+                    update_backfill_progress(
+                        conn, "hevy_workouts",
+                        last_page=page,
+                        total_items=total_count,
+                        items_completed=saved + ((start_page - 1) * page_size),
+                        status="complete",
+                    )
+            except Exception:
+                pass
             break
         page += 1
 
