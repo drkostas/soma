@@ -65,8 +65,11 @@ def _slice_hr_by_exercise(hr_samples: list[int], exercises: list[dict]) -> list[
     return result
 
 
-def compute_prs(hevy_id: str, exercises: list[dict]) -> dict:
-    """Compute PRs by comparing current workout against all historical data.
+def compute_prs(hevy_id: str, exercises: list[dict], workout_start_time: str | None = None) -> dict:
+    """Compute PRs by comparing current workout against prior workouts only.
+
+    When workout_start_time is provided, only considers workouts that started
+    before this time — giving historically accurate PR flags.
 
     Returns dict keyed by exercise_template_id:
     {
@@ -82,16 +85,26 @@ def compute_prs(hevy_id: str, exercises: list[dict]) -> dict:
     if not template_ids:
         return {}
 
-    # Load all historical workouts with these exercise templates
+    # Load historical workouts — only those before this workout if start_time given
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT hevy_id, raw_json->'exercises' as exercises
-                FROM hevy_raw_data
-                WHERE endpoint_name = 'workout'
-                  AND hevy_id != %s
-                ORDER BY raw_json->>'start_time' ASC
-            """, (hevy_id,))
+            if workout_start_time:
+                cur.execute("""
+                    SELECT hevy_id, raw_json->'exercises' as exercises
+                    FROM hevy_raw_data
+                    WHERE endpoint_name = 'workout'
+                      AND hevy_id != %s
+                      AND raw_json->>'start_time' < %s
+                    ORDER BY raw_json->>'start_time' ASC
+                """, (hevy_id, workout_start_time))
+            else:
+                cur.execute("""
+                    SELECT hevy_id, raw_json->'exercises' as exercises
+                    FROM hevy_raw_data
+                    WHERE endpoint_name = 'workout'
+                      AND hevy_id != %s
+                    ORDER BY raw_json->>'start_time' ASC
+                """, (hevy_id,))
             rows = cur.fetchall()
 
     # Build historical bests per template
@@ -206,8 +219,9 @@ def generate_description(
         lines.append(f'"{workout_desc}"')
     lines.append("")
 
-    # Compute PRs
-    prs = compute_prs(hevy_id, exercises)
+    # Compute PRs (only against prior workouts for historical accuracy)
+    workout_start = workout_json.get("start_time")
+    prs = compute_prs(hevy_id, exercises, workout_start_time=workout_start)
 
     # Slice HR by exercise
     ex_hr = _slice_hr_by_exercise(hr_samples or [], exercises)

@@ -232,17 +232,55 @@ def _extract_activity_id(upload_resp) -> int | None:
 
     The upload API returns a Response object. The JSON body has:
       detailedImportResult.successes[0].internalId
+    Some uploads return successes immediately, others process async
+    and only include uploadId/creationDate.
     """
     try:
         data = upload_resp.json() if hasattr(upload_resp, 'json') else upload_resp
-        successes = data.get("detailedImportResult", {}).get("successes", [])
+        detail = data.get("detailedImportResult", {})
+        successes = detail.get("successes", [])
         if successes:
             return successes[0]["internalId"]
-        # Log on failure for debugging
-        print(f"    Warning: upload response has no successes: {str(data)[:200]}")
+        # Async processing — no successes yet. Not an error.
+        if detail.get("uploadId"):
+            print(f"    Upload accepted (async processing, uploadId={detail['uploadId']})")
     except Exception as e:
         resp_str = str(upload_resp)[:200] if upload_resp else "None"
         print(f"    Warning: could not parse upload response ({e}): {resp_str}")
+    return None
+
+
+def _find_recent_garmin_activity(garmin_client, workout: dict) -> int | None:
+    """Find a just-uploaded activity on Garmin by matching timestamp.
+
+    After async upload processing, the activity should appear in the user's
+    recent activities list. Match by looking for a strength_training activity
+    with manufacturer='DEVELOPMENT' (our FIT files) within ±120s of the
+    Hevy workout start time.
+    """
+    from garmin_client import rate_limited_call
+
+    hevy_start = workout.get("hevy_workout", {}).get("start_time", "")
+    if not hevy_start:
+        return None
+
+    target_dt = datetime.fromisoformat(hevy_start).replace(tzinfo=None)
+
+    try:
+        activities = rate_limited_call(garmin_client.get_activities, 0, 5)
+        for act in activities:
+            start_gmt = act.get("startTimeGMT", "")
+            if not start_gmt:
+                continue
+            try:
+                act_dt = datetime.strptime(start_gmt, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+            if abs((act_dt - target_dt).total_seconds()) <= 120:
+                return act.get("activityId")
+    except Exception as e:
+        print(f"    Warning: could not search recent activities: {e}")
+
     return None
 
 
@@ -341,6 +379,15 @@ def process_workout(
         # Extract activity ID from upload response
         new_id = _extract_activity_id(upload_resp)
         result["upload_result"] = str(upload_resp)
+
+        # If async processing, wait and find by timestamp match
+        if not new_id:
+            import time as _time
+            print(f"    Waiting 8s for Garmin to process upload...")
+            _time.sleep(8)
+            new_id = _find_recent_garmin_activity(garmin_client, workout)
+            if new_id:
+                print(f"    Found activity {new_id} via recent activity lookup")
 
         # 3. Rename activity to match Hevy workout title
         hevy_title = workout.get("hevy_title", "")
