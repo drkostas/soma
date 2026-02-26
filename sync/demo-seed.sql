@@ -152,8 +152,8 @@ BEGIN
         'averageRunningCadenceInStepsPerMinute', (160 + (random() * 15))::int,
         'elevationGain',  (20 + random() * 150)::float,
         'avgStrideLength', (1.1 + random() * 0.3)::float,
-        'vO2MaxValue',    (50 + random() * 8)::float,
-        'aerobicTrainingEffect', (2.5 + random() * 2)::float,
+        'vO2MaxValue',    ROUND((50 + random() * 8)::numeric, 1),
+        'aerobicTrainingEffect', ROUND((2.5 + random() * 2)::numeric, 1),
         'activityType',   jsonb_build_object('typeKey', 'running')
       )
     ) ON CONFLICT DO NOTHING;
@@ -203,11 +203,13 @@ BEGIN
         'startTimeLocal', to_char(act_date, 'YYYY-MM-DD') || ' 09:00:00',
         'startTimeGMT',   to_char(act_date, 'YYYY-MM-DD') || ' 14:00:00',
         'beginTimestamp', (extract(epoch FROM act_date::timestamp + interval '9 hours') * 1000)::bigint,
-        'distance',      (3000 + random() * 10000)::float,
-        'duration',      (1800 + random() * 5400)::float,
+        'distance',      ROUND((3000 + random() * 10000)::numeric, 1),
+        'duration',      ROUND((1800 + random() * 5400)::numeric)::int,
         'averageHR',     (120 + (random() * 40)::int),
         'calories',      (200 + (random() * 500)::int),
-        'activityType',  jsonb_build_object('typeKey', act_type)
+        'activityType',  jsonb_build_object('typeKey', act_type),
+        'maxSpeed',      CASE WHEN act_type IN ('cycling', 'running') THEN (6 + random() * 10)::float ELSE NULL END,
+        'elevationGain', CASE WHEN act_type IN ('cycling', 'hiking') THEN (50 + random() * 400)::float ELSE NULL END
       )
     ) ON CONFLICT DO NOTHING;
   END LOOP;

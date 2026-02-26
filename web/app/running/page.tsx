@@ -842,7 +842,7 @@ export default async function RunningPage({
         />
         <StatCard
           title="VO2max"
-          value={stats?.peak_vo2max ? `${Number(stats.peak_vo2max)}` : "—"}
+          value={stats?.peak_vo2max ? `${Number(stats.peak_vo2max).toFixed(1)}` : "—"}
           subtitle="ml/kg/min"
           icon={<Zap className="h-4 w-4 text-yellow-400" />}
         />
