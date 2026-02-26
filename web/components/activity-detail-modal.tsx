@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import {
   Sheet,
   SheetContent,
@@ -11,6 +12,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ActivityPerformanceChart } from "@/components/activity-performance-chart";
+import { RunSparklines, buildSparkPoints } from "@/components/run-sparklines";
+
+const RunMap = dynamic(
+  () => import("@/components/run-map").then((m) => m.RunMap),
+  { ssr: false, loading: () => <div className="h-[300px] bg-muted animate-pulse rounded-lg" /> }
+);
 
 interface ActivityDetailModalProps {
   activityId: string | null;
@@ -64,6 +71,8 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
   const hasLaps = laps.length > 0 && laps[0]?.distance > 0;
   const shoeInfo = Array.isArray(gear) ? gear.find((g: any) => g.gearTypeName === "Shoes") : null;
   const hasTimeSeries = isRunning && Array.isArray(data?.time_series) && data.time_series.length > 0;
+  const gpsRoute = data?.gps_route ?? [];
+  const hasGpsRoute = isRunning && Array.isArray(gpsRoute) && gpsRoute.length > 10;
 
   return (
     <Sheet open={!!activityId} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -91,13 +100,14 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
         )}
 
         {!loading && summary && (
-          <Tabs defaultValue="overview" className="mt-4">
-            <TabsList className={`grid w-full ${hasTimeSeries ? "grid-cols-4" : "grid-cols-3"}`}>
+          <Tabs defaultValue={hasGpsRoute ? "map" : "overview"} className="mt-4">
+            <TabsList className={`grid w-full grid-cols-${[true, hasTimeSeries, hasLaps || true, true, hasGpsRoute].filter(Boolean).length}`}>
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              {hasTimeSeries && <TabsTrigger value="performance">Performance</TabsTrigger>}
-              {hasLaps && <TabsTrigger value="splits">Splits</TabsTrigger>}
-              {!hasLaps && <TabsTrigger value="splits" disabled>Splits</TabsTrigger>}
+              {hasTimeSeries && <TabsTrigger value="performance">Charts</TabsTrigger>}
+              {hasLaps ? <TabsTrigger value="splits">Splits</TabsTrigger>
+                       : <TabsTrigger value="splits" disabled>Splits</TabsTrigger>}
               <TabsTrigger value="details">Details</TabsTrigger>
+              {hasGpsRoute && <TabsTrigger value="map">Map</TabsTrigger>}
             </TabsList>
 
             <ScrollArea className="h-[calc(100vh-180px)] mt-4">
@@ -403,6 +413,15 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                   </div>
                 )}
               </TabsContent>
+
+              {hasGpsRoute && (
+                <TabsContent value="map" className="px-2 pb-8">
+                  <RunMap points={gpsRoute} height={300} />
+                  <div className="mt-3">
+                    <RunSparklines points={buildSparkPoints(gpsRoute)} />
+                  </div>
+                </TabsContent>
+              )}
 
               <TabsContent value="details" className="space-y-4 px-4 pb-8">
                 {/* All raw summary fields */}
