@@ -1015,7 +1015,8 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
               const rides = cyclingSessions as any[];
               const totalDist = rides.reduce((s: number, r: any) => s + Number(r.distance_km || 0), 0);
               const totalElev = rides.reduce((s: number, r: any) => s + Number(r.elev_gain || 0), 0);
-              const topSpeed = Math.max(...rides.filter((r: any) => r.max_speed_kmh).map((r: any) => Number(r.max_speed_kmh)));
+              const validSpeeds = rides.filter((r: any) => r.max_speed_kmh && Number(r.max_speed_kmh) > 0).map((r: any) => Number(r.max_speed_kmh));
+              const topSpeed = validSpeeds.length > 0 ? Math.max(...validSpeeds) : 0;
               const avgSpeed = rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).reduce((s: number, r: any) => s + Number(r.avg_speed_kmh), 0) / rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).length;
               return (
                 <>
