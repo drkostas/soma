@@ -34,6 +34,9 @@ export async function GET(
     power: number | null;
     respiration: number | null;
     stride: number | null;
+    lat: number | null;
+    lng: number | null;
+    dist_m: number | null;
   }> = [];
 
   if (
@@ -62,6 +65,9 @@ export async function GET(
     const powerIdx = keyIndex["directPower"];
     const respIdx = keyIndex["directRespirationRate"];
     const strideIdx = keyIndex["directStrideLength"];
+    const latIdx = keyIndex["directLatitude"];
+    const lngIdx = keyIndex["directLongitude"];
+    const distIdx = keyIndex["sumDistance"];
 
     let startTs: number | null = null;
 
@@ -87,9 +93,25 @@ export async function GET(
         power: powerIdx != null ? m[powerIdx] ?? null : null,
         respiration: respIdx != null ? m[respIdx] ?? null : null,
         stride: strideIdx != null ? m[strideIdx] ?? null : null,
+        lat: latIdx != null ? m[latIdx] ?? null : null,
+        lng: lngIdx != null ? m[lngIdx] ?? null : null,
+        dist_m: distIdx != null ? m[distIdx] ?? null : null,
       });
     }
   }
 
-  return NextResponse.json({ ...data, time_series: timeSeries });
+  // Build GPS route array for map rendering
+  const gpsRoute = timeSeries
+    .filter((p) => p.lat != null && p.lng != null)
+    .map((p) => ({
+      lat: p.lat as number,
+      lng: p.lng as number,
+      hr: p.hr,
+      speed: p.speed,
+      elev: p.elevation,
+      cadence: p.cadence,
+      dist_m: p.dist_m,
+    }));
+
+  return NextResponse.json({ ...data, time_series: timeSeries, gps_route: gpsRoute });
 }

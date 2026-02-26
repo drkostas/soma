@@ -298,3 +298,85 @@ BEGIN
     ) ON CONFLICT DO NOTHING;
   END LOOP;
 END $$;
+
+-- =============================================================================
+-- GPS Route data for first 5 demo runs (activity_ids 1000000-1000004)
+-- Simulates a ~5-7km loop run around Central Park, NYC
+-- Structure matches real Garmin activityDetailMetrics format
+-- =============================================================================
+DO $$
+DECLARE
+  act_id    bigint;
+  i         int;
+  n         int := 360;       -- ~1 sample per 10 seconds, 60 minutes
+  points    jsonb;
+  t         float;
+  lat       float;
+  lng       float;
+  center_lat float := 40.7851;
+  center_lng float := -73.9683;
+  lat_rad   float := 0.0135;  -- ~1.5km N-S radius
+  lng_rad   float := 0.020;   -- ~1.7km E-W radius
+  speed_ms  float;
+  hr_val    float;
+  elev_val  float;
+  cadence_v float;
+  ts_ms     bigint;
+  dist_m    float;
+  descriptors jsonb;
+BEGIN
+  -- Metric descriptors matching real Garmin structure
+  descriptors := jsonb_build_array(
+    jsonb_build_object('key','directTimestamp',    'metricsIndex',0),
+    jsonb_build_object('key','directLatitude',     'metricsIndex',1),
+    jsonb_build_object('key','directLongitude',    'metricsIndex',2),
+    jsonb_build_object('key','directHeartRate',    'metricsIndex',3),
+    jsonb_build_object('key','directSpeed',        'metricsIndex',4),
+    jsonb_build_object('key','directElevation',    'metricsIndex',5),
+    jsonb_build_object('key','directDoubleCadence','metricsIndex',6),
+    jsonb_build_object('key','sumDistance',        'metricsIndex',7)
+  );
+
+  FOR act_id IN SELECT generate_series(1000000, 1000004) LOOP
+    points   := '[]'::jsonb;
+    ts_ms    := (extract(epoch FROM NOW()) * 1000)::bigint - (act_id - 1000000) * 604800000;
+    dist_m   := 0;
+
+    FOR i IN 0..(n-1) LOOP
+      t         := (2.0 * pi() * i) / n;
+      lat       := center_lat + lat_rad * sin(t);
+      lng       := center_lng + lng_rad * cos(t);
+      -- Varied speed: faster on flat, slower on hills
+      speed_ms  := 2.8 + 0.9 * sin(3 * t) + (random() * 0.4 - 0.2);
+      speed_ms  := GREATEST(speed_ms, 1.8);
+      hr_val    := 142 + 18 * sin(2 * t + 0.5) + (random() * 6 - 3);
+      elev_val  := 38 + 22 * sin(2 * t) + 8 * sin(5 * t);
+      cadence_v := 170 + 12 * sin(t) + (random() * 6 - 3);
+      dist_m    := dist_m + speed_ms * 10;
+      ts_ms     := ts_ms + 10000;
+
+      points := points || jsonb_build_array(
+        jsonb_build_object('metrics', jsonb_build_array(
+          ts_ms,
+          round(lat::numeric, 6),
+          round(lng::numeric, 6),
+          round(hr_val::numeric, 0),
+          round(speed_ms::numeric, 3),
+          round(elev_val::numeric, 1),
+          round(cadence_v::numeric, 0) * 2,   -- double cadence
+          round(dist_m::numeric, 1)
+        ))
+      );
+    END LOOP;
+
+    INSERT INTO garmin_activity_raw (activity_id, endpoint_name, raw_json)
+    VALUES (
+      act_id,
+      'details',
+      jsonb_build_object(
+        'metricDescriptors',     descriptors,
+        'activityDetailMetrics', points
+      )
+    ) ON CONFLICT (activity_id, endpoint_name) DO NOTHING;
+  END LOOP;
+END $$;
