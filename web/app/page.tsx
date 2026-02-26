@@ -867,7 +867,7 @@ export default async function HomePage({
           {
             metric: "vo2max",
             title: "VO2max",
-            value: runStats?.vo2max ? `${Number(runStats.vo2max)}` : "—",
+            value: runStats?.vo2max ? `${Number(runStats.vo2max).toFixed(1)}` : "—",
             subtitle: "ml/kg/min",
             icon: <Zap className="h-4 w-4 text-yellow-400" />,
           },

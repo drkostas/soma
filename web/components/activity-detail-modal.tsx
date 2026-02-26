@@ -136,7 +136,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                     <MetricBox label="Stride" value={`${Math.round(summary.avgStrideLength)} cm`} />
                   )}
                   {summary.vO2MaxValue > 0 && (
-                    <MetricBox label="VO2max" value={`${summary.vO2MaxValue}`} />
+                    <MetricBox label="VO2max" value={`${Number(summary.vO2MaxValue).toFixed(1)}`} />
                   )}
                   {summary.aerobicTrainingEffect > 0 && (
                     <MetricBox label="Aerobic TE" value={`${Number(summary.aerobicTrainingEffect).toFixed(1)}`} />
