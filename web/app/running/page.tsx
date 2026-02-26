@@ -778,7 +778,9 @@ export default async function RunningPage({
 }) {
   const { range: rangeParam } = await searchParams;
   const rangeDays = rangeToDays(rangeParam);
-  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  // Cap at 2 years to prevent Neon free tier OOM on large JSONB scans
+  const cutoffDays = Math.min(rangeDays, 730);
+  const cutoff = new Date(Date.now() - cutoffDays * 86400000).toISOString().split("T")[0];
 
   const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution, shoeMileage, splitAnalysis, bestSplits, trainingLoadTrend] =
     await Promise.all([

@@ -14,6 +14,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.575.0",
+    "maplibre-gl": "^5.19.0",
     "motion": "^12.34.3",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
@@ -21,6 +22,7 @@
     "react": "19.2.3",
     "react-body-highlighter": "^2.0.5",
     "react-dom": "19.2.3",
+    "react-map-gl": "^8.1.0",
     "recharts": "^3.7.0",
     "tailwind-merge": "^3.5.0"
   },
