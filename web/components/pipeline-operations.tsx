@@ -248,22 +248,26 @@ export function PipelineOperations({
     }
   }
 
+  const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === "true";
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Auto-syncs every 30 min via GitHub Actions
+          {isDemo ? "Demo mode — sync disabled" : "Auto-syncs every 4h via GitHub Actions"}
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={triggerSync}
-          disabled={syncState === "loading"}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${syncState === "loading" ? "animate-spin" : ""}`} />
-          {syncState === "loading" ? "Triggering…" : syncState === "done" ? "Triggered!" : syncState === "error" ? "Failed" : "Sync Now"}
-        </Button>
+        {!isDemo && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={triggerSync}
+            disabled={syncState === "loading"}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncState === "loading" ? "animate-spin" : ""}`} />
+            {syncState === "loading" ? "Triggering…" : syncState === "done" ? "Triggered!" : syncState === "error" ? "Failed" : "Sync Now"}
+          </Button>
+        )}
       </div>
     <Tabs defaultValue="backfill" className="w-full">
       <TabsList variant="line" className="w-full justify-start">
