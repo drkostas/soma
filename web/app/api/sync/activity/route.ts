@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
+import { existsSync } from "fs";
 import path from "path";
 import { getDb } from "@/lib/db";
 
@@ -51,9 +52,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Spawn the push_single script
+    // Spawn the push_single script (local dev only — requires sync/.venv)
     const syncDir = path.resolve(process.cwd(), "..", "sync");
     const pythonBin = path.join(syncDir, ".venv", "bin", "python");
+
+    if (!existsSync(pythonBin)) {
+      return NextResponse.json(
+        { started: false, error: "Local sync not available — this feature requires running Soma locally with the sync/.venv Python environment." },
+        { status: 503 }
+      );
+    }
 
     const child = execFile(
       pythonBin,
