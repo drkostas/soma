@@ -38,4 +38,7 @@ logs/
 .history/
 # Strava backfill working data
 sync/strava_backfill_data/
+
+# Design plans and internal docs
+docs/
 .vercel
