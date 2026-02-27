@@ -201,7 +201,7 @@ def _enrich_garmin_activity(garmin_client, garmin_activity_id: int, hevy_id: str
 
     # Upload image (HR chart portion is already omitted in the image when HR is static)
     try:
-        url = f"http://localhost:3456/api/workout/{hevy_id}/image"
+        url = f"{os.environ.get('SOMA_WEB_URL', 'http://localhost:3456')}/api/workout/{hevy_id}/image"
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=30) as resp:
             if resp.status == 200:
@@ -463,7 +463,7 @@ def _enrich_garmin_run_activities(garmin_client) -> int:
 
         # Upload share image
         try:
-            url = f"http://localhost:3456/api/activity/{activity_id}/image"
+            url = f"{os.environ.get('SOMA_WEB_URL', 'http://localhost:3456')}/api/activity/{activity_id}/image"
             req = urllib.request.Request(url, method="GET")
             with urllib.request.urlopen(req, timeout=30) as resp:
                 if resp.status == 200:
