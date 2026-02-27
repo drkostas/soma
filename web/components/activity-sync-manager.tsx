@@ -187,11 +187,6 @@ function ActivityRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium truncate">{activity.name}</span>
-          {activity.sources.map((s) => (
-            <Badge key={s.platform} variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-              {s.platform === "garmin" ? "Garmin" : "Hevy"}
-            </Badge>
-          ))}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
           <span>{typeLabel}</span>
