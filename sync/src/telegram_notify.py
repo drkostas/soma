@@ -1,5 +1,6 @@
 """Send workout card images to Telegram after sync."""
 
+import os
 import urllib.request
 import urllib.error
 import json
@@ -81,7 +82,7 @@ def send_workout_image(hevy_id: str, title: str, workout_date: str) -> bool:
     if not is_configured():
         return False
 
-    url = f"http://localhost:3456/api/workout/{hevy_id}/image"
+    url = f"{os.environ.get('SOMA_WEB_URL', 'http://localhost:3456')}/api/workout/{hevy_id}/image"
     try:
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -102,7 +103,7 @@ def send_run_image(garmin_activity_id: str | int, title: str, run_date: str) -> 
     if not is_configured():
         return False
 
-    url = f"http://localhost:3456/api/activity/{garmin_activity_id}/image"
+    url = f"{os.environ.get('SOMA_WEB_URL', 'http://localhost:3456')}/api/activity/{garmin_activity_id}/image"
     try:
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=30) as resp:
