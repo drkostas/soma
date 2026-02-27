@@ -30,12 +30,10 @@ from config import HEVY_API_KEY
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# BENCH PRESS: last 2 workouts already include bar weight — exclude them
+# BENCH PRESS: workout IDs to exclude from specific fix rules
 # ---------------------------------------------------------------------------
-BENCH_EXCLUDE_WORKOUT_IDS = {
-    "af943870-e91c-4d8f-8641-b3f6d811ec5f",  # 2026-02-24 Push
-    "6f235a9f-47da-49a0-a71f-9023619cad2b",  # 2026-02-20 Upper 1
-}
+# Add workout UUIDs here if they should be skipped for a particular exercise fix.
+BENCH_EXCLUDE_WORKOUT_IDS: set[str] = set()
 
 # ---------------------------------------------------------------------------
 # WEIGHT FIX RULES
@@ -43,59 +41,26 @@ BENCH_EXCLUDE_WORKOUT_IDS = {
 # Each rule: exercise title, field, transform function, optional condition
 # Transform receives (weight_value, workout_json) and returns new value.
 # Return None to skip a set.
+#
+# Example — add bar weight to all barbell bench press sets:
+#   {"exercise": "Bench Press (Barbell)", "field": "weight_kg",
+#    "transform": lambda w, _wk: w + 20},
 
-FIXES: list[dict] = [
-    # --- Olympic barbell exercises: +20kg ---
-    {"exercise": "Bench Press (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 20},
-    {"exercise": "Incline Bench Press (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 20},
-    {"exercise": "Overhead Press (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 20},
-    {"exercise": "Seated Overhead Press (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 20},
-    {"exercise": "Romanian Deadlift (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 20},
-    {"exercise": "Deadlift (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 20},
-    {"exercise": "Squat (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 20},
-
-    # --- EZ bar exercises: +10kg ---
-    {"exercise": "Preacher Curl (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 10},
-    {"exercise": "Bicep Curl (Barbell)", "field": "weight_kg",
-     "transform": lambda w, _wk: w + 10},
-
-    # --- Bent Over Row: +10kg (EZ) before 2026, +20kg (Olympic) from 2026 ---
-    {"exercise": "Bent Over Row (Barbell)", "field": "weight_kg",
-     "transform": lambda w, wk: w + 20 if wk.get("start_time", "") >= "2026" else w + 10},
-
-    # --- Triceps: halve if >22kg (double-logging mistake) ---
-    {"exercise": "Triceps Pushdown", "field": "weight_kg",
-     "transform": lambda w, _wk: w / 2 if w > 22 else None},
-    {"exercise": "Triceps Extension (Cable)", "field": "weight_kg",
-     "transform": lambda w, _wk: w / 2 if w > 22 else None},
-]
+FIXES: list[dict] = []
 
 
 # ---------------------------------------------------------------------------
 # EXERCISE MERGES (rename title + template_id)
 # ---------------------------------------------------------------------------
-MERGES: list[dict] = [
-    {
-        "from_title": "Deadlift (Barbell)",
-        "from_template_id": "C6272009",
-        "to_title": "Romanian Deadlift (Barbell)",
-        "to_template_id": "2B4B7310",
-    },
-    {
-        "from_title": "Hanging Leg Raise",
-        "from_template_id": "F8356514",
-        "to_title": "Leg Raise Parallel Bars",
-        "to_template_id": "0482DA98",
-    },
-]
+# Example — rename an exercise across all workouts:
+#   {
+#       "from_title": "Deadlift (Barbell)",
+#       "from_template_id": "C6272009",
+#       "to_title": "Romanian Deadlift (Barbell)",
+#       "to_template_id": "2B4B7310",
+#   },
+
+MERGES: list[dict] = []
 
 
 # ---------------------------------------------------------------------------

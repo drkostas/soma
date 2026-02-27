@@ -3,8 +3,8 @@ import { getDb } from "@/lib/db";
 
 export const runtime = "nodejs";
 
-const GITHUB_OWNER = "drkostas";
-const GITHUB_REPO = "soma";
+const GITHUB_OWNER = process.env.GITHUB_REPO_OWNER ?? "drkostas";
+const GITHUB_REPO = process.env.GITHUB_REPO_NAME ?? "soma";
 
 export async function POST() {
   const sql = getDb();

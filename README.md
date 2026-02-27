@@ -110,6 +110,7 @@ Set **Root Directory → `web`** in Vercel, then add:
 | `GITHUB_CLIENT_SECRET` | From your GitHub OAuth app |
 | `GITHUB_OWNER_USERNAME` | Your GitHub username (only this account gets access) |
 | `NEXT_PUBLIC_BASE_URL` | Your Vercel URL |
+| `GITHUB_PAT` | GitHub Personal Access Token with `repo:workflow` scope — needed for the **Sync Now** button |
 | `STRAVA_CLIENT_ID` | From your Strava API settings *(optional)* |
 | `STRAVA_CLIENT_SECRET` | From your Strava API settings *(optional)* |
 
