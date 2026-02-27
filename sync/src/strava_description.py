@@ -213,31 +213,68 @@ def generate_description(
             except (ValueError, TypeError):
                 pass
 
-    # Header
-    lines = [f"\U0001f3cb\ufe0f {title} \u2014 {_format_duration(duration_s)}"]
+    avg_hr = enrichment.get("avg_hr")
+    max_hr = enrichment.get("max_hr")
+    calories = enrichment.get("calories")
+
+    # Compute volume and working-set count
+    total_sets = 0
+    total_volume = 0.0
+    for ex in exercises:
+        for s in ex.get("sets", []):
+            if s.get("type") == "normal" and (s.get("weight_kg") or 0) > 0 and (s.get("reps") or 0) > 0:
+                total_sets += 1
+                total_volume += (s.get("weight_kg") or 0) * (s.get("reps") or 0)
+    volume_str = (
+        f"{total_volume / 1000:.1f}t" if total_volume >= 1000
+        else f"{round(total_volume)}kg"
+    ) if total_volume > 0 else None
+
+    # ── Header: title + duration ──────────────────────────────────────────────
+    lines = [f"\U0001f3cb\ufe0f {title}  \u2014  {_format_duration(duration_s)}"]
     if workout_desc:
         lines.append(f'"{workout_desc}"')
+
+    # ── Stats lines (run-description style with · separator) ──────────────────
+    # Line 1: primary vitals
+    p1 = []
+    if total_sets > 0:
+        p1.append(f"\U0001f4aa {total_sets} sets")
+    if volume_str:
+        p1.append(f"\U0001f4ca {volume_str} volume")
+    if avg_hr:
+        p1.append(f"\u2764\ufe0f {avg_hr} bpm avg")
+    if p1:
+        lines.append("  \u00b7  ".join(p1))
+
+    # Line 2: secondary vitals
+    p2 = []
+    if calories:
+        p2.append(f"\U0001f525 {calories} kcal")
+    if max_hr:
+        p2.append(f"Max HR: {max_hr} bpm")
+    if exercises:
+        p2.append(f"{len(exercises)} exercises")
+    if p2:
+        lines.append("  \u00b7  ".join(p2))
+
     lines.append("")
 
-    # Compute PRs (only against prior workouts for historical accuracy)
+    # ── Compute PRs + per-exercise HR ─────────────────────────────────────────
     workout_start = workout_json.get("start_time")
     prs = compute_prs(hevy_id, exercises, workout_start_time=workout_start)
-
-    # Slice HR by exercise
     ex_hr = _slice_hr_by_exercise(hr_samples or [], exercises)
 
-    # Exercises
+    # ── Exercises ─────────────────────────────────────────────────────────────
     for i, ex in enumerate(exercises):
         ex_title = ex.get("title", "Unknown")
         hr_avg = ex_hr[i] if i < len(ex_hr) else None
 
-        # Exercise header with HR
         if hr_avg:
             lines.append(f"{ex_title}  \u2764\ufe0f {hr_avg} bpm")
         else:
             lines.append(ex_title)
 
-        # Sets
         sets = ex.get("sets", [])
         for j, s in enumerate(sets):
             set_num = j + 1
@@ -264,7 +301,6 @@ def generate_description(
                 else:
                     lines.append(f"  {set_num}. \u2014{suffix}")
 
-        # Exercise notes
         notes = ex.get("notes", "")
         if notes:
             lines.append(f"  \U0001f4dd {notes}")
@@ -272,39 +308,22 @@ def generate_description(
         # PR flags
         tid = ex.get("exercise_template_id")
         pr = prs.get(tid, {})
-
         if pr.get("is_new"):
-            lines.append("  \U0001f195 First time doing this exercise!")
+            lines.append("  \U0001f195 First time!")
         else:
             if pr.get("weight_pr"):
                 p = pr["weight_pr"]
-                lines.append(f"  \U0001f3c6 New weight PR: {_format_weight(p['new'])} (prev: {_format_weight(p['prev'])})")
+                lines.append(f"  \U0001f3c6 Weight PR: {_format_weight(p['new'])} (prev: {_format_weight(p['prev'])})")
             if pr.get("volume_pr"):
                 p = pr["volume_pr"]
-                lines.append(f"  \U0001f4c8 New volume PR: {_format_weight(p['new'])} (prev: {_format_weight(p['prev'])})")
+                lines.append(f"  \U0001f4c8 Volume PR: {_format_weight(p['new'])} (prev: {_format_weight(p['prev'])})")
             if pr.get("set_pr"):
                 p = pr["set_pr"]
-                lines.append(f"  \u26a1 New 1-set PR: {_format_weight(p['new'])} (prev: {_format_weight(p['prev'])})")
+                lines.append(f"  \u26a1 Set PR: {_format_weight(p['new'])} (prev: {_format_weight(p['prev'])})")
 
         lines.append("")
 
-    # Footer
-    lines.append("\u2500" * 25)
-    footer_parts = []
-    avg_hr = enrichment.get("avg_hr")
-    max_hr = enrichment.get("max_hr")
-    calories = enrichment.get("calories")
-
-    if avg_hr:
-        footer_parts.append(f"Avg HR: {avg_hr} bpm")
-    if max_hr:
-        footer_parts.append(f"Max HR: {max_hr} bpm")
-    if footer_parts:
-        lines.append(" | ".join(footer_parts))
-
-    if calories:
-        lines.append(f"Calories: {calories} kcal")
-
+    # ── Footer ────────────────────────────────────────────────────────────────
     lines.append("Tracked by github.com/drkostas/soma")
 
     return "\n".join(lines)

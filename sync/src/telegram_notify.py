@@ -97,6 +97,27 @@ def send_workout_image(hevy_id: str, title: str, workout_date: str) -> bool:
     return send_image(image_bytes, caption=caption, filename=f"{hevy_id}.png")
 
 
+def send_run_image(garmin_activity_id: str | int, title: str, run_date: str) -> bool:
+    """Fetch a run summary image from the local Next.js server and send it via Telegram."""
+    if not is_configured():
+        return False
+
+    url = f"http://localhost:3456/api/activity/{garmin_activity_id}/image"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status != 200:
+                print(f"    Telegram: run image fetch failed (HTTP {resp.status})")
+                return False
+            image_bytes = resp.read()
+    except Exception as e:
+        print(f"    Telegram: run image fetch failed ({e})")
+        return False
+
+    caption = f"🏃 {title} — {run_date}"
+    return send_image(image_bytes, caption=caption, filename=f"run_{garmin_activity_id}.png")
+
+
 def notify_new_workouts(workouts: list[dict]) -> int:
     """Send Telegram notifications for a list of new workouts.
 
