@@ -2,7 +2,7 @@ name: Sync Health Data
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour
+    - cron: '*/30 * * * *'  # Every 30 minutes
   workflow_dispatch: {}    # Manual trigger from GitHub UI
   repository_dispatch:
     types: [sync-trigger]  # Trigger from API route

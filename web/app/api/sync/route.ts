@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
-import { execFile } from "child_process";
-import path from "path";
 import { getDb } from "@/lib/db";
 
 export const runtime = "nodejs";
+
+const GITHUB_OWNER = "drkostas";
+const GITHUB_REPO = "soma";
 
 export async function POST() {
   const sql = getDb();
 
   try {
-    // Check for a sync already running (started within the last 10 minutes)
+    // Prevent double-triggering if a sync is already running
     const running = await sql`
       SELECT id, started_at
       FROM sync_log
@@ -26,37 +27,37 @@ export async function POST() {
       );
     }
 
-    // Resolve paths
-    const syncDir = path.resolve(process.cwd(), "..", "sync");
-    const pythonBin = path.join(syncDir, ".venv", "bin", "python");
+    const pat = process.env.GITHUB_PAT;
+    if (!pat) {
+      return NextResponse.json(
+        { started: false, error: "GITHUB_PAT not configured" },
+        { status: 500 }
+      );
+    }
 
-    // Spawn the pipeline (fire-and-forget)
-    const child = execFile(
-      pythonBin,
-      ["-m", "src.pipeline", "1"],
+    // Trigger GitHub Actions workflow via repository_dispatch
+    const resp = await fetch(
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/dispatches`,
       {
-        cwd: syncDir,
-        timeout: 300_000, // 5 minutes
-        env: {
-          ...process.env,
-          PYTHONPATH: syncDir,
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${pat}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
         },
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error("[sync] Pipeline error:", error.message);
-        }
-        if (stdout) {
-          console.log("[sync] Pipeline stdout:\n", stdout);
-        }
-        if (stderr) {
-          console.error("[sync] Pipeline stderr:\n", stderr);
-        }
+        body: JSON.stringify({ event_type: "sync-trigger" }),
       }
     );
 
-    // Detach so the HTTP response doesn't wait for the child
-    child.unref();
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.error("[sync] GitHub dispatch failed:", resp.status, text);
+      return NextResponse.json(
+        { started: false, error: `GitHub API error: ${resp.status}` },
+        { status: 502 }
+      );
+    }
 
     return NextResponse.json({ started: true });
   } catch (err) {

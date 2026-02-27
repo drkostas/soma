@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DuplicateResolver } from "@/components/duplicate-resolver";
 import {
@@ -227,7 +229,42 @@ export function PipelineOperations({
   dataCounts,
   syncLogs,
 }: PipelineOperationsProps) {
+  const [syncState, setSyncState] = useState<"idle" | "loading" | "done" | "error">("idle");
+
+  async function triggerSync() {
+    setSyncState("loading");
+    try {
+      const resp = await fetch("/api/sync", { method: "POST" });
+      if (resp.ok || resp.status === 409) {
+        setSyncState("done");
+        setTimeout(() => setSyncState("idle"), 4000);
+      } else {
+        setSyncState("error");
+        setTimeout(() => setSyncState("idle"), 4000);
+      }
+    } catch {
+      setSyncState("error");
+      setTimeout(() => setSyncState("idle"), 4000);
+    }
+  }
+
   return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Auto-syncs every 30 min via GitHub Actions
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={triggerSync}
+          disabled={syncState === "loading"}
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${syncState === "loading" ? "animate-spin" : ""}`} />
+          {syncState === "loading" ? "Triggering…" : syncState === "done" ? "Triggered!" : syncState === "error" ? "Failed" : "Sync Now"}
+        </Button>
+      </div>
     <Tabs defaultValue="backfill" className="w-full">
       <TabsList variant="line" className="w-full justify-start">
         <TabsTrigger value="backfill" className="gap-1.5">
@@ -264,5 +301,6 @@ export function PipelineOperations({
         <SyncRunsTab syncLogs={syncLogs} />
       </TabsContent>
     </Tabs>
+    </div>
   );
 }
