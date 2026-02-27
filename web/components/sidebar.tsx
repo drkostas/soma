@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { SyncButton } from "@/components/sync-button";
+import { SomaLogo } from "@/components/soma-logo";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Overview" },
@@ -34,7 +35,7 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-16 flex-col border-r border-border bg-sidebar">
       {/* Logo */}
       <div className="flex h-14 items-center justify-center border-b border-border">
-        <span className="text-lg font-bold text-primary">S</span>
+        <SomaLogo size={30} />
       </div>
 
       {/* Nav */}
