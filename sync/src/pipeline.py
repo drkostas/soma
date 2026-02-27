@@ -208,6 +208,16 @@ def _enrich_garmin_activity(garmin_client, garmin_activity_id: int, hevy_id: str
                 image_bytes = resp.read()
                 upload_activity_image(garmin_client, garmin_activity_id, image_bytes)
                 print(f"    Image uploaded ({len(image_bytes) // 1024}KB)")
+                # Notify Telegram with the same image
+                try:
+                    from telegram_notify import send_image, is_configured
+                    if is_configured():
+                        title = raw_json.get("title", "Workout")
+                        workout_date = str(raw_json.get("start_time", ""))[:10]
+                        send_image(image_bytes, caption=f"\U0001f4aa {title} — {workout_date}", filename=f"{hevy_id}.png")
+                        print(f"    Telegram: notified")
+                except Exception as _te:
+                    print(f"    Telegram: {_te}")
             else:
                 print(f"    Image skipped (HTTP {resp.status})")
     except Exception as e:
@@ -470,6 +480,15 @@ def _enrich_garmin_run_activities(garmin_client) -> int:
                     image_bytes = resp.read()
                     upload_activity_image(garmin_client, int(activity_id), image_bytes, filename=f"run_{activity_id}.png")
                     print(f"    Image uploaded ({len(image_bytes) // 1024} KB)")
+                    # Notify Telegram with the same image
+                    try:
+                        from telegram_notify import send_image, is_configured
+                        if is_configured():
+                            run_date = summary.get("startTimeGMT", "")[:10]
+                            send_image(image_bytes, caption=f"\U0001f3c3 {name} — {run_date}", filename=f"run_{activity_id}.png")
+                            print(f"    Telegram: notified")
+                    except Exception as _te:
+                        print(f"    Telegram: {_te}")
                 else:
                     print(f"    Image skipped (HTTP {resp.status})")
         except Exception as e:
