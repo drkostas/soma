@@ -35,4 +35,5 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRIGGERED_BY: ${{ github.event_name }}
+          SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
         run: python -m src.pipeline
