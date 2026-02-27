@@ -85,7 +85,8 @@ def compute_prs(hevy_id: str, exercises: list[dict], workout_start_time: str | N
     if not template_ids:
         return {}
 
-    # Load historical workouts — only those before this workout if start_time given
+    # Load only historical workouts that share at least one exercise template —
+    # avoids full-table reads by scoping to relevant exercise history only.
     with get_connection() as conn:
         with conn.cursor() as cur:
             if workout_start_time:
@@ -95,16 +96,24 @@ def compute_prs(hevy_id: str, exercises: list[dict], workout_start_time: str | N
                     WHERE endpoint_name = 'workout'
                       AND hevy_id != %s
                       AND raw_json->>'start_time' < %s
+                      AND EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(raw_json->'exercises') AS ex
+                          WHERE ex->>'exercise_template_id' = ANY(%s::text[])
+                      )
                     ORDER BY raw_json->>'start_time' ASC
-                """, (hevy_id, workout_start_time))
+                """, (hevy_id, workout_start_time, template_ids))
             else:
                 cur.execute("""
                     SELECT hevy_id, raw_json->'exercises' as exercises
                     FROM hevy_raw_data
                     WHERE endpoint_name = 'workout'
                       AND hevy_id != %s
+                      AND EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(raw_json->'exercises') AS ex
+                          WHERE ex->>'exercise_template_id' = ANY(%s::text[])
+                      )
                     ORDER BY raw_json->>'start_time' ASC
-                """, (hevy_id,))
+                """, (hevy_id, template_ids))
             rows = cur.fetchall()
 
     # Build historical bests per template
