@@ -1,6 +1,7 @@
 """Full sync pipeline: fetch from Garmin + Hevy -> store raw -> parse to structured."""
 
 import json
+import os
 import sys
 from datetime import date, timedelta
 
@@ -571,8 +572,26 @@ def run_pipeline(days: int | None = None):
     If days is None (default), automatically determines which dates need
     re-syncing by checking for incomplete daily HR data. If an explicit
     number of days is passed, syncs that fixed range instead.
+
+    Scheduled runs (TRIGGERED_BY=schedule) are skipped if a sync completed
+    successfully within the last hour — avoids redundant work after a
+    manual "Sync Now".
     """
     today = date.today()
+
+    triggered_by = os.environ.get("TRIGGERED_BY", "manual")
+    if triggered_by == "schedule":
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT COUNT(*) FROM sync_log
+                    WHERE status = 'success'
+                      AND started_at >= NOW() - INTERVAL '1 hour'
+                """)
+                recent_count = cur.fetchone()[0]
+        if recent_count > 0:
+            print(f"Skipping scheduled sync — a sync completed successfully within the last hour.")
+            return
 
     if days is not None:
         dates_to_sync = [today - timedelta(days=i) for i in range(days)]
