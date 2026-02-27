@@ -35,6 +35,8 @@ function relativeTime(iso: string | null): string {
 }
 
 export function SyncButton() {
+  const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === "true";
+
   const [state, setState] = useState<SyncState>({
     status: "never",
     lastSync: null,
@@ -126,6 +128,8 @@ export function SyncButton() {
   } else if (state.status === "success" && isFresh) {
     dotClass = "bg-emerald-400";
   }
+
+  if (isDemo) return null;
 
   return (
     <Tooltip delayDuration={0}>

@@ -1,34 +1,16 @@
-#!/bin/bash
-# Soma Sync — Cron Setup Helper
-# Adds an hourly sync job to the current user's crontab.
-# Run: bash sync/cron-setup.sh
+#!/usr/bin/env bash
+# Soma sync is now handled by GitHub Actions (every 4 hours + on-demand via Sync Now button).
+# A local cron job is no longer needed or recommended — it would cause double-syncs
+# and waste Neon DB network transfer.
+#
+# The GitHub Actions workflow is at: .github/workflows/sync.yml
+#
+# To trigger a manual sync immediately:
+#   - Use the "Sync Now" button on the Connections page (soma.gkos.dev/connections)
+#   - Or via GitHub CLI: gh workflow run sync.yml --repo drkostas/soma
+#   - Or via API: POST https://api.github.com/repos/drkostas/soma/dispatches
+#                  with body: {"event_type":"sync-trigger"}
+#                  and header: Authorization: Bearer <GITHUB_PAT>
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SYNC_DIR="$REPO_DIR/sync"
-PYTHON="$SYNC_DIR/.venv/bin/python"
-LOG_FILE="/tmp/soma-sync.log"
-
-# Verify python exists
-if [ ! -f "$PYTHON" ]; then
-    echo "Error: Python venv not found at $PYTHON"
-    echo "Run: cd $SYNC_DIR && python3 -m venv .venv && .venv/bin/pip install -e ."
-    exit 1
-fi
-
-CRON_LINE="0 * * * * cd $SYNC_DIR && $PYTHON -m src.pipeline 1 >> $LOG_FILE 2>&1"
-
-# Check if already installed
-if crontab -l 2>/dev/null | grep -q "soma-sync\|src.pipeline"; then
-    echo "Cron job already exists. Current crontab:"
-    crontab -l | grep "pipeline"
-    exit 0
-fi
-
-# Add to crontab (preserving existing entries)
-(crontab -l 2>/dev/null; echo "# soma-sync: hourly health data sync"; echo "$CRON_LINE") | crontab -
-
-echo "Cron job installed! Syncs every hour on the hour."
-echo "Log file: $LOG_FILE"
-echo ""
-echo "Verify with: crontab -l"
-echo "Remove with: crontab -e  (delete the soma-sync lines)"
+echo "Soma sync is managed by GitHub Actions (.github/workflows/sync.yml)."
+echo "No local cron job needed. Use the Sync Now button at soma.gkos.dev/connections."
