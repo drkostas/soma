@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Download } from "lucide-react";
 import { ActivityPerformanceChart } from "@/components/activity-performance-chart";
 import { RunSparklines, buildSparkPoints } from "@/components/run-sparklines";
 
@@ -101,16 +101,26 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
         {!loading && summary && (
           <Tabs defaultValue={hasGpsRoute ? "map" : "overview"} className="mt-4">
-            <TabsList className={`grid w-full grid-cols-${[true, hasTimeSeries, hasLaps || true, true, hasGpsRoute].filter(Boolean).length}`}>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              {hasTimeSeries && <TabsTrigger value="performance">Charts</TabsTrigger>}
-              {hasLaps ? <TabsTrigger value="splits">Splits</TabsTrigger>
-                       : <TabsTrigger value="splits" disabled>Splits</TabsTrigger>}
-              <TabsTrigger value="details">Details</TabsTrigger>
-              {hasGpsRoute && <TabsTrigger value="map">Map</TabsTrigger>}
+            <TabsList className="flex w-full h-9">
+              {hasGpsRoute && <TabsTrigger value="map" className="flex-1 text-xs px-1">Map</TabsTrigger>}
+              <TabsTrigger value="overview" className="flex-1 text-xs px-1">Overview</TabsTrigger>
+              {hasTimeSeries && <TabsTrigger value="performance" className="flex-1 text-xs px-1">Charts</TabsTrigger>}
+              {hasLaps ? <TabsTrigger value="splits" className="flex-1 text-xs px-1">Splits</TabsTrigger>
+                       : <TabsTrigger value="splits" className="flex-1 text-xs px-1" disabled>Splits</TabsTrigger>}
+              <TabsTrigger value="details" className="flex-1 text-xs px-1">Details</TabsTrigger>
+              <TabsTrigger value="image" className="flex-1 text-xs px-1">Image</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="h-[calc(100vh-180px)] mt-4">
+            <div className="overflow-y-auto mt-2" style={{ maxHeight: "calc(100vh - 160px)" }}>
+              {hasGpsRoute && (
+                <TabsContent value="map" className="px-2 pb-6">
+                  <RunMap points={gpsRoute} height={340} />
+                  <div className="mt-3">
+                    <RunSparklines points={buildSparkPoints(gpsRoute)} />
+                  </div>
+                </TabsContent>
+              )}
+
               <TabsContent value="overview" className="space-y-4 px-4 pb-8">
                 {/* Key Metrics Grid */}
                 <div className="grid grid-cols-2 gap-3">
@@ -414,14 +424,29 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                 )}
               </TabsContent>
 
-              {hasGpsRoute && (
-                <TabsContent value="map" className="px-2 pb-8">
-                  <RunMap points={gpsRoute} height={300} />
-                  <div className="mt-3">
-                    <RunSparklines points={buildSparkPoints(gpsRoute)} />
+              <TabsContent value="image" className="px-4 pb-8">
+                {activityId && (
+                  <div className="space-y-3">
+                    <div className="relative rounded-lg overflow-hidden border border-border/50 bg-black">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/activity/${activityId}/image`}
+                        alt={`${summary?.activityName || "Activity"} summary`}
+                        className="w-full h-auto"
+                        loading="lazy"
+                      />
+                    </div>
+                    <a
+                      href={`/api/activity/${activityId}/image`}
+                      download={`${(summary?.activityName || "activity").replace(/\s+/g, "-").toLowerCase()}.png`}
+                      className="flex items-center justify-center gap-1.5 w-full py-2 rounded-md text-xs font-medium border border-border bg-muted/50 hover:bg-accent/50 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download Image
+                    </a>
                   </div>
-                </TabsContent>
-              )}
+                )}
+              </TabsContent>
 
               <TabsContent value="details" className="space-y-4 px-4 pb-8">
                 {/* All raw summary fields */}
@@ -445,7 +470,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                     ))}
                 </div>
               </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
         )}
       </SheetContent>

@@ -406,6 +406,95 @@ def _upload_enriched_to_garmin(garmin_client) -> int:
     return uploaded
 
 
+def _enrich_garmin_run_activities(garmin_client) -> int:
+    """Set description and upload share image to recent Garmin run activities.
+
+    Runs after _route_garmin_activities(). Finds running activities from the
+    last 48 hours that haven't been enriched yet (tracked in activity_sync_log
+    with destination='garmin_image'), sets a generated description, and
+    uploads the share card image.
+
+    Returns count of enriched activities.
+    """
+    import urllib.request
+    from garmin_client import set_activity_description, upload_activity_image
+    from garmin_push import generate_run_strava_description, _get_activity_hr_zones
+    import json as _json
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT activity_id, raw_json
+                FROM garmin_activity_raw
+                WHERE endpoint_name = 'summary'
+                  AND synced_at >= NOW() - INTERVAL '48 hours'
+                  AND COALESCE(raw_json->>'manufacturer', '') != 'DEVELOPMENT'
+                  AND (raw_json->'activityType'->>'typeKey') IN ('running', 'trail_running', 'treadmill_running')
+                  AND activity_id::text NOT IN (
+                    SELECT source_id FROM activity_sync_log
+                    WHERE source_platform = 'garmin' AND destination = 'garmin_image'
+                      AND status = 'sent'
+                  )
+                ORDER BY raw_json->>'startTimeGMT' DESC
+            """)
+            rows = cur.fetchall()
+
+    if not rows:
+        print("  No Garmin run activities need enrichment.")
+        return 0
+
+    enriched = 0
+    for activity_id, raw_json in rows:
+        summary = _json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+        name = summary.get("activityName", "Run")
+        print(f"  Enriching Garmin run {activity_id} ({name})...")
+
+        # Set description
+        try:
+            with get_connection() as conn:
+                hr_zones = _get_activity_hr_zones(conn, activity_id)
+            desc = generate_run_strava_description(summary, hr_zones)
+            if desc:
+                set_activity_description(garmin_client, int(activity_id), desc)
+                print(f"    Description set ({len(desc)} chars)")
+        except Exception as e:
+            print(f"    Description failed: {e}")
+
+        # Upload share image
+        try:
+            url = f"http://localhost:3456/api/activity/{activity_id}/image"
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                if resp.status == 200:
+                    image_bytes = resp.read()
+                    upload_activity_image(garmin_client, int(activity_id), image_bytes, filename=f"run_{activity_id}.png")
+                    print(f"    Image uploaded ({len(image_bytes) // 1024} KB)")
+                else:
+                    print(f"    Image skipped (HTTP {resp.status})")
+        except Exception as e:
+            print(f"    Image skipped: {e}")
+
+        # Log to prevent re-processing
+        try:
+            with get_connection() as conn:
+                log_activity_sync(
+                    conn,
+                    source_platform="garmin",
+                    source_id=str(activity_id),
+                    destination="garmin_image",
+                    destination_id=str(activity_id),
+                    rule_id=None,
+                    status="sent",
+                )
+        except Exception as e:
+            print(f"    Log failed: {e}")
+
+        enriched += 1
+
+    print(f"  Enriched {enriched} Garmin run activities")
+    return enriched
+
+
 def _route_garmin_activities(strava_client=None, garmin_client=None) -> int:
     """Route recent Garmin activities to configured destinations.
 
@@ -606,6 +695,14 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
         print(f"  Routed: {garmin_route_count} Garmin activities")
     except Exception as e:
         print(f"  Garmin routing error (non-fatal): {e}")
+
+    # --- Enrich Garmin run activities (description + image upload) ---
+    print(f"\nEnriching Garmin run activities...")
+    try:
+        run_enriched = _enrich_garmin_run_activities(garmin_client=client)
+        print(f"  Enriched: {run_enriched} Garmin run activities")
+    except Exception as e:
+        print(f"  Garmin run enrichment error (non-fatal): {e}")
 
     # --- Reconcile Strava syncs ---
     print(f"\nReconciling Strava syncs...")

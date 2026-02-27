@@ -125,15 +125,22 @@ def execute_routes(
                     "error": push_result.get("error"),
                 })
             elif destination == "telegram":
-                from telegram_notify import send_workout_image, is_configured
+                from telegram_notify import send_workout_image, send_run_image, is_configured
                 if not is_configured():
                     logger.warning("Telegram not configured, skipping rule %s", rule_id)
                     continue
-                ok = send_workout_image(
-                    hevy_id=workout.get("hevy_id", source_id),
-                    title=workout.get("hevy_title", "Workout"),
-                    workout_date=str(workout.get("date", "")),
-                )
+                if source_platform == "garmin":
+                    ok = send_run_image(
+                        garmin_activity_id=source_id,
+                        title=workout.get("name", workout.get("activityName", "Run")),
+                        run_date=str(workout.get("date", workout.get("startTimeLocal", "")[:10])),
+                    )
+                else:
+                    ok = send_workout_image(
+                        hevy_id=workout.get("hevy_id", source_id),
+                        title=workout.get("hevy_title", "Workout"),
+                        workout_date=str(workout.get("date", "")),
+                    )
                 status = "sent" if ok else "error"
                 # Log to activity_sync_log for dedup
                 try:
