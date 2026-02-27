@@ -61,6 +61,90 @@ def _get_activity_summary(conn, activity_id: int) -> dict | None:
         return raw
 
 
+def _get_activity_hr_zones(conn, activity_id: int) -> list | None:
+    """Fetch HR zones JSON for a Garmin activity."""
+    import json
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT raw_json FROM garmin_activity_raw WHERE activity_id = %s AND endpoint_name = 'hr_zones'",
+            (activity_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        raw = row[0]
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        return raw if isinstance(raw, list) else None
+
+
+def generate_run_strava_description(summary: dict, hr_zones: list | None = None) -> str:
+    """Generate a rich Strava description for a Garmin run activity."""
+    lines = []
+
+    # Core stats
+    parts = []
+    dist = summary.get("distance", 0)
+    if dist > 0:
+        parts.append(f"📏 {dist / 1000:.2f} km")
+    avg_speed = summary.get("averageSpeed", 0)
+    if avg_speed > 0:
+        pace = 1000 / avg_speed / 60
+        parts.append(f"⚡ {int(pace)}:{round((pace - int(pace)) * 60):02d}/km")
+    avg_hr = summary.get("averageHR", 0)
+    if avg_hr > 0:
+        parts.append(f"❤️ {round(avg_hr)} bpm")
+    if parts:
+        lines.append("  ·  ".join(parts))
+
+    # Secondary stats
+    parts2 = []
+    elev = summary.get("elevationGain", 0)
+    if elev > 0:
+        parts2.append(f"📈 +{round(elev)} m")
+    cals = summary.get("calories", 0)
+    if cals > 0:
+        parts2.append(f"🔥 {round(cals)} kcal")
+    max_hr = summary.get("maxHR", 0)
+    if max_hr > 0:
+        parts2.append(f"Max HR: {round(max_hr)}")
+    if parts2:
+        lines.append("  ·  ".join(parts2))
+
+    # Training metrics
+    parts3 = []
+    vo2 = summary.get("vO2MaxValue", 0)
+    if vo2 and float(vo2) > 0:
+        parts3.append(f"VO2max: {float(vo2):.1f}")
+    te = summary.get("aerobicTrainingEffect", 0)
+    if te and float(te) > 0:
+        parts3.append(f"Training Effect: {float(te):.1f}")
+    cadence = summary.get("averageRunningCadenceInStepsPerMinute", 0)
+    if cadence > 0:
+        parts3.append(f"Cadence: {round(cadence)} spm")
+    if parts3:
+        lines.append("  ·  ".join(parts3))
+
+    # HR Zones
+    if hr_zones:
+        total_secs = sum(z.get("secsInZone", 0) for z in hr_zones)
+        if total_secs > 0:
+            zone_labels = ["Z1", "Z2", "Z3", "Z4", "Z5"]
+            zone_parts = []
+            for i, z in enumerate(hr_zones[:5]):
+                pct = round(z.get("secsInZone", 0) / total_secs * 100)
+                if pct >= 5:
+                    zone_parts.append(f"{zone_labels[i]}: {pct}%")
+            if zone_parts:
+                lines.append("Zones: " + "  ·  ".join(zone_parts))
+
+    if lines:
+        lines.append("")
+        lines.append("Tracked by github.com/drkostas/soma")
+
+    return "\n".join(lines)
+
+
 def _download_fit_file(garmin_client, activity_id: int) -> str:
     """Download the original FIT file from Garmin Connect.
 
@@ -168,7 +252,19 @@ def push_garmin_activity_to_strava(
         else:
             status = "sent"
 
-        # 6. Log the sync
+        # 6. Update Strava activity with rich description
+        if strava_activity_id:
+            try:
+                with get_connection() as db_conn:
+                    hr_zones = _get_activity_hr_zones(db_conn, activity_id)
+                desc = generate_run_strava_description(summary, hr_zones)
+                if desc:
+                    strava_client.update_activity(strava_activity_id, description=desc)
+                    logger.info("Description updated for Strava activity %s", strava_activity_id)
+            except Exception as desc_exc:
+                logger.warning("Failed to update Strava description for %s: %s", activity_id, desc_exc)
+
+        # 7. Log the sync
         with get_connection() as db_conn:
             log_activity_sync(
                 db_conn,
