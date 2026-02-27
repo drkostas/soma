@@ -29,7 +29,7 @@
 
 Daily steps, resting heart rate, stress trend, body composition, recovery status, weekly training load, activity streaks — your full health picture on one page.
 
-<img src="docs/screenshots/overview.png" width="100%" alt="Daily steps · Resting heart rate · Stress trend" />
+<img src="screenshots/overview.png" width="100%" alt="Daily steps · Resting heart rate · Stress trend" />
 
 ---
 
@@ -37,7 +37,7 @@ Daily steps, resting heart rate, stress trend, body composition, recovery status
 
 Pace progression across every run, monthly mileage history, VO2max trend, training zones, HR vs pace scatter, split analysis, shoe mileage tracking.
 
-<img src="docs/screenshots/running.png" width="100%" alt="Running — 2926 km across 456 runs · Pace progression · Monthly mileage" />
+<img src="screenshots/running.png" width="100%" alt="Running — 2926 km across 456 runs · Pace progression · Monthly mileage" />
 
 ---
 
@@ -45,7 +45,7 @@ Pace progression across every run, monthly mileage history, VO2max trend, traini
 
 Muscle activation map (front & back) with volume by muscle group across all sessions. Exercise progression, personal records, gym frequency heatmap.
 
-<img src="docs/screenshots/workouts.png" width="100%" alt="Muscle activation map · Volume by muscle group across 266 sessions" />
+<img src="screenshots/workouts.png" width="100%" alt="Muscle activation map · Volume by muscle group across 266 sessions" />
 
 ---
 
@@ -53,7 +53,7 @@ Muscle activation map (front & back) with volume by muscle group across all sess
 
 Sleep stages over time (deep, light, REM, awake), score trend, sleep schedule, HRV, blood oxygen, respiration rate, body battery, training readiness.
 
-<img src="docs/screenshots/sleep.png" width="100%" alt="Sleep stages · Score trend across 1538 nights" />
+<img src="screenshots/sleep.png" width="100%" alt="Sleep stages · Score trend across 1538 nights" />
 
 ---
 
@@ -61,7 +61,7 @@ Sleep stages over time (deep, light, REM, awake), score trend, sleep schedule, H
 
 See exactly what synced, configure push rules (e.g. Hevy strength → Strava), and monitor the live data pipeline.
 
-<img src="docs/screenshots/connections.png" width="100%" alt="Sync hub — Garmin and Hevy ingest, push to Strava · Telegram · Garmin" />
+<img src="screenshots/connections.png" width="100%" alt="Sync hub — Garmin and Hevy ingest, push to Strava · Telegram · Garmin" />
 
 ---
 
@@ -136,22 +136,10 @@ Add to your fork under **Settings → Secrets → Actions**:
 | `TELEGRAM_BOT_TOKEN` | *(optional)* |
 | `TELEGRAM_CHAT_ID` | *(optional)* |
 
-Runs hourly via [`.github/workflows/sync.yml`](.github/workflows/sync.yml). Trigger manually from the **Actions** tab anytime.
+Runs every 4 hours via [`.github/workflows/sync.yml`](.github/workflows/sync.yml). Trigger instantly via the **Sync Now** button on the Connections page, or from the **Actions** tab.
 
 </details>
 
-<details>
-<summary><strong>Local cron</strong> (for home servers)</summary>
-<br>
-
-```bash
-cd sync
-python3 -m venv .venv && .venv/bin/pip install -e .
-cp ../.env.example ../.env   # fill in credentials
-bash cron-setup.sh           # installs hourly cron
-```
-
-</details>
 
 ---
 
