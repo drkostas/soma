@@ -262,6 +262,121 @@ export default function PlaylistBuilder() {
     }
   }
 
+  // Per-segment regeneration: runs the SSE API for a single segment only.
+  // Does NOT reset other assignments — only marks the targeted flat indices as loading.
+  async function generateSegmentOnly(flatIdx: number, toleranceBoost = 0) {
+    const { segments: allSegs, flatIndexMap } = segsForGenerate(items);
+    const apiIdx = flatIndexMap.findIndex(indices => indices.includes(flatIdx));
+    if (apiIdx === -1) return;
+
+    const flatIndices = flatIndexMap[apiIdx];
+    const seg = allSegs[apiIdx];
+    const segWithBoost = toleranceBoost > 0
+      ? { ...seg, bpm_tolerance: seg.bpm_tolerance + toleranceBoost }
+      : seg;
+
+    // Mark only the targeted flat indices as loading
+    setAssignments(prev => {
+      const next = { ...prev };
+      for (const fi of flatIndices) {
+        next[fi] = { ...next[fi], loading: true };
+      }
+      return next;
+    });
+
+    try {
+      const signal = abortRef.current?.signal;
+      const res = await fetch("/api/playlist/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          segments: [segWithBoost],
+          excluded_track_ids: Array.from(excludedIds),
+          genre_selection: genres,
+          genre_threshold: genreThreshold,
+          source_playlist_ids: sources,
+          garmin_activity_id: garminActivityIdRef.current,
+        }),
+        signal,
+      });
+      if (!res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "segment_done") {
+              // event.index is 0 (only one segment sent) — map to the real flat indices
+              setAssignments(prev => {
+                const next = { ...prev };
+                for (const fi of flatIndices) {
+                  next[fi] = { songs: event.songs, loading: false, poolCount: event.pool_count };
+                }
+                return next;
+              });
+            } else if (event.type === "segment_warning") {
+              setAssignments(prev => {
+                const next = { ...prev };
+                for (const fi of flatIndices) {
+                  next[fi] = { ...next[fi], warning: event.message };
+                }
+                return next;
+              });
+            } else if (event.type === "error") {
+              console.error("Segment regeneration error:", event.message);
+              setAssignments(prev => {
+                const next = { ...prev };
+                for (const fi of flatIndices) {
+                  if (next[fi]?.loading) next[fi] = { ...next[fi], loading: false, warning: "Generation failed" };
+                }
+                return next;
+              });
+            }
+          } catch (err) {
+            console.error("SSE parse error:", err);
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      console.error("Segment regeneration failed:", err);
+      setAssignments(prev => {
+        const next = { ...prev };
+        for (const fi of flatIndices) {
+          if (next[fi]?.loading) next[fi] = { ...next[fi], loading: false, warning: "Generation failed" };
+        }
+        return next;
+      });
+    }
+  }
+
+  function handleWidenBpm(flatIdx: number) {
+    // Persist the updated bpm_tolerance in items state, then regenerate only that segment
+    const flat = flatItems(items);
+    const seg = flat[flatIdx];
+    if (!seg) return;
+    function updateInItems(its: SegmentItem[]): SegmentItem[] {
+      return its.map(item => {
+        if (item.type === "repeat") {
+          const group = item as RepeatGroup;
+          return { ...group, children: group.children.map(child => child.id === seg.id ? { ...child, bpm_tolerance: child.bpm_tolerance + 15 } : child) };
+        }
+        const s = item as Segment;
+        return s.id === seg.id ? { ...s, bpm_tolerance: s.bpm_tolerance + 15 } : s;
+      });
+    }
+    setItems(updateInItems(items));
+    void generateSegmentOnly(flatIdx, 15);
+  }
+
   async function handleSave() {
     if (!sessionId) return;
     setSaving(true);
@@ -368,6 +483,8 @@ export default function PlaylistBuilder() {
             onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
             onPreview={setPreviewSong}
             onPumpUp={(_idx) => { /* pump-up modal — Task 12 */ }}
+            onWidenBpm={handleWidenBpm}
+            onAddPlaylists={() => { /* open source picker — not wired yet */ }}
             onSave={handleSave}
             saving={saving}
             savedUrl={savedUrl}
