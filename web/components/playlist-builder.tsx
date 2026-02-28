@@ -108,6 +108,7 @@ export default function PlaylistBuilder() {
   const [workoutName, setWorkoutName] = useState<string | undefined>();
   const [hasRun, setHasRun] = useState(false);
   const [pumpUpModalOpen, setPumpUpModalOpen] = useState(false);
+  const [pumpUpBankKey, setPumpUpBankKey] = useState(0);
   const garminActivityIdRef = useRef<string | null>(null);
 
   const leftRef = useRef<HTMLDivElement>(null);
@@ -412,23 +413,23 @@ export default function PlaylistBuilder() {
   }
 
   async function handlePumpUp(flatIdx: number) {
-    let bankSongs: { track_id: string; name: string; artist_name: string; tempo: number | null; energy: number | null }[] = [];
-    try {
-      const res = await fetch("/api/playlist/pump-up");
-      bankSongs = await res.json();
-    } catch {
-      return;
-    }
+    // Capture current state before the async gap to avoid stale closure issues
+    const currentAssignments = assignments;
+    const currentExcludedIds = excludedIds;
+
+    const bankSongs: { track_id: string; name: string; artist_name: string; tempo: number | null; energy: number | null }[] =
+      await fetch("/api/playlist/pump-up").then(r => r.json()).catch(() => []);
+
     if (!bankSongs.length) {
       console.warn("Pump-up bank is empty");
       return;
     }
     // Collect all currently placed track IDs across all segments
     const allPlacedIds = new Set(
-      Object.values(assignments).flatMap(a => a.songs.map(s => s.track_id))
+      Object.values(currentAssignments).flatMap(a => a.songs.map(s => s.track_id))
     );
     // Find first bank song not already placed and not excluded
-    const song = bankSongs.find(s => !allPlacedIds.has(s.track_id) && !excludedIds.has(s.track_id));
+    const song = bankSongs.find((s: { track_id: string }) => !allPlacedIds.has(s.track_id) && !currentExcludedIds.has(s.track_id));
     if (!song) {
       console.warn("Pump-up bank: all songs already placed or excluded");
       return;
@@ -526,6 +527,7 @@ export default function PlaylistBuilder() {
             onPumpUp={handlePumpUp}
             onWidenBpm={handleWidenBpm}
             onAddPlaylists={(_idx) => { /* TODO: open source picker */ }}
+            onBankChanged={() => setPumpUpBankKey(k => k + 1)}
             onSave={handleSave}
             saving={saving}
             savedUrl={savedUrl}
@@ -535,7 +537,7 @@ export default function PlaylistBuilder() {
       {/* Mini player */}
       <SpotifyPlayer currentSong={previewSong} />
       {/* Pump-up bank modal */}
-      <PumpUpModal open={pumpUpModalOpen} onClose={() => setPumpUpModalOpen(false)} />
+      <PumpUpModal open={pumpUpModalOpen} onClose={() => setPumpUpModalOpen(false)} refreshKey={pumpUpBankKey} />
     </div>
   );
 }
