@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   }
 
   const tokens = await tokenRes.json();
-  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
   // Fetch Spotify user profile
   const profileRes = await fetch("https://api.spotify.com/v1/me", {
@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
       ${JSON.stringify({
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
+        expires_at: expiresAt,
         display_name: profile?.display_name ?? null,
         spotify_user_id: profile?.id ?? null,
       })}::jsonb,
