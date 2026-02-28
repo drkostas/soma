@@ -35,6 +35,7 @@ export default function PlaylistBuilder() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [workoutName, setWorkoutName] = useState<string | undefined>();
   const [hasRun, setHasRun] = useState(false);
+  const garminActivityIdRef = useRef<string | null>(null);
 
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
@@ -56,8 +57,29 @@ export default function PlaylistBuilder() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleRunSelect(run: { type: "garmin" | "plan" | "session"; data: any; segments: any[] }) {
+    if (run.type === "session" && !run.segments?.length) {
+      // Restore session via its Garmin activity
+      const garminId = run.data?.garmin_activity_id;
+      if (!garminId) return;
+      fetch(`/api/playlist/garmin-runs?id=${garminId}`)
+        .then(r => r.json())
+        .then(data => {
+          const segs = parsedToSegments(data.segments ?? []);
+          if (!segs.length) return;
+          garminActivityIdRef.current = garminId;
+          setSegments(segs);
+          setWorkoutName(run.data?.activity_name ?? "Run");
+          setHasRun(true);
+          abortRef.current?.abort();
+          abortRef.current = new AbortController();
+          void generate(segs, abortRef.current.signal);
+        })
+        .catch(() => {});
+      return;
+    }
     if (run.segments?.length > 0) {
       const segs = parsedToSegments(run.segments);
+      garminActivityIdRef.current = run.type === "garmin" ? (run.data?.activity_id ?? null) : null;
       setSegments(segs);
       setWorkoutName(run.data?.activity_name ?? run.data?.name ?? "Run");
       setHasRun(true);
@@ -77,7 +99,7 @@ export default function PlaylistBuilder() {
       const res = await fetch("/api/playlist/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ segments: segs, excluded_track_ids: Array.from(excludedIds), genre_selection: genres, genre_threshold: genreThreshold, source_playlist_ids: sources }),
+        body: JSON.stringify({ segments: segs, excluded_track_ids: Array.from(excludedIds), genre_selection: genres, genre_threshold: genreThreshold, source_playlist_ids: sources, garmin_activity_id: garminActivityIdRef.current }),
         signal,
       });
       if (!res.body) return;
@@ -163,7 +185,7 @@ export default function PlaylistBuilder() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); setHasRun(false); setSegments([]); setAssignments({}); setWorkoutName(undefined); }} />
+      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); garminActivityIdRef.current = null; setHasRun(false); setSegments([]); setAssignments({}); setWorkoutName(undefined); }} />
       <div className="flex flex-1 overflow-hidden">
         {/* Left: run selector (first time) or run timeline */}
         <div ref={leftRef} className="w-[40%] border-r overflow-y-auto">
