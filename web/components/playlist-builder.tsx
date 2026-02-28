@@ -1,8 +1,9 @@
 // web/components/playlist-builder.tsx
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import PlaylistTopBar from "./playlist-top-bar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RunSegmentTimeline from "./run-segment-timeline";
 import SongAssignmentPanel from "./song-assignment-panel";
 import SpotifyPlayer from "./spotify-player";
@@ -110,6 +111,9 @@ export default function PlaylistBuilder() {
   const [hasRun, setHasRun] = useState(false);
   const [pumpUpModalOpen, setPumpUpModalOpen] = useState(false);
   const [pumpUpBankKey, setPumpUpBankKey] = useState(0);
+  // Tracks the Spotify playlist ID from a loaded session — if set, Save → Update (PUT)
+  const [existingPlaylistId, setExistingPlaylistId] = useState<string | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const garminActivityIdRef = useRef<string | null>(null);
 
   const leftRef = useRef<HTMLDivElement>(null);
@@ -120,6 +124,30 @@ export default function PlaylistBuilder() {
   // Per-segment abort controllers — keyed by flat index, so rapid "Widen BPM" clicks
   // cancel the previous SSE call for the same segment rather than racing.
   const segmentAbortRefs = useRef<Map<number, AbortController>>(new Map());
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const inInput = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
+      if (inInput) return; // don't intercept text fields
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      } else if (e.key === "Escape") {
+        setFocusedIdx(-1);
+        setShortcutsOpen(false);
+      } else if (e.key === "?") {
+        setShortcutsOpen(v => !v);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   // Scroll sync between panels
   useEffect(() => {
@@ -157,6 +185,9 @@ export default function PlaylistBuilder() {
             setSessionId(run.data.id);
             setWorkoutName(data.activity_name ?? "Run");
             setHasRun(true);
+            // If this session was previously saved to Spotify, offer to Update instead of Create
+            setExistingPlaylistId(run.data.spotify_playlist_id ?? null);
+            setSavedUrl(run.data.spotify_playlist_url ?? undefined);
           })
           .catch(() => {});
         return;
@@ -391,18 +422,32 @@ export default function PlaylistBuilder() {
   }
 
   async function handleSave() {
-    if (!sessionId) return;
+    if (!sessionId) { toast.error("Generation not complete — wait for all songs to load"); return; }
     setSaving(true);
     const allTracks = [...new Set(Object.values(assignments).flatMap(a => a.songs.filter(s => !excludedIds.has(s.track_id)).map(s => s.track_id)))];
-    const name = `Soma: ${workoutName ?? "Run"} · ${new Date().toLocaleDateString()}`;
     try {
-      const res = await fetch("/api/playlist/spotify/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, name, track_ids: allTracks }),
-      });
-      const data = await res.json();
-      setSavedUrl(data.playlist_url);
+      if (existingPlaylistId) {
+        // Update existing Spotify playlist (replace tracks in-place)
+        const res = await fetch("/api/playlist/spotify/create", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playlist_id: existingPlaylistId, session_id: sessionId, track_ids: allTracks }),
+        });
+        if (!res.ok) throw new Error("Update failed");
+        const data = await res.json();
+        setSavedUrl(data.playlist_url);
+      } else {
+        const name = `Soma: ${workoutName ?? "Run"} · ${new Date().toLocaleDateString()}`;
+        const res = await fetch("/api/playlist/spotify/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, name, track_ids: allTracks }),
+        });
+        if (!res.ok) throw new Error("Save failed");
+        const data = await res.json();
+        setSavedUrl(data.playlist_url);
+        setExistingPlaylistId(data.playlist_id ?? null);
+      }
     } catch {
       toast.error("Failed to save playlist", { description: "Check your Spotify connection in Sources" });
     } finally {
@@ -503,9 +548,26 @@ export default function PlaylistBuilder() {
     toast.success(`Added "${song.name}"`, { description: song.artist_name, duration: 3000 });
   }
 
+  // Derive has_genre_warning for placed songs: true when a genre filter is active and
+  // the song's genres don't intersect the selected genres (placed before filter changed).
+  const assignmentsWithWarnings = useMemo(() => {
+    if (genres.length === 0) return assignments;
+    const result: Record<number, typeof assignments[number]> = {};
+    for (const [k, v] of Object.entries(assignments)) {
+      result[Number(k)] = {
+        ...v,
+        songs: v.songs.map(song => ({
+          ...song,
+          has_genre_warning: !!song.genres?.length && !song.genres.some(g => genres.includes(g)),
+        })),
+      };
+    }
+    return result;
+  }, [assignments, genres]);
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); garminActivityIdRef.current = null; setHasRun(false); setItems([]); setAssignments({}); setWorkoutName(undefined); }} onOpenBank={() => setPumpUpModalOpen(true)} />
+      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); garminActivityIdRef.current = null; setHasRun(false); setItems([]); setAssignments({}); setWorkoutName(undefined); setExistingPlaylistId(null); setSavedUrl(undefined); }} onOpenBank={() => setPumpUpModalOpen(true)} onOpenShortcuts={() => setShortcutsOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         {/* Left: run selector (first time) or run timeline */}
         <div ref={leftRef} className="w-[40%] border-r overflow-y-auto">
@@ -567,7 +629,7 @@ export default function PlaylistBuilder() {
         <div ref={rightRef} className="flex-1 overflow-y-auto">
           <SongAssignmentPanel
             items={items}
-            assignments={assignments}
+            assignments={assignmentsWithWarnings}
             excludedIds={excludedIds}
             selectedGenres={genres}
             focusedIdx={focusedIdx}
@@ -589,6 +651,7 @@ export default function PlaylistBuilder() {
             onSave={handleSave}
             saving={saving}
             savedUrl={savedUrl}
+            saveLabel={existingPlaylistId && !savedUrl ? "Update Playlist →" : undefined}
           />
         </div>
       </div>
@@ -596,6 +659,27 @@ export default function PlaylistBuilder() {
       <SpotifyPlayer currentSong={previewSong} />
       {/* Pump-up bank modal */}
       <PumpUpModal open={pumpUpModalOpen} onClose={() => setPumpUpModalOpen(false)} refreshKey={pumpUpBankKey} />
+      {/* Keyboard shortcuts cheatsheet */}
+      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Keyboard Shortcuts</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 text-sm">
+            {([
+              ["Ctrl + Z", "Undo"],
+              ["Ctrl + Y / Ctrl + Shift + Z", "Redo"],
+              ["Escape", "Collapse focused segment"],
+              ["?", "Toggle this cheatsheet"],
+            ] as [string, string][]).map(([key, label]) => (
+              <div key={key} className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">{label}</span>
+                <kbd className="text-xs bg-muted border rounded px-1.5 py-0.5 font-mono shrink-0">{key}</kbd>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
