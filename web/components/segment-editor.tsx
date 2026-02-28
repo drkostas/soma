@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const SEGMENT_TYPES = ["warmup","easy","aerobic","tempo","interval","vo2max","recovery","rest","strides","cooldown"] as const;
-type SegmentType = typeof SEGMENT_TYPES[number];
+export type SegmentType = typeof SEGMENT_TYPES[number];
 
 export const TYPE_COLORS: Record<SegmentType, string> = {
   warmup: "bg-yellow-500", easy: "bg-green-500", aerobic: "bg-blue-500",
