@@ -199,6 +199,21 @@ export default function PlaylistBuilder() {
           ) : (
             <RunSegmentTimeline
               segments={segments}
+              onSavePlan={async (name) => {
+                const totalDuration = segments.reduce((s, seg) => s + (seg.duration_s ?? 0), 0);
+                await fetch("/api/playlist/workout-plans", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name,
+                    segments: segments.map(({ id: _id, ...rest }) => rest),
+                    sport_type: "running",
+                    total_duration_s: totalDuration,
+                    source: "builder",
+                    garmin_activity_id: garminActivityIdRef.current,
+                  }),
+                });
+              }}
               onChange={(segs) => {
                 setSegments(segs);
                 if (segs.length > 0) {

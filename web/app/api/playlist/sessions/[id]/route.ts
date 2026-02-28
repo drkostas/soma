@@ -13,6 +13,16 @@ export async function GET(
   return rows[0] ? NextResponse.json(rows[0]) : NextResponse.json(null, { status: 404 });
 }
 
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const sql = getDb();
+  await sql`DELETE FROM playlist_sessions WHERE id = ${id}`;
+  return NextResponse.json({ ok: true });
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
