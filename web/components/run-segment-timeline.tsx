@@ -3,11 +3,11 @@
 import { motion, AnimatePresence, Reorder } from "motion/react";
 import { Plus, GripVertical, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import SegmentEditor, { Segment, TYPE_COLORS } from "./segment-editor";
+import SegmentEditor, { Segment, SegmentType, TYPE_COLORS, SEGMENT_TYPES } from "./segment-editor";
 import { nanoid } from "nanoid";
 
 
-const BPM_DEFAULTS: Record<string, { min: number; max: number }> = {
+const BPM_DEFAULTS: Record<SegmentType, { min: number; max: number }> = {
   warmup: { min: 100, max: 140 }, easy: { min: 125, max: 145 }, aerobic: { min: 125, max: 145 },
   tempo: { min: 160, max: 180 }, interval: { min: 175, max: 195 }, vo2max: { min: 175, max: 195 },
   recovery: { min: 125, max: 145 }, rest: { min: 80, max: 110 }, strides: { min: 160, max: 180 }, cooldown: { min: 60, max: 90 },
@@ -21,7 +21,7 @@ function newSegment(type: Segment["type"] = "easy", duration_s = 600): Segment {
 interface Props {
   segments: Segment[];
   onChange: (segs: Segment[]) => void;
-  focusedIdx: number | null;
+  focusedIdx: number;
   onFocus: (idx: number) => void;
   onPumpUp: (idx: number) => void;
 }
