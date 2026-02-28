@@ -14,23 +14,21 @@ export default function SpotifyPlayer({ currentSong }: Props) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.7);
   const playerRef = useRef<Spotify.Player | null>(null);
+  const deviceIdRef = useRef<string | null>(null); // Fix 3: capture device_id on ready
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => {
-    // Load Spotify Web Playback SDK
-    const script = document.createElement("script");
-    script.src = "https://sdk.scdn.co/spotify-player.js";
-    script.async = true;
-    document.head.appendChild(script);
-
-    (window as { onSpotifyWebPlaybackSDKReady?: () => void }).onSpotifyWebPlaybackSDKReady = async () => {
-      const tokenRes = await fetch("/api/playlist/spotify/token");
-      if (!tokenRes.ok) return;
-      const { token } = await tokenRes.json() as { token: string };
-
+    // Fix 6: guard against SDK already loaded
+    const initPlayer = () => {
       const player = new window.Spotify.Player({
         name: "Soma Playlist Builder",
-        getOAuthToken: (cb: (t: string) => void) => cb(token),
+        // Fix 4: always fetch a fresh token rather than capturing a stale closure value
+        getOAuthToken: (cb: (t: string) => void) => {
+          fetch("/api/playlist/spotify/token")
+            .then(r => r.json())
+            .then((d: { token: string }) => cb(d.token))
+            .catch(() => cb(""));
+        },
         volume,
       });
 
@@ -41,12 +39,34 @@ export default function SpotifyPlayer({ currentSong }: Props) {
         setDuration(state.duration);
       });
 
-      await player.connect();
+      // Fix 3: store device_id when player is ready
+      player.addListener("ready", ({ device_id }: { device_id: string }) => {
+        deviceIdRef.current = device_id;
+      });
+
+      void player.connect();
       playerRef.current = player;
     };
 
+    // Fix 6: if SDK is already loaded, init directly; otherwise inject script
+    if (window.Spotify) {
+      initPlayer();
+    } else {
+      // Only inject if the script tag isn't already in the DOM
+      const existing = document.querySelector('script[src="https://sdk.scdn.co/spotify-player.js"]');
+      if (!existing) {
+        const script = document.createElement("script");
+        script.src = "https://sdk.scdn.co/spotify-player.js";
+        script.async = true;
+        document.head.appendChild(script);
+      }
+      (window as { onSpotifyWebPlaybackSDKReady?: () => void }).onSpotifyWebPlaybackSDKReady = initPlayer;
+    }
+
+    // Fix 5: disconnect player on cleanup
     return () => {
-      if (document.head.contains(script)) document.head.removeChild(script);
+      playerRef.current?.disconnect();
+      playerRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -61,18 +81,15 @@ export default function SpotifyPlayer({ currentSong }: Props) {
   }, [isPlaying]);
 
   // Play song when it changes
+  // Fix 3: include device_id query param so Spotify targets the SDK player
   useEffect(() => {
     if (!currentSong || !playerRef.current) return;
-    void fetch("/api/playlist/spotify/token")
-      .then(r => r.json())
-      .then(({ token }: { token: string }) => {
-        if (!token) return;
-        return fetch("https://api.spotify.com/v1/me/player/play", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ uris: [`spotify:track:${currentSong.track_id}`] }),
-        });
-      });
+    const deviceParam = deviceIdRef.current ? `?device_id=${deviceIdRef.current}` : "";
+    void fetch(`/api/playlist/spotify/play${deviceParam}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uris: [`spotify:track:${currentSong.track_id}`] }),
+    });
   }, [currentSong?.track_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatTime = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
