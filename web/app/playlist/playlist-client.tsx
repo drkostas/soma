@@ -18,7 +18,7 @@ export default function PlaylistClient({ spotifyConnected }: Props) {
     fetch("/api/playlist/spotify/library")
       .then((r) => r.json())
       .then((d) => {
-        if (Number(d.tracks_with_bpm) > 0) setLibraryAnalysed(true);
+        if (Number(d.total_tracks) > 0) setLibraryAnalysed(true);
       })
       .catch(() => {});
   }, [spotifyConnected]);

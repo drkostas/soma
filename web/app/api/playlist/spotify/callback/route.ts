@@ -3,25 +3,33 @@ import { getDb } from "@/lib/db";
 
 export const runtime = "nodejs";
 
+function decodeState(raw: string): { nonce: string; verifier: string; returnTo: string } | null {
+  try {
+    const padded = raw.replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(padded.padEnd(padded.length + ((4 - (padded.length % 4)) % 4), "="));
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const code = sp.get("code");
-  const state = sp.get("state");
+  const stateParam = sp.get("state");
   const error = sp.get("error");
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3456";
 
-  if (error || !code) {
+  if (error || !code || !stateParam) {
     return NextResponse.redirect(`${baseUrl}/connections?error=spotify_denied`);
   }
 
-  const verifier = req.cookies.get("spotify_pkce_verifier")?.value;
-  const storedState = req.cookies.get("spotify_state")?.value;
-
-  if (!verifier || state !== storedState) {
-    return NextResponse.redirect(
-      `${baseUrl}/connections?error=spotify_invalid`
-    );
+  const stateData = decodeState(stateParam);
+  if (!stateData?.verifier) {
+    return NextResponse.redirect(`${baseUrl}/connections?error=spotify_invalid`);
   }
+
+  const { verifier, returnTo } = stateData;
 
   // Exchange code for tokens
   const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
@@ -39,9 +47,7 @@ export async function GET(req: NextRequest) {
   if (!tokenRes.ok) {
     const err = await tokenRes.text();
     console.error("Spotify token exchange failed:", err);
-    return NextResponse.redirect(
-      `${baseUrl}/connections?error=spotify_token`
-    );
+    return NextResponse.redirect(`${baseUrl}/connections?error=spotify_token`);
   }
 
   const tokens = await tokenRes.json();
@@ -78,8 +84,5 @@ export async function GET(req: NextRequest) {
       status = 'active'
   `;
 
-  const res = NextResponse.redirect(`${baseUrl}/connections?connected=spotify`);
-  res.cookies.delete("spotify_pkce_verifier");
-  res.cookies.delete("spotify_state");
-  return res;
+  return NextResponse.redirect(`${baseUrl}${returnTo}?connected=spotify`);
 }

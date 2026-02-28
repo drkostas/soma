@@ -14,12 +14,19 @@ interface Props {
   genreThreshold: number;
   onThresholdChange: (v: number) => void;
   workoutName?: string;
+  onChangeRun?: () => void;
 }
 
-export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGenresChange, genreThreshold, onThresholdChange, workoutName }: Props) {
+export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGenresChange, genreThreshold, onThresholdChange, workoutName, onChangeRun }: Props) {
   return (
     <div className="sticky top-0 z-10 flex items-center gap-2 p-2 border-b bg-background/80 backdrop-blur-sm">
-      <span className="text-sm font-medium truncate max-w-[160px]">{workoutName ?? "Pick a run ▾"}</span>
+      {workoutName && onChangeRun ? (
+        <button type="button" onClick={onChangeRun} className="text-sm font-medium truncate max-w-[160px] hover:text-muted-foreground transition-colors flex items-center gap-1" title="Change run">
+          {workoutName} <span className="text-muted-foreground text-xs">↩</span>
+        </button>
+      ) : (
+        <span className="text-sm font-medium truncate max-w-[160px]">{workoutName ?? "Pick a run ▾"}</span>
+      )}
       <div className="flex-1" />
       <Popover>
         <PopoverTrigger asChild>

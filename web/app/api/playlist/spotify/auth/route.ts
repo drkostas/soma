@@ -21,10 +21,18 @@ function randomBase64url(n: number): string {
     .replace(/=/g, "");
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const verifier = randomBase64url(64);
   const challenge = await sha256Base64url(verifier);
-  const state = randomBase64url(16);
+  const nonce = randomBase64url(16);
+  const returnTo = req.nextUrl.searchParams.get("return_to") ?? "/connections";
+
+  // Encode verifier + nonce + return_to in the state param so it survives
+  // the localhost → 127.0.0.1 host hop (cookies don't cross hostnames).
+  const state = btoa(JSON.stringify({ nonce, verifier, returnTo }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
 
   const params = new URLSearchParams({
     client_id: process.env.SPOTIFY_CLIENT_ID!,
@@ -36,17 +44,7 @@ export async function GET(_req: NextRequest) {
     state,
   });
 
-  const res = NextResponse.redirect(
+  return NextResponse.redirect(
     `https://accounts.spotify.com/authorize?${params}`
   );
-
-  const cookieOpts = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 600,
-    path: "/",
-  };
-  res.cookies.set("spotify_pkce_verifier", verifier, cookieOpts);
-  res.cookies.set("spotify_state", state, cookieOpts);
-  return res;
 }

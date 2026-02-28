@@ -33,6 +33,7 @@ export default function PlaylistGenrePicker({ selected, onChange, threshold, onT
         </div>
         <Slider min={1} max={10} step={1} value={[threshold * 100]} onValueChange={([v]) => onThresholdChange(v / 100)} />
       </div>
+      {genres.length === 0 && <div className="text-xs text-muted-foreground text-center py-2">Analyse your library first to filter by genre</div>}
       <div className="flex flex-wrap gap-1.5">
         <AnimatePresence>
           {visible.map(g => (

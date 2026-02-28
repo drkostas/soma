@@ -137,7 +137,7 @@ export default function SongAssignmentPanel({
             <a href={savedUrl} target="_blank" rel="noopener noreferrer">✓ Open in Spotify ↗</a>
           </Button>
         ) : (
-          <Button size="sm" onClick={onSave} disabled={saving} className="text-xs h-7">
+          <Button size="sm" onClick={onSave} disabled={saving || totalPlaced === 0} className="text-xs h-7">
             {saving ? "Saving…" : "Save to Spotify →"}
           </Button>
         )}
