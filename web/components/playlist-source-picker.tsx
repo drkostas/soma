@@ -17,6 +17,7 @@ export default function PlaylistSourcePicker({ selected, onChange }: Props) {
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [libraryStatus, setLibraryStatus] = useState<LibraryStatus | null>(null);
   const [analysing, setAnalysing] = useState(false);
+  const [progress, setProgress] = useState<{ stage: string; pct: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/playlist/spotify/playlists").then(r => r.json()).then(setPlaylists).catch(() => {});
@@ -31,14 +32,43 @@ export default function PlaylistSourcePicker({ selected, onChange }: Props) {
 
   async function handleAnalyse() {
     setAnalysing(true);
+    setProgress({ stage: "Starting…", pct: 0 });
     try {
-      await fetch("/api/playlist/spotify/library", {
+      const res = await fetch("/api/playlist/spotify/library", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source_ids: selected }),
       });
-      const status = await fetch("/api/playlist/spotify/library").then(r => r.json());
-      setLibraryStatus(status);
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const part of parts) {
+          const lines = part.trim().split("\n");
+          const eventLine = lines.find((l) => l.startsWith("event: "));
+          const dataLine = lines.find((l) => l.startsWith("data: "));
+          if (!eventLine || !dataLine) continue;
+          const evt = eventLine.slice(7).trim();
+          const data = JSON.parse(dataLine.slice(6));
+          if (evt === "progress") {
+            setProgress({ stage: data.stage, pct: data.pct });
+          } else if (evt === "done") {
+            setProgress({ stage: `Done — ${data.new} new, ${data.cached} cached`, pct: 100 });
+            const status = await fetch("/api/playlist/spotify/library").then(r => r.json());
+            setLibraryStatus(status);
+          } else if (evt === "error") {
+            setProgress({ stage: `Error: ${data.message}`, pct: 0 });
+          }
+        }
+      }
+    } catch (err) {
+      setProgress({ stage: `Error: ${String(err)}`, pct: 0 });
     } finally {
       setAnalysing(false);
     }
@@ -59,7 +89,18 @@ export default function PlaylistSourcePicker({ selected, onChange }: Props) {
       <Button size="sm" className="w-full mt-2" disabled={analysing} onClick={handleAnalyse}>
         {analysing ? "Analysing…" : "Analyse Library"}
       </Button>
-      {libraryStatus && (
+      {progress && (
+        <div className="space-y-1 pt-1">
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span className="truncate pr-2">{progress.stage}</span>
+            <span className="shrink-0">{progress.pct}%</span>
+          </div>
+          <div className="w-full h-1 rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progress.pct}%` }} />
+          </div>
+        </div>
+      )}
+      {!progress && libraryStatus && (
         <div className="text-xs text-muted-foreground text-center">
           {libraryStatus.tracks_with_bpm} / {libraryStatus.total_tracks} tracks analysed
         </div>

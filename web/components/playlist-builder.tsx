@@ -5,9 +5,25 @@ import PlaylistTopBar from "./playlist-top-bar";
 import RunSegmentTimeline from "./run-segment-timeline";
 import SongAssignmentPanel from "./song-assignment-panel";
 import SpotifyPlayer from "./spotify-player";
-import { Segment } from "./segment-editor";
+import PlaylistRunSelector from "./playlist-run-selector";
+import { Segment, SegmentType } from "./segment-editor";
 import { SongData } from "./song-card";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
+import { nanoid } from "nanoid";
+
+const BPM_DEFAULTS: Record<SegmentType, { min: number; max: number }> = {
+  warmup: { min: 100, max: 140 }, easy: { min: 125, max: 145 }, aerobic: { min: 125, max: 145 },
+  tempo: { min: 160, max: 180 }, interval: { min: 175, max: 195 }, vo2max: { min: 175, max: 195 },
+  recovery: { min: 125, max: 145 }, rest: { min: 80, max: 110 }, strides: { min: 160, max: 180 }, cooldown: { min: 60, max: 90 },
+};
+
+function parsedToSegments(parsed: Array<{ type?: string; duration_s: number }>): Segment[] {
+  return parsed.map((p) => {
+    const type = (p.type as SegmentType) ?? "easy";
+    const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145 };
+    return { id: nanoid(), type, duration_s: p.duration_s, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto" as const, valence_min: 0.3, valence_max: 0.7 };
+  });
+}
 
 interface SegmentSongs { songs: SongData[]; loading?: boolean; poolCount?: number; warning?: string; }
 
@@ -24,6 +40,7 @@ export default function PlaylistBuilder() {
   const [savedUrl, setSavedUrl] = useState<string | undefined>();
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [workoutName, setWorkoutName] = useState<string | undefined>();
+  const [hasRun, setHasRun] = useState(false);
 
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
@@ -42,6 +59,20 @@ export default function PlaylistBuilder() {
     right.addEventListener("scroll", syncRight);
     return () => { left.removeEventListener("scroll", syncLeft); right.removeEventListener("scroll", syncRight); };
   }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function handleRunSelect(run: { type: "garmin" | "plan" | "session"; data: any; segments: any[] }) {
+    if (run.segments?.length > 0) {
+      const segs = parsedToSegments(run.segments);
+      setSegments(segs);
+      setWorkoutName(run.data?.activity_name ?? run.data?.name ?? "Run");
+      setHasRun(true);
+      // Trigger initial playlist generation
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+      void generate(segs, abortRef.current.signal);
+    }
+  }
 
   // Generate playlist via SSE
   async function generate(segs: Segment[], signal?: AbortSignal) {
@@ -138,27 +169,36 @@ export default function PlaylistBuilder() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} />
+      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); setHasRun(false); setSegments([]); setAssignments({}); setWorkoutName(undefined); }} />
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: run timeline */}
+        {/* Left: run selector (first time) or run timeline */}
         <div ref={leftRef} className="w-[40%] border-r overflow-y-auto">
-          <RunSegmentTimeline
-            segments={segments}
-            onChange={(segs) => {
-              setSegments(segs);
-              if (segs.length > 0) {
-                clearTimeout(generateDebounceRef.current);
-                generateDebounceRef.current = setTimeout(() => {
-                  abortRef.current?.abort();
-                  abortRef.current = new AbortController();
-                  void generate(segs, abortRef.current.signal);
-                }, 600);
-              }
-            }}
-            focusedIdx={focusedIdx}
-            onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
-            onPumpUp={(_idx) => { /* pump-up modal — Task 12 */ }}
-          />
+          {!hasRun ? (
+            <div className="h-full flex flex-col">
+              <div className="px-3 py-2 border-b text-xs font-medium text-muted-foreground">Select a run to get started</div>
+              <div className="flex-1 overflow-hidden">
+                <PlaylistRunSelector onSelect={handleRunSelect} />
+              </div>
+            </div>
+          ) : (
+            <RunSegmentTimeline
+              segments={segments}
+              onChange={(segs) => {
+                setSegments(segs);
+                if (segs.length > 0) {
+                  clearTimeout(generateDebounceRef.current);
+                  generateDebounceRef.current = setTimeout(() => {
+                    abortRef.current?.abort();
+                    abortRef.current = new AbortController();
+                    void generate(segs, abortRef.current.signal);
+                  }, 600);
+                }
+              }}
+              focusedIdx={focusedIdx}
+              onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
+              onPumpUp={(_idx) => { /* pump-up modal — Task 12 */ }}
+            />
+          )}
         </div>
         {/* Right: song assignment */}
         <div ref={rightRef} className="flex-1 overflow-y-auto">

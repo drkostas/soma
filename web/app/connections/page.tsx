@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getDb } from "@/lib/db";
+import { getDb, withDbRetry } from "@/lib/db";
 import { ConnectionActions } from "@/components/connection-actions";
 import { SyncRulesManager } from "@/components/sync-rules-manager";
 import { SyncFlowDiagram } from "@/components/sync-flow-diagram";
@@ -130,7 +130,7 @@ async function getPageData() {
   const sql = getDb();
 
   const [credentials, rules, syncLog, syncServiceStatus, backfillProgress, syncRunLogs] =
-    await Promise.all([
+    await withDbRetry(() => Promise.all([
       sql`
         SELECT platform, status, connected_at,
                credentials->>'athlete_name' as athlete_name
@@ -169,7 +169,7 @@ async function getPageData() {
       sql`
         SELECT * FROM sync_log ORDER BY started_at DESC LIMIT 10
       `,
-    ]);
+    ]));
 
   // Telegram: check DB credentials first, fallback to env vars
   const telegramCred = (credentials as unknown as PlatformCredential[]).find(
@@ -187,7 +187,7 @@ async function getPageData() {
 
   // Data count queries
   const [garminDaily, garminActivity, garminProfile, hevy, healthSummary, weight, sleep] =
-    await Promise.all([
+    await withDbRetry(() => Promise.all([
       sql`SELECT COUNT(*) as count, COUNT(DISTINCT date) as dates, COUNT(DISTINCT endpoint_name) as endpoints FROM garmin_raw_data`,
       sql`SELECT COUNT(*) as count, COUNT(DISTINCT activity_id) as activities FROM garmin_activity_raw`,
       sql`SELECT COUNT(*) as count FROM garmin_profile_raw`,
@@ -195,7 +195,7 @@ async function getPageData() {
       sql`SELECT COUNT(*) as count FROM daily_health_summary`,
       sql`SELECT COUNT(*) as count FROM weight_log`,
       sql`SELECT COUNT(*) as count FROM sleep_detail`,
-    ]);
+    ]));
 
   const dataCounts: DataCount[] = [
     { table_name: "Garmin Daily (raw)", record_count: garminDaily[0]?.count ?? 0, unique_dates: garminDaily[0]?.dates ?? 0, unique_endpoints: garminDaily[0]?.endpoints ?? 0 },
@@ -208,7 +208,7 @@ async function getPageData() {
   ];
 
   // Syncable activities (last 30 days from Garmin + Hevy)
-  const [garminActivities, hevyActivities] = await Promise.all([
+  const [garminActivities, hevyActivities] = await withDbRetry(() => Promise.all([
     sql`
       SELECT ga.activity_id::text AS source_id,
              'garmin' AS source_platform,
@@ -255,7 +255,7 @@ async function getPageData() {
         AND h.raw_json->>'start_time' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
       ORDER BY h.raw_json->>'start_time' DESC
     `,
-  ]);
+  ]));
 
   // Merge Garmin + Hevy activities by timestamp (±120s) into unified rows
   type RawActivity = {
@@ -604,7 +604,7 @@ export default async function ConnectionsPage() {
               {spotifyConnected ? (
                 <span className="text-xs text-green-500 font-medium">● Connected</span>
               ) : (
-                <a href="/api/playlist/spotify/auth" className="text-xs text-primary hover:underline">
+                <a href="/api/playlist/spotify/auth?return_to=/connections" className="text-xs text-primary hover:underline">
                   Connect →
                 </a>
               )}

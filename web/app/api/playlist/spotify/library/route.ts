@@ -7,7 +7,7 @@ import { getArtistTopTags } from "@/lib/lastfm-client";
 import { toMacroGenres } from "@/lib/genre-mapper";
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // Vercel: allow up to 60s for large libraries
+export const maxDuration = 60;
 
 interface SpotifyTrack {
   id: string;
@@ -31,11 +31,8 @@ async function fetchSourceTracks(sourceId: string): Promise<SpotifyTrack[]> {
     const data = await res.json();
     for (const item of data.items ?? []) {
       const t: SpotifyTrack = item.track ?? item;
-      if (t && t.type === "track" && !t.is_local && t.id) {
-        tracks.push(t);
-      }
+      if (t && t.type === "track" && !t.is_local && t.id) tracks.push(t);
     }
-    // data.next is the full URL like https://api.spotify.com/v1/...
     url = data.next
       ? (data.next as string).replace("https://api.spotify.com/v1", "")
       : null;
@@ -43,124 +40,145 @@ async function fetchSourceTracks(sourceId: string): Promise<SpotifyTrack[]> {
   return tracks;
 }
 
+function enc(event: string, data: object): Uint8Array {
+  return new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const sourceIds: string[] = body.source_ids ?? ["liked"];
 
-  const sql = getDb();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const sql = getDb();
 
-  // 1. Collect all unique tracks from all sources
-  const allTracks = new Map<string, SpotifyTrack>();
-  for (const sid of sourceIds) {
-    const tracks = await fetchSourceTracks(sid);
-    for (const t of tracks) allTracks.set(t.id, t);
-  }
+        // Stage 1: fetch tracks from Spotify
+        controller.enqueue(enc("progress", { stage: "Fetching tracks from Spotify…", pct: 5 }));
+        const allTracks = new Map<string, SpotifyTrack>();
+        for (const sid of sourceIds) {
+          const tracks = await fetchSourceTracks(sid);
+          for (const t of tracks) allTracks.set(t.id, t);
+        }
+        const allIds = Array.from(allTracks.keys());
+        controller.enqueue(enc("progress", { stage: `Found ${allIds.length} tracks`, pct: 15 }));
 
-  const allIds = Array.from(allTracks.keys());
-  if (allIds.length === 0) {
-    return NextResponse.json({ cached: 0, new: 0, total: 0 });
-  }
+        if (allIds.length === 0) {
+          controller.enqueue(enc("done", { cached: 0, new: 0, total: 0 }));
+          return;
+        }
 
-  // 2. Filter out already-cached tracks
-  const existing = await sql`
-    SELECT track_id FROM spotify_track_features WHERE track_id = ANY(${allIds})
-  `;
-  const existingSet = new Set((existing as Array<{ track_id: string }>).map((r) => r.track_id));
-  const newIds = allIds.filter((id) => !existingSet.has(id));
+        // Stage 2: filter cached tracks — only skip those that already have BPM data (tempo IS NOT NULL)
+        const existing = await sql`SELECT track_id FROM spotify_track_features WHERE track_id = ANY(${allIds}) AND tempo IS NOT NULL`;
+        const existingSet = new Set((existing as Array<{ track_id: string }>).map((r) => r.track_id));
+        const newIds = allIds.filter((id) => !existingSet.has(id));
 
-  if (newIds.length === 0) {
-    return NextResponse.json({ cached: allIds.length, new: 0, total: allIds.length });
-  }
+        if (newIds.length === 0) {
+          controller.enqueue(enc("done", { cached: allIds.length, new: 0, total: allIds.length }));
+          return;
+        }
 
-  // 3. Batch BPM fetch from ReccoBeats
-  const features = await fetchAudioFeatures(newIds);
+        controller.enqueue(enc("progress", {
+          stage: `${newIds.length} new tracks to analyse (${existingSet.size} cached)`,
+          pct: 20,
+        }));
 
-  // 4. Collect unique artist IDs needing genre fetch
-  const artistIds = new Set<string>();
-  for (const id of newIds) {
-    const artistId = allTracks.get(id)?.artists?.[0]?.id;
-    if (artistId) artistIds.add(artistId);
-  }
+        // Stage 3: BPM fetch from ReccoBeats
+        controller.enqueue(enc("progress", { stage: "Fetching BPM & energy data…", pct: 25 }));
+        const features = await fetchAudioFeatures(newIds);
+        controller.enqueue(enc("progress", { stage: "BPM data fetched", pct: 40 }));
 
-  // Filter already-cached artists
-  const cachedArtists = await sql`
-    SELECT artist_id FROM spotify_artist_genres WHERE artist_id = ANY(${Array.from(artistIds)})
-  `;
-  const cachedArtistSet = new Set(
-    (cachedArtists as Array<{ artist_id: string }>).map((r) => r.artist_id)
-  );
+        // Stage 4: artist genres — batch 20 at a time (Spotify /artists?ids=)
+        const artistIds = new Set<string>();
+        for (const id of newIds) {
+          const artistId = allTracks.get(id)?.artists?.[0]?.id;
+          if (artistId) artistIds.add(artistId);
+        }
 
-  // Fetch and cache new artist genres
-  for (const artistId of artistIds) {
-    if (cachedArtistSet.has(artistId)) continue;
+        const cachedArtists = await sql`SELECT artist_id FROM spotify_artist_genres WHERE artist_id = ANY(${Array.from(artistIds)})`;
+        const cachedArtistSet = new Set((cachedArtists as Array<{ artist_id: string }>).map((r) => r.artist_id));
+        const newArtistIds = Array.from(artistIds).filter((id) => !cachedArtistSet.has(id));
 
-    const res = await spotifyFetch(`/artists/${artistId}`);
-    if (!res.ok) continue;
-    const artist = await res.json();
-    let genres: string[] = artist.genres ?? [];
-    let source = "spotify";
+        const BATCH = 20;
+        let artistsDone = 0;
+        for (let i = 0; i < newArtistIds.length; i += BATCH) {
+          const batch = newArtistIds.slice(i, i + BATCH);
+          const res = await spotifyFetch(`/artists?ids=${batch.join(",")}`);
+          if (res.ok) {
+            const data = await res.json();
+            for (const artist of data.artists ?? []) {
+              if (!artist) continue;
+              let genres: string[] = artist.genres ?? [];
+              let source = "spotify";
+              if (genres.length === 0) {
+                genres = await getArtistTopTags(artist.name as string);
+                source = "lastfm";
+              }
+              const macroGenres = toMacroGenres(genres);
+              await sql`
+                INSERT INTO spotify_artist_genres (artist_id, artist_name, genres, macro_genres, source)
+                VALUES (${artist.id as string}, ${artist.name as string}, ${genres}, ${macroGenres}, ${source})
+                ON CONFLICT (artist_id) DO NOTHING
+              `;
+            }
+          }
+          artistsDone += batch.length;
+          const pct = 40 + Math.round((artistsDone / Math.max(newArtistIds.length, 1)) * 30);
+          controller.enqueue(enc("progress", {
+            stage: `Fetching artist genres… ${artistsDone}/${newArtistIds.length}`,
+            pct,
+          }));
+        }
 
-    if (genres.length === 0) {
-      genres = await getArtistTopTags(artist.name as string);
-      source = "lastfm";
-    }
+        // Stage 5: resolve genre map + insert tracks
+        const genreRows = await sql`SELECT artist_id, macro_genres FROM spotify_artist_genres WHERE artist_id = ANY(${Array.from(artistIds)})`;
+        const genreMap = new Map((genreRows as Array<{ artist_id: string; macro_genres: string[] }>).map((r) => [r.artist_id, r.macro_genres]));
 
-    const macroGenres = toMacroGenres(genres);
+        controller.enqueue(enc("progress", { stage: `Saving ${newIds.length} tracks to database…`, pct: 72 }));
 
-    await sql`
-      INSERT INTO spotify_artist_genres (artist_id, artist_name, genres, macro_genres, source)
-      VALUES (${artistId}, ${artist.name as string}, ${genres}, ${macroGenres}, ${source})
-      ON CONFLICT (artist_id) DO NOTHING
-    `;
-  }
+        let inserted = 0;
+        for (const id of newIds) {
+          const t = allTracks.get(id)!;
+          const f = features.get(id);
+          const artistId = t.artists?.[0]?.id ?? "";
+          const artistName = t.artists?.[0]?.name ?? "";
+          const macroGenres = genreMap.get(artistId) ?? [];
+          await sql`
+            INSERT INTO spotify_track_features
+              (track_id, name, artist_id, artist_name, duration_ms, tempo, energy, valence, danceability, genres)
+            VALUES (${id}, ${t.name}, ${artistId}, ${artistName}, ${t.duration_ms},
+                    ${f?.tempo ?? null}, ${f?.energy ?? null}, ${f?.valence ?? null},
+                    ${f?.danceability ?? null}, ${macroGenres})
+            ON CONFLICT (track_id) DO UPDATE SET
+              tempo = EXCLUDED.tempo, energy = EXCLUDED.energy,
+              valence = EXCLUDED.valence, danceability = EXCLUDED.danceability,
+              genres = EXCLUDED.genres
+          `;
+          inserted++;
+          if (inserted % 50 === 0) {
+            controller.enqueue(enc("progress", {
+              stage: `Saving tracks… ${inserted}/${newIds.length}`,
+              pct: 72 + Math.round((inserted / newIds.length) * 25),
+            }));
+          }
+        }
 
-  // 5. Resolve artist genre map from DB
-  const genreRows = await sql`
-    SELECT artist_id, macro_genres FROM spotify_artist_genres
-    WHERE artist_id = ANY(${Array.from(artistIds)})
-  `;
-  const genreMap = new Map(
-    (genreRows as Array<{ artist_id: string; macro_genres: string[] }>).map((r) => [
-      r.artist_id,
-      r.macro_genres,
-    ])
-  );
+        controller.enqueue(enc("done", { cached: existingSet.size, new: inserted, total: allIds.length }));
+      } catch (err) {
+        controller.enqueue(enc("error", { message: String(err) }));
+      } finally {
+        controller.close();
+      }
+    },
+  });
 
-  // 6. Insert track features
-  let inserted = 0;
-  for (const id of newIds) {
-    const t = allTracks.get(id)!;
-    const f = features.get(id);
-    const artistId = t.artists?.[0]?.id ?? "";
-    const artistName = t.artists?.[0]?.name ?? "";
-    const macroGenres = genreMap.get(artistId) ?? [];
-
-    await sql`
-      INSERT INTO spotify_track_features
-        (track_id, name, artist_id, artist_name, duration_ms, tempo, energy, valence, danceability, genres)
-      VALUES (
-        ${id},
-        ${t.name},
-        ${artistId},
-        ${artistName},
-        ${t.duration_ms},
-        ${f?.tempo ?? null},
-        ${f?.energy ?? null},
-        ${f?.valence ?? null},
-        ${f?.danceability ?? null},
-        ${macroGenres}
-      )
-      ON CONFLICT (track_id) DO UPDATE SET
-        tempo = EXCLUDED.tempo,
-        energy = EXCLUDED.energy,
-        valence = EXCLUDED.valence,
-        danceability = EXCLUDED.danceability,
-        genres = EXCLUDED.genres
-    `;
-    inserted++;
-  }
-
-  return NextResponse.json({ cached: existingSet.size, new: inserted, total: allIds.length });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+  });
 }
 
 export async function GET() {

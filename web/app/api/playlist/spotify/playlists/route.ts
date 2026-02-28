@@ -12,7 +12,8 @@ export async function GET() {
     if (!res.ok) break;
     const data = await res.json();
     for (const p of data.items ?? []) {
-      playlists.push({ id: p.id, name: p.name, tracks: p.tracks?.total ?? 0 });
+      // Spotify API uses "items" in newer responses, "tracks" in older ones
+      playlists.push({ id: p.id, name: p.name, tracks: p.items?.total ?? p.tracks?.total ?? 0 });
     }
     url = data.next
       ? (data.next as string).replace("https://api.spotify.com/v1", "")

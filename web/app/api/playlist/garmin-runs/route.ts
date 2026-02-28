@@ -13,21 +13,28 @@ export async function GET(req: NextRequest) {
   const sql = getDb();
 
   if (id) {
-    // Single activity with parsed segments
+    // Single activity: get splits for segment parsing
     const rows = await sql`
-      SELECT activity_id, activity_name, start_time, distance, duration, data
+      SELECT
+        activity_id::text,
+        raw_json AS data
       FROM garmin_activity_raw
-      WHERE activity_id = ${id} AND endpoint_name = 'splits'
+      WHERE activity_id = ${id}::bigint AND endpoint_name = 'splits'
       LIMIT 1
     `;
     if (!rows[0]) return NextResponse.json(null, { status: 404 });
 
-    const row = rows[0] as {
-      activity_id: string;
-      activity_name: string;
-      start_time: string;
-      data: Record<string, unknown>;
-    };
+    // Also fetch the name + start_time from summary
+    const meta = await sql`
+      SELECT
+        raw_json->>'activityName' AS activity_name,
+        raw_json->>'startTimeGMT' AS start_time
+      FROM garmin_activity_raw
+      WHERE activity_id = ${id}::bigint AND endpoint_name = 'summary'
+      LIMIT 1
+    `;
+
+    const row = rows[0] as { activity_id: string; data: Record<string, unknown> };
     const lapDTOs = (row.data?.lapDTOs ?? []) as unknown[];
     const hasSplits = !!((row.data?.activityDetail as Record<string, unknown>)?.hasSplits);
     const isTreadmill =
@@ -38,18 +45,30 @@ export async function GET(req: NextRequest) {
       ? parseStructuredLaps(lapDTOs)
       : parseUnstructuredLaps(lapDTOs);
 
-    return NextResponse.json({ ...row, segments, hasSplits, isTreadmill });
+    return NextResponse.json({
+      activity_id: row.activity_id,
+      activity_name: meta[0]?.activity_name ?? null,
+      start_time: meta[0]?.start_time ?? null,
+      segments,
+      hasSplits,
+      isTreadmill,
+    });
   }
 
-  // List running activities (most recent first)
+  // List running activities from summary endpoint (has metadata)
   const rows = await sql`
-    SELECT DISTINCT ON (activity_id)
-      activity_id, activity_name, start_time, distance, duration, sport_type
+    SELECT
+      activity_id::text,
+      raw_json->>'activityName'          AS activity_name,
+      raw_json->>'startTimeGMT'          AS start_time,
+      (raw_json->>'distance')::float     AS distance,
+      (raw_json->>'duration')::float     AS duration,
+      raw_json->'activityType'->>'typeKey' AS sport_type
     FROM garmin_activity_raw
-    WHERE endpoint_name = 'splits'
-      AND sport_type ILIKE '%running%'
-      AND (${q} = '' OR activity_name ILIKE ${"%" + q + "%"})
-    ORDER BY activity_id DESC, start_time DESC
+    WHERE endpoint_name = 'summary'
+      AND raw_json->'activityType'->>'typeKey' ILIKE '%running%'
+      AND (${q} = '' OR raw_json->>'activityName' ILIKE ${"%" + q + "%"})
+    ORDER BY raw_json->>'startTimeGMT' DESC
     LIMIT ${limit}
   `;
 

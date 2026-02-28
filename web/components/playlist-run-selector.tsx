@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 
 interface GarminRun { activity_id: string; activity_name: string; start_time: string; distance: number; duration: number; }
-interface Session { id: number; created_at: string; garmin_activity_id: string; spotify_playlist_url: string; }
+interface Session { id: number; created_at: string; garmin_activity_id: string | null; spotify_playlist_url: string | null; song_assignments?: Record<string, unknown[]>; source_playlist_ids?: string[]; }
 
 interface Props {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,7 +55,7 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
                 className="w-full text-left p-2.5 rounded-lg border hover:bg-muted transition-colors">
                 <div className="text-sm font-medium truncate">{run.activity_name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(run.start_time), { addSuffix: true })} · {(run.distance / 1000).toFixed(1)} km · {Math.round(run.duration / 60)} min
+                  {formatDistanceToNow(new Date(run.start_time.replace(" ", "T")), { addSuffix: true })} · {(run.distance / 1000).toFixed(1)} km · {Math.round(run.duration / 60)} min
                 </div>
               </button>
             ))}
@@ -63,14 +63,21 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
         </TabsContent>
 
         <TabsContent value="history" className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
-          {sessions.map(s => (
-            <button key={s.id} onClick={() => {
-              onSelect({ type: "session", data: s, segments: [] });
-            }} className="w-full text-left p-2.5 rounded-lg border hover:bg-muted transition-colors">
-              <div className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}</div>
-              {s.spotify_playlist_url && <a href={s.spotify_playlist_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline" onClick={e => e.stopPropagation()}>Open in Spotify ↗</a>}
-            </button>
-          ))}
+          {sessions.length === 0 && <div className="text-xs text-muted-foreground pt-4 text-center">No past sessions yet</div>}
+          {sessions.map(s => {
+            const totalSongs = Object.values(s.song_assignments ?? {}).reduce((n, arr) => n + (Array.isArray(arr) ? arr.length : 0), 0);
+            const segments = Object.keys(s.song_assignments ?? {}).length;
+            return (
+              <button key={s.id} onClick={() => { onSelect({ type: "session", data: s, segments: [] }); }}
+                className="w-full text-left p-2.5 rounded-lg border hover:bg-muted transition-colors">
+                <div className="text-xs font-medium">{formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {segments > 0 ? `${segments} segments · ${totalSongs} songs` : "No songs generated"}
+                </div>
+                {s.spotify_playlist_url && <a href={s.spotify_playlist_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-0.5 block" onClick={e => e.stopPropagation()}>Open in Spotify ↗</a>}
+              </button>
+            );
+          })}
         </TabsContent>
 
         <TabsContent value="plans" className="px-3 pb-3">
