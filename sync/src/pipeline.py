@@ -6,7 +6,7 @@ import sys
 from datetime import date, timedelta
 
 from garmin_client import init_garmin
-from garmin_sync import sync_day, sync_activities_for_date, sync_activity_details
+from garmin_sync import sync_day, sync_activities_for_date, sync_activity_details, sync_garmin_workouts, push_pending_plans
 from hevy_sync import sync_all_workouts
 from hevy_client import HevyClient
 from parsers import process_day
@@ -750,6 +750,22 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
         print(f"  Reconciled: {reconciled} activities")
     except Exception as e:
         print(f"  Reconciliation error (non-fatal): {e}")
+
+    # --- Sync structured workouts ---
+    print(f"\nSyncing Garmin structured workouts...")
+    try:
+        workout_count = sync_garmin_workouts(client)
+        print(f"  Synced: {workout_count} workouts")
+    except Exception as e:
+        print(f"  Workout sync error (non-fatal): {e}")
+
+    # --- Push pending saved plans to Garmin ---
+    print(f"\nPushing pending plans to Garmin...")
+    try:
+        pushed = push_pending_plans(client)
+        print(f"  Pushed: {pushed} plans")
+    except Exception as e:
+        print(f"  Push plans error (non-fatal): {e}")
 
     # --- Log completion ---
     total = total_raw + total_activities

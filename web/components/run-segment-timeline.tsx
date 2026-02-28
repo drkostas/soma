@@ -1,10 +1,12 @@
 // web/components/run-segment-timeline.tsx
 "use client";
 import { motion, AnimatePresence, Reorder } from "motion/react";
-import { Plus, GripVertical, Trash2, Zap } from "lucide-react";
+import { Plus, GripVertical, Trash2, Zap, BookmarkPlus, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import SegmentEditor, { Segment, BPM_DEFAULTS, TYPE_COLORS, SEGMENT_TYPES } from "./segment-editor";
 import { nanoid } from "nanoid";
+import { useState } from "react";
 
 function newSegment(type: Segment["type"] = "easy", duration_s = 600): Segment {
   const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145 };
@@ -17,9 +19,27 @@ interface Props {
   focusedIdx: number;
   onFocus: (idx: number) => void;
   onPumpUp: (idx: number) => void;
+  onSavePlan?: (name: string) => Promise<void>;
 }
 
-export default function RunSegmentTimeline({ segments, onChange, focusedIdx, onFocus, onPumpUp }: Props) {
+export default function RunSegmentTimeline({ segments, onChange, focusedIdx, onFocus, onPumpUp, onSavePlan }: Props) {
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [planNameInput, setPlanNameInput] = useState(false);
+  const [planName, setPlanName] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  async function handleSavePlan() {
+    const name = planName.trim();
+    if (!name || !onSavePlan) return;
+    setSavingPlan(true);
+    await onSavePlan(name);
+    setSavingPlan(false);
+    setPlanNameInput(false);
+    setPlanName("");
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
   function updateSegment(idx: number, s: Segment) {
     const next = [...segments]; next[idx] = s; onChange(next);
   }
@@ -78,11 +98,36 @@ export default function RunSegmentTimeline({ segments, onChange, focusedIdx, onF
         </AnimatePresence>
       </Reorder.Group>
 
-      <div className="p-3 border-t flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={addSegment} className="text-xs h-7">
-          <Plus className="w-3 h-3 mr-1" /> Add Segment
-        </Button>
-        <span className="text-xs text-muted-foreground ml-auto">Total: {totalMin} min</span>
+      <div className="p-3 border-t space-y-2">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={addSegment} className="text-xs h-7">
+            <Plus className="w-3 h-3 mr-1" /> Add Segment
+          </Button>
+          {onSavePlan && !planNameInput && (
+            <Button variant="outline" size="sm" onClick={() => setPlanNameInput(true)} className="text-xs h-7 gap-1">
+              {saved ? <><Check className="w-3 h-3 text-green-500" /> Saved!</> : <><BookmarkPlus className="w-3 h-3" /> Save Plan</>}
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground ml-auto">Total: {totalMin} min</span>
+        </div>
+        {planNameInput && (
+          <div className="flex items-center gap-1.5">
+            <Input
+              autoFocus
+              value={planName}
+              onChange={e => setPlanName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleSavePlan(); if (e.key === "Escape") { setPlanNameInput(false); setPlanName(""); } }}
+              placeholder="Plan name…"
+              className="h-7 text-xs flex-1"
+            />
+            <Button size="sm" className="h-7 text-xs" disabled={!planName.trim() || savingPlan} onClick={handleSavePlan}>
+              {savingPlan ? "Saving…" : "Save"}
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setPlanNameInput(false); setPlanName(""); }}>
+              Cancel
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
