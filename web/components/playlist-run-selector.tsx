@@ -19,7 +19,13 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetch(`/api/playlist/garmin-runs?limit=50&q=${encodeURIComponent(search)}`).then(r => r.json()).then(setGarminRuns).catch(() => {});
+    const id = setTimeout(() => {
+      fetch(`/api/playlist/garmin-runs?limit=50&q=${encodeURIComponent(search)}`)
+        .then(r => r.json())
+        .then(setGarminRuns)
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(id);
   }, [search]);
 
   useEffect(() => {
@@ -62,7 +68,7 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
               onSelect({ type: "session", data: s, segments: [] });
             }} className="w-full text-left p-2.5 rounded-lg border hover:bg-muted transition-colors">
               <div className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}</div>
-              {s.spotify_playlist_url && <a href={s.spotify_playlist_url} target="_blank" className="text-xs text-primary hover:underline" onClick={e => e.stopPropagation()}>Open in Spotify ↗</a>}
+              {s.spotify_playlist_url && <a href={s.spotify_playlist_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline" onClick={e => e.stopPropagation()}>Open in Spotify ↗</a>}
             </button>
           ))}
         </TabsContent>

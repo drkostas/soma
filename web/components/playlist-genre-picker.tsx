@@ -1,7 +1,7 @@
 // web/components/playlist-genre-picker.tsx
 "use client";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { Slider } from "@/components/ui/slider";
 
 interface Props {
@@ -12,14 +12,14 @@ interface Props {
 }
 
 export default function PlaylistGenrePicker({ selected, onChange, threshold, onThresholdChange }: Props) {
-  const [genres, setGenres] = useState<Array<{genre: string; count: number}>>([]);
+  const [genres, setGenres] = useState<Array<{genre: string; count: string}>>([]);
   const [total, setTotal] = useState(1);
 
   useEffect(() => {
-    fetch("/api/playlist/genres").then(r => r.json()).then(d => { setGenres(d.genres ?? []); setTotal(d.total ?? 1); }).catch(() => {});
+    fetch("/api/playlist/genres").then(r => r.json()).then(d => { setGenres(d.genres ?? []); setTotal(Number(d.total ?? 1)); }).catch(() => {});
   }, []);
 
-  const visible = genres.filter(g => g.count / total >= threshold);
+  const visible = genres.filter(g => parseInt(g.count) / total >= threshold);
 
   function toggle(genre: string) {
     onChange(selected.includes(genre) ? selected.filter(g => g !== genre) : [...selected, genre]);
