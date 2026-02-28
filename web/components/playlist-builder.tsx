@@ -12,7 +12,7 @@ import { useUndoRedo } from "@/hooks/use-undo-redo";
 interface SegmentSongs { songs: SongData[]; loading?: boolean; poolCount?: number; warning?: string; }
 
 export default function PlaylistBuilder() {
-  const [segments, setSegments] = useUndoRedo<Segment[]>([]);
+  const [segments, setSegments, undo, redo] = useUndoRedo<Segment[]>([]);
   const [assignments, setAssignments] = useState<Record<number, SegmentSongs>>({});
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [focusedIdx, setFocusedIdx] = useState(-1);
@@ -44,12 +44,12 @@ export default function PlaylistBuilder() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === "y") { e.preventDefault(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "y") { e.preventDefault(); redo(); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [undo, redo]);
 
   // Generate playlist via SSE
   async function generate(segs: Segment[]) {
