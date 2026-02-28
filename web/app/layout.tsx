@@ -30,7 +30,7 @@ export default function RootLayout({
           <main className={`ml-16 min-h-screen bg-background${isDemo ? " pt-8" : ""}`}>
             {children}
           </main>
-        <Toaster richColors />
+          <Toaster richColors />
         </TooltipProvider>
       </body>
     </html>
