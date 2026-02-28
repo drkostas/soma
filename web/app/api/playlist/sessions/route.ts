@@ -23,18 +23,18 @@ interface RequestSegment {
 
 const BPM_DEFAULTS: Record<
   string,
-  { min: number; max: number; minEnergy: number }
+  { min: number; max: number; minEnergy: number; valence_min: number; valence_max: number }
 > = {
-  warmup:   { min: 100, max: 140, minEnergy: 0.4 },
-  easy:     { min: 125, max: 145, minEnergy: 0.5 },
-  aerobic:  { min: 125, max: 145, minEnergy: 0.6 },
-  tempo:    { min: 160, max: 180, minEnergy: 0.75 },
-  interval: { min: 175, max: 195, minEnergy: 0.85 },
-  vo2max:   { min: 175, max: 195, minEnergy: 0.85 },
-  recovery: { min: 125, max: 145, minEnergy: 0.5 },
-  rest:     { min: 80,  max: 110, minEnergy: 0.3 },
-  strides:  { min: 160, max: 180, minEnergy: 0.75 },
-  cooldown: { min: 60,  max: 90,  minEnergy: 0.3 },
+  warmup:   { min: 100, max: 140, minEnergy: 0.4,  valence_min: 0.3, valence_max: 0.7 },
+  easy:     { min: 125, max: 145, minEnergy: 0.5,  valence_min: 0.3, valence_max: 0.7 },
+  aerobic:  { min: 125, max: 145, minEnergy: 0.6,  valence_min: 0.3, valence_max: 0.7 },
+  tempo:    { min: 160, max: 180, minEnergy: 0.75, valence_min: 0.1, valence_max: 0.5 },
+  interval: { min: 175, max: 195, minEnergy: 0.85, valence_min: 0.0, valence_max: 0.4 },
+  vo2max:   { min: 175, max: 195, minEnergy: 0.85, valence_min: 0.0, valence_max: 0.4 },
+  recovery: { min: 125, max: 145, minEnergy: 0.5,  valence_min: 0.3, valence_max: 0.7 },
+  rest:     { min: 80,  max: 110, minEnergy: 0.3,  valence_min: 0.3, valence_max: 0.7 },
+  strides:  { min: 160, max: 180, minEnergy: 0.75, valence_min: 0.1, valence_max: 0.5 },
+  cooldown: { min: 60,  max: 90,  minEnergy: 0.3,  valence_min: 0.6, valence_max: 1.0 },
 };
 
 export async function GET() {
@@ -75,8 +75,8 @@ export async function POST(req: NextRequest) {
           const bpmMin = seg.bpm_min ?? defaults.min;
           const bpmMax = seg.bpm_max ?? defaults.max;
           const bpmTol = seg.bpm_tolerance ?? 8;
-          const valenceMin = seg.valence_min ?? 0;
-          const valenceMax = seg.valence_max ?? 1;
+          const valenceMin = seg.valence_min ?? defaults.valence_min;
+          const valenceMax = seg.valence_max ?? defaults.valence_max;
 
           const lo = bpmMin - bpmTol;
           const hi = bpmMax + bpmTol;
