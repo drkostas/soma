@@ -179,6 +179,207 @@ def sync_profile(client) -> int:
     return count
 
 
+def _parse_workout_steps(steps: list) -> list:
+    """Recursively parse Garmin workout step DTOs into our segment format."""
+    result = []
+    for step in steps:
+        step_type = step.get("stepType", {}).get("stepTypeKey", "active")
+        condition = step.get("conditionType", {}).get("conditionTypeKey", "time")
+        end_val = step.get("endConditionValue") or 0
+
+        if step_type == "repeat":
+            n = int(step.get("numberOfIterations") or 1)
+            inner = step.get("workoutSteps") or []
+            for _ in range(n):
+                result.extend(_parse_workout_steps(inner))
+            continue
+
+        if condition == "time":
+            duration_s = int(end_val)
+        elif condition == "distance":
+            meters = float(end_val)
+            # Estimate: 5 min/km for intervals, 6 for easy, use 5.5 generic
+            duration_s = int(meters / 1000 * 330)  # 5:30/km in seconds
+        else:
+            duration_s = 600  # lap button / unknown → default 10 min
+
+        type_map = {
+            "warmup": "warmup", "interval": "interval", "recovery": "recovery",
+            "cooldown": "cooldown", "rest": "rest", "active": "aerobic",
+        }
+        result.append({
+            "type": type_map.get(step_type, "aerobic"),
+            "duration_s": max(duration_s, 30),
+        })
+    return result
+
+
+def _workout_steps_summary(steps: list, depth: int = 0) -> str:
+    """Generate a human-readable summary of workout steps."""
+    parts = []
+    i = 0
+    while i < len(steps):
+        step = steps[i]
+        step_type = step.get("stepType", {}).get("stepTypeKey", "active")
+        condition = step.get("conditionType", {}).get("conditionTypeKey", "time")
+        end_val = step.get("endConditionValue") or 0
+
+        if step_type == "repeat":
+            n = int(step.get("numberOfIterations") or 1)
+            inner = step.get("workoutSteps") or []
+            inner_summary = _workout_steps_summary(inner, depth + 1)
+            parts.append(f"{n}×[{inner_summary}]")
+        else:
+            if condition == "time":
+                mins = int(end_val) // 60
+                secs = int(end_val) % 60
+                dur = f"{mins}:{secs:02d}" if secs else f"{mins} min"
+            elif condition == "distance":
+                dur = f"{int(float(end_val))} m"
+            else:
+                dur = "lap"
+            label = step_type.capitalize()
+            parts.append(f"{label} {dur}")
+        i += 1
+    return " · ".join(parts)
+
+
+def sync_garmin_workouts(client) -> int:
+    """Sync structured workouts (training templates) from Garmin Connect to DB."""
+    import json
+    workouts = rate_limited_call(client.get_workouts, 0, 100)
+    if not workouts:
+        return 0
+
+    count = 0
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for w in workouts:
+                workout_id = str(w.get("workoutId", ""))
+                if not workout_id:
+                    continue
+                sport_type = w.get("sportType", {}).get("sportTypeKey", "running")
+
+                # Parse all steps from all segments
+                all_steps = []
+                for seg in w.get("workoutSegments", []):
+                    all_steps.extend(seg.get("workoutSteps", []))
+                segments = _parse_workout_steps(all_steps)
+                summary = _workout_steps_summary(all_steps)
+
+                cur.execute("""
+                    INSERT INTO garmin_workouts
+                        (workout_id, workout_name, sport_type, steps_summary, segments, raw_json, synced_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (workout_id) DO UPDATE SET
+                        workout_name = EXCLUDED.workout_name,
+                        sport_type = EXCLUDED.sport_type,
+                        steps_summary = EXCLUDED.steps_summary,
+                        segments = EXCLUDED.segments,
+                        raw_json = EXCLUDED.raw_json,
+                        synced_at = NOW()
+                """, (
+                    workout_id,
+                    w.get("workoutName", "Workout"),
+                    sport_type,
+                    summary,
+                    json.dumps(segments),
+                    json.dumps(w),
+                ))
+                count += 1
+        conn.commit()
+    return count
+
+
+def _segments_to_garmin_workout(name: str, segments: list) -> dict:
+    """Convert our segment format to a Garmin workout payload."""
+    STEP_TYPE_MAP = {
+        "warmup":   {"stepTypeId": 1, "stepTypeKey": "warmup"},
+        "cooldown": {"stepTypeId": 2, "stepTypeKey": "cooldown"},
+        "interval": {"stepTypeId": 3, "stepTypeKey": "interval"},
+        "recovery": {"stepTypeId": 4, "stepTypeKey": "recovery"},
+        "rest":     {"stepTypeId": 5, "stepTypeKey": "rest"},
+        "aerobic":  {"stepTypeId": 6, "stepTypeKey": "active"},
+        "easy":     {"stepTypeId": 6, "stepTypeKey": "active"},
+        "tempo":    {"stepTypeId": 3, "stepTypeKey": "interval"},
+        "vo2max":   {"stepTypeId": 3, "stepTypeKey": "interval"},
+        "strides":  {"stepTypeId": 3, "stepTypeKey": "interval"},
+    }
+    NO_TARGET = {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target"}
+    TIME_COND = {"conditionTypeId": 2, "conditionTypeKey": "time"}
+
+    steps = []
+    for i, seg in enumerate(segments):
+        steps.append({
+            "stepId": i + 1,
+            "stepOrder": i + 1,
+            "stepType": STEP_TYPE_MAP.get(seg.get("type", "aerobic"), STEP_TYPE_MAP["aerobic"]),
+            "conditionType": TIME_COND,
+            "endConditionValue": int(seg.get("duration_s", 600)),
+            "targetType": NO_TARGET,
+            "targetValueOne": 0,
+            "targetValueTwo": 0,
+            "description": "",
+        })
+
+    return {
+        "workoutName": name,
+        "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+        "workoutSegments": [{
+            "segmentOrder": 1,
+            "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+            "workoutSteps": steps,
+        }],
+    }
+
+
+def push_pending_plans(client) -> int:
+    """Push workout_plans with garmin_push_status='pending' to Garmin Connect."""
+    import json
+    pushed = 0
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, name, segments FROM workout_plans
+                WHERE garmin_push_status = 'pending'
+                ORDER BY created_at DESC
+                LIMIT 10
+            """)
+            rows = cur.fetchall()
+
+        for plan_id, name, segments_raw in rows:
+            segs = segments_raw if isinstance(segments_raw, list) else json.loads(segments_raw)
+            payload = _segments_to_garmin_workout(name, segs)
+            try:
+                result = rate_limited_call(client.add_workout, payload)
+                garmin_id = str(result.get("workoutId", "")) if result else ""
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE workout_plans SET
+                            garmin_workout_id = %s,
+                            garmin_push_status = 'pushed'
+                        WHERE id = %s
+                    """, (garmin_id or None, plan_id))
+                    conn.commit()
+                pushed += 1
+                print(f"  Pushed plan {plan_id} ({name}) → Garmin workout {garmin_id}")
+            except Exception as e:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE saved_plans SET garmin_push_status='failed' WHERE id=%s",
+                        (plan_id,)
+                    )
+                    conn.commit()
+                print(f"  Failed to push plan {plan_id}: {e}")
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE workout_plans SET garmin_push_status='failed' WHERE id=%s",
+                        (plan_id,)
+                    )
+                    conn.commit()
+    return pushed
+
+
 def sync_recent(days: int = 7):
     """Sync the last N days of data."""
     client = init_garmin()
