@@ -219,7 +219,7 @@ export default function PlaylistBuilder() {
               setAssignments(prev => {
                 const next = { ...prev };
                 for (const fi of flatIndices) {
-                  next[fi] = { songs: event.songs, loading: false, poolCount: event.pool_count };
+                  next[fi] = { songs: event.songs, loading: false, poolCount: event.pool_count, warning: undefined };
                 }
                 return next;
               });
@@ -285,7 +285,7 @@ export default function PlaylistBuilder() {
     });
 
     try {
-      const signal = abortRef.current?.signal;
+      const ac = new AbortController();
       const res = await fetch("/api/playlist/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -297,7 +297,7 @@ export default function PlaylistBuilder() {
           source_playlist_ids: sources,
           garmin_activity_id: garminActivityIdRef.current,
         }),
-        signal,
+        signal: ac.signal,
       });
       if (!res.body) return;
       const reader = res.body.getReader();
@@ -318,7 +318,7 @@ export default function PlaylistBuilder() {
               setAssignments(prev => {
                 const next = { ...prev };
                 for (const fi of flatIndices) {
-                  next[fi] = { songs: event.songs, loading: false, poolCount: event.pool_count };
+                  next[fi] = { songs: event.songs, loading: false, poolCount: event.pool_count, warning: undefined };
                 }
                 return next;
               });
@@ -363,17 +363,16 @@ export default function PlaylistBuilder() {
     const flat = flatItems(items);
     const seg = flat[flatIdx];
     if (!seg) return;
-    function updateInItems(its: SegmentItem[]): SegmentItem[] {
-      return its.map(item => {
-        if (item.type === "repeat") {
-          const group = item as RepeatGroup;
-          return { ...group, children: group.children.map(child => child.id === seg.id ? { ...child, bpm_tolerance: child.bpm_tolerance + 15 } : child) };
-        }
-        const s = item as Segment;
-        return s.id === seg.id ? { ...s, bpm_tolerance: s.bpm_tolerance + 15 } : s;
-      });
-    }
-    setItems(updateInItems(items));
+    setItems(items.map(item => {
+      if (item.type === "repeat") {
+        const group = item as RepeatGroup;
+        return { ...group, children: group.children.map(child =>
+          (child as Segment).id === seg.id ? { ...child, bpm_tolerance: (child as Segment).bpm_tolerance + 15 } : child
+        )};
+      }
+      const s = item as Segment;
+      return s.id === seg.id ? { ...s, bpm_tolerance: s.bpm_tolerance + 15 } : s;
+    }));
     void generateSegmentOnly(flatIdx, 15);
   }
 
@@ -484,7 +483,7 @@ export default function PlaylistBuilder() {
             onPreview={setPreviewSong}
             onPumpUp={(_idx) => { /* pump-up modal — Task 12 */ }}
             onWidenBpm={handleWidenBpm}
-            onAddPlaylists={() => { /* open source picker — not wired yet */ }}
+            onAddPlaylists={(_idx) => { /* TODO: open source picker */ }}
             onSave={handleSave}
             saving={saving}
             savedUrl={savedUrl}
