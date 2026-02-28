@@ -70,6 +70,10 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, exclud
             Array.from({ length: 4 }).map((_, i) => (
               <motion.div key={`sk-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-40 h-14 rounded-lg bg-muted animate-pulse shrink-0" />
             ))
+          ) : songs.length === 0 ? (
+            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-xs text-muted-foreground italic py-1 px-1 shrink-0">
+              No alternatives — try widening BPM or changing genres
+            </motion.div>
           ) : (
             songs.map((song) => (
               <motion.div

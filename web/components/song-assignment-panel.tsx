@@ -1,6 +1,7 @@
 // web/components/song-assignment-panel.tsx
 "use client";
 import { motion, AnimatePresence, Reorder } from "motion/react";
+import { toast } from "sonner";
 import { Zap, AlertTriangle, ChevronDown, Repeat2 } from "lucide-react";
 import SongCard, { SongData } from "./song-card";
 import SongAlternativesStrip from "./song-alternatives-strip";
@@ -132,11 +133,12 @@ function SegmentSection({
                   }).then(async r => {
                     if (!r.ok) {
                       const data = await r.json().catch(() => ({}));
-                      console.warn("Pump-up bank:", (data as { error?: string }).error ?? "Failed to add song");
+                      const msg = (data as { error?: string }).error ?? "Failed to add song";
+                      toast.error(msg.includes("Max") ? "Bank is full — remove a song first (max 10)" : msg);
                     } else {
                       onBankChanged?.();
                     }
-                  }).catch(() => {});
+                  }).catch(() => { toast.error("Failed to add to bank"); });
                 }}
               />
             </Reorder.Item>
