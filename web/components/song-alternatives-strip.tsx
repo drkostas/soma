@@ -36,7 +36,7 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, exclud
         valence_min: segmentConfig.valence_min.toString(),
         valence_max: segmentConfig.valence_max.toString(),
         half_time: "true",
-        exclude: Array.from(new Set([...placedIds, ...excludedIds])).join(","),
+        exclude: [...placedIds, ...excludedIds].join(","),
         ...(segmentConfig.genres.length > 0 ? { genres: segmentConfig.genres.join(",") } : {}),
       });
       try {
