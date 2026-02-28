@@ -2,6 +2,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { X, Zap } from "lucide-react";
 
@@ -35,9 +36,13 @@ export default function PumpUpModal({ open, onClose, refreshKey }: Props) {
   }, [open, refreshKey]);
 
   function handleRemove(trackId: string) {
+    const snapshot = songs;
+    setSongs(prev => prev.filter(s => s.track_id !== trackId)); // optimistic
     fetch(`/api/playlist/pump-up/${trackId}`, { method: "DELETE" })
-      .then(() => setSongs(prev => prev.filter(s => s.track_id !== trackId)))
-      .catch(() => {});
+      .then(r => {
+        if (!r.ok) { setSongs(snapshot); toast.error("Failed to remove song"); }
+      })
+      .catch(() => { setSongs(snapshot); toast.error("Failed to remove song"); });
   }
 
   return (

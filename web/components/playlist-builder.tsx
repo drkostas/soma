@@ -117,6 +117,9 @@ export default function PlaylistBuilder() {
   const syncingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const generateDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Per-segment abort controllers — keyed by flat index, so rapid "Widen BPM" clicks
+  // cancel the previous SSE call for the same segment rather than racing.
+  const segmentAbortRefs = useRef<Map<number, AbortController>>(new Map());
 
   // Scroll sync between panels
   useEffect(() => {
@@ -279,6 +282,11 @@ export default function PlaylistBuilder() {
       ? { ...seg, bpm_tolerance: toleranceOverride }
       : seg;
 
+    // Cancel any previous per-segment call for this flat index (rapid Widen BPM clicks)
+    segmentAbortRefs.current.get(flatIdx)?.abort();
+    const ac = new AbortController();
+    segmentAbortRefs.current.set(flatIdx, ac);
+
     // Mark only the targeted flat indices as loading
     setAssignments(prev => {
       const next = { ...prev };
@@ -289,7 +297,6 @@ export default function PlaylistBuilder() {
     });
 
     try {
-      const ac = new AbortController();
       const res = await fetch("/api/playlist/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -369,7 +376,7 @@ export default function PlaylistBuilder() {
     const flat = flatItems(items);
     const seg = flat[flatIdx];
     if (!seg) return;
-    const newTolerance = seg.bpm_tolerance + 15;
+    const newTolerance = Math.min(seg.bpm_tolerance + 15, 30);
     setItems(items.map(item => {
       if (item.type === "repeat") {
         const group = item as RepeatGroup;
@@ -397,7 +404,7 @@ export default function PlaylistBuilder() {
       const data = await res.json();
       setSavedUrl(data.playlist_url);
     } catch {
-      console.error("Failed to save playlist");
+      toast.error("Failed to save playlist", { description: "Check your Spotify connection in Sources" });
     } finally {
       setSaving(false);
     }
@@ -434,7 +441,12 @@ export default function PlaylistBuilder() {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ track_id: trackId, name: songName, artist_name: artistName }),
-                }).catch((err) => { console.error("Failed to blacklist:", err); });
+                })
+                  .then(r => {
+                    if (r.ok) toast.success("Permanently blocked — won't appear again");
+                    else toast.error("Failed to block song");
+                  })
+                  .catch(() => { toast.error("Failed to block song"); });
               },
             },
             duration: 8000,
@@ -453,7 +465,10 @@ export default function PlaylistBuilder() {
       await fetch("/api/playlist/pump-up").then(r => r.json()).catch(() => []);
 
     if (!bankSongs.length) {
-      console.warn("Pump-up bank is empty");
+      toast("Pump-up bank is empty", {
+        description: "Add songs by clicking ⚡ on any song card",
+        duration: 4000,
+      });
       return;
     }
     // Collect all currently placed track IDs across all segments
@@ -463,7 +478,10 @@ export default function PlaylistBuilder() {
     // Find first bank song not already placed and not excluded
     const song = bankSongs.find((s: { track_id: string }) => !allPlacedIds.has(s.track_id) && !currentExcludedIds.has(s.track_id));
     if (!song) {
-      console.warn("Pump-up bank: all songs already placed or excluded");
+      toast("No bank songs available", {
+        description: "All pump-up songs are already placed or excluded in this playlist",
+        duration: 4000,
+      });
       return;
     }
     // Inject pump-up song before skip song, after other placed songs
@@ -482,6 +500,7 @@ export default function PlaylistBuilder() {
       };
       return { ...prev, [flatIdx]: { ...prev[flatIdx], songs: [...nonSkip, pumpSong, ...skip] } };
     });
+    toast.success(`Added "${song.name}"`, { description: song.artist_name, duration: 3000 });
   }
 
   return (
@@ -513,7 +532,7 @@ export default function PlaylistBuilder() {
                   });
                 }
                 const flat = flatItems(items);
-                await fetch("/api/playlist/workout-plans", {
+                const res = await fetch("/api/playlist/workout-plans", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -525,6 +544,7 @@ export default function PlaylistBuilder() {
                     garmin_activity_id: garminActivityIdRef.current,
                   }),
                 });
+                if (!res.ok) throw new Error("Server error saving plan");
               }}
               onChange={(newItems) => {
                 setItems(newItems);
@@ -553,7 +573,11 @@ export default function PlaylistBuilder() {
             focusedIdx={focusedIdx}
             onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
             onExclude={handleExclude}
-            onPlace={(idx, song) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs: [...(prev[idx]?.songs ?? []).filter(s => !s.is_skip), song, ...(prev[idx]?.songs ?? []).filter(s => s.is_skip)] } }))}
+            onPlace={(idx, song) => setAssignments(prev => {
+              const existing = prev[idx]?.songs ?? [];
+              if (existing.some(s => s.track_id === song.track_id)) return prev; // dedup
+              return { ...prev, [idx]: { ...prev[idx], songs: [...existing.filter(s => !s.is_skip), song, ...existing.filter(s => s.is_skip)] } };
+            })}
             onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
             onPreview={setPreviewSong}
             onPumpUp={handlePumpUp}

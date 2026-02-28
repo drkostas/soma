@@ -1,8 +1,9 @@
 // web/components/run-segment-timeline.tsx
 "use client";
 import { motion, AnimatePresence, Reorder } from "motion/react";
-import { Plus, GripVertical, Trash2, Zap, BookmarkPlus, Check, Repeat2 } from "lucide-react";
+import { Plus, GripVertical, Trash2, Zap, BookmarkPlus, Check, Repeat2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import SegmentEditor, { Segment, RepeatGroup, SegmentItem, BPM_DEFAULTS, TYPE_COLORS } from "./segment-editor";
 import { nanoid } from "nanoid";
@@ -35,17 +36,26 @@ export default function RunSegmentTimeline({ items, onChange, focusedIdx, onFocu
   const [planNameInput, setPlanNameInput] = useState(false);
   const [planName, setPlanName] = useState("");
   const [saved, setSaved] = useState(false);
+  const [savePlanError, setSavePlanError] = useState(false);
 
   async function handleSavePlan() {
     const name = planName.trim();
     if (!name || !onSavePlan) return;
     setSavingPlan(true);
-    await onSavePlan(name);
-    setSavingPlan(false);
-    setPlanNameInput(false);
-    setPlanName("");
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSavePlanError(false);
+    try {
+      await onSavePlan(name);
+      setSavingPlan(false);
+      setPlanNameInput(false);
+      setPlanName("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setSavingPlan(false);
+      setSavePlanError(true);
+      toast.error("Failed to save plan — try again");
+      setTimeout(() => setSavePlanError(false), 3000);
+    }
   }
 
   // Flat start index for each top-level item
@@ -219,7 +229,9 @@ export default function RunSegmentTimeline({ items, onChange, focusedIdx, onFocu
           </Button>
           {onSavePlan && !planNameInput && (
             <Button variant="outline" size="sm" onClick={() => setPlanNameInput(true)} className="text-xs h-7 gap-1">
-              {saved ? <><Check className="w-3 h-3 text-green-500" /> Saved!</> : <><BookmarkPlus className="w-3 h-3" /> Save Plan</>}
+              {saved ? <><Check className="w-3 h-3 text-green-500" /> Saved!</>
+                : savePlanError ? <><AlertCircle className="w-3 h-3 text-destructive" /> Failed</>
+                : <><BookmarkPlus className="w-3 h-3" /> Save Plan</>}
             </Button>
           )}
           <span className="text-xs text-muted-foreground ml-auto">Total: {totalMin} min</span>
