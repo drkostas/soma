@@ -21,13 +21,22 @@ export default function PlaylistOnboarding({
 
   async function handleAnalyse() {
     setAnalysing(true);
-    await fetch("/api/playlist/spotify/library", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source_ids: ["liked"] }),
-    });
-    setAnalysing(false);
-    onLibraryAnalysed();
+    try {
+      const res = await fetch("/api/playlist/spotify/library", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_ids: ["liked"] }),
+      });
+      if (res.ok) {
+        onLibraryAnalysed();
+      } else {
+        console.error("Library analysis failed:", res.status);
+      }
+    } catch (err) {
+      console.error("Library analysis error:", err);
+    } finally {
+      setAnalysing(false);
+    }
   }
 
   const steps = [
