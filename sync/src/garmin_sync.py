@@ -184,7 +184,7 @@ def _parse_workout_steps(steps: list) -> list:
     result = []
     for step in steps:
         step_type = step.get("stepType", {}).get("stepTypeKey", "active")
-        condition = step.get("conditionType", {}).get("conditionTypeKey", "time")
+        condition = step.get("endCondition", {}).get("conditionTypeKey", "time")
         end_val = step.get("endConditionValue") or 0
 
         if step_type == "repeat":
@@ -221,7 +221,7 @@ def _workout_steps_summary(steps: list, depth: int = 0) -> str:
     while i < len(steps):
         step = steps[i]
         step_type = step.get("stepType", {}).get("stepTypeKey", "active")
-        condition = step.get("conditionType", {}).get("conditionTypeKey", "time")
+        condition = step.get("endCondition", {}).get("conditionTypeKey", "time")
         end_val = step.get("endConditionValue") or 0
 
         if step_type == "repeat":
@@ -260,9 +260,15 @@ def sync_garmin_workouts(client) -> int:
                     continue
                 sport_type = w.get("sportType", {}).get("sportTypeKey", "running")
 
+                # Fetch full workout detail to get workoutSegments + steps
+                try:
+                    detail = rate_limited_call(client.get_workout_by_id, workout_id)
+                except Exception:
+                    detail = w
+
                 # Parse all steps from all segments
                 all_steps = []
-                for seg in w.get("workoutSegments", []):
+                for seg in detail.get("workoutSegments", []):
                     all_steps.extend(seg.get("workoutSteps", []))
                 segments = _parse_workout_steps(all_steps)
                 summary = _workout_steps_summary(all_steps)
@@ -280,11 +286,11 @@ def sync_garmin_workouts(client) -> int:
                         synced_at = NOW()
                 """, (
                     workout_id,
-                    w.get("workoutName", "Workout"),
+                    detail.get("workoutName", w.get("workoutName", "Workout")),
                     sport_type,
                     summary,
                     json.dumps(segments),
-                    json.dumps(w),
+                    json.dumps(detail),
                 ))
                 count += 1
         conn.commit()
