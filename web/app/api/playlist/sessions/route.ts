@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
                 { tempo: r.tempo as number, energy: r.energy as number },
                 cfg
               ),
+              genres: (r.genres as string[] | null) ?? [],
             }));
 
           const poolCount = candidates.length;

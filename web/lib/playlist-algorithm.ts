@@ -8,6 +8,7 @@ export interface SongCandidate {
   energy: number;
   valence: number;
   quality_score: number;
+  genres?: string[];
 }
 
 export interface SegmentConfig {
