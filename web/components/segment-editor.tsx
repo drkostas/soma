@@ -6,10 +6,10 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const SEGMENT_TYPES = ["warmup","easy","aerobic","tempo","interval","vo2max","recovery","rest","strides","cooldown"] as const;
+export const SEGMENT_TYPES = ["warmup","easy","aerobic","tempo","interval","vo2max","recovery","rest","strides","cooldown"] as const;
 type SegmentType = typeof SEGMENT_TYPES[number];
 
-const TYPE_COLORS: Record<SegmentType, string> = {
+export const TYPE_COLORS: Record<SegmentType, string> = {
   warmup: "bg-yellow-500", easy: "bg-green-500", aerobic: "bg-blue-500",
   tempo: "bg-orange-500", interval: "bg-red-500", vo2max: "bg-purple-500",
   recovery: "bg-sky-400", rest: "bg-slate-400", strides: "bg-amber-400", cooldown: "bg-slate-600",
@@ -107,5 +107,3 @@ export default function SegmentEditor({ segment, onChange }: Props) {
   );
 }
 
-// Suppress unused variable warning for TYPE_COLORS (used for coloring in the parent)
-void TYPE_COLORS;
