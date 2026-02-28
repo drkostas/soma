@@ -12,6 +12,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const { track_id } = await req.json();
+  if (!track_id || typeof track_id !== "string") {
+    return NextResponse.json({ error: "track_id required" }, { status: 400 });
+  }
   const sql = getDb();
 
   // Increment or create exclude count
