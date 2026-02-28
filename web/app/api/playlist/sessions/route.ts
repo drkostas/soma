@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
 
         send({ type: "done", session_id: (session as { id: number }).id });
       } catch (err) {
-        send({ type: "error", message: String(err) });
+        send({ type: "error", message: err instanceof Error ? err.message : String(err) });
       } finally {
         controller.close();
       }
