@@ -5,10 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Trash2, Dumbbell } from "lucide-react";
+import { Trash2, Dumbbell, CopyPlus } from "lucide-react";
 
 interface GarminRun { activity_id: string; activity_name: string; start_time: string; distance: number; duration: number; }
-interface Session { id: number; created_at: string; garmin_activity_id: string | null; spotify_playlist_url: string | null; song_assignments?: Record<string, unknown[]>; source_playlist_ids?: string[]; }
+interface Session { id: number; created_at: string; garmin_activity_id: string | null; spotify_playlist_url: string | null; spotify_playlist_id: string | null; song_assignments?: Record<string, unknown[]>; source_playlist_ids?: string[]; workout_name?: string | null; }
 interface WorkoutPlan { id: number; name: string; sport_type: string; segments: unknown[]; total_duration_s: number; garmin_workout_id: string | null; garmin_push_status: string; created_at: string; }
 interface GarminWorkout { workout_id: string; workout_name: string; sport_type: string; steps_summary: string | null; segments: unknown[]; }
 
@@ -151,8 +151,9 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
               <div key={s.id} className="flex items-center gap-1">
                 <button onClick={() => onSelect({ type: "session", data: s, segments: [] })}
                   className="flex-1 text-left p-2.5 rounded-lg border hover:bg-muted transition-colors min-w-0">
-                  <div className="text-xs font-medium">{formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}</div>
+                  <div className="text-xs font-medium truncate">{s.workout_name ?? formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
+                    {s.workout_name && <span>{formatDistanceToNow(new Date(s.created_at), { addSuffix: true })} · </span>}
                     {segments > 0 ? `${segments} ${segments === 1 ? "segment" : "segments"} · ${totalSongs} ${totalSongs === 1 ? "song" : "songs"}` : "No songs generated"}
                   </div>
                   {s.spotify_playlist_url && (
@@ -162,6 +163,11 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
                     </a>
                   )}
                 </button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-primary"
+                  title="Duplicate as new (won't overwrite existing playlist)"
+                  onClick={(e) => { e.stopPropagation(); onSelect({ type: "session", data: { ...s, spotify_playlist_id: null, spotify_playlist_url: null }, segments: [] }); }}>
+                  <CopyPlus className="h-3.5 w-3.5" />
+                </Button>
                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-red-400"
                   onClick={(e) => deleteSession(e, s.id)}>
                   <Trash2 className="h-3.5 w-3.5" />

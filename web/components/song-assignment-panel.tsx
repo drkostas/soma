@@ -90,7 +90,12 @@ function SegmentSection({
         <button type="button" onClick={(e) => { e.stopPropagation(); onPumpUp(); }} className="ml-auto text-muted-foreground hover:text-amber-400 transition-colors shrink-0">
           <Zap className="w-3.5 h-3.5" />
         </button>
-        {assignment && <span className="text-xs text-muted-foreground shrink-0">Pool: {assignment.poolCount ?? "?"} · {nonSkip.length} placed</span>}
+        {assignment && (
+          <span className="text-xs text-muted-foreground shrink-0">
+            Pool: {assignment.poolCount ?? "?"} · {nonSkip.length} placed
+            {assignment.poolCount !== undefined && ` · ${Math.max(0, assignment.poolCount - nonSkip.length)} left`}
+          </span>
+        )}
       </div>
 
       {/* Pool exhaustion warning */}
