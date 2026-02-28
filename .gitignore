@@ -42,3 +42,6 @@ sync/strava_backfill_data/
 # Design plans and internal docs
 docs/
 .vercel
+
+# Git worktrees
+.worktrees/
