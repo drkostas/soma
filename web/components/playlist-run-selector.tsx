@@ -50,6 +50,7 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
         <TabsContent value="past" className="flex-1 overflow-hidden flex flex-col px-3 pb-3">
           <Input placeholder="Search runs…" value={search} onChange={e => setSearch(e.target.value)} className="my-2 h-7 text-xs" />
           <div className="flex-1 overflow-y-auto space-y-1">
+            {garminRuns.length === 0 && <div className="text-xs text-muted-foreground text-center pt-6">No runs found{search ? ` for "${search}"` : ""}</div>}
             {garminRuns.map(run => (
               <button key={run.activity_id} onClick={() => selectGarminRun(run)}
                 className="w-full text-left p-2.5 rounded-lg border hover:bg-muted transition-colors">
@@ -72,7 +73,7 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
                 className="w-full text-left p-2.5 rounded-lg border hover:bg-muted transition-colors">
                 <div className="text-xs font-medium">{formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {segments > 0 ? `${segments} segments · ${totalSongs} songs` : "No songs generated"}
+                  {segments > 0 ? `${segments} ${segments === 1 ? "segment" : "segments"} · ${totalSongs} ${totalSongs === 1 ? "song" : "songs"}` : "No songs generated"}
                 </div>
                 {s.spotify_playlist_url && <a href={s.spotify_playlist_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-0.5 block" onClick={e => e.stopPropagation()}>Open in Spotify ↗</a>}
               </button>

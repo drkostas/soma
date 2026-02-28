@@ -6,16 +6,10 @@ import RunSegmentTimeline from "./run-segment-timeline";
 import SongAssignmentPanel from "./song-assignment-panel";
 import SpotifyPlayer from "./spotify-player";
 import PlaylistRunSelector from "./playlist-run-selector";
-import { Segment, SegmentType } from "./segment-editor";
+import { Segment, SegmentType, BPM_DEFAULTS } from "./segment-editor";
 import { SongData } from "./song-card";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { nanoid } from "nanoid";
-
-const BPM_DEFAULTS: Record<SegmentType, { min: number; max: number }> = {
-  warmup: { min: 100, max: 140 }, easy: { min: 125, max: 145 }, aerobic: { min: 125, max: 145 },
-  tempo: { min: 160, max: 180 }, interval: { min: 175, max: 195 }, vo2max: { min: 175, max: 195 },
-  recovery: { min: 125, max: 145 }, rest: { min: 80, max: 110 }, strides: { min: 160, max: 180 }, cooldown: { min: 60, max: 90 },
-};
 
 function parsedToSegments(parsed: Array<{ type?: string; duration_s: number }>): Segment[] {
   return parsed.map((p) => {
