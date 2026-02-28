@@ -39,7 +39,17 @@ const BPM_DEFAULTS: Record<
 
 export async function GET() {
   const sql = getDb();
-  const rows = await sql`SELECT * FROM playlist_sessions ORDER BY created_at DESC LIMIT 50`;
+  const rows = await sql`
+    SELECT
+      ps.*,
+      gar.raw_json->>'activityName' AS workout_name
+    FROM playlist_sessions ps
+    LEFT JOIN garmin_activity_raw gar
+      ON gar.activity_id = ps.garmin_activity_id::bigint
+      AND gar.endpoint_name = 'summary'
+    ORDER BY ps.created_at DESC
+    LIMIT 50
+  `;
   return NextResponse.json(rows);
 }
 
