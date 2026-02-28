@@ -27,6 +27,8 @@ interface Props {
   onReorder: (segIdx: number, songs: SongData[]) => void;
   onPreview: (song: SongData) => void;
   onPumpUp: (segIdx: number) => void;
+  onWidenBpm: (flatIdx: number) => void;
+  onAddPlaylists: () => void;
   onSave: () => void;
   saving: boolean;
   savedUrl?: string;
@@ -44,6 +46,8 @@ interface SectionProps {
   showExcluded: boolean;
   onFocus: () => void;
   onPumpUp: () => void;
+  onWidenBpm: () => void;
+  onAddPlaylists: () => void;
   onReorder: (songs: SongData[]) => void;
   onExclude: (trackId: string) => void;
   onPlace: (song: SongData) => void;
@@ -53,7 +57,7 @@ interface SectionProps {
 
 function SegmentSection({
   seg, flatIdx, label, assignment, excludedIds, allPlacedIds, selectedGenres,
-  isFocused, showExcluded, onFocus, onPumpUp, onReorder, onExclude, onPlace, onPreview, onToggleExcluded
+  isFocused, showExcluded, onFocus, onPumpUp, onWidenBpm, onAddPlaylists, onReorder, onExclude, onPlace, onPreview, onToggleExcluded
 }: SectionProps) {
   const songs = assignment?.songs ?? [];
   const excluded = songs.filter(s => excludedIds.has(s.track_id));
@@ -82,6 +86,20 @@ function SegmentSection({
         </button>
         {assignment && <span className="text-xs text-muted-foreground shrink-0">Pool: {assignment.poolCount ?? "?"} · {nonSkip.length} placed</span>}
       </div>
+
+      {/* Pool exhaustion warning */}
+      {assignment && assignment.poolCount !== undefined && assignment.poolCount < 3 && !assignment.loading && (
+        <div className="mt-1 flex items-center gap-2 text-xs text-amber-400">
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          <span>Only {assignment.poolCount} song{assignment.poolCount !== 1 ? "s" : ""} found</span>
+          <button type="button" onClick={onWidenBpm} className="ml-auto px-2 py-0.5 rounded border border-amber-400/50 text-amber-400 hover:bg-amber-400/10 transition-colors text-xs">
+            Widen BPM ±15
+          </button>
+          <button type="button" onClick={onAddPlaylists} className="px-2 py-0.5 rounded border border-muted-foreground/30 text-muted-foreground hover:text-foreground transition-colors text-xs">
+            Add playlists
+          </button>
+        </div>
+      )}
 
       {/* Song list */}
       <Reorder.Group
@@ -147,7 +165,7 @@ function SegmentSection({
 export default function SongAssignmentPanel({
   items, assignments, excludedIds, selectedGenres,
   focusedIdx, onFocus, onExclude, onPlace, onReorder,
-  onPreview, onPumpUp, onSave, saving, savedUrl
+  onPreview, onPumpUp, onWidenBpm, onAddPlaylists, onSave, saving, savedUrl
 }: Props) {
   const [showExcluded, setShowExcluded] = useState<Record<number, boolean>>({});
 
@@ -189,6 +207,8 @@ export default function SongAssignmentPanel({
       showExcluded: !!showExcluded[flatIdx],
       onFocus: () => onFocus(focusedIdx === flatIdx ? -1 : flatIdx),
       onPumpUp: () => onPumpUp(flatIdx),
+      onWidenBpm: () => onWidenBpm(flatIdx),
+      onAddPlaylists,
       onReorder: (songs) => onReorder(flatIdx, songs),
       onExclude: (trackId) => onExclude(flatIdx, trackId),
       onPlace: (song) => onPlace(flatIdx, song),
