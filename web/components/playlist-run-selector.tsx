@@ -165,7 +165,7 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
                 </button>
                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-primary"
                   title="Duplicate as new (won't overwrite existing playlist)"
-                  onClick={(e) => { e.stopPropagation(); onSelect({ type: "session", data: { ...s, spotify_playlist_id: null, spotify_playlist_url: null }, segments: [] }); }}>
+                  onClick={(e) => { e.stopPropagation(); onSelect({ type: "session", data: { ...s, id: null, spotify_playlist_id: null, spotify_playlist_url: null }, segments: [] }); }}>
                   <CopyPlus className="h-3.5 w-3.5" />
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-red-400"
