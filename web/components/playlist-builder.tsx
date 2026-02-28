@@ -43,6 +43,43 @@ function parsedToItems(parsed: ParsedStep[]): SegmentItem[] {
   });
 }
 
+// Auto-Bundle Rule: repeat groups where every template step ≤ 120s are collapsed into
+// a single API segment (total duration). Short steps (strides, 20-40s intervals) would
+// otherwise get knapsack capacity = max(0, duration_s - 60) = 0 → no songs assigned.
+// flatIndexMap[apiIdx] = flat panel indices that receive songs from that API segment.
+function segsForGenerate(items: SegmentItem[]): { segments: Segment[]; flatIndexMap: number[][] } {
+  const segments: Segment[] = [];
+  const flatIndexMap: number[][] = [];
+  let flatIdx = 0;
+  for (const item of items) {
+    if (item.type === "repeat") {
+      const group = item as RepeatGroup;
+      const template = group.children.slice(0, group.template_size);
+      const allShort = template.every(s => s.duration_s <= 120);
+      if (allShort) {
+        // Collapse entire group: dominant type = first non-recovery/rest step
+        const dominant = template.find(s => s.type !== "recovery" && s.type !== "rest") ?? template[0];
+        const totalDuration = group.children.reduce((s, c) => s + c.duration_s, 0);
+        segments.push({ ...dominant, id: nanoid(), duration_s: totalDuration });
+        const indices = Array.from({ length: group.children.length }, (_, i) => flatIdx + i);
+        flatIndexMap.push(indices);
+        flatIdx += group.children.length;
+      } else {
+        for (const child of group.children) {
+          segments.push(child);
+          flatIndexMap.push([flatIdx]);
+          flatIdx++;
+        }
+      }
+    } else {
+      segments.push(item as Segment);
+      flatIndexMap.push([flatIdx]);
+      flatIdx++;
+    }
+  }
+  return { segments, flatIndexMap };
+}
+
 interface SegmentSongs { songs: SongData[]; loading?: boolean; poolCount?: number; warning?: string; }
 
 export default function PlaylistBuilder() {
@@ -96,7 +133,7 @@ export default function PlaylistBuilder() {
           setHasRun(true);
           abortRef.current?.abort();
           abortRef.current = new AbortController();
-          void generate(flatItems(newItems), abortRef.current.signal);
+          void generate(segsForGenerate(newItems), abortRef.current.signal);
         })
         .catch(() => {});
       return;
@@ -109,13 +146,14 @@ export default function PlaylistBuilder() {
       setHasRun(true);
       abortRef.current?.abort();
       abortRef.current = new AbortController();
-      void generate(flatItems(newItems), abortRef.current.signal);
+      void generate(segsForGenerate(newItems), abortRef.current.signal);
     }
   }
 
-  // Generate playlist via SSE — takes flat Segment[]
-  async function generate(segs: Segment[], signal?: AbortSignal) {
-    setAssignments(Object.fromEntries(segs.map((_, i) => [i, { songs: [], loading: true }])));
+  // Generate playlist via SSE — collapses short repeat groups via segsForGenerate
+  async function generate({ segments: segs, flatIndexMap }: { segments: Segment[]; flatIndexMap: number[][] }, signal?: AbortSignal) {
+    const flatCount = flatIndexMap.flat().length;
+    setAssignments(Object.fromEntries(Array.from({ length: flatCount }, (_, i) => [i, { songs: [], loading: true }])));
     setSavedUrl(undefined);
     setSessionId(null);
     try {
@@ -140,9 +178,24 @@ export default function PlaylistBuilder() {
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === "segment_done") {
-              setAssignments(prev => ({ ...prev, [event.index]: { songs: event.songs, loading: false, poolCount: event.pool_count } }));
+              // Spread songs to all flat panel indices mapped from this API segment index
+              const flatIndices = flatIndexMap[event.index] ?? [event.index];
+              setAssignments(prev => {
+                const next = { ...prev };
+                for (const fi of flatIndices) {
+                  next[fi] = { songs: event.songs, loading: false, poolCount: event.pool_count };
+                }
+                return next;
+              });
             } else if (event.type === "segment_warning") {
-              setAssignments(prev => ({ ...prev, [event.index]: { ...prev[event.index], warning: event.message } }));
+              const flatIndices = flatIndexMap[event.index] ?? [event.index];
+              setAssignments(prev => {
+                const next = { ...prev };
+                for (const fi of flatIndices) {
+                  next[fi] = { ...next[fi], warning: event.message };
+                }
+                return next;
+              });
             } else if (event.type === "done") {
               setSessionId(event.session_id);
             } else if (event.type === "error") {
@@ -250,13 +303,12 @@ export default function PlaylistBuilder() {
               }}
               onChange={(newItems) => {
                 setItems(newItems);
-                const flat = flatItems(newItems);
-                if (flat.length > 0) {
+                if (flatItems(newItems).length > 0) {
                   clearTimeout(generateDebounceRef.current);
                   generateDebounceRef.current = setTimeout(() => {
                     abortRef.current?.abort();
                     abortRef.current = new AbortController();
-                    void generate(flat, abortRef.current.signal);
+                    void generate(segsForGenerate(newItems), abortRef.current.signal);
                   }, 600);
                 }
               }}
