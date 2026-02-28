@@ -18,8 +18,7 @@ interface Props {
   draggable?: boolean;
 }
 
-export default function SongCard({ song, onExclude, onPreview, draggable }: Props) {
-  void draggable; // accepted for future use by parent
+export default function SongCard({ song, onExclude, onPreview, draggable: _draggable }: Props) {
   const durationStr = `${Math.floor(song.duration_ms / 60000)}:${String(Math.floor((song.duration_ms % 60000) / 1000)).padStart(2, "0")}`;
   const energyWidth = `${Math.round(song.energy * 100)}%`;
 
