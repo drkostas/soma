@@ -1,3 +1,7 @@
+-- Migration: 20260227_spotify_playlist
+-- Description: Data layer for the BPM-matched Spotify Playlist Builder
+-- Apply: psql "$DATABASE_URL" -f web/lib/db/migrations/20260227_spotify_playlist.sql
+
 -- Cached track BPM/energy/valence from ReccoBeats
 CREATE TABLE IF NOT EXISTS spotify_track_features (
   track_id TEXT PRIMARY KEY,
