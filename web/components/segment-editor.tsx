@@ -28,6 +28,16 @@ export interface Segment {
   valence_min: number; valence_max: number;
 }
 
+export interface RepeatGroup {
+  id: string;
+  type: "repeat";
+  repeat_count: number;
+  template_size: number;   // steps in one iteration
+  children: Segment[];     // all iterations (repeat_count × template_size)
+}
+
+export type SegmentItem = Segment | RepeatGroup;
+
 interface Props {
   segment: Segment;
   onChange: (s: Segment) => void;
