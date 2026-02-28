@@ -117,7 +117,19 @@ function SegmentSection({
         ) : (
           nonSkip.map(song => (
             <Reorder.Item key={song.track_id} value={song} as="div">
-              <SongCard song={song} onExclude={() => onExclude(song.track_id)} onPreview={() => onPreview(song)} draggable />
+              <SongCard
+                song={song}
+                onExclude={() => onExclude(song.track_id)}
+                onPreview={() => onPreview(song)}
+                draggable
+                onAddToPumpUp={() => {
+                  fetch("/api/playlist/pump-up", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ track_id: song.track_id, name: song.name, artist_name: song.artist_name, tempo: song.tempo, energy: song.energy }),
+                  }).catch(() => {});
+                }}
+              />
             </Reorder.Item>
           ))
         )}
