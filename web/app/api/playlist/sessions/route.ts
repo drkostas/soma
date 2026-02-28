@@ -57,22 +57,6 @@ export async function POST(req: NextRequest) {
 
   const sql = getDb();
 
-  // Create session record
-  const [session] = await sql`
-    INSERT INTO playlist_sessions
-      (workout_plan_id, garmin_activity_id, source_playlist_ids, genre_selection, genre_threshold, excluded_track_ids, song_assignments)
-    VALUES (
-      ${workout_plan_id},
-      ${garmin_activity_id},
-      ${source_playlist_ids},
-      ${genre_selection},
-      ${genre_threshold},
-      ${excluded_track_ids},
-      '{}'::jsonb
-    )
-    RETURNING id
-  `;
-
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
@@ -181,14 +165,23 @@ export async function POST(req: NextRequest) {
           send({ type: "segment_done", index: idx, songs: segmentSongs, pool_count: poolCount });
         }
 
-        // Save final assignments
-        await sql`
-          UPDATE playlist_sessions
-          SET song_assignments = ${JSON.stringify(allAssignments)}::jsonb
-          WHERE id = ${(session as { id: number }).id}
+        // Save session with all assignments at the very end (only creates a record if generation completes)
+        const [sessionRecord] = await sql`
+          INSERT INTO playlist_sessions
+            (workout_plan_id, garmin_activity_id, source_playlist_ids, genre_selection, genre_threshold, excluded_track_ids, song_assignments)
+          VALUES (
+            ${workout_plan_id},
+            ${garmin_activity_id},
+            ${source_playlist_ids},
+            ${genre_selection},
+            ${genre_threshold},
+            ${excluded_track_ids},
+            ${JSON.stringify(allAssignments)}::jsonb
+          )
+          RETURNING id
         `;
 
-        send({ type: "done", session_id: (session as { id: number }).id });
+        send({ type: "done", session_id: (sessionRecord as { id: number }).id });
       } catch (err) {
         send({ type: "error", message: err instanceof Error ? err.message : String(err) });
       } finally {

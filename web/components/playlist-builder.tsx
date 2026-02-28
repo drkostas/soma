@@ -43,9 +43,12 @@ function parsedToItems(parsed: ParsedStep[]): SegmentItem[] {
   });
 }
 
-// Auto-Bundle Rule: repeat groups where every template step ≤ 120s are collapsed into
-// a single API segment (total duration). Short steps (strides, 20-40s intervals) would
-// otherwise get knapsack capacity = max(0, duration_s - 60) = 0 → no songs assigned.
+// Song generation bundling:
+// - Short repeat groups (all template steps ≤120s, e.g. strides): collapse ENTIRE group
+//   into ONE segment (total duration, dominant BPM) → one continuous music block
+// - Long repeat groups (any template step >120s, e.g. 5×1000m): bundle BY TEMPLATE TYPE
+//   across iterations → "Interval (5×)" gets one pool, "Recovery (5×)" gets another
+// - Regular segments: 1-to-1 (unchanged)
 // flatIndexMap[apiIdx] = flat panel indices that receive songs from that API segment.
 function segsForGenerate(items: SegmentItem[]): { segments: Segment[]; flatIndexMap: number[][] } {
   const segments: Segment[] = [];
@@ -57,7 +60,7 @@ function segsForGenerate(items: SegmentItem[]): { segments: Segment[]; flatIndex
       const template = group.children.slice(0, group.template_size);
       const allShort = template.every(s => s.duration_s <= 120);
       if (allShort) {
-        // Collapse entire group: dominant type = first non-recovery/rest step
+        // One bundle for the whole group (strides, short drills)
         const dominant = template.find(s => s.type !== "recovery" && s.type !== "rest") ?? template[0];
         const totalDuration = group.children.reduce((s, c) => s + c.duration_s, 0);
         segments.push({ ...dominant, id: nanoid(), duration_s: totalDuration });
@@ -65,11 +68,18 @@ function segsForGenerate(items: SegmentItem[]): { segments: Segment[]; flatIndex
         flatIndexMap.push(indices);
         flatIdx += group.children.length;
       } else {
-        for (const child of group.children) {
-          segments.push(child);
-          flatIndexMap.push([flatIdx]);
-          flatIdx++;
+        // Bundle each template step type across all iterations
+        // e.g. 5×[interval+recovery] → one "interval" bundle + one "recovery" bundle
+        for (let t = 0; t < template.length; t++) {
+          const step = template[t];
+          segments.push({ ...step, id: nanoid(), duration_s: step.duration_s * group.repeat_count });
+          const indices: number[] = [];
+          for (let r = 0; r < group.repeat_count; r++) {
+            indices.push(flatIdx + r * group.template_size + t);
+          }
+          flatIndexMap.push(indices);
         }
+        flatIdx += group.children.length;
       }
     } else {
       segments.push(item as Segment);
@@ -118,9 +128,34 @@ export default function PlaylistBuilder() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleRunSelect(run: { type: "garmin" | "plan" | "session"; data: any; segments: any[] }) {
-    if (run.type === "session" && !run.segments?.length) {
-      // Restore session via its Garmin activity
-      const garminId = run.data?.garmin_activity_id;
+    if (run.type === "session") {
+      const garminId = run.data?.garmin_activity_id ?? null;
+      const songAssignments = run.data?.song_assignments ?? {};
+      const hasAssignments = Object.keys(songAssignments).length > 0;
+
+      if (hasAssignments && garminId) {
+        // Restore session: fetch timeline segments, restore stored song assignments
+        fetch(`/api/playlist/garmin-runs?id=${garminId}`)
+          .then(r => r.json())
+          .then(data => {
+            const newItems = parsedToItems(data.segments ?? []);
+            if (!newItems.length) return;
+            const restoredAssignments: Record<number, SegmentSongs> = {};
+            for (const [k, v] of Object.entries(songAssignments as Record<string, SongData[]>)) {
+              restoredAssignments[Number(k)] = { songs: v as SongData[] };
+            }
+            garminActivityIdRef.current = garminId;
+            setItems(newItems);
+            setAssignments(restoredAssignments);
+            setSessionId(run.data.id);
+            setWorkoutName(data.activity_name ?? "Run");
+            setHasRun(true);
+          })
+          .catch(() => {});
+        return;
+      }
+
+      // No stored assignments or no garmin ID — re-generate
       if (!garminId) return;
       fetch(`/api/playlist/garmin-runs?id=${garminId}`)
         .then(r => r.json())
@@ -129,7 +164,7 @@ export default function PlaylistBuilder() {
           if (!newItems.length) return;
           garminActivityIdRef.current = garminId;
           setItems(newItems);
-          setWorkoutName(run.data?.activity_name ?? "Run");
+          setWorkoutName(data.activity_name ?? "Run");
           setHasRun(true);
           abortRef.current?.abort();
           abortRef.current = new AbortController();
@@ -138,6 +173,7 @@ export default function PlaylistBuilder() {
         .catch(() => {});
       return;
     }
+
     if (run.segments?.length > 0) {
       const newItems = parsedToItems(run.segments);
       garminActivityIdRef.current = run.type === "garmin" ? (run.data?.activity_id ?? null) : null;
@@ -229,7 +265,7 @@ export default function PlaylistBuilder() {
   async function handleSave() {
     if (!sessionId) return;
     setSaving(true);
-    const allTracks = Object.values(assignments).flatMap(a => a.songs.filter(s => !excludedIds.has(s.track_id)).map(s => s.track_id));
+    const allTracks = [...new Set(Object.values(assignments).flatMap(a => a.songs.filter(s => !excludedIds.has(s.track_id)).map(s => s.track_id)))];
     const name = `Soma: ${workoutName ?? "Run"} · ${new Date().toLocaleDateString()}`;
     try {
       const res = await fetch("/api/playlist/spotify/create", {
@@ -321,7 +357,7 @@ export default function PlaylistBuilder() {
         {/* Right: song assignment */}
         <div ref={rightRef} className="flex-1 overflow-y-auto">
           <SongAssignmentPanel
-            segments={flatItems(items)}
+            items={items}
             assignments={assignments}
             excludedIds={excludedIds}
             selectedGenres={genres}
