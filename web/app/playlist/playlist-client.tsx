@@ -14,13 +14,14 @@ export default function PlaylistClient({ spotifyConnected }: Props) {
 
   // Check library status on mount
   useEffect(() => {
+    if (!spotifyConnected) return;
     fetch("/api/playlist/spotify/library")
       .then((r) => r.json())
       .then((d) => {
-        if (d.tracks_with_bpm > 0) setLibraryAnalysed(true);
+        if (Number(d.tracks_with_bpm) > 0) setLibraryAnalysed(true);
       })
       .catch(() => {});
-  }, []);
+  }, [spotifyConnected]);
 
   const isReady = spotifyConnected && libraryAnalysed && runSelected;
 
