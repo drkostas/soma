@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 
 export const SPOTIFY_SCOPES =
-  "user-library-read playlist-read-private playlist-modify-private user-modify-playback-state user-read-playback-state";
+  "user-library-read playlist-read-private playlist-modify-private user-modify-playback-state user-read-playback-state streaming";
 
 async function getCredentials() {
   const sql = getDb();

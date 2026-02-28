@@ -43,16 +43,6 @@ export default function PlaylistBuilder() {
     return () => { left.removeEventListener("scroll", syncLeft); right.removeEventListener("scroll", syncRight); };
   }, []);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === "y") { e.preventDefault(); redo(); }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [undo, redo]);
-
   // Generate playlist via SSE
   async function generate(segs: Segment[], signal?: AbortSignal) {
     setAssignments(Object.fromEntries(segs.map((_, i) => [i, { songs: [], loading: true }])));
