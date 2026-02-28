@@ -17,9 +17,10 @@ interface PumpUpSong {
 interface Props {
   open: boolean;
   onClose: () => void;
+  refreshKey?: number;
 }
 
-export default function PumpUpModal({ open, onClose }: Props) {
+export default function PumpUpModal({ open, onClose, refreshKey }: Props) {
   const [songs, setSongs] = useState<PumpUpSong[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -31,7 +32,7 @@ export default function PumpUpModal({ open, onClose }: Props) {
       .then((data: PumpUpSong[]) => setSongs(data))
       .catch(() => setSongs([]))
       .finally(() => setLoading(false));
-  }, [open]);
+  }, [open, refreshKey]);
 
   function handleRemove(trackId: string) {
     fetch(`/api/playlist/pump-up/${trackId}`, { method: "DELETE" })
