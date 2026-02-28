@@ -3,14 +3,9 @@
 import { motion, AnimatePresence, Reorder } from "motion/react";
 import { Plus, GripVertical, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import SegmentEditor, { Segment } from "./segment-editor";
+import SegmentEditor, { Segment, TYPE_COLORS } from "./segment-editor";
 import { nanoid } from "nanoid";
 
-const TYPE_COLORS: Record<string, string> = {
-  warmup: "bg-yellow-500", easy: "bg-green-500", aerobic: "bg-blue-500",
-  tempo: "bg-orange-500", interval: "bg-red-500", vo2max: "bg-purple-500",
-  recovery: "bg-sky-400", rest: "bg-slate-400", strides: "bg-amber-400", cooldown: "bg-slate-600",
-};
 
 const BPM_DEFAULTS: Record<string, { min: number; max: number }> = {
   warmup: { min: 100, max: 140 }, easy: { min: 125, max: 145 }, aerobic: { min: 125, max: 145 },
