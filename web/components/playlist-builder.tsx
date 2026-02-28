@@ -751,6 +751,7 @@ export default function PlaylistBuilder() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Keyboard Shortcuts</DialogTitle>
+            <DialogDescription>Available keyboard shortcuts for the playlist builder.</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 text-sm">
             {([
