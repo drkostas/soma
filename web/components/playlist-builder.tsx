@@ -17,8 +17,8 @@ type ParsedStep = { type?: string; duration_s?: number } | { type: "repeat"; rep
 
 function makeSegment(p: { type?: string; duration_s?: number }): Segment {
   const type = (p.type as SegmentType) ?? "easy";
-  const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145 };
-  return { id: nanoid(), type, duration_s: p.duration_s ?? 600, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto" as const, valence_min: 0.3, valence_max: 0.7 };
+  const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145, valence_min: 0.3, valence_max: 0.7 };
+  return { id: nanoid(), type, duration_s: p.duration_s ?? 600, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto" as const, valence_min: bpm.valence_min, valence_max: bpm.valence_max };
 }
 
 function parsedToItems(parsed: ParsedStep[]): SegmentItem[] {

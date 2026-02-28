@@ -9,8 +9,8 @@ import { nanoid } from "nanoid";
 import { useState, useMemo } from "react";
 
 function newSegment(type: Segment["type"] = "easy", duration_s = 600): Segment {
-  const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145 };
-  return { id: nanoid(), type, duration_s, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto", valence_min: 0.3, valence_max: 0.7 };
+  const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145, valence_min: 0.3, valence_max: 0.7 };
+  return { id: nanoid(), type, duration_s, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto", valence_min: bpm.valence_min, valence_max: bpm.valence_max };
 }
 
 function fmt(s: number) {
