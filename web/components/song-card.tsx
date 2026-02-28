@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 export interface SongData {
   track_id: string; name: string; artist_name: string;
   tempo: number; energy: number; duration_ms: number;
+  genres?: string[];
   is_skip?: boolean; is_half_time?: boolean; has_genre_warning?: boolean;
 }
 

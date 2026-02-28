@@ -36,6 +36,7 @@ interface Props {
   onSave: () => void;
   saving: boolean;
   savedUrl?: string;
+  saveLabel?: string;
 }
 
 interface SectionProps {
@@ -190,7 +191,7 @@ function SegmentSection({
 export default function SongAssignmentPanel({
   items, assignments, excludedIds, selectedGenres,
   focusedIdx, onFocus, onExclude, onPlace, onReorder,
-  onPreview, onPumpUp, onWidenBpm, onAddPlaylists, onBankChanged, onSave, saving, savedUrl
+  onPreview, onPumpUp, onWidenBpm, onAddPlaylists, onBankChanged, onSave, saving, savedUrl, saveLabel
 }: Props) {
   const [showExcluded, setShowExcluded] = useState<Record<number, boolean>>({});
 
@@ -320,7 +321,7 @@ export default function SongAssignmentPanel({
           </Button>
         ) : (
           <Button size="sm" onClick={onSave} disabled={saving || totalPlaced === 0} className="text-xs h-7">
-            {saving ? "Saving…" : "Save to Spotify →"}
+            {saving ? "Saving…" : (saveLabel ?? "Save to Spotify →")}
           </Button>
         )}
       </div>

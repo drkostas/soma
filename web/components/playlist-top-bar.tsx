@@ -2,7 +2,7 @@
 "use client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronLeft, Zap } from "lucide-react";
+import { ChevronDown, ChevronLeft, Zap, Keyboard } from "lucide-react";
 import PlaylistSourcePicker from "./playlist-source-picker";
 import PlaylistGenrePicker from "./playlist-genre-picker";
 
@@ -16,9 +16,10 @@ interface Props {
   workoutName?: string;
   onChangeRun?: () => void;
   onOpenBank?: () => void;
+  onOpenShortcuts?: () => void;
 }
 
-export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGenresChange, genreThreshold, onThresholdChange, workoutName, onChangeRun, onOpenBank }: Props) {
+export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGenresChange, genreThreshold, onThresholdChange, workoutName, onChangeRun, onOpenBank, onOpenShortcuts }: Props) {
   return (
     <div className="sticky top-0 z-10 flex items-center gap-2 p-2 border-b bg-background/80 backdrop-blur-sm">
       {workoutName && onChangeRun ? (
@@ -57,6 +58,11 @@ export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGen
       {onOpenBank && (
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onOpenBank}>
           <Zap className="w-3 h-3" /> Bank
+        </Button>
+      )}
+      {onOpenShortcuts && (
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground" onClick={onOpenShortcuts} title="Keyboard shortcuts (?)">
+          <Keyboard className="w-3.5 h-3.5" />
         </Button>
       )}
     </div>

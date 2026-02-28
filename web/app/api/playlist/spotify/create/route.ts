@@ -53,3 +53,57 @@ export async function POST(req: NextRequest) {
     playlist_url: playlist.external_urls?.spotify,
   });
 }
+
+export async function PUT(req: NextRequest) {
+  const { playlist_id, session_id, track_ids } = await req.json();
+
+  const profile = await getSpotifyProfile();
+  if (!profile) {
+    return NextResponse.json({ error: "Spotify not connected" }, { status: 401 });
+  }
+
+  if (!playlist_id) {
+    return NextResponse.json({ error: "playlist_id required" }, { status: 400 });
+  }
+
+  const ids: string[] = track_ids ?? [];
+
+  // Replace all tracks: first batch = PUT (replaces), remaining = POST (appends)
+  const firstBatch = ids.slice(0, 100).map((id) => `spotify:track:${id}`);
+  const replaceRes = await spotifyFetch(`/playlists/${playlist_id}/tracks`, {
+    method: "PUT",
+    body: JSON.stringify({ uris: firstBatch }),
+  });
+  if (!replaceRes.ok) {
+    const err = await replaceRes.text();
+    return NextResponse.json({ error: `Failed to update playlist: ${err}` }, { status: 500 });
+  }
+
+  // Append remaining batches
+  for (let i = 100; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100).map((id) => `spotify:track:${id}`);
+    await spotifyFetch(`/playlists/${playlist_id}/tracks`, {
+      method: "POST",
+      body: JSON.stringify({ uris: batch }),
+    });
+  }
+
+  // Update session record
+  if (session_id) {
+    const sql = getDb();
+    await sql`
+      UPDATE playlist_sessions
+      SET updated_at = NOW()
+      WHERE id = ${session_id}
+    `;
+  }
+
+  // Fetch playlist URL (it doesn't change on update)
+  const playlistRes = await spotifyFetch(`/playlists/${playlist_id}?fields=external_urls`);
+  const playlistData = playlistRes.ok ? await playlistRes.json() : null;
+
+  return NextResponse.json({
+    playlist_id,
+    playlist_url: (playlistData as { external_urls?: { spotify?: string } } | null)?.external_urls?.spotify,
+  });
+}
