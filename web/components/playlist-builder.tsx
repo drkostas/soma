@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import PlaylistTopBar from "./playlist-top-bar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import RunSegmentTimeline from "./run-segment-timeline";
 import SongAssignmentPanel from "./song-assignment-panel";
 import SpotifyPlayer from "./spotify-player";
@@ -114,6 +115,10 @@ export default function PlaylistBuilder() {
   // Tracks the Spotify playlist ID from a loaded session — if set, Save → Update (PUT)
   const [existingPlaylistId, setExistingPlaylistId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [changeRunConfirm, setChangeRunConfirm] = useState(false);
+  const [skipBannerDismissed, setSkipBannerDismissed] = useState(() =>
+    typeof window !== "undefined" && !!localStorage.getItem("soma_skip_banner_dismissed")
+  );
   const garminActivityIdRef = useRef<string | null>(null);
 
   const leftRef = useRef<HTMLDivElement>(null);
@@ -565,9 +570,22 @@ export default function PlaylistBuilder() {
     return result;
   }, [assignments, genres]);
 
+  function resetRun() {
+    abortRef.current?.abort();
+    garminActivityIdRef.current = null;
+    setHasRun(false);
+    setItems([]);
+    setAssignments({});
+    setWorkoutName(undefined);
+    setExistingPlaylistId(null);
+    setSavedUrl(undefined);
+  }
+
+  const hasSongsPlaced = Object.values(assignments).some(a => a.songs.length > 0);
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); garminActivityIdRef.current = null; setHasRun(false); setItems([]); setAssignments({}); setWorkoutName(undefined); setExistingPlaylistId(null); setSavedUrl(undefined); }} onOpenBank={() => setPumpUpModalOpen(true)} onOpenShortcuts={() => setShortcutsOpen(true)} />
+      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { if (hasSongsPlaced) { setChangeRunConfirm(true); } else { resetRun(); } }} onOpenBank={() => setPumpUpModalOpen(true)} onOpenShortcuts={() => setShortcutsOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         {/* Left: run selector (first time) or run timeline */}
         <div ref={leftRef} className="w-[40%] border-r overflow-y-auto">
@@ -626,7 +644,24 @@ export default function PlaylistBuilder() {
           )}
         </div>
         {/* Right: song assignment */}
-        <div ref={rightRef} className="flex-1 overflow-y-auto">
+        <div ref={rightRef} className="flex-1 overflow-y-auto flex flex-col">
+          {/* One-time skip song explainer banner */}
+          {hasRun && sessionId !== null && !skipBannerDismissed && (
+            <div className="mx-3 mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 flex items-start gap-2 text-xs shrink-0">
+              <span className="text-lg leading-none shrink-0">◄◄</span>
+              <p className="text-muted-foreground flex-1">
+                <span className="text-foreground font-medium">How skip songs work: </span>
+                Each segment ends with a &quot;skip song&quot; — start it ~60s before your watch transitions, then skip it when your Garmin vibrates. The next segment&apos;s music begins immediately.
+              </p>
+              <button
+                type="button"
+                onClick={() => { localStorage.setItem("soma_skip_banner_dismissed", "1"); setSkipBannerDismissed(true); }}
+                className="text-muted-foreground hover:text-foreground shrink-0 p-0.5"
+                aria-label="Dismiss"
+              >✕</button>
+            </div>
+          )}
+          <div className="flex-1">
           <SongAssignmentPanel
             items={items}
             assignments={assignmentsWithWarnings}
@@ -653,12 +688,26 @@ export default function PlaylistBuilder() {
             savedUrl={savedUrl}
             saveLabel={existingPlaylistId && !savedUrl ? "Update Playlist →" : undefined}
           />
+          </div>
         </div>
       </div>
       {/* Mini player */}
       <SpotifyPlayer currentSong={previewSong} />
       {/* Pump-up bank modal */}
       <PumpUpModal open={pumpUpModalOpen} onClose={() => setPumpUpModalOpen(false)} refreshKey={pumpUpBankKey} />
+      {/* Change run confirmation */}
+      <Dialog open={changeRunConfirm} onOpenChange={setChangeRunConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change run?</DialogTitle>
+            <DialogDescription>This will clear all song assignments. Your placed songs will be lost.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChangeRunConfirm(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => { setChangeRunConfirm(false); resetRun(); }}>Change run</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Keyboard shortcuts cheatsheet */}
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
         <DialogContent className="max-w-sm">
