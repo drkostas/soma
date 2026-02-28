@@ -312,8 +312,8 @@ export default function PlaylistBuilder() {
 
   // Per-segment regeneration: runs the SSE API for a single segment only.
   // Does NOT reset other assignments — only marks the targeted flat indices as loading.
-  async function generateSegmentOnly(flatIdx: number, toleranceOverride?: number) {
-    const { segments: allSegs, flatIndexMap } = segsForGenerate(items);
+  async function generateSegmentOnly(flatIdx: number, toleranceOverride?: number, currentItems?: SegmentItem[]) {
+    const { segments: allSegs, flatIndexMap } = segsForGenerate(currentItems ?? items);
     const apiIdx = flatIndexMap.findIndex(indices => indices.includes(flatIdx));
     if (apiIdx === -1) return;
 
@@ -632,13 +632,46 @@ export default function PlaylistBuilder() {
                 if (!res.ok) throw new Error("Server error saving plan");
               }}
               onChange={(newItems) => {
+                const oldFlat = flatItems(items);
+                const newFlat = flatItems(newItems);
                 setItems(newItems);
-                if (flatItems(newItems).length > 0) {
-                  clearTimeout(generateDebounceRef.current);
+                if (newFlat.length === 0) return;
+
+                // Detect structural change: segments added, removed, or reordered
+                // (reorder changes flat-index→assignment mapping so full regen is needed)
+                const oldIds = oldFlat.map(s => s.id).join(",");
+                const newIds = newFlat.map(s => s.id).join(",");
+                const isStructural = oldIds !== newIds;
+
+                clearTimeout(generateDebounceRef.current);
+                if (isStructural) {
+                  // Structural change: full regenerate
                   generateDebounceRef.current = setTimeout(() => {
                     abortRef.current?.abort();
                     abortRef.current = new AbortController();
                     void generate(segsForGenerate(newItems), abortRef.current.signal);
+                  }, 600);
+                } else {
+                  // Same segments, same order: find which changed (type/duration/bpm/valence)
+                  const oldById = new Map(oldFlat.map(s => [s.id, s]));
+                  const changedFlatIndices = newFlat.reduce<number[]>((acc, seg, fi) => {
+                    const old = oldById.get(seg.id);
+                    if (!old) return acc;
+                    const changed = seg.type !== old.type || seg.duration_s !== old.duration_s
+                      || seg.bpm_min !== old.bpm_min || seg.bpm_max !== old.bpm_max
+                      || seg.bpm_tolerance !== old.bpm_tolerance
+                      || seg.valence_min !== old.valence_min || seg.valence_max !== old.valence_max;
+                    if (changed) acc.push(fi);
+                    return acc;
+                  }, []);
+
+                  if (changedFlatIndices.length === 0) return; // no-op (e.g. only sync_mode changed)
+
+                  // Per-segment regenerate: only affected indices, preserving all others
+                  generateDebounceRef.current = setTimeout(() => {
+                    for (const fi of changedFlatIndices) {
+                      void generateSegmentOnly(fi, undefined, newItems);
+                    }
                   }, 600);
                 }
               }}
