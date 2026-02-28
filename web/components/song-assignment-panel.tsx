@@ -8,6 +8,8 @@ import { Segment, SegmentItem, RepeatGroup, TYPE_COLORS } from "./segment-editor
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 
+const POOL_EXHAUSTION_THRESHOLD = 3;
+
 interface SegmentSongs {
   songs: SongData[];
   loading?: boolean;
@@ -28,7 +30,7 @@ interface Props {
   onPreview: (song: SongData) => void;
   onPumpUp: (segIdx: number) => void;
   onWidenBpm: (flatIdx: number) => void;
-  onAddPlaylists: () => void;
+  onAddPlaylists: (flatIdx: number) => void;
   onSave: () => void;
   saving: boolean;
   savedUrl?: string;
@@ -47,7 +49,7 @@ interface SectionProps {
   onFocus: () => void;
   onPumpUp: () => void;
   onWidenBpm: () => void;
-  onAddPlaylists: () => void;
+  onAddPlaylists: () => void; // pre-bound with flatIdx by sectionProps()
   onReorder: (songs: SongData[]) => void;
   onExclude: (trackId: string) => void;
   onPlace: (song: SongData) => void;
@@ -88,7 +90,7 @@ function SegmentSection({
       </div>
 
       {/* Pool exhaustion warning */}
-      {assignment && assignment.poolCount !== undefined && assignment.poolCount < 3 && !assignment.loading && (
+      {assignment && assignment.poolCount !== undefined && assignment.poolCount < POOL_EXHAUSTION_THRESHOLD && !assignment.loading && (
         <div className="mt-1 flex items-center gap-2 text-xs text-amber-400">
           <AlertTriangle className="w-3 h-3 shrink-0" />
           <span>Only {assignment.poolCount} song{assignment.poolCount !== 1 ? "s" : ""} found</span>
@@ -208,7 +210,7 @@ export default function SongAssignmentPanel({
       onFocus: () => onFocus(focusedIdx === flatIdx ? -1 : flatIdx),
       onPumpUp: () => onPumpUp(flatIdx),
       onWidenBpm: () => onWidenBpm(flatIdx),
-      onAddPlaylists,
+      onAddPlaylists: () => onAddPlaylists(flatIdx),
       onReorder: (songs) => onReorder(flatIdx, songs),
       onExclude: (trackId) => onExclude(flatIdx, trackId),
       onPlace: (song) => onPlace(flatIdx, song),
