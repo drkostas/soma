@@ -9,7 +9,7 @@ interface Props {
   segmentConfig: {
     bpm_min: number; bpm_max: number; bpm_tolerance: number;
     valence_min: number; valence_max: number; min_energy: number;
-    genres: string[]; exclude_ids: string[];
+    genres: string[];
   };
   placedIds: Set<string>;
   onPreview: (song: SongData) => void;
@@ -50,7 +50,7 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, onPrev
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(segmentConfig), placedIds.size]);
+  }, [JSON.stringify(segmentConfig), [...placedIds].sort().join(",")]);
 
   useEffect(() => {
     const el = stripRef.current;
@@ -67,7 +67,7 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, onPrev
         <AnimatePresence>
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
-              <motion.div key={`sk-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-40 h-14 rounded-lg bg-muted animate-pulse shrink-0" />
+              <motion.div key={`sk-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-40 h-14 rounded-lg bg-muted animate-pulse shrink-0" />
             ))
           ) : (
             songs.map((song) => (
