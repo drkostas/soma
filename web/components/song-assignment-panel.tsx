@@ -31,6 +31,7 @@ interface Props {
   onPumpUp: (segIdx: number) => void;
   onWidenBpm: (flatIdx: number) => void;
   onAddPlaylists: (flatIdx: number) => void;
+  onBankChanged?: () => void;
   onSave: () => void;
   saving: boolean;
   savedUrl?: string;
@@ -55,11 +56,12 @@ interface SectionProps {
   onPlace: (song: SongData) => void;
   onPreview: (song: SongData) => void;
   onToggleExcluded: () => void;
+  onBankChanged?: () => void;
 }
 
 function SegmentSection({
   seg, flatIdx, label, assignment, excludedIds, allPlacedIds, selectedGenres,
-  isFocused, showExcluded, onFocus, onPumpUp, onWidenBpm, onAddPlaylists, onReorder, onExclude, onPlace, onPreview, onToggleExcluded
+  isFocused, showExcluded, onFocus, onPumpUp, onWidenBpm, onAddPlaylists, onReorder, onExclude, onPlace, onPreview, onToggleExcluded, onBankChanged
 }: SectionProps) {
   const songs = assignment?.songs ?? [];
   const excluded = songs.filter(s => excludedIds.has(s.track_id));
@@ -127,6 +129,13 @@ function SegmentSection({
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ track_id: song.track_id, name: song.name, artist_name: song.artist_name, tempo: song.tempo, energy: song.energy }),
+                  }).then(async r => {
+                    if (!r.ok) {
+                      const data = await r.json().catch(() => ({}));
+                      console.warn("Pump-up bank:", (data as { error?: string }).error ?? "Failed to add song");
+                    } else {
+                      onBankChanged?.();
+                    }
                   }).catch(() => {});
                 }}
               />
@@ -179,7 +188,7 @@ function SegmentSection({
 export default function SongAssignmentPanel({
   items, assignments, excludedIds, selectedGenres,
   focusedIdx, onFocus, onExclude, onPlace, onReorder,
-  onPreview, onPumpUp, onWidenBpm, onAddPlaylists, onSave, saving, savedUrl
+  onPreview, onPumpUp, onWidenBpm, onAddPlaylists, onBankChanged, onSave, saving, savedUrl
 }: Props) {
   const [showExcluded, setShowExcluded] = useState<Record<number, boolean>>({});
 
@@ -228,6 +237,7 @@ export default function SongAssignmentPanel({
       onPlace: (song) => onPlace(flatIdx, song),
       onPreview,
       onToggleExcluded: () => setShowExcluded(p => ({ ...p, [flatIdx]: !p[flatIdx] })),
+      onBankChanged,
     };
   }
 

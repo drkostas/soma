@@ -15,7 +15,7 @@ interface Props {
   onThresholdChange: (v: number) => void;
   workoutName?: string;
   onChangeRun?: () => void;
-  onOpenBank: () => void;
+  onOpenBank?: () => void;
 }
 
 export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGenresChange, genreThreshold, onThresholdChange, workoutName, onChangeRun, onOpenBank }: Props) {
@@ -54,9 +54,11 @@ export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGen
           <PlaylistGenrePicker selected={genres} onChange={onGenresChange} threshold={genreThreshold} onThresholdChange={onThresholdChange} />
         </PopoverContent>
       </Popover>
-      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onOpenBank}>
-        <Zap className="w-3 h-3" /> Bank
-      </Button>
+      {onOpenBank && (
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onOpenBank}>
+          <Zap className="w-3 h-3" /> Bank
+        </Button>
+      )}
     </div>
   );
 }

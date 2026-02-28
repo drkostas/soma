@@ -90,11 +90,14 @@ export default function SongCard({ song, onExclude, onPreview, draggable: _dragg
           <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
             <div className="h-full bg-primary/60 rounded-full" style={{ width: energyWidth }} />
           </div>
-          <span className="text-xs text-muted-foreground hidden group-hover:block">{durationStr}</span>
+          {song.duration_ms > 0 && (
+            <span className="text-xs text-muted-foreground hidden group-hover:block">{durationStr}</span>
+          )}
         </div>
         {onAddToPumpUp && (
           <button
             type="button"
+            aria-label="Add to pump-up bank"
             onClick={(e) => { e.stopPropagation(); onAddToPumpUp(); }}
             className="text-muted-foreground hover:text-amber-400 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
           >
