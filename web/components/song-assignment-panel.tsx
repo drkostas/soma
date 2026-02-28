@@ -68,7 +68,14 @@ function SegmentSection({
   const songs = assignment?.songs ?? [];
   const excluded = songs.filter(s => excludedIds.has(s.track_id));
   const placed = songs.filter(s => !excludedIds.has(s.track_id));
-  const nonSkip = placed.filter(s => !s.is_skip);
+  // Compute genre warning: song has genres, user has selected genres, but none match
+  const withWarning = (s: SongData): SongData => ({
+    ...s,
+    has_genre_warning: selectedGenres.length > 0 && (s.genres?.length ?? 0) > 0
+      ? !s.genres!.some(g => selectedGenres.includes(g))
+      : false,
+  });
+  const nonSkip = placed.filter(s => !s.is_skip).map(withWarning);
   const skipSong = placed.find(s => s.is_skip);
   const displayLabel = label ?? seg.type;
   const durationMin = Math.round(seg.duration_s / 60);
