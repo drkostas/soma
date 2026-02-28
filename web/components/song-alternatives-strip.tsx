@@ -85,7 +85,18 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, exclud
               >
                 <div className="text-xs font-medium truncate">{song.name}</div>
                 <div className="text-xs text-muted-foreground truncate">{song.artist_name}</div>
-                <div className="text-xs text-muted-foreground">{song.tempo.toFixed(0)} BPM</div>
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  {(() => {
+                    const lo = segmentConfig.bpm_min - segmentConfig.bpm_tolerance;
+                    const hi = segmentConfig.bpm_max + segmentConfig.bpm_tolerance;
+                    const inFull = song.tempo >= lo && song.tempo <= hi;
+                    const inHalf = song.tempo >= lo / 2 && song.tempo <= hi / 2;
+                    return !inFull && inHalf ? (
+                      <span title={`${song.tempo.toFixed(0)} BPM — half-time match at ${(song.tempo * 2).toFixed(0)} SPM`} className="border rounded px-0.5 text-[10px] leading-tight cursor-help">½</span>
+                    ) : null;
+                  })()}
+                  {song.tempo.toFixed(0)} BPM
+                </div>
                 <div className="flex gap-1 mt-auto">
                   <button type="button" onClick={() => onPreview(song)} className="flex-1 flex items-center justify-center gap-1 text-xs border rounded hover:bg-muted py-0.5 transition-colors">
                     <Play className="w-3 h-3" /> Preview
