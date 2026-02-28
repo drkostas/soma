@@ -29,7 +29,8 @@ async function fetchSourceTracks(sourceId: string): Promise<SpotifyTrack[]> {
     const res = await spotifyFetch(url);
     if (res.status === 429) {
       const retryAfter = parseInt(res.headers.get("Retry-After") ?? "5", 10);
-      await new Promise((r) => setTimeout(r, Math.min(retryAfter, 10) * 1000));
+      if (retryAfter > 60) throw new Error(`Spotify rate-limited for ${Math.round(retryAfter / 60)} min. Try again later.`);
+      await new Promise((r) => setTimeout(r, retryAfter * 1000));
       continue; // retry same url
     }
     if (!res.ok) {
@@ -173,7 +174,7 @@ export async function POST(req: NextRequest) {
 
         controller.enqueue(enc("done", { cached: existingSet.size, new: inserted, total: allIds.length }));
       } catch (err) {
-        controller.enqueue(enc("error", { message: String(err) }));
+        controller.enqueue(enc("error", { message: err instanceof Error ? err.message : String(err) }));
       } finally {
         controller.close();
       }
