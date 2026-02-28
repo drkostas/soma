@@ -35,7 +35,7 @@ export default function SongCard({ song, onExclude, onPreview, draggable: _dragg
             <div className="text-xs font-medium truncate">{song.name}</div>
             <div className="text-xs text-muted-foreground truncate">{song.artist_name}</div>
           </div>
-          <div className="text-xs text-muted-foreground whitespace-nowrap">{song.tempo.toFixed(0)} BPM</div>
+          {song.tempo > 0 && <div className="text-xs text-muted-foreground whitespace-nowrap">{song.tempo.toFixed(0)} BPM</div>}
           <Badge variant="outline" className="text-xs shrink-0">SKIP</Badge>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -86,7 +86,7 @@ export default function SongCard({ song, onExclude, onPreview, draggable: _dragg
               <TooltipContent side="top" className="text-xs">Outside current genre filter — placed intentionally</TooltipContent>
             </Tooltip>
           )}
-          <span className="text-xs text-muted-foreground">{song.tempo.toFixed(0)} BPM</span>
+          {song.tempo > 0 && <span className="text-xs text-muted-foreground">{song.tempo.toFixed(0)} BPM</span>}
           <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
             <div className="h-full bg-primary/60 rounded-full" style={{ width: energyWidth }} />
           </div>
