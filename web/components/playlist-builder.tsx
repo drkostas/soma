@@ -28,6 +28,8 @@ export default function PlaylistBuilder() {
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
   const syncingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const generateDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Scroll sync between panels
   useEffect(() => {
@@ -52,34 +54,62 @@ export default function PlaylistBuilder() {
   }, [undo, redo]);
 
   // Generate playlist via SSE
-  async function generate(segs: Segment[]) {
+  async function generate(segs: Segment[], signal?: AbortSignal) {
     setAssignments(Object.fromEntries(segs.map((_, i) => [i, { songs: [], loading: true }])));
-    const res = await fetch("/api/playlist/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ segments: segs, excluded_track_ids: Array.from(excludedIds), genre_selection: genres, genre_threshold: genreThreshold, source_playlist_ids: sources }),
-    });
-    if (!res.body) return;
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const event = JSON.parse(line.slice(6));
-        if (event.type === "segment_done") {
-          setAssignments(prev => ({ ...prev, [event.index]: { songs: event.songs, loading: false, poolCount: event.pool_count } }));
-        } else if (event.type === "segment_warning") {
-          setAssignments(prev => ({ ...prev, [event.index]: { ...prev[event.index], warning: event.message } }));
-        } else if (event.type === "done") {
-          setSessionId(event.session_id);
+    setSavedUrl(undefined);  // Reset stale Spotify URL
+    setSessionId(null);       // Reset stale session
+    try {
+      const res = await fetch("/api/playlist/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ segments: segs, excluded_track_ids: Array.from(excludedIds), genre_selection: genres, genre_threshold: genreThreshold, source_playlist_ids: sources }),
+        signal,
+      });
+      if (!res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "segment_done") {
+              setAssignments(prev => ({ ...prev, [event.index]: { songs: event.songs, loading: false, poolCount: event.pool_count } }));
+            } else if (event.type === "segment_warning") {
+              setAssignments(prev => ({ ...prev, [event.index]: { ...prev[event.index], warning: event.message } }));
+            } else if (event.type === "done") {
+              setSessionId(event.session_id);
+            } else if (event.type === "error") {
+              console.error("Playlist generation error:", event.message);
+              setAssignments(prev => {
+                const next = { ...prev };
+                for (const k in next) {
+                  if (next[k].loading) next[k] = { ...next[k], loading: false, warning: "Generation failed" };
+                }
+                return next;
+              });
+            }
+          } catch (err) {
+            console.error("SSE parse error:", err);
+          }
         }
       }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return; // Ignore cancellation
+      console.error("Generate failed:", err);
+      setAssignments(prev => {
+        const next = { ...prev };
+        for (const k in next) {
+          if (next[k].loading) next[k] = { ...next[k], loading: false, warning: "Generation failed" };
+        }
+        return next;
+      });
     }
   }
 
@@ -103,14 +133,17 @@ export default function PlaylistBuilder() {
     }
   }
 
-  function handleExclude(segIdx: number, trackId: string) {
+  function handleExclude(_segIdx: number, trackId: string) {
+    const isExcluding = !excludedIds.has(trackId);
     setExcludedIds(prev => {
       const next = new Set(prev);
       if (next.has(trackId)) { next.delete(trackId); } else { next.add(trackId); }
       return next;
     });
-    // Blacklist learning
-    void fetch("/api/playlist/blacklist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ track_id: trackId }) });
+    // Blacklist learning — only call API when actually excluding, not restoring
+    if (isExcluding) {
+      void fetch("/api/playlist/blacklist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ track_id: trackId }) });
+    }
   }
 
   return (
@@ -121,7 +154,17 @@ export default function PlaylistBuilder() {
         <div ref={leftRef} className="w-[40%] border-r overflow-y-auto">
           <RunSegmentTimeline
             segments={segments}
-            onChange={(segs) => { setSegments(segs); if (segs.length > 0) void generate(segs); }}
+            onChange={(segs) => {
+              setSegments(segs);
+              if (segs.length > 0) {
+                clearTimeout(generateDebounceRef.current);
+                generateDebounceRef.current = setTimeout(() => {
+                  abortRef.current?.abort();
+                  abortRef.current = new AbortController();
+                  void generate(segs, abortRef.current.signal);
+                }, 600);
+              }
+            }}
             focusedIdx={focusedIdx}
             onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
             onPumpUp={(_idx) => { /* pump-up modal — Task 12 */ }}
