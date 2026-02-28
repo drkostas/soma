@@ -17,6 +17,7 @@
     "lucide-react": "^0.575.0",
     "maplibre-gl": "^5.19.0",
     "motion": "^12.34.3",
+    "nanoid": "^5.1.6",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
     "radix-ui": "^1.4.3",
