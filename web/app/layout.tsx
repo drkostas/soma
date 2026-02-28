@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/sidebar";
 import { DemoBanner } from "@/components/demo-banner";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -29,6 +30,7 @@ export default function RootLayout({
           <main className={`ml-16 min-h-screen bg-background${isDemo ? " pt-8" : ""}`}>
             {children}
           </main>
+        <Toaster richColors />
         </TooltipProvider>
       </body>
     </html>

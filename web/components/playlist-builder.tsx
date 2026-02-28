@@ -1,6 +1,7 @@
 // web/components/playlist-builder.tsx
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import PlaylistTopBar from "./playlist-top-bar";
 import RunSegmentTimeline from "./run-segment-timeline";
 import SongAssignmentPanel from "./song-assignment-panel";
@@ -406,10 +407,38 @@ export default function PlaylistBuilder() {
       if (next.has(trackId)) { next.delete(trackId); } else { next.add(trackId); }
       return next;
     });
-    // Blacklist learning — only call API when actually excluding, not restoring
-    if (isExcluding) {
-      void fetch("/api/playlist/blacklist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ track_id: trackId }) });
-    }
+    if (!isExcluding) return; // restoring — no API call
+
+    // Find the song name/artist for the toast message
+    const song = Object.values(assignments).flatMap(a => a.songs).find(s => s.track_id === trackId);
+    const songName = song?.name ?? "This song";
+    const artistName = song?.artist_name ?? "";
+
+    fetch("/api/playlist/blacklist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ track_id: trackId, name: songName, artist_name: artistName }),
+    })
+      .then(r => r.json())
+      .then((data: { count: number }) => {
+        if (data.count >= 3) {
+          toast(`${songName} — ${artistName}`, {
+            description: "You've excluded this 3 times",
+            action: {
+              label: "Never suggest",
+              onClick: () => {
+                void fetch("/api/playlist/blacklist/confirm", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ track_id: trackId, name: songName, artist_name: artistName }),
+                });
+              },
+            },
+            duration: 8000,
+          });
+        }
+      })
+      .catch(() => {});
   }
 
   async function handlePumpUp(flatIdx: number) {
