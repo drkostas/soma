@@ -91,7 +91,8 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
         </TabsContent>
 
         {/* Saved Plans — user-created plans + Garmin structured workouts */}
-        <TabsContent value="plans" className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
+        <TabsContent value="plans" className="flex-1 overflow-hidden flex flex-col px-3 pb-3">
+          <div className="flex-1 overflow-y-auto space-y-1">
           {totalPlans === 0 ? (
             <div className="text-xs text-muted-foreground pt-4 text-center space-y-1">
               <p>No saved plans yet.</p>
@@ -137,6 +138,7 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
               ))}
             </>
           )}
+          </div>
         </TabsContent>
 
         {/* History */}
