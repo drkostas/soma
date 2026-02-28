@@ -268,15 +268,15 @@ export default function PlaylistBuilder() {
 
   // Per-segment regeneration: runs the SSE API for a single segment only.
   // Does NOT reset other assignments — only marks the targeted flat indices as loading.
-  async function generateSegmentOnly(flatIdx: number, toleranceBoost = 0) {
+  async function generateSegmentOnly(flatIdx: number, toleranceOverride?: number) {
     const { segments: allSegs, flatIndexMap } = segsForGenerate(items);
     const apiIdx = flatIndexMap.findIndex(indices => indices.includes(flatIdx));
     if (apiIdx === -1) return;
 
     const flatIndices = flatIndexMap[apiIdx];
     const seg = allSegs[apiIdx];
-    const segWithBoost = toleranceBoost > 0
-      ? { ...seg, bpm_tolerance: seg.bpm_tolerance + toleranceBoost }
+    const segWithOverride = toleranceOverride !== undefined
+      ? { ...seg, bpm_tolerance: toleranceOverride }
       : seg;
 
     // Mark only the targeted flat indices as loading
@@ -294,7 +294,7 @@ export default function PlaylistBuilder() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          segments: [segWithBoost],
+          segments: [segWithOverride],
           excluded_track_ids: Array.from(excludedIds),
           genre_selection: genres,
           genre_threshold: genreThreshold,
@@ -363,21 +363,24 @@ export default function PlaylistBuilder() {
   }
 
   function handleWidenBpm(flatIdx: number) {
-    // Persist the updated bpm_tolerance in items state, then regenerate only that segment
+    // Persist the updated bpm_tolerance in items state, then regenerate only that segment.
+    // Compute newTolerance once and pass as an absolute override to avoid double-adding
+    // (generateSegmentOnly reads items from closure which hasn't updated yet).
     const flat = flatItems(items);
     const seg = flat[flatIdx];
     if (!seg) return;
+    const newTolerance = seg.bpm_tolerance + 15;
     setItems(items.map(item => {
       if (item.type === "repeat") {
         const group = item as RepeatGroup;
         return { ...group, children: group.children.map(child =>
-          (child as Segment).id === seg.id ? { ...child, bpm_tolerance: (child as Segment).bpm_tolerance + 15 } : child
+          (child as Segment).id === seg.id ? { ...child, bpm_tolerance: newTolerance } : child
         )};
       }
       const s = item as Segment;
-      return s.id === seg.id ? { ...s, bpm_tolerance: s.bpm_tolerance + 15 } : s;
+      return s.id === seg.id ? { ...s, bpm_tolerance: newTolerance } : s;
     }));
-    void generateSegmentOnly(flatIdx, 15);
+    void generateSegmentOnly(flatIdx, newTolerance);
   }
 
   async function handleSave() {
@@ -421,7 +424,7 @@ export default function PlaylistBuilder() {
     })
       .then(r => r.json())
       .then((data: { count: number }) => {
-        if (data.count === 3) {
+        if (data.count >= 3) {
           toast(`${songName} — ${artistName}`, {
             description: "You've excluded this 3 times",
             action: {
@@ -555,7 +558,9 @@ export default function PlaylistBuilder() {
             onPreview={setPreviewSong}
             onPumpUp={handlePumpUp}
             onWidenBpm={handleWidenBpm}
-            onAddPlaylists={(_idx) => { /* TODO: open source picker */ }}
+            onAddPlaylists={() => {
+                  toast("Open the Sources menu to add more playlists", { duration: 4000 });
+                }}
             onBankChanged={() => setPumpUpBankKey(k => k + 1)}
             onSave={handleSave}
             saving={saving}
