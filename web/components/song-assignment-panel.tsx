@@ -42,7 +42,7 @@ export default function SongAssignmentPanel({
     Object.values(assignments).flatMap(a => a.songs.map(s => s.track_id))
   );
 
-  const totalPlaced = Object.values(assignments).reduce((s, a) => s + a.songs.filter(x => !x.is_skip).length, 0);
+  const totalPlaced = Object.values(assignments).reduce((s, a) => s + a.songs.filter(x => !x.is_skip && !excludedIds.has(x.track_id)).length, 0);
   const totalTracks = Object.values(assignments).reduce((s, a) => s + a.songs.length, 0);
 
   return (
@@ -58,9 +58,9 @@ export default function SongAssignmentPanel({
           const skipSong = placed.find(s => s.is_skip);
 
           return (
-            <motion.div key={idx} layout animate={{ opacity: focusedIdx !== -1 && !isFocused ? 0.5 : 1 }}>
-              {/* Segment header */}
-              <button type="button" className="w-full flex items-center gap-2 text-left mb-2" onClick={() => onFocus(isFocused ? -1 : idx)}>
+            <motion.div key={seg.id} layout animate={{ opacity: focusedIdx !== -1 && !isFocused ? 0.5 : 1 }}>
+              {/* Segment header — outer div to avoid nested buttons */}
+              <div className="w-full flex items-center gap-2 text-left mb-2 cursor-pointer" role="button" tabIndex={0} onClick={() => onFocus(isFocused ? -1 : idx)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onFocus(isFocused ? -1 : idx); } }}>
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground capitalize">{seg.type}</span>
                 <span className="text-xs text-muted-foreground">{Math.floor(seg.duration_s/60)} min</span>
                 <span className="text-xs text-muted-foreground">{seg.bpm_min}–{seg.bpm_max} BPM</span>
@@ -69,7 +69,7 @@ export default function SongAssignmentPanel({
                   <Zap className="w-3.5 h-3.5" />
                 </button>
                 {assignment && <span className="text-xs text-muted-foreground">Pool: {assignment.poolCount ?? "?"} · {nonSkip.length} placed</span>}
-              </button>
+              </div>
 
               {/* Song list */}
               <Reorder.Group axis="y" values={nonSkip} onReorder={(reordered) => onReorder(idx, [...reordered, ...(skipSong ? [skipSong] : [])])} className="space-y-1.5">
