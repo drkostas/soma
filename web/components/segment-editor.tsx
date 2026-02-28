@@ -9,6 +9,12 @@ import { Label } from "@/components/ui/label";
 export const SEGMENT_TYPES = ["warmup","easy","aerobic","tempo","interval","vo2max","recovery","rest","strides","cooldown"] as const;
 export type SegmentType = typeof SEGMENT_TYPES[number];
 
+export const BPM_DEFAULTS: Record<SegmentType, { min: number; max: number }> = {
+  warmup: { min: 100, max: 140 }, easy: { min: 125, max: 145 }, aerobic: { min: 125, max: 145 },
+  tempo: { min: 160, max: 180 }, interval: { min: 175, max: 195 }, vo2max: { min: 175, max: 195 },
+  recovery: { min: 125, max: 145 }, rest: { min: 80, max: 110 }, strides: { min: 160, max: 180 }, cooldown: { min: 60, max: 90 },
+};
+
 export const TYPE_COLORS: Record<SegmentType, string> = {
   warmup: "bg-yellow-500", easy: "bg-green-500", aerobic: "bg-blue-500",
   tempo: "bg-orange-500", interval: "bg-red-500", vo2max: "bg-purple-500",
@@ -47,7 +53,7 @@ export default function SegmentEditor({ segment, onChange }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs">Type</Label>
-            <Select value={segment.type} onValueChange={(v) => update({ type: v as SegmentType })}>
+            <Select value={segment.type} onValueChange={(v) => { const t = v as SegmentType; const bpm = BPM_DEFAULTS[t]; update({ type: t, bpm_min: bpm.min, bpm_max: bpm.max }); }}>
               <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SEGMENT_TYPES.map(t => <SelectItem key={t} value={t} className="text-xs capitalize">{t}</SelectItem>)}

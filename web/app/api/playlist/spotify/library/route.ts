@@ -27,7 +27,15 @@ async function fetchSourceTracks(sourceId: string): Promise<SpotifyTrack[]> {
 
   while (url) {
     const res = await spotifyFetch(url);
-    if (!res.ok) break;
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get("Retry-After") ?? "5", 10);
+      await new Promise((r) => setTimeout(r, Math.min(retryAfter, 10) * 1000));
+      continue; // retry same url
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Spotify ${res.status} for ${url}: ${body.slice(0, 120)}`);
+    }
     const data = await res.json();
     for (const item of data.items ?? []) {
       const t: SpotifyTrack = item.track ?? item;
