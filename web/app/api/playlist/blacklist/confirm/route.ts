@@ -5,6 +5,9 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   const { track_id, name, artist_name } = await req.json();
+  if (!track_id || typeof track_id !== "string") {
+    return NextResponse.json({ error: "track_id required" }, { status: 400 });
+  }
   const sql = getDb();
 
   await sql`

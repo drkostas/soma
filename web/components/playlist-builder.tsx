@@ -417,11 +417,11 @@ export default function PlaylistBuilder() {
     fetch("/api/playlist/blacklist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ track_id: trackId, name: songName, artist_name: artistName }),
+      body: JSON.stringify({ track_id: trackId }),
     })
       .then(r => r.json())
       .then((data: { count: number }) => {
-        if (data.count >= 3) {
+        if (data.count === 3) {
           toast(`${songName} — ${artistName}`, {
             description: "You've excluded this 3 times",
             action: {
@@ -431,7 +431,7 @@ export default function PlaylistBuilder() {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ track_id: trackId, name: songName, artist_name: artistName }),
-                });
+                }).catch((err) => { console.error("Failed to blacklist:", err); });
               },
             },
             duration: 8000,
