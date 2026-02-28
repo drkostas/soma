@@ -12,11 +12,12 @@ interface Props {
     genres: string[];
   };
   placedIds: Set<string>;
+  excludedIds: Set<string>;
   onPreview: (song: SongData) => void;
   onPlace: (song: SongData) => void;
 }
 
-export default function SongAlternativesStrip({ segmentConfig, placedIds, onPreview, onPlace }: Props) {
+export default function SongAlternativesStrip({ segmentConfig, placedIds, excludedIds, onPreview, onPlace }: Props) {
   const [songs, setSongs] = useState<SongData[]>([]);
   const [loading, setLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -35,12 +36,12 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, onPrev
         valence_min: segmentConfig.valence_min.toString(),
         valence_max: segmentConfig.valence_max.toString(),
         half_time: "true",
-        exclude: Array.from(placedIds).join(","),
+        exclude: Array.from(new Set([...placedIds, ...excludedIds])).join(","),
         ...(segmentConfig.genres.length > 0 ? { genres: segmentConfig.genres.join(",") } : {}),
       });
       try {
         const data = await fetch(`/api/playlist/tracks?${params}`).then(r => r.json());
-        setSongs((data ?? []).filter((s: SongData) => !placedIds.has(s.track_id)).slice(0, 12));
+        setSongs((data ?? []).filter((s: SongData) => !placedIds.has(s.track_id) && !excludedIds.has(s.track_id)).slice(0, 12));
       } catch {
         // ignore fetch errors
       }
@@ -50,7 +51,7 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, onPrev
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(segmentConfig), [...placedIds].sort().join(",")]);
+  }, [JSON.stringify(segmentConfig), [...placedIds].sort().join(","), [...excludedIds].sort().join(",")]);
 
   useEffect(() => {
     const el = stripRef.current;

@@ -114,6 +114,7 @@ function SegmentSection({
         <SongAlternativesStrip
           segmentConfig={{ bpm_min: seg.bpm_min, bpm_max: seg.bpm_max, bpm_tolerance: seg.bpm_tolerance, valence_min: seg.valence_min, valence_max: seg.valence_max, min_energy: 0.5, genres: selectedGenres }}
           placedIds={allPlacedIds}
+          excludedIds={excludedIds}
           onPreview={onPreview}
           onPlace={onPlace}
         />
