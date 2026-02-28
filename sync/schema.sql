@@ -266,3 +266,23 @@ CREATE TABLE IF NOT EXISTS strava_raw_data (
 
 CREATE INDEX IF NOT EXISTS idx_strava_raw_id ON strava_raw_data(strava_id);
 CREATE INDEX IF NOT EXISTS idx_strava_raw_endpoint ON strava_raw_data(endpoint_name);
+
+-- ===================
+-- PLAYLIST / WORKOUT BUILDER
+-- ===================
+
+CREATE TABLE IF NOT EXISTS garmin_workouts (
+    workout_id      TEXT PRIMARY KEY,
+    workout_name    TEXT NOT NULL,
+    sport_type      TEXT DEFAULT 'running',
+    steps_summary   TEXT,
+    segments        JSONB,
+    raw_json        JSONB NOT NULL,
+    synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- workout_plans: garmin_workout_id and garmin_push_status added post-launch
+ALTER TABLE workout_plans
+    ADD COLUMN IF NOT EXISTS garmin_workout_id TEXT,
+    ADD COLUMN IF NOT EXISTS garmin_push_status TEXT DEFAULT 'none';
+
