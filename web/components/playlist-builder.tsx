@@ -199,7 +199,10 @@ export default function PlaylistBuilder() {
       }
 
       // No stored assignments or no garmin ID — re-generate
-      if (!garminId) return;
+      if (!garminId) {
+        toast.error("This session can't be restored — no run was linked to it");
+        return;
+      }
       fetch(`/api/playlist/garmin-runs?id=${garminId}`)
         .then(r => r.json())
         .then(data => {
@@ -209,6 +212,7 @@ export default function PlaylistBuilder() {
           setItems(newItems);
           setWorkoutName(data.activity_name ?? "Run");
           setHasRun(true);
+          setExistingPlaylistId(null);
           abortRef.current?.abort();
           abortRef.current = new AbortController();
           void generate(segsForGenerate(newItems), abortRef.current.signal);
@@ -223,6 +227,7 @@ export default function PlaylistBuilder() {
       setItems(newItems);
       setWorkoutName(run.data?.activity_name ?? run.data?.name ?? "Run");
       setHasRun(true);
+      setExistingPlaylistId(null);
       abortRef.current?.abort();
       abortRef.current = new AbortController();
       void generate(segsForGenerate(newItems), abortRef.current.signal);
