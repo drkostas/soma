@@ -1,7 +1,7 @@
 // web/components/song-card.tsx
 "use client";
 import { motion } from "motion/react";
-import { X, SkipForward, Info } from "lucide-react";
+import { X, SkipForward, Info, Zap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 
@@ -16,9 +16,10 @@ interface Props {
   onExclude: () => void;
   onPreview: () => void;
   draggable?: boolean;
+  onAddToPumpUp?: () => void;
 }
 
-export default function SongCard({ song, onExclude, onPreview, draggable: _draggable }: Props) {
+export default function SongCard({ song, onExclude, onPreview, draggable: _draggable, onAddToPumpUp }: Props) {
   const durationStr = `${Math.floor(song.duration_ms / 60000)}:${String(Math.floor((song.duration_ms % 60000) / 1000)).padStart(2, "0")}`;
   const energyWidth = `${Math.round(song.energy * 100)}%`;
 
@@ -91,6 +92,15 @@ export default function SongCard({ song, onExclude, onPreview, draggable: _dragg
           </div>
           <span className="text-xs text-muted-foreground hidden group-hover:block">{durationStr}</span>
         </div>
+        {onAddToPumpUp && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAddToPumpUp(); }}
+            className="text-muted-foreground hover:text-amber-400 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Zap className="w-3.5 h-3.5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onExclude(); }}

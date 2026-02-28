@@ -6,6 +6,7 @@ import RunSegmentTimeline from "./run-segment-timeline";
 import SongAssignmentPanel from "./song-assignment-panel";
 import SpotifyPlayer from "./spotify-player";
 import PlaylistRunSelector from "./playlist-run-selector";
+import PumpUpModal from "./pump-up-modal";
 import { Segment, SegmentItem, RepeatGroup, SegmentType, BPM_DEFAULTS } from "./segment-editor";
 import { flatItems } from "./run-segment-timeline";
 import { SongData } from "./song-card";
@@ -106,6 +107,7 @@ export default function PlaylistBuilder() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [workoutName, setWorkoutName] = useState<string | undefined>();
   const [hasRun, setHasRun] = useState(false);
+  const [pumpUpModalOpen, setPumpUpModalOpen] = useState(false);
   const garminActivityIdRef = useRef<string | null>(null);
 
   const leftRef = useRef<HTMLDivElement>(null);
@@ -409,9 +411,49 @@ export default function PlaylistBuilder() {
     }
   }
 
+  async function handlePumpUp(flatIdx: number) {
+    let bankSongs: { track_id: string; name: string; artist_name: string; tempo: number | null; energy: number | null }[] = [];
+    try {
+      const res = await fetch("/api/playlist/pump-up");
+      bankSongs = await res.json();
+    } catch {
+      return;
+    }
+    if (!bankSongs.length) {
+      console.warn("Pump-up bank is empty");
+      return;
+    }
+    // Collect all currently placed track IDs across all segments
+    const allPlacedIds = new Set(
+      Object.values(assignments).flatMap(a => a.songs.map(s => s.track_id))
+    );
+    // Find first bank song not already placed and not excluded
+    const song = bankSongs.find(s => !allPlacedIds.has(s.track_id) && !excludedIds.has(s.track_id));
+    if (!song) {
+      console.warn("Pump-up bank: all songs already placed or excluded");
+      return;
+    }
+    // Inject pump-up song before skip song, after other placed songs
+    setAssignments(prev => {
+      const existing = prev[flatIdx]?.songs ?? [];
+      const nonSkip = existing.filter(s => !s.is_skip);
+      const skip = existing.filter(s => s.is_skip);
+      const pumpSong: SongData = {
+        track_id: song.track_id,
+        name: song.name,
+        artist_name: song.artist_name,
+        tempo: song.tempo ?? 0,
+        energy: song.energy ?? 0,
+        duration_ms: 0,
+        is_skip: false,
+      };
+      return { ...prev, [flatIdx]: { ...prev[flatIdx], songs: [...nonSkip, pumpSong, ...skip] } };
+    });
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); garminActivityIdRef.current = null; setHasRun(false); setItems([]); setAssignments({}); setWorkoutName(undefined); }} />
+      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); garminActivityIdRef.current = null; setHasRun(false); setItems([]); setAssignments({}); setWorkoutName(undefined); }} onOpenBank={() => setPumpUpModalOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         {/* Left: run selector (first time) or run timeline */}
         <div ref={leftRef} className="w-[40%] border-r overflow-y-auto">
@@ -464,7 +506,7 @@ export default function PlaylistBuilder() {
               }}
               focusedIdx={focusedIdx}
               onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
-              onPumpUp={(_idx) => { /* pump-up modal */ }}
+              onPumpUp={handlePumpUp}
             />
           )}
         </div>
@@ -481,7 +523,7 @@ export default function PlaylistBuilder() {
             onPlace={(idx, song) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs: [...(prev[idx]?.songs ?? []).filter(s => !s.is_skip), song, ...(prev[idx]?.songs ?? []).filter(s => s.is_skip)] } }))}
             onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
             onPreview={setPreviewSong}
-            onPumpUp={(_idx) => { /* pump-up modal — Task 12 */ }}
+            onPumpUp={handlePumpUp}
             onWidenBpm={handleWidenBpm}
             onAddPlaylists={(_idx) => { /* TODO: open source picker */ }}
             onSave={handleSave}
@@ -492,6 +534,8 @@ export default function PlaylistBuilder() {
       </div>
       {/* Mini player */}
       <SpotifyPlayer currentSong={previewSong} />
+      {/* Pump-up bank modal */}
+      <PumpUpModal open={pumpUpModalOpen} onClose={() => setPumpUpModalOpen(false)} />
     </div>
   );
 }

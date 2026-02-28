@@ -2,7 +2,7 @@
 "use client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronLeft } from "lucide-react";
+import { ChevronDown, ChevronLeft, Zap } from "lucide-react";
 import PlaylistSourcePicker from "./playlist-source-picker";
 import PlaylistGenrePicker from "./playlist-genre-picker";
 
@@ -15,9 +15,10 @@ interface Props {
   onThresholdChange: (v: number) => void;
   workoutName?: string;
   onChangeRun?: () => void;
+  onOpenBank: () => void;
 }
 
-export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGenresChange, genreThreshold, onThresholdChange, workoutName, onChangeRun }: Props) {
+export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGenresChange, genreThreshold, onThresholdChange, workoutName, onChangeRun, onOpenBank }: Props) {
   return (
     <div className="sticky top-0 z-10 flex items-center gap-2 p-2 border-b bg-background/80 backdrop-blur-sm">
       {workoutName && onChangeRun ? (
@@ -53,6 +54,9 @@ export default function PlaylistTopBar({ sources, onSourcesChange, genres, onGen
           <PlaylistGenrePicker selected={genres} onChange={onGenresChange} threshold={genreThreshold} onThresholdChange={onThresholdChange} />
         </PopoverContent>
       </Popover>
+      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onOpenBank}>
+        <Zap className="w-3 h-3" /> Bank
+      </Button>
     </div>
   );
 }
