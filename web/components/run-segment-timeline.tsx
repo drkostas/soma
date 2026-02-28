@@ -1,28 +1,36 @@
 // web/components/run-segment-timeline.tsx
 "use client";
 import { motion, AnimatePresence, Reorder } from "motion/react";
-import { Plus, GripVertical, Trash2, Zap, BookmarkPlus, Check } from "lucide-react";
+import { Plus, GripVertical, Trash2, Zap, BookmarkPlus, Check, Repeat2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import SegmentEditor, { Segment, BPM_DEFAULTS, TYPE_COLORS, SEGMENT_TYPES } from "./segment-editor";
+import SegmentEditor, { Segment, RepeatGroup, SegmentItem, BPM_DEFAULTS, TYPE_COLORS } from "./segment-editor";
 import { nanoid } from "nanoid";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 function newSegment(type: Segment["type"] = "easy", duration_s = 600): Segment {
   const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145 };
   return { id: nanoid(), type, duration_s, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto", valence_min: 0.3, valence_max: 0.7 };
 }
 
+function fmt(s: number) {
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+export function flatItems(items: SegmentItem[]): Segment[] {
+  return items.flatMap(item => item.type === "repeat" ? item.children : [item as Segment]);
+}
+
 interface Props {
-  segments: Segment[];
-  onChange: (segs: Segment[]) => void;
+  items: SegmentItem[];
+  onChange: (items: SegmentItem[]) => void;
   focusedIdx: number;
   onFocus: (idx: number) => void;
   onPumpUp: (idx: number) => void;
   onSavePlan?: (name: string) => Promise<void>;
 }
 
-export default function RunSegmentTimeline({ segments, onChange, focusedIdx, onFocus, onPumpUp, onSavePlan }: Props) {
+export default function RunSegmentTimeline({ items, onChange, focusedIdx, onFocus, onPumpUp, onSavePlan }: Props) {
   const [savingPlan, setSavingPlan] = useState(false);
   const [planNameInput, setPlanNameInput] = useState(false);
   const [planName, setPlanName] = useState("");
@@ -40,25 +48,125 @@ export default function RunSegmentTimeline({ segments, onChange, focusedIdx, onF
     setTimeout(() => setSaved(false), 2000);
   }
 
-  function updateSegment(idx: number, s: Segment) {
-    const next = [...segments]; next[idx] = s; onChange(next);
-  }
-  function removeSegment(idx: number) {
-    onChange(segments.filter((_, i) => i !== idx));
-    if (focusedIdx === idx) onFocus(-1);
-  }
-  function addSegment() {
-    onChange([...segments, newSegment()]);
+  // Flat start index for each top-level item
+  const flatStarts = useMemo(() => {
+    const starts: number[] = [];
+    let idx = 0;
+    for (const item of items) {
+      starts.push(idx);
+      idx += item.type === "repeat" ? item.children.length : 1;
+    }
+    return starts;
+  }, [items]);
+
+  function updateSegment(itemIdx: number, newSeg: Segment) {
+    const next = [...items];
+    next[itemIdx] = newSeg;
+    onChange(next);
   }
 
-  const totalMin = Math.round(segments.reduce((s, seg) => s + seg.duration_s, 0) / 60);
+  function updateGroupChild(itemIdx: number, templateIdx: number, newSeg: Segment) {
+    const group = items[itemIdx] as RepeatGroup;
+    const newChildren = group.children.map((child, ci) =>
+      ci % group.template_size === templateIdx ? { ...newSeg, id: child.id } : child
+    );
+    const next = [...items];
+    next[itemIdx] = { ...group, children: newChildren };
+    onChange(next);
+  }
+
+  function removeItem(itemIdx: number) {
+    const flatIdx = flatStarts[itemIdx];
+    onChange(items.filter((_, i) => i !== itemIdx));
+    if (focusedIdx >= flatIdx) onFocus(-1);
+  }
+
+  function addSegment() {
+    onChange([...items, newSegment()]);
+  }
+
+  const totalMin = Math.round(flatItems(items).reduce((s, seg) => s + seg.duration_s, 0) / 60);
 
   return (
     <div className="flex flex-col h-full">
-      <Reorder.Group axis="y" values={segments} onReorder={onChange} className="flex-1 overflow-y-auto p-3 space-y-1">
+      <Reorder.Group axis="y" values={items} onReorder={onChange} className="flex-1 overflow-y-auto p-3 space-y-1.5">
         <AnimatePresence>
-          {segments.map((seg, idx) => {
-            const isFocused = focusedIdx === idx;
+          {items.map((item, itemIdx) => {
+            const flatStart = flatStarts[itemIdx];
+
+            if (item.type === "repeat") {
+              const group = item as RepeatGroup;
+              const template = group.children.slice(0, group.template_size);
+              const totalGroupTime = group.children.reduce((s, c) => s + c.duration_s, 0);
+
+              return (
+                <Reorder.Item key={group.id} value={group} as="div">
+                  <motion.div layout className="rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 overflow-hidden">
+                    {/* Group header */}
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 select-none cursor-grab active:cursor-grabbing">
+                      <GripVertical className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <Repeat2 className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-bold text-foreground">{group.repeat_count}×</span>
+                      <span className="text-xs text-muted-foreground">repeat</span>
+                      <span className="text-xs text-muted-foreground ml-auto">{fmt(totalGroupTime)} total</span>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(itemIdx)}
+                        className="text-muted-foreground hover:text-destructive transition-colors p-0.5 ml-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* Template steps */}
+                    <div className="px-2 pb-2 space-y-1">
+                      {template.map((seg, templateIdx) => {
+                        const segFlatIdx = flatStart + templateIdx;
+                        const isFocused = focusedIdx === segFlatIdx;
+                        return (
+                          <motion.div
+                            key={seg.id}
+                            layout
+                            animate={{ minHeight: isFocused ? 120 : 36 }}
+                            className="rounded-md border bg-card overflow-hidden"
+                          >
+                            <div
+                              className="flex items-center gap-1.5 px-2 py-1 cursor-pointer select-none"
+                              onClick={() => onFocus(isFocused ? -1 : segFlatIdx)}
+                            >
+                              <div className={`w-1 h-5 rounded-full shrink-0 ${TYPE_COLORS[seg.type] ?? "bg-muted"}`} />
+                              <span className="text-xs font-medium capitalize flex-1">{seg.type}</span>
+                              <span className="text-xs text-muted-foreground">{fmt(seg.duration_s)}</span>
+                              <span className="text-xs text-muted-foreground">{seg.bpm_min}–{seg.bpm_max}</span>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); onPumpUp(segFlatIdx); }}
+                                className="text-muted-foreground hover:text-amber-400 transition-colors p-0.5"
+                              >
+                                <Zap className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <AnimatePresence>
+                              {isFocused && (
+                                <SegmentEditor
+                                  key={seg.id}
+                                  segment={seg}
+                                  onChange={s => updateGroupChild(itemIdx, templateIdx, s)}
+                                />
+                              )}
+                            </AnimatePresence>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                </Reorder.Item>
+              );
+            }
+
+            // Regular segment
+            const seg = item as Segment;
+            const isFocused = focusedIdx === flatStart;
             return (
               <Reorder.Item key={seg.id} value={seg} as="div">
                 <motion.div
@@ -66,29 +174,35 @@ export default function RunSegmentTimeline({ segments, onChange, focusedIdx, onF
                   animate={{ minHeight: isFocused ? 120 : 48 }}
                   className="rounded-lg border bg-card overflow-hidden"
                 >
-                  {/* Segment header */}
                   <div
                     className="flex items-center gap-2 p-2 cursor-pointer select-none"
-                    onClick={() => onFocus(isFocused ? -1 : idx)}
+                    onClick={() => onFocus(isFocused ? -1 : flatStart)}
                   >
                     <div className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground">
                       <GripVertical className="w-3 h-3" />
                     </div>
                     <div className={`w-1.5 h-8 rounded-full shrink-0 ${TYPE_COLORS[seg.type] ?? "bg-muted"}`} />
                     <span className="text-xs font-medium capitalize flex-1">{seg.type}</span>
-                    <span className="text-xs text-muted-foreground">{Math.floor(seg.duration_s/60)}:{String(seg.duration_s%60).padStart(2,"0")}</span>
+                    <span className="text-xs text-muted-foreground">{fmt(seg.duration_s)}</span>
                     <span className="text-xs text-muted-foreground">{seg.bpm_min}–{seg.bpm_max} BPM</span>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); onPumpUp(idx); }} className="text-muted-foreground hover:text-amber-400 transition-colors p-0.5">
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); onPumpUp(flatStart); }}
+                      className="text-muted-foreground hover:text-amber-400 transition-colors p-0.5"
+                    >
                       <Zap className="w-3 h-3" />
                     </button>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); removeSegment(idx); }} className="text-muted-foreground hover:text-destructive transition-colors p-0.5">
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); removeItem(itemIdx); }}
+                      className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                    >
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
-
                   <AnimatePresence>
                     {isFocused && (
-                      <SegmentEditor key={seg.id} segment={seg} onChange={(s) => updateSegment(idx, s)} />
+                      <SegmentEditor key={seg.id} segment={seg} onChange={s => updateSegment(itemIdx, s)} />
                     )}
                   </AnimatePresence>
                 </motion.div>

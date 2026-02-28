@@ -6,23 +6,47 @@ import RunSegmentTimeline from "./run-segment-timeline";
 import SongAssignmentPanel from "./song-assignment-panel";
 import SpotifyPlayer from "./spotify-player";
 import PlaylistRunSelector from "./playlist-run-selector";
-import { Segment, SegmentType, BPM_DEFAULTS } from "./segment-editor";
+import { Segment, SegmentItem, RepeatGroup, SegmentType, BPM_DEFAULTS } from "./segment-editor";
+import { flatItems } from "./run-segment-timeline";
 import { SongData } from "./song-card";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { nanoid } from "nanoid";
 
-function parsedToSegments(parsed: Array<{ type?: string; duration_s: number }>): Segment[] {
-  return parsed.map((p) => {
-    const type = (p.type as SegmentType) ?? "easy";
-    const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145 };
-    return { id: nanoid(), type, duration_s: p.duration_s, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto" as const, valence_min: 0.3, valence_max: 0.7 };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ParsedStep = { type?: string; duration_s?: number } | { type: "repeat"; repeat_count: number; children: ParsedStep[] };
+
+function makeSegment(p: { type?: string; duration_s?: number }): Segment {
+  const type = (p.type as SegmentType) ?? "easy";
+  const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145 };
+  return { id: nanoid(), type, duration_s: p.duration_s ?? 600, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto" as const, valence_min: 0.3, valence_max: 0.7 };
+}
+
+function parsedToItems(parsed: ParsedStep[]): SegmentItem[] {
+  return parsed.map(p => {
+    if (p.type === "repeat" && "children" in p) {
+      const repeatCount = (p as { repeat_count: number }).repeat_count ?? 1;
+      const rawChildren = (p as { children: ParsedStep[] }).children;
+      // Flatten any nested repeats in template (simplified: treat nested as individual steps)
+      const templateSegs = rawChildren
+        .filter(c => c.type !== "repeat")
+        .map(c => makeSegment(c as { type?: string; duration_s?: number }));
+      if (!templateSegs.length) return makeSegment({ type: "easy", duration_s: 600 });
+      const allChildren: Segment[] = [];
+      for (let i = 0; i < repeatCount; i++) {
+        for (const seg of templateSegs) {
+          allChildren.push(i === 0 ? seg : { ...seg, id: nanoid() });
+        }
+      }
+      return { id: nanoid(), type: "repeat" as const, repeat_count: repeatCount, template_size: templateSegs.length, children: allChildren } satisfies RepeatGroup;
+    }
+    return makeSegment(p as { type?: string; duration_s?: number });
   });
 }
 
 interface SegmentSongs { songs: SongData[]; loading?: boolean; poolCount?: number; warning?: string; }
 
 export default function PlaylistBuilder() {
-  const [segments, setSegments, undo, redo] = useUndoRedo<Segment[]>([]);
+  const [items, setItems, undo, redo] = useUndoRedo<SegmentItem[]>([]);
   const [assignments, setAssignments] = useState<Record<number, SegmentSongs>>({});
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [focusedIdx, setFocusedIdx] = useState(-1);
@@ -64,37 +88,36 @@ export default function PlaylistBuilder() {
       fetch(`/api/playlist/garmin-runs?id=${garminId}`)
         .then(r => r.json())
         .then(data => {
-          const segs = parsedToSegments(data.segments ?? []);
-          if (!segs.length) return;
+          const newItems = parsedToItems(data.segments ?? []);
+          if (!newItems.length) return;
           garminActivityIdRef.current = garminId;
-          setSegments(segs);
+          setItems(newItems);
           setWorkoutName(run.data?.activity_name ?? "Run");
           setHasRun(true);
           abortRef.current?.abort();
           abortRef.current = new AbortController();
-          void generate(segs, abortRef.current.signal);
+          void generate(flatItems(newItems), abortRef.current.signal);
         })
         .catch(() => {});
       return;
     }
     if (run.segments?.length > 0) {
-      const segs = parsedToSegments(run.segments);
+      const newItems = parsedToItems(run.segments);
       garminActivityIdRef.current = run.type === "garmin" ? (run.data?.activity_id ?? null) : null;
-      setSegments(segs);
+      setItems(newItems);
       setWorkoutName(run.data?.activity_name ?? run.data?.name ?? "Run");
       setHasRun(true);
-      // Trigger initial playlist generation
       abortRef.current?.abort();
       abortRef.current = new AbortController();
-      void generate(segs, abortRef.current.signal);
+      void generate(flatItems(newItems), abortRef.current.signal);
     }
   }
 
-  // Generate playlist via SSE
+  // Generate playlist via SSE — takes flat Segment[]
   async function generate(segs: Segment[], signal?: AbortSignal) {
     setAssignments(Object.fromEntries(segs.map((_, i) => [i, { songs: [], loading: true }])));
-    setSavedUrl(undefined);  // Reset stale Spotify URL
-    setSessionId(null);       // Reset stale session
+    setSavedUrl(undefined);
+    setSessionId(null);
     try {
       const res = await fetch("/api/playlist/sessions", {
         method: "POST",
@@ -185,7 +208,7 @@ export default function PlaylistBuilder() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); garminActivityIdRef.current = null; setHasRun(false); setSegments([]); setAssignments({}); setWorkoutName(undefined); }} />
+      <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { abortRef.current?.abort(); garminActivityIdRef.current = null; setHasRun(false); setItems([]); setAssignments({}); setWorkoutName(undefined); }} />
       <div className="flex flex-1 overflow-hidden">
         {/* Left: run selector (first time) or run timeline */}
         <div ref={leftRef} className="w-[40%] border-r overflow-y-auto">
@@ -198,43 +221,55 @@ export default function PlaylistBuilder() {
             </div>
           ) : (
             <RunSegmentTimeline
-              segments={segments}
+              items={items}
               onSavePlan={async (name) => {
-                const totalDuration = segments.reduce((s, seg) => s + (seg.duration_s ?? 0), 0);
+                // Store template-only hierarchical format (strip IDs)
+                function serializeItems(its: SegmentItem[]) {
+                  return its.map(it => {
+                    if (it.type === "repeat") {
+                      const { id: _id, children, ...rest } = it;
+                      return { ...rest, children: children.slice(0, it.template_size).map(({ id: _cid, ...cr }) => cr) };
+                    }
+                    const { id: _id, ...rest } = it as Segment;
+                    return rest;
+                  });
+                }
+                const flat = flatItems(items);
                 await fetch("/api/playlist/workout-plans", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     name,
-                    segments: segments.map(({ id: _id, ...rest }) => rest),
+                    segments: serializeItems(items),
                     sport_type: "running",
-                    total_duration_s: totalDuration,
+                    total_duration_s: flat.reduce((s, seg) => s + seg.duration_s, 0),
                     source: "builder",
                     garmin_activity_id: garminActivityIdRef.current,
                   }),
                 });
               }}
-              onChange={(segs) => {
-                setSegments(segs);
-                if (segs.length > 0) {
+              onChange={(newItems) => {
+                setItems(newItems);
+                const flat = flatItems(newItems);
+                if (flat.length > 0) {
                   clearTimeout(generateDebounceRef.current);
                   generateDebounceRef.current = setTimeout(() => {
                     abortRef.current?.abort();
                     abortRef.current = new AbortController();
-                    void generate(segs, abortRef.current.signal);
+                    void generate(flat, abortRef.current.signal);
                   }, 600);
                 }
               }}
               focusedIdx={focusedIdx}
               onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
-              onPumpUp={(_idx) => { /* pump-up modal — Task 12 */ }}
+              onPumpUp={(_idx) => { /* pump-up modal */ }}
             />
           )}
         </div>
         {/* Right: song assignment */}
         <div ref={rightRef} className="flex-1 overflow-y-auto">
           <SongAssignmentPanel
-            segments={segments}
+            segments={flatItems(items)}
             assignments={assignments}
             excludedIds={excludedIds}
             selectedGenres={genres}

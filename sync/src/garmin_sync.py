@@ -179,68 +179,59 @@ def sync_profile(client) -> int:
     return count
 
 
+_STEP_TYPE_MAP = {
+    "warmup": "warmup", "cooldown": "cooldown",
+    "interval": "interval", "recovery": "recovery", "rest": "rest",
+    "active": "aerobic",
+}
+
+
+def _step_duration(condition: str, end_val: float) -> int:
+    if condition == "time":
+        return max(int(end_val), 30)
+    elif condition == "distance":
+        return max(int(float(end_val) / 1000 * 330), 30)  # 5:30/km estimate
+    return 600  # lap button / unknown
+
+
 def _parse_workout_steps(steps: list) -> list:
-    """Recursively parse Garmin workout step DTOs into our segment format."""
+    """Parse Garmin step DTOs into hierarchical segment format.
+    Repeat groups are preserved (not expanded). 'other' type steps are skipped.
+    Returns: list of { type, duration_s } or { type: "repeat", repeat_count, children: [...] }
+    """
     result = []
     for step in steps:
         step_type = step.get("stepType", {}).get("stepTypeKey", "active")
-        condition = step.get("endCondition", {}).get("conditionTypeKey", "time")
-        end_val = step.get("endConditionValue") or 0
-
+        if step_type == "other":
+            continue  # lap-button prompts / transitions
         if step_type == "repeat":
             n = int(step.get("numberOfIterations") or 1)
-            inner = step.get("workoutSteps") or []
-            for _ in range(n):
-                result.extend(_parse_workout_steps(inner))
+            children = _parse_workout_steps(step.get("workoutSteps") or [])
+            if children:
+                result.append({"type": "repeat", "repeat_count": n, "children": children})
             continue
-
-        if condition == "time":
-            duration_s = int(end_val)
-        elif condition == "distance":
-            meters = float(end_val)
-            # Estimate: 5 min/km for intervals, 6 for easy, use 5.5 generic
-            duration_s = int(meters / 1000 * 330)  # 5:30/km in seconds
-        else:
-            duration_s = 600  # lap button / unknown → default 10 min
-
-        type_map = {
-            "warmup": "warmup", "interval": "interval", "recovery": "recovery",
-            "cooldown": "cooldown", "rest": "rest", "active": "aerobic",
-        }
+        condition = step.get("endCondition", {}).get("conditionTypeKey", "time")
+        end_val = step.get("endConditionValue") or 0
         result.append({
-            "type": type_map.get(step_type, "aerobic"),
-            "duration_s": max(duration_s, 30),
+            "type": _STEP_TYPE_MAP.get(step_type, "aerobic"),
+            "duration_s": _step_duration(condition, end_val),
         })
     return result
 
 
-def _workout_steps_summary(steps: list, depth: int = 0) -> str:
-    """Generate a human-readable summary of workout steps."""
+def _workout_steps_summary(parsed: list) -> str:
+    """Generate human-readable summary from parsed hierarchical segment data."""
     parts = []
-    i = 0
-    while i < len(steps):
-        step = steps[i]
-        step_type = step.get("stepType", {}).get("stepTypeKey", "active")
-        condition = step.get("endCondition", {}).get("conditionTypeKey", "time")
-        end_val = step.get("endConditionValue") or 0
-
-        if step_type == "repeat":
-            n = int(step.get("numberOfIterations") or 1)
-            inner = step.get("workoutSteps") or []
-            inner_summary = _workout_steps_summary(inner, depth + 1)
-            parts.append(f"{n}×[{inner_summary}]")
+    for item in parsed:
+        if item.get("type") == "repeat":
+            n = item.get("repeat_count", 1)
+            inner = _workout_steps_summary(item.get("children", []))
+            parts.append(f"{n}×[{inner}]")
         else:
-            if condition == "time":
-                mins = int(end_val) // 60
-                secs = int(end_val) % 60
-                dur = f"{mins}:{secs:02d}" if secs else f"{mins} min"
-            elif condition == "distance":
-                dur = f"{int(float(end_val))} m"
-            else:
-                dur = "lap"
-            label = step_type.capitalize()
-            parts.append(f"{label} {dur}")
-        i += 1
+            d = item.get("duration_s", 0)
+            mins, secs = divmod(int(d), 60)
+            dur = f"{mins}:{secs:02d}" if secs else f"{mins} min"
+            parts.append(f"{item.get('type', 'aerobic').capitalize()} {dur}")
     return " · ".join(parts)
 
 
@@ -271,7 +262,7 @@ def sync_garmin_workouts(client) -> int:
                 for seg in detail.get("workoutSegments", []):
                     all_steps.extend(seg.get("workoutSteps", []))
                 segments = _parse_workout_steps(all_steps)
-                summary = _workout_steps_summary(all_steps)
+                summary = _workout_steps_summary(segments)
 
                 cur.execute("""
                     INSERT INTO garmin_workouts
