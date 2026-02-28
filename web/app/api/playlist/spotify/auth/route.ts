@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SPOTIFY_SCOPES } from "@/lib/spotify-client";
 
 export const runtime = "edge";
-
-const SCOPES =
-  "user-library-read playlist-read-private playlist-modify-private user-modify-playback-state user-read-playback-state";
 
 async function sha256Base64url(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -32,7 +30,7 @@ export async function GET(_req: NextRequest) {
     client_id: process.env.SPOTIFY_CLIENT_ID!,
     response_type: "code",
     redirect_uri: process.env.SPOTIFY_REDIRECT_URI!,
-    scope: SCOPES,
+    scope: SPOTIFY_SCOPES,
     code_challenge_method: "S256",
     code_challenge: challenge,
     state,
