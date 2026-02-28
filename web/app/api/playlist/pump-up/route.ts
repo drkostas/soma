@@ -12,6 +12,12 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const { track_id, name, artist_name, tempo, energy } = await req.json();
+  if (!track_id || typeof track_id !== "string") {
+    return NextResponse.json({ error: "track_id required" }, { status: 400 });
+  }
+  if (!name || typeof name !== "string") {
+    return NextResponse.json({ error: "name required" }, { status: 400 });
+  }
   const sql = getDb();
   const [countRow] = await sql`SELECT COUNT(*) AS n FROM pump_up_songs`;
   if (parseInt((countRow as { n: string }).n) >= 10) {
