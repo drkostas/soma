@@ -85,7 +85,7 @@ export default function SongCard({ song, onExclude, onPreview, draggable: _dragg
               <TooltipContent side="top" className="text-xs">Outside current genre filter — placed intentionally</TooltipContent>
             </Tooltip>
           )}
-          <span className="text-xs text-muted-foreground">{song.tempo.toFixed(0)}</span>
+          <span className="text-xs text-muted-foreground">{song.tempo.toFixed(0)} BPM</span>
           <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
             <div className="h-full bg-primary/60 rounded-full" style={{ width: energyWidth }} />
           </div>
