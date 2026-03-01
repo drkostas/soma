@@ -31,6 +31,8 @@ DAILY_ENDPOINTS = {
     "intensity_minutes_data": lambda client, d: client.get_intensity_minutes_data(d),
     "daily_weigh_ins": lambda client, d: client.get_daily_weigh_ins(d),
     "rhr_day": lambda client, d: client.get_rhr_day(d),
+    "morning_training_readiness": lambda client, d: client.get_morning_training_readiness(d),
+    "body_battery_events": lambda client, d: client.get_body_battery_events(d),
 }
 
 # Endpoints that take date ranges (unchanged)
@@ -45,7 +47,11 @@ ACTIVITY_DETAIL_ENDPOINTS = {
     "details": lambda client, aid: client.get_activity_details(aid),
     "exercise_sets": lambda client, aid: client.get_activity_exercise_sets(aid),
     "splits": lambda client, aid: client.get_activity_splits(aid),
+    "typed_splits": lambda client, aid: client.get_activity_typed_splits(aid),
+    "split_summaries": lambda client, aid: client.get_activity_split_summaries(aid),
     "hr_zones": lambda client, aid: client.get_activity_hr_in_timezones(aid),
+    "power_zones": lambda client, aid: client.get_activity_power_in_timezones(aid),
+    "lactate_threshold": lambda client, aid: client.get_lactate_threshold(aid),
     "weather": lambda client, aid: client.get_activity_weather(aid),
     "gear": lambda client, aid: client.get_activity_gear(aid),
 }

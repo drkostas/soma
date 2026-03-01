@@ -10,6 +10,7 @@ import { WeeklyDistanceChart } from "@/components/weekly-distance-chart";
 import { CadenceStrideChart } from "@/components/cadence-stride-chart";
 import { ClickableRunTable } from "@/components/clickable-run-table";
 import { RecentRoutesGallery } from "@/components/recent-routes-gallery";
+import { RunHeatmapCard } from "@/components/run-heatmap-card";
 import { FitnessScoresChart } from "@/components/fitness-scores-chart";
 import { TrainingLoadChart } from "@/components/training-load-chart";
 import { YearlyMileageChart } from "@/components/yearly-mileage-chart";
@@ -1727,6 +1728,19 @@ export default async function RunningPage({
           </CardContent>
         </Card>
       )}
+
+      {/* Route Heatmap */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-blue-400" />
+            Route Heatmap
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 overflow-hidden rounded-b-lg">
+          <RunHeatmapCard />
+        </CardContent>
+      </Card>
 
       {/* Recent Routes Gallery */}
       <Card className="mb-6">
