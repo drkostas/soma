@@ -10,7 +10,10 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const isDemo = process.env.DEMO_MODE === "true";
 
 export const metadata: Metadata = {
-  title: "Soma — Personal Health Intelligence",
+  title: {
+    default: "Soma: Dashboard",
+    template: "Soma: %s",
+  },
   description: "Science-driven personal health dashboard",
 };
 

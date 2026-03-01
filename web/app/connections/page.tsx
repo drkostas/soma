@@ -1,8 +1,11 @@
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getDb, withDbRetry } from "@/lib/db";
+
+export const metadata: Metadata = { title: "Sync" };
 import { ConnectionActions } from "@/components/connection-actions";
 import { SyncRulesManager } from "@/components/sync-rules-manager";
 import { SyncFlowDiagram } from "@/components/sync-flow-diagram";
