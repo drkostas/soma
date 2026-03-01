@@ -41,12 +41,12 @@ async function fetchBatch(ids: string[], attempt = 0): Promise<ReccoBeatsFeature
   }));
 }
 
-/** Fetch audio features for any number of IDs, chunking into batches of 100 */
+/** Fetch audio features for any number of IDs, chunking into batches of 40 (ReccoBeats limit) */
 export async function fetchAudioFeatures(
   ids: string[]
 ): Promise<Map<string, ReccoBeatsFeatures>> {
   const result = new Map<string, ReccoBeatsFeatures>();
-  const BATCH_SIZE = 100;
+  const BATCH_SIZE = 40; // ReccoBeats silently returns 0 results for batches >40 IDs
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
     const features = await fetchBatch(batch);
