@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { StatCard } from "@/components/stat-card";
 import { MonthlyActivityChart } from "@/components/monthly-activity-chart";
 import { KiteSpeedChart } from "@/components/kite-speed-chart";
+
+export const metadata: Metadata = { title: "Activities" };
 import { PaginatedActivityTable } from "@/components/paginated-activity-table";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";

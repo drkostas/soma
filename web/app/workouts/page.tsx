@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { getDb } from "@/lib/db";
 import { VolumeChart } from "@/components/volume-chart";
 import { ExpandableStrengthChart } from "@/components/expandable-strength-chart";
+
+export const metadata: Metadata = { title: "Gym" };
 import { WorkoutHrTrendChart } from "@/components/workout-hr-trend-chart";
 import { ExerciseHrChart } from "@/components/exercise-hr-chart";
 import { MuscleGroupHrChart } from "@/components/muscle-group-hr-chart";
