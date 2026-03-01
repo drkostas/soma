@@ -478,9 +478,199 @@ class HevyBackfill:
         print(f"  Items: {progress['items_completed']}/{progress['total_items']}")
 
 
+class GarminGapBackfill:
+    """Fill historical gaps for newly-added endpoints.
+
+    Rather than re-running the full backfill, this finds dates/activities
+    that were already synced (have a reference endpoint) but are missing
+    specific newer endpoints, and fetches only those gaps.
+
+    Anchors:
+    - Daily gaps: dates that have 'heart_rates' but not the target endpoint
+    - Activity gaps: activity_ids that have 'details' but not the target endpoint
+
+    Designed to survive interruptions — saves progress after every record.
+    Can be run repeatedly; skips already-fetched records on each run.
+    """
+
+    def __init__(self):
+        self._shutdown = False
+        self.client = None
+        signal.signal(signal.SIGINT, self._handle_shutdown)
+        signal.signal(signal.SIGTERM, self._handle_shutdown)
+
+    def _handle_shutdown(self, signum, frame):
+        print("\n\nShutdown received. Progress auto-saved — run again to continue.")
+        self._shutdown = True
+
+    def _ensure_client(self):
+        if self.client is None:
+            print("Authenticating with Garmin Connect...")
+            self.client = init_garmin()
+            print("Authenticated.\n")
+
+    def _find_date_gaps(self, endpoint_name: str) -> list[date]:
+        """Find dates that have heart_rates but not the given endpoint."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT date FROM garmin_raw_data
+                    WHERE endpoint_name = 'heart_rates'
+                    EXCEPT
+                    SELECT date FROM garmin_raw_data
+                    WHERE endpoint_name = %s
+                    ORDER BY date DESC
+                """, (endpoint_name,))
+                return [row[0] for row in cur.fetchall()]
+
+    def _find_activity_gaps(self, endpoint_name: str) -> list[int]:
+        """Find activity_ids that have 'details' but not the given endpoint."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT activity_id FROM garmin_activity_raw
+                    WHERE endpoint_name = 'details'
+                    EXCEPT
+                    SELECT activity_id FROM garmin_activity_raw
+                    WHERE endpoint_name = %s
+                    ORDER BY activity_id DESC
+                """, (endpoint_name,))
+                return [row[0] for row in cur.fetchall()]
+
+    def _fill_daily_gaps(self, endpoint_name: str, fetch_fn):
+        """Fetch and store a daily endpoint for all dates missing it."""
+        gaps = self._find_date_gaps(endpoint_name)
+        if not gaps:
+            print(f"  {endpoint_name}: no gaps (complete)")
+            return 0
+
+        print(f"  {endpoint_name}: {len(gaps)} missing dates")
+        filled = 0
+        for i, sync_date in enumerate(gaps):
+            if self._shutdown:
+                break
+            date_str = sync_date.isoformat()
+            try:
+                data = rate_limited_call(fetch_fn, self.client, date_str)
+                if data:
+                    _safe_db_op(upsert_raw_data, sync_date, endpoint_name, data)
+                    filled += 1
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "Too Many" in err:
+                    print(f"    Rate limited. Waiting 60s...")
+                    time.sleep(60)
+                # else: endpoint may not exist for old dates — skip silently
+            if (i + 1) % 100 == 0:
+                print(f"    {i+1}/{len(gaps)} ({filled} filled)...", flush=True)
+
+        print(f"  {endpoint_name}: filled {filled}/{len(gaps)}")
+        return filled
+
+    def _fill_range_gaps(self, endpoint_name: str, fetch_fn):
+        """Fetch and store a range endpoint for all dates missing it."""
+        gaps = self._find_date_gaps(endpoint_name)
+        if not gaps:
+            print(f"  {endpoint_name}: no gaps (complete)")
+            return 0
+
+        print(f"  {endpoint_name}: {len(gaps)} missing dates")
+        filled = 0
+        for i, sync_date in enumerate(gaps):
+            if self._shutdown:
+                break
+            date_str = sync_date.isoformat()
+            try:
+                data = rate_limited_call(fetch_fn, self.client, date_str, date_str)
+                if data:
+                    _safe_db_op(upsert_raw_data, sync_date, endpoint_name, data)
+                    filled += 1
+            except Exception as e:
+                if "429" in str(e) or "Too Many" in str(e):
+                    print(f"    Rate limited. Waiting 60s...")
+                    time.sleep(60)
+            if (i + 1) % 100 == 0:
+                print(f"    {i+1}/{len(gaps)} ({filled} filled)...", flush=True)
+
+        print(f"  {endpoint_name}: filled {filled}/{len(gaps)}")
+        return filled
+
+    def _fill_activity_gaps(self, endpoint_name: str, fetch_fn):
+        """Fetch and store an activity detail endpoint for all activities missing it."""
+        gaps = self._find_activity_gaps(endpoint_name)
+        if not gaps:
+            print(f"  {endpoint_name}: no gaps (complete)")
+            return 0
+
+        print(f"  {endpoint_name}: {len(gaps)} activities missing")
+        filled = 0
+        for i, aid in enumerate(gaps):
+            if self._shutdown:
+                break
+            try:
+                data = rate_limited_call(fetch_fn, self.client, aid)
+                if data:
+                    _safe_db_op(upsert_activity_raw, aid, endpoint_name, data)
+                    filled += 1
+            except Exception as e:
+                if "429" in str(e) or "Too Many" in str(e):
+                    print(f"    Rate limited. Waiting 60s...")
+                    time.sleep(60)
+            if (i + 1) % 50 == 0:
+                print(f"    {i+1}/{len(gaps)} ({filled} filled)...", flush=True)
+
+        print(f"  {endpoint_name}: filled {filled}/{len(gaps)}")
+        return filled
+
+    def run(self):
+        """Find and fill all endpoint gaps across daily and activity data."""
+        self._ensure_client()
+        total_filled = 0
+
+        # --- Daily endpoint gaps ---
+        print("=== Daily endpoint gaps ===")
+        for name, fn in DAILY_ENDPOINTS.items():
+            if self._shutdown:
+                break
+            total_filled += self._fill_daily_gaps(name, fn)
+
+        # --- Range endpoint gaps ---
+        print("\n=== Range endpoint gaps ===")
+        for name, fn in RANGE_ENDPOINTS.items():
+            if self._shutdown:
+                break
+            total_filled += self._fill_range_gaps(name, fn)
+
+        # --- Activity detail gaps ---
+        print("\n=== Activity detail gaps ===")
+        for name, fn in ACTIVITY_DETAIL_ENDPOINTS.items():
+            if self._shutdown:
+                break
+            total_filled += self._fill_activity_gaps(name, fn)
+
+        status_msg = "stopped early" if self._shutdown else "complete"
+        print(f"\n=== Gap backfill {status_msg}: {total_filled} records filled ===")
+
+    def status(self):
+        """Print gap counts for each endpoint."""
+        print("=== Gap report ===\n")
+        print("Daily endpoints:")
+        for name in DAILY_ENDPOINTS:
+            gaps = self._find_date_gaps(name)
+            print(f"  {name:45s} {len(gaps):5d} gaps")
+        print("\nRange endpoints:")
+        for name in RANGE_ENDPOINTS:
+            gaps = self._find_date_gaps(name)
+            print(f"  {name:45s} {len(gaps):5d} gaps")
+        print("\nActivity detail endpoints:")
+        for name in ACTIVITY_DETAIL_ENDPOINTS:
+            gaps = self._find_activity_gaps(name)
+            print(f"  {name:45s} {len(gaps):5d} gaps")
+
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python backfill.py <garmin|garmin-activities|garmin-profile|hevy> [--status]")
+        print("Usage: python backfill.py <garmin|garmin-activities|garmin-gaps|garmin-profile|hevy> [--status]")
         sys.exit(1)
 
     source = sys.argv[1]
@@ -498,6 +688,12 @@ def main():
             bf.status()
         else:
             bf.run()
+    elif source == "garmin-gaps":
+        bf = GarminGapBackfill()
+        if check_status:
+            bf.status()
+        else:
+            bf.run()
     elif source == "garmin-profile":
         bf = GarminBackfill()
         bf.run_profile()
@@ -509,7 +705,7 @@ def main():
             bf.run()
     else:
         print(f"Unknown source: {source}")
-        print("Use: garmin, garmin-activities, garmin-profile, or hevy")
+        print("Use: garmin, garmin-activities, garmin-gaps, garmin-profile, or hevy")
         sys.exit(1)
 
 

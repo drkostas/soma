@@ -120,6 +120,11 @@ export default function PlaylistBuilder() {
     typeof window !== "undefined" && !!localStorage.getItem("soma_skip_banner_dismissed")
   );
   const garminActivityIdRef = useRef<string | null>(null);
+  // Refs for stale-closure-safe keyboard handlers
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  const focusedIdxRef = useRef(focusedIdx);
+  useEffect(() => { focusedIdxRef.current = focusedIdx; }, [focusedIdx]);
 
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
@@ -148,11 +153,22 @@ export default function PlaylistBuilder() {
         setShortcutsOpen(false);
       } else if (e.key === "?") {
         setShortcutsOpen(v => !v);
+      } else if (e.key === "j" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        const total = flatItems(itemsRef.current).length;
+        if (total > 0) setFocusedIdx(prev => (prev === -1 ? 0 : Math.min(prev + 1, total - 1)));
+      } else if (e.key === "k" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        const total = flatItems(itemsRef.current).length;
+        if (total > 0) setFocusedIdx(prev => (prev <= 0 ? 0 : prev - 1));
+      } else if (e.key === "r" && !e.ctrlKey && !e.metaKey && focusedIdxRef.current !== -1) {
+        e.preventDefault();
+        void generateSegmentOnly(focusedIdxRef.current, undefined, itemsRef.current);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+  }, [undo, redo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll sync between panels
   useEffect(() => {
@@ -312,7 +328,7 @@ export default function PlaylistBuilder() {
 
   // Per-segment regeneration: runs the SSE API for a single segment only.
   // Does NOT reset other assignments — only marks the targeted flat indices as loading.
-  async function generateSegmentOnly(flatIdx: number, toleranceOverride?: number, currentItems?: SegmentItem[]) {
+  async function generateSegmentOnly(flatIdx: number, toleranceOverride?: number, currentItems?: SegmentItem[], excludedOverride?: Set<string>) {
     const { segments: allSegs, flatIndexMap } = segsForGenerate(currentItems ?? items);
     const apiIdx = flatIndexMap.findIndex(indices => indices.includes(flatIdx));
     if (apiIdx === -1) return;
@@ -343,7 +359,7 @@ export default function PlaylistBuilder() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           segments: [segWithOverride],
-          excluded_track_ids: Array.from(excludedIds),
+          excluded_track_ids: Array.from(excludedOverride ?? excludedIds),
           genre_selection: genres,
           genre_threshold: genreThreshold,
           source_playlist_ids: sources,
@@ -443,7 +459,10 @@ export default function PlaylistBuilder() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ playlist_id: existingPlaylistId, session_id: sessionId, track_ids: allTracks }),
         });
-        if (!res.ok) throw new Error("Update failed");
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error((errData as { error?: string }).error ?? "Update failed");
+        }
         const data = await res.json();
         setSavedUrl(data.playlist_url);
       } else {
@@ -453,26 +472,31 @@ export default function PlaylistBuilder() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ session_id: sessionId, name, track_ids: allTracks }),
         });
-        if (!res.ok) throw new Error("Save failed");
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error((errData as { error?: string }).error ?? "Save failed");
+        }
         const data = await res.json();
         setSavedUrl(data.playlist_url);
         setExistingPlaylistId(data.playlist_id ?? null);
       }
-    } catch {
-      toast.error("Failed to save playlist", { description: "Check your Spotify connection in Sources" });
+    } catch (err) {
+      toast.error("Failed to save to Spotify", { description: err instanceof Error ? err.message : "Check your Spotify connection in Sources" });
     } finally {
       setSaving(false);
     }
   }
 
-  function handleExclude(_segIdx: number, trackId: string) {
+  function handleExclude(segIdx: number, trackId: string) {
     const isExcluding = !excludedIds.has(trackId);
-    setExcludedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(trackId)) { next.delete(trackId); } else { next.add(trackId); }
-      return next;
-    });
-    if (!isExcluding) return; // restoring — no API call
+    // Compute new excluded set synchronously so generateSegmentOnly gets the updated list
+    const newExcluded = new Set(excludedIds);
+    if (isExcluding) { newExcluded.add(trackId); } else { newExcluded.delete(trackId); }
+    setExcludedIds(newExcluded);
+    if (!isExcluding) return; // restoring — no regeneration needed
+
+    // Auto-regenerate to get a replacement song (pass newExcluded to avoid stale closure)
+    void generateSegmentOnly(segIdx, undefined, undefined, newExcluded);
 
     // Find the song name/artist for the toast message
     const song = Object.values(assignments).flatMap(a => a.songs).find(s => s.track_id === trackId);
@@ -757,6 +781,8 @@ export default function PlaylistBuilder() {
             {([
               ["Ctrl + Z", "Undo"],
               ["Ctrl + Y / Ctrl + Shift + Z", "Redo"],
+              ["j / k", "Next / previous segment"],
+              ["r", "Regenerate focused segment"],
               ["Escape", "Collapse focused segment"],
               ["?", "Toggle this cheatsheet"],
             ] as [string, string][]).map(([key, label]) => (

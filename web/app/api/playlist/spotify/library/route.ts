@@ -7,7 +7,7 @@ import { getArtistTopTags } from "@/lib/lastfm-client";
 import { toMacroGenres } from "@/lib/genre-mapper";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300; // 5 min on Vercel (was 60)
 
 interface SpotifyTrack {
   id: string;
@@ -18,12 +18,16 @@ interface SpotifyTrack {
   artists: Array<{ id: string; name: string }>;
 }
 
-async function fetchSourceTracks(sourceId: string): Promise<SpotifyTrack[]> {
+// Fetch all tracks for a source, stopping early once we see 2 consecutive pages
+// of tracks already in our DB. Spotify returns liked songs newest-first, so once
+// we hit a run of known tracks the rest are older and already processed.
+async function fetchSourceTracks(sourceId: string, knownIds?: Set<string>): Promise<SpotifyTrack[]> {
   const tracks: SpotifyTrack[] = [];
   let url: string | null =
     sourceId === "liked"
       ? "/me/tracks?limit=50"
-      : `/playlists/${sourceId}/tracks?limit=50`;
+      : `/playlists/${sourceId}/items?limit=50`;
+  let consecutiveKnownPages = 0;
 
   while (url) {
     const res = await spotifyFetch(url);
@@ -38,10 +42,20 @@ async function fetchSourceTracks(sourceId: string): Promise<SpotifyTrack[]> {
       throw new Error(`Spotify ${res.status} for ${url}: ${body.slice(0, 120)}`);
     }
     const data = await res.json();
+    const pageItems: SpotifyTrack[] = [];
     for (const item of data.items ?? []) {
       const t: SpotifyTrack = item.track ?? item;
-      if (t && t.type === "track" && !t.is_local && t.id) tracks.push(t);
+      if (t && t.type === "track" && !t.is_local && t.id) pageItems.push(t);
     }
+    tracks.push(...pageItems);
+
+    // Early stop: 2 consecutive pages of all-known tracks → remainder is older, already saved
+    if (knownIds && pageItems.length > 0 && pageItems.every((t) => knownIds.has(t.id))) {
+      if (++consecutiveKnownPages >= 2) break;
+    } else {
+      consecutiveKnownPages = 0;
+    }
+
     url = data.next
       ? (data.next as string).replace("https://api.spotify.com/v1", "")
       : null;
@@ -59,59 +73,66 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
+      // Safe enqueue: client disconnect should NOT abort DB saves
+      const send = (event: string, data: object) => {
+        try { controller.enqueue(enc(event, data)); } catch { /* ignore */ }
+      };
+
       try {
         const sql = getDb();
 
-        // Stage 1: fetch tracks from Spotify
-        controller.enqueue(enc("progress", { stage: "Fetching tracks from Spotify…", pct: 5 }));
+        // Stage 1: fetch tracks from Spotify, stopping early for re-runs
+        send("progress", { stage: "Fetching tracks from Spotify…", pct: 5 });
+
+        // Pre-load all known track IDs so fetchSourceTracks can stop paginating
+        // once it hits 2 consecutive pages of tracks already in our DB (newest-first order).
+        const knownRows = await sql`SELECT track_id FROM spotify_track_features`;
+        const knownSet = new Set((knownRows as Array<{ track_id: string }>).map((r) => r.track_id));
+
         const allTracks = new Map<string, SpotifyTrack>();
         for (const sid of sourceIds) {
-          const tracks = await fetchSourceTracks(sid);
+          const tracks = await fetchSourceTracks(sid, knownSet);
           for (const t of tracks) allTracks.set(t.id, t);
         }
         const allIds = Array.from(allTracks.keys());
-        controller.enqueue(enc("progress", { stage: `Found ${allIds.length} tracks`, pct: 15 }));
+        send("progress", { stage: `Found ${allIds.length} tracks`, pct: 15 });
 
         if (allIds.length === 0) {
-          controller.enqueue(enc("done", { cached: 0, new: 0, total: 0 }));
+          send("done", { cached: 0, new: 0, total: 0 });
           return;
         }
 
-        // Stage 2: filter cached tracks — only skip those that already have BPM data (tempo IS NOT NULL)
+        // Stage 2: filter cached tracks — only skip those that already have BPM data
         const existing = await sql`SELECT track_id FROM spotify_track_features WHERE track_id = ANY(${allIds}) AND tempo IS NOT NULL`;
         const existingSet = new Set((existing as Array<{ track_id: string }>).map((r) => r.track_id));
         const newIds = allIds.filter((id) => !existingSet.has(id));
 
         if (newIds.length === 0) {
-          controller.enqueue(enc("done", { cached: allIds.length, new: 0, total: allIds.length }));
+          send("done", { cached: allIds.length, new: 0, total: allIds.length });
           return;
         }
 
-        controller.enqueue(enc("progress", {
-          stage: `${newIds.length} new tracks to analyse (${existingSet.size} cached)`,
+        send("progress", {
+          stage: `${newIds.length} tracks to analyse (${existingSet.size} cached)`,
           pct: 20,
-        }));
+        });
 
-        // Stage 3: BPM fetch from ReccoBeats
-        controller.enqueue(enc("progress", { stage: "Fetching BPM & energy data…", pct: 25 }));
-        const features = await fetchAudioFeatures(newIds);
-        controller.enqueue(enc("progress", { stage: "BPM data fetched", pct: 40 }));
-
-        // Stage 4: artist genres — batch 20 at a time (Spotify /artists?ids=)
+        // Stage 3: pre-fetch artist genres for all new tracks' artists
         const artistIds = new Set<string>();
         for (const id of newIds) {
           const artistId = allTracks.get(id)?.artists?.[0]?.id;
           if (artistId) artistIds.add(artistId);
         }
 
-        const cachedArtists = await sql`SELECT artist_id FROM spotify_artist_genres WHERE artist_id = ANY(${Array.from(artistIds)})`;
-        const cachedArtistSet = new Set((cachedArtists as Array<{ artist_id: string }>).map((r) => r.artist_id));
-        const newArtistIds = Array.from(artistIds).filter((id) => !cachedArtistSet.has(id));
+        const cachedArtistRows = await sql`SELECT artist_id, macro_genres FROM spotify_artist_genres WHERE artist_id = ANY(${Array.from(artistIds)})`;
+        const genreMap = new Map((cachedArtistRows as Array<{ artist_id: string; macro_genres: string[] }>).map((r) => [r.artist_id, r.macro_genres]));
+        const newArtistIds = Array.from(artistIds).filter((id) => !genreMap.has(id));
 
-        const BATCH = 20;
-        let artistsDone = 0;
-        for (let i = 0; i < newArtistIds.length; i += BATCH) {
-          const batch = newArtistIds.slice(i, i + BATCH);
+        send("progress", { stage: `Fetching genres for ${newArtistIds.length} artists…`, pct: 22 });
+
+        const ARTIST_BATCH = 20;
+        for (let i = 0; i < newArtistIds.length; i += ARTIST_BATCH) {
+          const batch = newArtistIds.slice(i, i + ARTIST_BATCH);
           const res = await spotifyFetch(`/artists?ids=${batch.join(",")}`);
           if (res.ok) {
             const data = await res.json();
@@ -127,54 +148,62 @@ export async function POST(req: NextRequest) {
               await sql`
                 INSERT INTO spotify_artist_genres (artist_id, artist_name, genres, macro_genres, source)
                 VALUES (${artist.id as string}, ${artist.name as string}, ${genres}, ${macroGenres}, ${source})
-                ON CONFLICT (artist_id) DO NOTHING
+                ON CONFLICT (artist_id) DO UPDATE SET
+                  genres = EXCLUDED.genres, macro_genres = EXCLUDED.macro_genres,
+                  source = EXCLUDED.source
+                WHERE EXCLUDED.genres != '{}'::text[]
               `;
+              genreMap.set(artist.id as string, macroGenres);
             }
           }
-          artistsDone += batch.length;
-          const pct = 40 + Math.round((artistsDone / Math.max(newArtistIds.length, 1)) * 30);
-          controller.enqueue(enc("progress", {
-            stage: `Fetching artist genres… ${artistsDone}/${newArtistIds.length}`,
-            pct,
-          }));
+          const pct = 22 + Math.round(((i + ARTIST_BATCH) / Math.max(newArtistIds.length, 1)) * 8);
+          send("progress", { stage: `Artist genres ${Math.min(i + ARTIST_BATCH, newArtistIds.length)}/${newArtistIds.length}`, pct });
         }
 
-        // Stage 5: resolve genre map + insert tracks
-        const genreRows = await sql`SELECT artist_id, macro_genres FROM spotify_artist_genres WHERE artist_id = ANY(${Array.from(artistIds)})`;
-        const genreMap = new Map((genreRows as Array<{ artist_id: string; macro_genres: string[] }>).map((r) => [r.artist_id, r.macro_genres]));
+        // Stage 4: BPM fetch + save in chunks of 100 (incremental — saves persist even if client disconnects)
+        send("progress", { stage: "Fetching BPM & saving tracks…", pct: 30 });
+        const CHUNK = 100;
+        let saved = 0;
 
-        controller.enqueue(enc("progress", { stage: `Saving ${newIds.length} tracks to database…`, pct: 72 }));
+        for (let i = 0; i < newIds.length; i += CHUNK) {
+          const chunk = newIds.slice(i, i + CHUNK);
 
-        let inserted = 0;
-        for (const id of newIds) {
-          const t = allTracks.get(id)!;
-          const f = features.get(id);
-          const artistId = t.artists?.[0]?.id ?? "";
-          const artistName = t.artists?.[0]?.name ?? "";
-          const macroGenres = genreMap.get(artistId) ?? [];
-          await sql`
-            INSERT INTO spotify_track_features
-              (track_id, name, artist_id, artist_name, duration_ms, tempo, energy, valence, danceability, genres)
-            VALUES (${id}, ${t.name}, ${artistId}, ${artistName}, ${t.duration_ms},
-                    ${f?.tempo ?? null}, ${f?.energy ?? null}, ${f?.valence ?? null},
-                    ${f?.danceability ?? null}, ${macroGenres})
-            ON CONFLICT (track_id) DO UPDATE SET
-              tempo = EXCLUDED.tempo, energy = EXCLUDED.energy,
-              valence = EXCLUDED.valence, danceability = EXCLUDED.danceability,
-              genres = EXCLUDED.genres
-          `;
-          inserted++;
-          if (inserted % 50 === 0) {
-            controller.enqueue(enc("progress", {
-              stage: `Saving tracks… ${inserted}/${newIds.length}`,
-              pct: 72 + Math.round((inserted / newIds.length) * 25),
-            }));
+          // Fetch BPM for this chunk (single batch, ~0.8s)
+          const features = await fetchAudioFeatures(chunk);
+
+          // Save this chunk immediately — progress survives client disconnect
+          for (const id of chunk) {
+            const t = allTracks.get(id)!;
+            const f = features.get(id);
+            const artistId = t.artists?.[0]?.id ?? "";
+            const artistName = t.artists?.[0]?.name ?? "";
+            const macroGenres = genreMap.get(artistId) ?? [];
+            await sql`
+              INSERT INTO spotify_track_features
+                (track_id, name, artist_id, artist_name, duration_ms, tempo, energy, valence, danceability, genres)
+              VALUES (${id}, ${t.name}, ${artistId}, ${artistName}, ${t.duration_ms},
+                      ${f?.tempo ?? null}, ${f?.energy ?? null}, ${f?.valence ?? null},
+                      ${f?.danceability ?? null}, ${macroGenres})
+              ON CONFLICT (track_id) DO UPDATE SET
+                tempo = EXCLUDED.tempo, energy = EXCLUDED.energy,
+                valence = EXCLUDED.valence, danceability = EXCLUDED.danceability,
+                genres = EXCLUDED.genres
+            `;
+          }
+
+          saved += chunk.length;
+          const pct = 30 + Math.round((saved / newIds.length) * 67);
+          send("progress", { stage: `Saved ${saved}/${newIds.length} tracks`, pct });
+
+          // Brief pause between chunks to avoid rate limiting
+          if (i + CHUNK < newIds.length) {
+            await new Promise((r) => setTimeout(r, 200));
           }
         }
 
-        controller.enqueue(enc("done", { cached: existingSet.size, new: inserted, total: allIds.length }));
+        send("done", { cached: existingSet.size, new: saved, total: allIds.length });
       } catch (err) {
-        controller.enqueue(enc("error", { message: err instanceof Error ? err.message : String(err) }));
+        send("error", { message: err instanceof Error ? err.message : String(err) });
       } finally {
         controller.close();
       }

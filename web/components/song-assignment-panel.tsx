@@ -80,6 +80,14 @@ function SegmentSection({
   const displayLabel = label ?? seg.type;
   const durationMin = Math.round(seg.duration_s / 60);
 
+  // Song coverage: total duration of placed (non-skip) songs
+  const totalPlacedMs = nonSkip.reduce((sum, s) => sum + (s.duration_ms ?? 0), 0);
+  const covMin = Math.floor(totalPlacedMs / 60000);
+  const covSec = Math.floor((totalPlacedMs % 60000) / 1000);
+  const coverageStr = totalPlacedMs > 0
+    ? `${covMin}:${String(covSec).padStart(2, "0")} / ${durationMin} min`
+    : `${durationMin} min`;
+
   return (
     <div>
       {/* Section header */}
@@ -91,7 +99,7 @@ function SegmentSection({
       >
         <div className={`w-1 h-4 rounded-full shrink-0 ${TYPE_COLORS[seg.type] ?? "bg-muted"}`} />
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground capitalize">{displayLabel}</span>
-        <span className="text-xs text-muted-foreground">{durationMin} min</span>
+        <span className="text-xs text-muted-foreground">{coverageStr}</span>
         <span className="text-xs text-muted-foreground">{seg.bpm_min}–{seg.bpm_max} BPM</span>
         {assignment?.warning && <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
         <button type="button" onClick={(e) => { e.stopPropagation(); onPumpUp(); }} className="ml-auto text-muted-foreground hover:text-amber-400 transition-colors shrink-0">
