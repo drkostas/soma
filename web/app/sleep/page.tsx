@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { StatCard } from "@/components/stat-card";
 import { SleepStagesChart } from "@/components/sleep-chart";
 import { SleepScoreChart } from "@/components/sleep-score-chart";
+
+export const metadata: Metadata = { title: "Sleep" };
 import { RHRChart } from "@/components/rhr-chart";
 import { HRVChart } from "@/components/hrv-chart";
 import { TrainingReadinessChart } from "@/components/training-readiness-chart";

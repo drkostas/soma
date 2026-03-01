@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { StatCard } from "@/components/stat-card";
 import { PaceChart } from "@/components/pace-chart";
 import { MileageChart } from "@/components/mileage-chart";
+
+export const metadata: Metadata = { title: "Running" };
 import { HRZoneChart } from "@/components/hr-zone-chart";
 import { VO2MaxChart } from "@/components/vo2max-chart";
 import { HRPaceChart } from "@/components/hr-pace-chart";
