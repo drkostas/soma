@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Download, Upload, Check, Loader2 } from "lucide-react";
 import { ActivityPerformanceChart } from "@/components/activity-performance-chart";
 import { RunSparklines, buildSparkPoints } from "@/components/run-sparklines";
 
@@ -43,6 +44,32 @@ function formatDur(seconds: number) {
 export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModalProps) {
   const [data, setData] = useState<Record<string, any> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showBranding, setShowBranding] = useState(true);
+  const [uploadState, setUploadState] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function handleStravaUpload() {
+    if (!activityId) return;
+    setUploadState("uploading");
+    setUploadError(null);
+    try {
+      const resp = await fetch(`/api/activity/${activityId}/strava-photo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branding: showBranding }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setUploadError((json as { error?: string }).error ?? "Upload failed");
+        setUploadState("error");
+      } else {
+        setUploadState("done");
+      }
+    } catch {
+      setUploadError("Network error");
+      setUploadState("error");
+    }
+  }
 
   useEffect(() => {
     if (!activityId) {
@@ -50,6 +77,8 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
       return;
     }
     setLoading(true);
+    setUploadState("idle");
+    setUploadError(null);
     fetch(`/api/activity/${activityId}`)
       .then((r) => r.json())
       .then((d) => setData(d))
@@ -108,7 +137,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
               {hasLaps ? <TabsTrigger value="splits" className="flex-1 text-xs px-1">Splits</TabsTrigger>
                        : <TabsTrigger value="splits" className="flex-1 text-xs px-1" disabled>Splits</TabsTrigger>}
               <TabsTrigger value="details" className="flex-1 text-xs px-1">Details</TabsTrigger>
-              <TabsTrigger value="image" className="flex-1 text-xs px-1">Image</TabsTrigger>
+              <TabsTrigger value="share" className="flex-1 text-xs px-1">Share</TabsTrigger>
             </TabsList>
 
             <div className="overflow-y-auto mt-2" style={{ maxHeight: "calc(100vh - 160px)" }}>
@@ -424,26 +453,65 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                 )}
               </TabsContent>
 
-              <TabsContent value="image" className="px-4 pb-8">
+              <TabsContent value="share" className="px-4 pb-8">
                 {activityId && (
                   <div className="space-y-3">
+                    {/* Branding toggle */}
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={showBranding}
+                        onChange={(e) => setShowBranding(e.target.checked)}
+                        className="rounded"
+                      />
+                      Show branding
+                    </label>
+
+                    {/* Image preview */}
                     <div className="relative rounded-lg overflow-hidden border border-border/50 bg-black">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`/api/activity/${activityId}/image`}
+                        src={`/api/activity/${activityId}/image?branding=${showBranding ? "1" : "0"}`}
                         alt={`${summary?.activityName || "Activity"} summary`}
                         className="w-full h-auto"
-                        loading="lazy"
+                        loading="eager"
                       />
                     </div>
+
+                    {/* Download */}
                     <a
-                      href={`/api/activity/${activityId}/image`}
+                      href={`/api/activity/${activityId}/image?branding=${showBranding ? "1" : "0"}`}
                       download={`${(summary?.activityName || "activity").replace(/\s+/g, "-").toLowerCase()}.png`}
                       className="flex items-center justify-center gap-1.5 w-full py-2 rounded-md text-xs font-medium border border-border bg-muted/50 hover:bg-accent/50 transition-colors"
                     >
                       <Download className="h-3.5 w-3.5" />
-                      Download Image
+                      Download PNG
                     </a>
+
+                    {/* Upload to Strava */}
+                    <div className="space-y-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-1.5 text-xs"
+                        disabled={!data?.strava_id || uploadState === "uploading" || uploadState === "done"}
+                        onClick={handleStravaUpload}
+                        title={!data?.strava_id ? "Sync this activity to Strava first" : undefined}
+                      >
+                        {uploadState === "uploading" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        {uploadState === "done" && <Check className="h-3.5 w-3.5 text-green-500" />}
+                        {uploadState !== "uploading" && uploadState !== "done" && <Upload className="h-3.5 w-3.5" />}
+                        {uploadState === "uploading" ? "Uploading…" : uploadState === "done" ? "Uploaded to Strava" : "Upload to Strava"}
+                      </Button>
+                      {!data?.strava_id && (
+                        <p className="text-[11px] text-muted-foreground/60 text-center">
+                          Sync to Strava first from the Connections page
+                        </p>
+                      )}
+                      {uploadState === "error" && uploadError && (
+                        <p className="text-[11px] text-destructive text-center">{uploadError}</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </TabsContent>
