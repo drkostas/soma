@@ -12,7 +12,6 @@ jobs:
       - name: Trigger library refresh
         run: |
           curl -s -f -X POST \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -d '{"source_ids":["liked"]}' \
-            "${{ secrets.NEXT_PUBLIC_BASE_URL }}/api/playlist/spotify/library"
+            "${{ secrets.SOMA_WEB_URL }}/api/playlist/spotify/library"
