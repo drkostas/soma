@@ -162,8 +162,9 @@ const CHART_H = 160;
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const showBranding = new URL(req.url).searchParams.get("branding") !== "0";
   const sql = getDb();
   const rows = await sql`SELECT endpoint_name, raw_json FROM garmin_activity_raw WHERE activity_id = ${id}`;
   if (!rows.length) return new Response("Not found", { status: 404 });
@@ -440,13 +441,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         </div>
 
         {/* ── Footer ── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #1c1c1e", paddingTop: 16 }}>
-          <div style={{ display: "flex", fontSize: 18, color: "#3f3f46" }}>github.com/drkostas/soma</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", width: 24, height: 4, backgroundColor: "#10b981", borderRadius: 2 }} />
-            <span style={{ display: "flex", fontSize: 22, fontWeight: 800, color: "#10b981", letterSpacing: 5 }}>SOMA</span>
+        {showBranding && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #1c1c1e", paddingTop: 16 }}>
+            <div style={{ display: "flex", fontSize: 18, color: "#3f3f46" }}>github.com/drkostas/soma</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", width: 24, height: 4, backgroundColor: "#10b981", borderRadius: 2 }} />
+              <span style={{ display: "flex", fontSize: 22, fontWeight: 800, color: "#10b981", letterSpacing: 5 }}>SOMA</span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     ),
     { width: IMG_W, height: IMG_H }
