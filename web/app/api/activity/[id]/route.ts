@@ -113,5 +113,15 @@ export async function GET(
       dist_m: p.dist_m,
     }));
 
-  return NextResponse.json({ ...data, time_series: timeSeries, gps_route: gpsRoute });
+  // Look up Strava destination ID (if activity has been synced)
+  const stravaRows = await sql`
+    SELECT destination_id FROM activity_sync_log
+    WHERE source_id = ${id}
+      AND destination = 'strava'
+      AND status IN ('sent', 'external')
+    LIMIT 1
+  `;
+  const strava_id = (stravaRows[0] as { destination_id: string | null } | undefined)?.destination_id ?? null;
+
+  return NextResponse.json({ ...data, time_series: timeSeries, gps_route: gpsRoute, strava_id });
 }
