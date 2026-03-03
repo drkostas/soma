@@ -3,9 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PlaylistTopBar from "./playlist-top-bar";
-import LiveDjTab from "./live-dj-tab";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import RunSegmentTimeline from "./run-segment-timeline";
@@ -118,7 +116,6 @@ export default function PlaylistBuilder() {
   // Tracks the Spotify playlist ID from a loaded session — if set, Save → Update (PUT)
   const [existingPlaylistId, setExistingPlaylistId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"playlist" | "dj">("playlist");
   const [changeRunConfirm, setChangeRunConfirm] = useState(false);
   const [skipBannerDismissed, setSkipBannerDismissed] = useState(() =>
     typeof window !== "undefined" && !!localStorage.getItem("soma_skip_banner_dismissed")
@@ -648,7 +645,7 @@ export default function PlaylistBuilder() {
   const hasSongsPlaced = Object.values(assignments).some(a => a.songs.length > 0);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)]">
+    <div className="flex flex-col h-full">
       <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { if (hasSongsPlaced) { setChangeRunConfirm(true); } else { resetRun(); } }} onOpenBank={() => setPumpUpModalOpen(true)} onOpenShortcuts={() => setShortcutsOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         {/* Left: run selector (first time) or run timeline */}
@@ -740,26 +737,9 @@ export default function PlaylistBuilder() {
             />
           )}
         </div>
-        {/* Right: playlist builder or live DJ */}
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "playlist" | "dj")}
-          className="flex-1 flex flex-col overflow-hidden"
-        >
-          <TabsList variant="line" className="w-full justify-start shrink-0 rounded-none border-b border-border bg-transparent px-0 h-auto">
-            <TabsTrigger value="playlist" className="rounded-none px-4 py-2 text-xs font-medium">
-              Playlist
-            </TabsTrigger>
-            <TabsTrigger value="dj" className="rounded-none px-4 py-2 text-xs font-medium">
-              Live DJ
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="dj" className="flex-1 overflow-y-auto mt-0">
-            <LiveDjTab genres={genres} sources={sources} />
-          </TabsContent>
-
-          <TabsContent value="playlist" className="flex-1 overflow-y-auto mt-0" ref={rightRef}>
+        {/* Right: song assignments */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div ref={rightRef} className="flex-1 overflow-y-auto">
             {/* One-time skip song explainer banner */}
             {hasRun && sessionId !== null && !skipBannerDismissed && (
               <div className="mx-3 mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 flex items-start gap-2 text-xs shrink-0">
@@ -776,36 +756,34 @@ export default function PlaylistBuilder() {
                 >✕</button>
               </div>
             )}
-            <div className="flex-1">
-              <SongAssignmentPanel
-                items={items}
-                assignments={assignmentsWithWarnings}
-                excludedIds={excludedIds}
-                selectedGenres={genres}
-                focusedIdx={focusedIdx}
-                onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
-                onExclude={handleExclude}
-                onReplace={handleReplace}
-                onPlace={(idx, song) => setAssignments(prev => {
-                  const existing = prev[idx]?.songs ?? [];
-                  if (existing.some(s => s.track_id === song.track_id)) return prev;
-                  return { ...prev, [idx]: { ...prev[idx], songs: [...existing.filter(s => !s.is_skip), song, ...existing.filter(s => s.is_skip)] } };
-                })}
-                onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
-                onPreview={setPreviewSong}
-                onPumpUp={handlePumpUp}
-                onWidenBpm={handleWidenBpm}
-                onAddPlaylists={() => {
-                  toast("Open the Sources menu to add more playlists", { duration: 4000 });
-                }}
-                onBankChanged={() => setPumpUpBankKey(k => k + 1)}
-                onSave={handleSave}
-                saving={saving}
-                savedUrl={savedUrl}
-              />
-            </div>
-          </TabsContent>
-        </Tabs>
+            <SongAssignmentPanel
+              items={items}
+              assignments={assignmentsWithWarnings}
+              excludedIds={excludedIds}
+              selectedGenres={genres}
+              focusedIdx={focusedIdx}
+              onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
+              onExclude={handleExclude}
+              onReplace={handleReplace}
+              onPlace={(idx, song) => setAssignments(prev => {
+                const existing = prev[idx]?.songs ?? [];
+                if (existing.some(s => s.track_id === song.track_id)) return prev;
+                return { ...prev, [idx]: { ...prev[idx], songs: [...existing.filter(s => !s.is_skip), song, ...existing.filter(s => s.is_skip)] } };
+              })}
+              onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
+              onPreview={setPreviewSong}
+              onPumpUp={handlePumpUp}
+              onWidenBpm={handleWidenBpm}
+              onAddPlaylists={() => {
+                toast("Open the Sources menu to add more playlists", { duration: 4000 });
+              }}
+              onBankChanged={() => setPumpUpBankKey(k => k + 1)}
+              onSave={handleSave}
+              saving={saving}
+              savedUrl={savedUrl}
+            />
+          </div>
+        </div>
       </div>
       {/* Mini player */}
       <SpotifyPlayer currentSong={previewSong} />
