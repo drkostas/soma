@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PlaylistTopBar from "./playlist-top-bar";
 import LiveDjTab from "./live-dj-tab";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -740,77 +741,71 @@ export default function PlaylistBuilder() {
           )}
         </div>
         {/* Right: playlist builder or live DJ */}
-        <div ref={rightRef} className="flex-1 overflow-y-auto flex flex-col">
-          {/* Tab strip */}
-          <div className="flex border-b shrink-0">
-            {(["playlist", "dj"] as const).map(tab => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  "px-4 py-2 text-xs font-medium border-b-2 transition-colors",
-                  activeTab === tab
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tab === "playlist" ? "Playlist" : "Live DJ"}
-              </button>
-            ))}
-          </div>
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "playlist" | "dj")}
+          className="flex-1 flex flex-col overflow-hidden"
+        >
+          <TabsList variant="line" className="w-full justify-start shrink-0 rounded-none border-b border-border bg-transparent px-0 h-auto">
+            <TabsTrigger value="playlist" className="rounded-none px-4 py-2 text-xs font-medium">
+              Playlist
+            </TabsTrigger>
+            <TabsTrigger value="dj" className="rounded-none px-4 py-2 text-xs font-medium">
+              Live DJ
+            </TabsTrigger>
+          </TabsList>
 
-          {activeTab === "dj" ? (
+          <TabsContent value="dj" className="flex-1 overflow-y-auto mt-0">
             <LiveDjTab genres={genres} sources={sources} />
-          ) : (
-            <>
-              {/* One-time skip song explainer banner */}
-              {hasRun && sessionId !== null && !skipBannerDismissed && (
-                <div className="mx-3 mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 flex items-start gap-2 text-xs shrink-0">
-                  <span className="text-lg leading-none shrink-0">◄◄</span>
-                  <p className="text-muted-foreground flex-1">
-                    <span className="text-foreground font-medium">How skip songs work: </span>
-                    Each segment ends with a &quot;skip song&quot; — start it ~60s before your watch transitions, then skip it when your Garmin vibrates. The next segment&apos;s music begins immediately.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => { localStorage.setItem("soma_skip_banner_dismissed", "1"); setSkipBannerDismissed(true); }}
-                    className="text-muted-foreground hover:text-foreground shrink-0 p-0.5"
-                    aria-label="Dismiss"
-                  >✕</button>
-                </div>
-              )}
-              <div className="flex-1">
-                <SongAssignmentPanel
-                  items={items}
-                  assignments={assignmentsWithWarnings}
-                  excludedIds={excludedIds}
-                  selectedGenres={genres}
-                  focusedIdx={focusedIdx}
-                  onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
-                  onExclude={handleExclude}
-                  onReplace={handleReplace}
-                  onPlace={(idx, song) => setAssignments(prev => {
-                    const existing = prev[idx]?.songs ?? [];
-                    if (existing.some(s => s.track_id === song.track_id)) return prev;
-                    return { ...prev, [idx]: { ...prev[idx], songs: [...existing.filter(s => !s.is_skip), song, ...existing.filter(s => s.is_skip)] } };
-                  })}
-                  onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
-                  onPreview={setPreviewSong}
-                  onPumpUp={handlePumpUp}
-                  onWidenBpm={handleWidenBpm}
-                  onAddPlaylists={() => {
-                    toast("Open the Sources menu to add more playlists", { duration: 4000 });
-                  }}
-                  onBankChanged={() => setPumpUpBankKey(k => k + 1)}
-                  onSave={handleSave}
-                  saving={saving}
-                  savedUrl={savedUrl}
-                />
+          </TabsContent>
+
+          <TabsContent value="playlist" className="flex-1 overflow-y-auto mt-0" ref={rightRef}>
+            {/* One-time skip song explainer banner */}
+            {hasRun && sessionId !== null && !skipBannerDismissed && (
+              <div className="mx-3 mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 flex items-start gap-2 text-xs shrink-0">
+                <span className="text-lg leading-none shrink-0">◄◄</span>
+                <p className="text-muted-foreground flex-1">
+                  <span className="text-foreground font-medium">How skip songs work: </span>
+                  Each segment ends with a &quot;skip song&quot; — start it ~60s before your watch transitions, then skip it when your Garmin vibrates. The next segment&apos;s music begins immediately.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { localStorage.setItem("soma_skip_banner_dismissed", "1"); setSkipBannerDismissed(true); }}
+                  className="text-muted-foreground hover:text-foreground shrink-0 p-0.5"
+                  aria-label="Dismiss"
+                >✕</button>
               </div>
-            </>
-          )}
-        </div>
+            )}
+            <div className="flex-1">
+              <SongAssignmentPanel
+                items={items}
+                assignments={assignmentsWithWarnings}
+                excludedIds={excludedIds}
+                selectedGenres={genres}
+                focusedIdx={focusedIdx}
+                onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
+                onExclude={handleExclude}
+                onReplace={handleReplace}
+                onPlace={(idx, song) => setAssignments(prev => {
+                  const existing = prev[idx]?.songs ?? [];
+                  if (existing.some(s => s.track_id === song.track_id)) return prev;
+                  return { ...prev, [idx]: { ...prev[idx], songs: [...existing.filter(s => !s.is_skip), song, ...existing.filter(s => s.is_skip)] } };
+                })}
+                onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
+                onPreview={setPreviewSong}
+                onPumpUp={handlePumpUp}
+                onWidenBpm={handleWidenBpm}
+                onAddPlaylists={() => {
+                  toast("Open the Sources menu to add more playlists", { duration: 4000 });
+                }}
+                onBankChanged={() => setPumpUpBankKey(k => k + 1)}
+                onSave={handleSave}
+                saving={saving}
+                savedUrl={savedUrl}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
       {/* Mini player */}
       <SpotifyPlayer currentSong={previewSong} />
