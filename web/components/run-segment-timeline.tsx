@@ -146,7 +146,7 @@ export default function RunSegmentTimeline({ items, onChange, focusedIdx, onFocu
                             >
                               <div className={`w-1 h-5 rounded-full shrink-0 ${TYPE_COLORS[seg.type] ?? "bg-muted"}`} />
                               <span className="text-xs font-medium capitalize flex-1">{seg.type}</span>
-                              <span className="text-xs text-muted-foreground">{fmt(seg.duration_s)}</span>
+                              <span className="text-xs text-muted-foreground">{fmt(seg.duration_s * group.repeat_count)}</span>
                               <span className="text-xs text-muted-foreground">{seg.bpm_min}–{seg.bpm_max}</span>
                               <button
                                 type="button"

@@ -560,7 +560,7 @@ export default function PlaylistBuilder() {
     const currentAssignments = assignments;
     const currentExcludedIds = excludedIds;
 
-    const bankSongs: { track_id: string; name: string; artist_name: string; tempo: number | null; energy: number | null }[] =
+    const bankSongs: { track_id: string; name: string; artist_name: string; tempo: number | null; energy: number | null; duration_ms: number }[] =
       await fetch("/api/playlist/pump-up").then(r => r.json()).catch(() => []);
 
     if (!bankSongs.length) {
@@ -594,7 +594,7 @@ export default function PlaylistBuilder() {
         artist_name: song.artist_name,
         tempo: song.tempo ?? 0,
         energy: song.energy ?? 0,
-        duration_ms: 0,
+        duration_ms: song.duration_ms ?? 0,
         is_skip: false,
       };
       return { ...prev, [flatIdx]: { ...prev[flatIdx], songs: [...nonSkip, pumpSong, ...skip] } };
