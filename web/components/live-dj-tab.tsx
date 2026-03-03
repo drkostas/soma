@@ -12,11 +12,15 @@ import PlaylistGenrePicker from "./playlist-genre-picker";
 type OffsetMode = "pump_up" | "normal" | "wind_down";
 interface DjStatus {
   state: "stopped" | "starting" | "running" | "error";
-  hr?: number;
-  target_bpm?: number;
-  current_track?: string;
-  queued_track?: string;
-  ms_remaining?: number;
+  hr?: number | null;
+  hr_age_s?: number | null;
+  target_bpm?: number | null;
+  current_track?: string | null;
+  queued_track?: string | null;
+  ms_remaining?: number | null;
+  no_queue_reason?: string | null;
+  session_played_count?: number;
+  ts?: number;
   error?: string;
 }
 
@@ -272,35 +276,104 @@ export default function LiveDjTab() {
       </div>
 
       {/* Live status card */}
-      {isRunning && (
-        <div className="rounded-lg border bg-card p-3 space-y-1 text-sm">
+      {status.state !== "stopped" && (
+        <div className="rounded-lg border bg-card p-3 space-y-2 text-sm">
+          {/* Header row */}
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs font-medium text-green-600">LIVE</span>
-            {status.hr && (
-              <span className="text-muted-foreground ml-auto">
-                HR: <span className="text-foreground font-medium">{status.hr} bpm</span>
-                {status.target_bpm && (
-                  <> → Target: <span className="text-foreground font-medium">{status.target_bpm} BPM</span></>
-                )}
+            {status.state === "error" ? (
+              <span className="w-2 h-2 rounded-full bg-red-500" />
+            ) : status.state === "starting" ? (
+              <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            )}
+            <span className={cn(
+              "text-xs font-medium",
+              status.state === "error" ? "text-red-600" :
+              status.state === "starting" ? "text-yellow-600" :
+              "text-green-600"
+            )}>
+              {status.state === "error" ? "ERROR" :
+               status.state === "starting" ? "STARTING…" :
+               "LIVE"}
+            </span>
+            {status.ts && (
+              <span className="text-xs text-muted-foreground/60 ml-auto">
+                polled {Math.round((Date.now() / 1000 - status.ts) / 60)}m ago
               </span>
             )}
           </div>
-          {status.current_track && (
+
+          {/* Error message */}
+          {status.state === "error" && status.error && (
+            <div className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1">
+              {status.error}
+            </div>
+          )}
+
+          {/* HR + Target BPM */}
+          <div className="flex items-center gap-3 text-xs">
+            {status.hr ? (
+              <span className="text-muted-foreground">
+                HR <span className="text-foreground font-medium">{status.hr} bpm</span>
+                {status.hr_age_s != null && (
+                  <span className="text-muted-foreground/60 ml-1">
+                    ({status.hr_age_s < 120
+                      ? "just now"
+                      : status.hr_age_s < 3600
+                        ? `${Math.round(status.hr_age_s / 60)}m ago`
+                        : `${Math.round(status.hr_age_s / 3600)}h ago`})
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/60 italic">Waiting for Garmin HR…</span>
+            )}
+            {status.target_bpm && (
+              <span className="text-muted-foreground">
+                → target <span className="text-foreground font-medium">{status.target_bpm} BPM</span>
+              </span>
+            )}
+          </div>
+
+          {/* No-queue reason */}
+          {status.no_queue_reason && (
+            <div className="text-xs text-amber-600 dark:text-amber-400">
+              {status.no_queue_reason === "no_hr"
+                ? "⚠ No HR data — will queue once Garmin syncs"
+                : status.no_queue_reason === "no_candidates"
+                  ? `⚠ No tracks match ${status.target_bpm ?? "?"} BPM — widen genres or sources`
+                  : status.no_queue_reason === "already_queued"
+                    ? null
+                    : `⚠ ${status.no_queue_reason}`}
+            </div>
+          )}
+
+          {/* Current track */}
+          {status.current_track ? (
             <div className="text-xs text-muted-foreground truncate">
-              Now: <span className="text-foreground">{status.current_track}</span>
-              {status.ms_remaining !== undefined && (
-                <span className="ml-1 text-muted-foreground">({msToMinSec(status.ms_remaining)} left)</span>
+              ▶ <span className="text-foreground">{status.current_track}</span>
+              {status.ms_remaining != null && (
+                <span className="ml-1 text-muted-foreground/60">({msToMinSec(status.ms_remaining)} left)</span>
               )}
             </div>
+          ) : status.state === "running" && (
+            <div className="text-xs text-muted-foreground/60 italic">Nothing playing on Spotify</div>
           )}
+
+          {/* Queued track */}
           {status.queued_track && (
             <div className="text-xs text-muted-foreground truncate">
-              Queued: <span className="text-foreground">{status.queued_track}</span>
+              ⏭ <span className="text-foreground">{status.queued_track}</span>
+              <span className="text-muted-foreground/60 ml-1">(queued)</span>
             </div>
           )}
-          {status.state === "starting" && (
-            <div className="text-xs text-muted-foreground italic">Starting up…</div>
+
+          {/* Session count */}
+          {(status.session_played_count ?? 0) > 0 && (
+            <div className="text-xs text-muted-foreground/50">
+              {status.session_played_count} track{status.session_played_count === 1 ? "" : "s"} this session
+            </div>
           )}
         </div>
       )}
