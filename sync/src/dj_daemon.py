@@ -342,8 +342,13 @@ def run_daemon(
                         item.get("artists", [{}])[0].get("name", "").lower().replace(" ", "_")
                     )
 
-                # When queued track starts playing, clear the queued state
+                # When queued track starts playing, mark it played and clear queued state
                 if current_track_id == queued_track_id:
+                    session.mark_played(current_track_id)
+                    session.last_played_artist_id = (
+                        item.get("artists", [{}])[0].get("id") or
+                        item.get("artists", [{}])[0].get("name", "").lower().replace(" ", "_")
+                    )
                     queued_track_id = None
                     queued_track_name = None
 
