@@ -151,9 +151,10 @@ def _fetch_source_track_ids(sources: list[str], token: str) -> set[str] | None:
                 print(f"[dj] Cannot read playlist {source}: {exc}", flush=True)
                 break
             items = data.get("items") or []
-            print(f"[dj] Playlist {source} offset={offset}: {len(items)} items, keys={list(data.keys())[:6]}", flush=True)
             for item in items:
-                track = item.get("track") or {}
+                # /playlists/{id}/items returns track under "item" key (new API)
+                # while the legacy /tracks endpoint used "track" — handle both
+                track = item.get("item") or item.get("track") or {}
                 if track.get("id"):
                     ids.add(track["id"])
             if len(items) < 50 or not data.get("next"):
