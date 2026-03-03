@@ -36,6 +36,11 @@ class SessionState:
         self.last_played_artist_id = None
 
 
+def _artist_key(song: Song) -> str:
+    """Stable artist identifier, falling back to a slug from artist_name."""
+    return song.get("artist_id") or song.get("artist_name", "").lower().replace(" ", "_")
+
+
 def interleaved_shuffle(
     songs: list[Song],
     state: SessionState | None = None,
@@ -54,26 +59,28 @@ def interleaved_shuffle(
     # 1. Partition by artist_id
     by_artist: dict[str, list[Song]] = defaultdict(list)
     for song in songs:
-        artist_id = song.get("artist_id") or song.get("artist_name", "").lower().replace(" ", "_")
+        artist_id = _artist_key(song)
         by_artist[artist_id].append(song)
 
-    # 2. Shuffle within each partition
+    # 2. Shuffle within each partition (reverse so pop() from tail is O(1))
     for partition in by_artist.values():
         random.shuffle(partition)
+        partition.reverse()
 
     # 3. Interleave: sort partitions by size desc, then round-robin
     partitions = sorted(by_artist.values(), key=len, reverse=True)
     result: list[Song] = []
-    while any(partitions):
+    while partitions:
         for p in partitions:
             if p:
-                result.append(p.pop(0))
+                result.append(p.pop())
         partitions = [p for p in partitions if p]
 
-    # 4. If last-played artist is at position 0, rotate until it isn't
+    # 4. If last-played artist is at position 0, rotate until it isn't.
+    # If all songs share last_played_artist, no valid rotation exists — return as-is.
     if state and state.last_played_artist_id and result:
         for i, song in enumerate(result):
-            artist_id = song.get("artist_id") or song.get("artist_name", "").lower().replace(" ", "_")
+            artist_id = _artist_key(song)
             if artist_id != state.last_played_artist_id:
                 result = result[i:] + result[:i]
                 break
