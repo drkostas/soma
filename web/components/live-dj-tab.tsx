@@ -10,6 +10,14 @@ import PlaylistSourcePicker from "./playlist-source-picker";
 import PlaylistGenrePicker from "./playlist-genre-picker";
 
 type OffsetMode = "pump_up" | "normal" | "wind_down";
+interface QueueHistoryEntry {
+  name: string;
+  artist: string;
+  target_bpm: number;
+  track_bpm: number;
+  reason: string;
+  ts: number;
+}
 interface DjStatus {
   state: "stopped" | "starting" | "running" | "error";
   hr?: number | null;
@@ -20,6 +28,8 @@ interface DjStatus {
   ms_remaining?: number | null;
   no_queue_reason?: string | null;
   session_played_count?: number;
+  allowed_track_count?: number | null;
+  queue_history?: QueueHistoryEntry[];
   ts?: number;
   error?: string;
 }
@@ -34,6 +44,15 @@ const OFFSET_LABELS: Record<OffsetMode, string> = {
   normal: "● Normal",
   wind_down: "⬇ Wind down",
 };
+
+function formatReason(reason: string): string {
+  if (reason === "initial") return "start";
+  if (reason === "45s_remaining") return "45s left";
+  if (reason === "queued") return "queued";
+  const m = reason.match(/^hr_shift_(\d+)_to_(\d+)$/);
+  if (m) return `HR shift ${m[1]}→${m[2]} BPM`;
+  return reason;
+}
 
 function msToMinSec(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -314,15 +333,18 @@ export default function LiveDjTab() {
           {/* HR + Target BPM */}
           <div className="flex items-center gap-3 text-xs">
             {status.hr ? (
-              <span className="text-muted-foreground">
-                HR <span className="text-foreground font-medium">{status.hr} bpm</span>
+              <span className={cn(
+                "text-muted-foreground",
+                (status.hr_age_s ?? 0) > 3600 && "text-amber-600 dark:text-amber-400"
+              )}>
+                HR <span className="font-medium">{status.hr} bpm</span>
                 {status.hr_age_s != null && (
-                  <span className="text-muted-foreground/60 ml-1">
+                  <span className="opacity-70 ml-1">
                     ({status.hr_age_s < 120
                       ? "just now"
                       : status.hr_age_s < 3600
                         ? `${Math.round(status.hr_age_s / 60)}m ago`
-                        : `${Math.round(status.hr_age_s / 3600)}h ago`})
+                        : `${Math.round(status.hr_age_s / 3600)}h ago — stale`})
                   </span>
                 )}
               </span>
@@ -369,10 +391,32 @@ export default function LiveDjTab() {
             </div>
           )}
 
-          {/* Session count */}
-          {(status.session_played_count ?? 0) > 0 && (
+          {/* Source pool size */}
+          {status.allowed_track_count != null && (
             <div className="text-xs text-muted-foreground/50">
-              {status.session_played_count} track{status.session_played_count === 1 ? "" : "s"} this session
+              Pool: {status.allowed_track_count} tracks from selected source
+            </div>
+          )}
+
+          {/* Queue history */}
+          {status.queue_history && status.queue_history.length > 0 && (
+            <div className="pt-1 border-t space-y-1">
+              <div className="text-xs text-muted-foreground/60 font-medium">Queued this session</div>
+              {[...status.queue_history].reverse().map((entry, i) => (
+                <div key={i} className="text-xs flex items-baseline gap-1.5">
+                  <span className="text-foreground/80 truncate flex-1">{entry.name}</span>
+                  <span className="shrink-0 text-muted-foreground/50">{entry.artist}</span>
+                  <span
+                    className="shrink-0 text-muted-foreground font-medium"
+                    title={`Target: ${entry.target_bpm} BPM · Track: ${entry.track_bpm} BPM · Trigger: ${formatReason(entry.reason)}`}
+                  >
+                    {entry.track_bpm} BPM
+                  </span>
+                  <span className="shrink-0 text-muted-foreground/40 text-[10px]">
+                    {formatReason(entry.reason)}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </div>
