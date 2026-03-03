@@ -37,17 +37,17 @@ def test_no_consecutive_same_artist():
 
 
 def test_large_artist_spread():
-    """Dominant artist (8 songs) in 10-song list must not cluster."""
+    """Dominant artist (5 songs) in balanced 10-song list must not cluster."""
     songs = (
-        [make_song(f"a{i}", "Big Artist") for i in range(8)]
-        + [make_song(f"b{i}", "Small") for i in range(2)]
+        [make_song(f"a{i}", "Big Artist") for i in range(5)]
+        + [make_song(f"b{i}", "Small") for i in range(5)]
     )
     result = interleaved_shuffle(songs)
     big_positions = [i for i, s in enumerate(result) if s["artist_id"] == "big_artist"]
-    # Min gap between same-artist songs should be >= 1
+    # Min gap between same-artist songs should be >= 2 (balanced split guarantees it)
     for i in range(len(big_positions) - 1):
         gap = big_positions[i + 1] - big_positions[i]
-        assert gap >= 1
+        assert gap >= 2, f"Big Artist clustered: positions {big_positions[i]} and {big_positions[i+1]} (gap={gap})"
 
 
 def test_session_state_excludes_played():
