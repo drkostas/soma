@@ -275,6 +275,7 @@ def run_daemon(
     source_refresh_counter = 0
     SOURCE_REFRESH_INTERVAL = 20  # re-fetch source IDs every 20 polls (~10 min)
     last_context_uri: str | None = None  # for auto-detect mode
+    observed_context_tracks: set[str] = set()  # tracks seen playing in current context (fallback when playlist fetch fails)
     queue_history: list[dict] = []  # rolling log of queued tracks (newest last)
 
     _write_status(status_file, {"state": "starting", "hr": None, "target_bpm": None})
@@ -339,23 +340,56 @@ def run_daemon(
                 ctx = now_playing.get("context") or {}
                 ctx_uri: str = ctx.get("uri") or ""
                 ctx_type: str = ctx.get("type") or ""
-                if ctx_uri and ctx_uri != last_context_uri:
-                    ctx_id = ctx_uri.split(":")[-1]
+
+                # Context changed — reset and re-fetch
+                if ctx_uri != last_context_uri:
                     last_context_uri = ctx_uri
-                    source_ids_loaded = False  # force re-fetch
+                    source_ids_loaded = False
+                    observed_context_tracks.clear()
+                    allowed_ids = None
+
                 if ctx_uri and not source_ids_loaded:
                     ctx_id = ctx_uri.split(":")[-1]
+                    fetch_ok = False
                     try:
                         if ctx_type == "playlist":
-                            allowed_ids = _fetch_source_track_ids([ctx_id], token)
+                            fetched = _fetch_source_track_ids([ctx_id], token)
+                            if fetched:  # None means 'liked'/full-library; empty means fetch failed
+                                allowed_ids = fetched
+                                fetch_ok = True
                         elif ctx_type == "album":
-                            allowed_ids = _fetch_album_track_ids(ctx_id, token)
+                            allowed_ids = _fetch_album_track_ids(ctx_id, token) or None
+                            fetch_ok = bool(allowed_ids)
                         else:
-                            allowed_ids = None  # artist / unknown — use full library
-                        source_ids_loaded = True
+                            allowed_ids = None  # artist / search — no filter
+                            fetch_ok = True
                     except Exception as exc:
                         print(f"[dj] Auto-detect source fetch failed: {exc}", flush=True)
-                # Resolve display name from context
+
+                    if not fetch_ok and ctx_type == "playlist":
+                        # Playlist not accessible (not owned) — seed from recently-played
+                        try:
+                            recent = _spotify_get("/me/player/recently-played?limit=50", token)
+                            for item in (recent.get("items") or []):
+                                if (item.get("context") or {}).get("uri") == ctx_uri:
+                                    tid = (item.get("track") or {}).get("id")
+                                    if tid:
+                                        observed_context_tracks.add(tid)
+                        except Exception:
+                            pass
+                        print(f"[dj] Playlist {ctx_id} inaccessible — using observation fallback ({len(observed_context_tracks)} seeds)", flush=True)
+
+                    source_ids_loaded = True
+
+                # Add currently-playing track to observed set (observation fallback)
+                if auto_detect and ctx_uri and current_track_id and allowed_ids is None:
+                    observed_context_tracks.add(current_track_id)
+
+                # Use observed tracks as filter when direct fetch failed
+                if allowed_ids is None and observed_context_tracks:
+                    allowed_ids = set(observed_context_tracks)
+
+                # Context display name
                 if ctx_type == "playlist":
                     current_context_name = f"playlist:{ctx_uri.split(':')[-1]}"
                 elif ctx_type == "album":
@@ -365,8 +399,7 @@ def run_daemon(
                     except Exception:
                         current_context_name = "album"
                 elif not ctx_uri:
-                    # Nothing playing or playing from search/etc — no context
-                    allowed_ids = None
+                    allowed_ids = None  # no context (playing from search, etc.)
 
             # 3. Decide whether to queue
             should_queue = False
