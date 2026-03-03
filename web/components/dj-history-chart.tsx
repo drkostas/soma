@@ -58,9 +58,9 @@ export default function DjHistoryChart({ hrHistory, songEvents }: Props) {
     target_bpm: p.target_bpm ?? undefined,
   }));
 
-  const allBpm = data.flatMap(d => [d.hr, d.target_bpm].filter(Boolean) as number[]);
-  const yMin = Math.max(30, Math.min(...allBpm) - 10);
-  const yMax = Math.min(220, Math.max(...allBpm) + 10);
+  const allBpm = data.flatMap(d => [d.hr, d.target_bpm].filter((x): x is number => typeof x === "number" && x > 0));
+  const yMin = allBpm.length > 0 ? Math.max(30, Math.min(...allBpm) - 10) : 60;
+  const yMax = allBpm.length > 0 ? Math.min(220, Math.max(...allBpm) + 10) : 180;
 
   return (
     <ResponsiveContainer width="100%" height={180}>
@@ -108,7 +108,7 @@ export default function DjHistoryChart({ hrHistory, songEvents }: Props) {
         />
         {songEvents.map((evt, i) => (
           <ReferenceLine
-            key={i}
+            key={evt.ts}
             x={evt.ts}
             stroke="var(--primary)"
             strokeWidth={1}
