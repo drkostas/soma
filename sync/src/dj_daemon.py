@@ -264,6 +264,17 @@ def run_daemon(
 
     garmin = init_garmin()
     session = SessionState()
+    # Persist played track IDs across restarts so the same songs aren't
+    # immediately re-queued. Keep last 200 played IDs in a temp file.
+    PLAYED_HISTORY_FILE = "/tmp/soma-dj-played.json"
+    try:
+        prev_played = json.loads(Path(PLAYED_HISTORY_FILE).read_text())
+        if isinstance(prev_played, list):
+            for tid in prev_played[-200:]:
+                session.played.add(tid)
+    except Exception:
+        pass
+
     last_hr: int | None = None
     last_hr_ts: float | None = None  # wall-clock time of last successful HR read
     last_target_bpm: int | None = None
@@ -485,6 +496,12 @@ def run_daemon(
                     queue_history[:] = queue_history[-10:]  # keep last 10
                     first_queue_done = True  # successful — stop forcing on every iteration
                     no_queue_reason = None
+                    # Persist played history so next session avoids repeats
+                    try:
+                        all_played = list(session.played)[-200:]
+                        Path(PLAYED_HISTORY_FILE).write_text(json.dumps(all_played))
+                    except Exception:
+                        pass
                 else:
                     queued_track_id = None
                     queued_track_name = None
