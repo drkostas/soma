@@ -36,15 +36,20 @@ interface DjStatus {
   error?: string;
 }
 
-const OFFSET_VALUES: Record<OffsetMode, number> = {
+const DEFAULT_OFFSETS: Record<OffsetMode, number> = {
   pump_up: 12,
   normal: 0,
   wind_down: -12,
 };
-const OFFSET_LABELS: Record<OffsetMode, string> = {
-  pump_up: "⬆ Pump up",
-  normal: "● Normal",
-  wind_down: "⬇ Wind down",
+const OFFSET_ICONS: Record<OffsetMode, string> = {
+  pump_up: "⬆",
+  normal: "●",
+  wind_down: "⬇",
+};
+const OFFSET_NAMES: Record<OffsetMode, string> = {
+  pump_up: "Pump up",
+  normal: "Normal",
+  wind_down: "Wind down",
 };
 
 function formatReason(reason: string): string {
@@ -79,6 +84,14 @@ export default function LiveDjTab() {
     const validModes: OffsetMode[] = ["pump_up", "normal", "wind_down"];
     return (validModes.includes(stored as OffsetMode) ? stored as OffsetMode : "normal");
   });
+  const [offsetValues, setOffsetValues] = useState<Record<OffsetMode, number>>(() => {
+    if (typeof window === "undefined") return { ...DEFAULT_OFFSETS };
+    try {
+      const stored = localStorage.getItem("dj_offset_values");
+      if (stored) return { ...DEFAULT_OFFSETS, ...JSON.parse(stored) } as Record<OffsetMode, number>;
+    } catch {}
+    return { ...DEFAULT_OFFSETS };
+  });
   const [sourceMode, setSourceMode] = useState<"auto" | "manual">(() => {
     if (typeof window === "undefined") return "auto";
     return (localStorage.getItem("dj_source_mode") === "manual" ? "manual" : "auto");
@@ -95,6 +108,7 @@ export default function LiveDjTab() {
 
   // Persist settings
   useEffect(() => { localStorage.setItem("dj_offset_mode", offsetMode); }, [offsetMode]);
+  useEffect(() => { localStorage.setItem("dj_offset_values", JSON.stringify(offsetValues)); }, [offsetValues]);
   useEffect(() => { localStorage.setItem("dj_source_mode", sourceMode); }, [sourceMode]);
   useEffect(() => { localStorage.setItem("dj_sources", sources.join(",")); }, [sources]);
   useEffect(() => { localStorage.setItem("dj_genres", genres.join(",")); }, [genres]);
@@ -136,7 +150,7 @@ export default function LiveDjTab() {
         body: JSON.stringify({
           hr_rest: hrRest,
           hr_max: hrMax,
-          offset: OFFSET_VALUES[offsetMode],
+          offset: offsetValues[offsetMode],
           genres: sourceMode === "auto" ? [] : genres,
           sources: sourceMode === "auto" ? ["auto"] : sources,
         }),
@@ -228,27 +242,61 @@ export default function LiveDjTab() {
         </div>
       </div>
 
-      {/* Offset toggle */}
-      <div className="space-y-1">
+      {/* Offset toggle + per-mode BPM offset inputs */}
+      <div className="space-y-1.5">
         <div className="text-xs text-muted-foreground">Mode</div>
         <div className="flex gap-1">
-          {(["pump_up", "normal", "wind_down"] as OffsetMode[]).map(mode => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setOffsetMode(mode)}
-              disabled={isRunning}
-              className={cn(
-                "flex-1 text-xs py-1.5 rounded border transition-colors disabled:opacity-50",
-                offsetMode === mode
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "hover:bg-muted"
-              )}
-            >
-              {OFFSET_LABELS[mode]}
-            </button>
-          ))}
+          {(["pump_up", "normal", "wind_down"] as OffsetMode[]).map(mode => {
+            const val = offsetValues[mode];
+            const sign = val > 0 ? "+" : "";
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setOffsetMode(mode)}
+                disabled={isRunning}
+                className={cn(
+                  "flex-1 text-xs py-1.5 rounded border transition-colors disabled:opacity-50 flex flex-col items-center gap-0.5",
+                  offsetMode === mode
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "hover:bg-muted"
+                )}
+              >
+                <span>{OFFSET_ICONS[mode]} {OFFSET_NAMES[mode]}</span>
+                <span className="opacity-70 text-[10px]">{sign}{val} BPM</span>
+              </button>
+            );
+          })}
         </div>
+        {/* Offset editor for selected mode */}
+        {!isRunning && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground w-24 shrink-0">
+              {OFFSET_NAMES[offsetMode]} offset
+            </span>
+            <input
+              type="range"
+              min={offsetMode === "wind_down" ? -30 : offsetMode === "pump_up" ? 0 : -15}
+              max={offsetMode === "wind_down" ? 0 : offsetMode === "pump_up" ? 30 : 15}
+              step={1}
+              value={offsetValues[offsetMode]}
+              disabled={isRunning}
+              onChange={e => setOffsetValues(prev => ({ ...prev, [offsetMode]: Number(e.target.value) }))}
+              className="flex-1 h-1 accent-primary disabled:opacity-50"
+            />
+            <span className="text-xs font-medium w-10 text-right">
+              {offsetValues[offsetMode] > 0 ? "+" : ""}{offsetValues[offsetMode]} BPM
+            </span>
+            <button
+              type="button"
+              onClick={() => setOffsetValues(prev => ({ ...prev, [offsetMode]: DEFAULT_OFFSETS[offsetMode] }))}
+              className="text-xs text-muted-foreground/60 hover:text-muted-foreground"
+              title="Reset to default"
+            >
+              ↺
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Source mode */}
