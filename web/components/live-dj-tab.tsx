@@ -8,6 +8,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PlaylistSourcePicker from "./playlist-source-picker";
 import PlaylistGenrePicker from "./playlist-genre-picker";
+import DjHistoryChart from "./dj-history-chart";
 
 type OffsetMode = "pump_up" | "normal" | "wind_down";
 interface QueueHistoryEntry {
@@ -514,25 +515,38 @@ export default function LiveDjTab() {
               </div>
             )}
 
+            {/* HR / BPM history chart */}
+            {status.hr_history && status.hr_history.length > 0 && (
+              <div className="pt-2 border-t">
+                <div className="text-xs text-muted-foreground/60 font-medium mb-1">Session timeline</div>
+                <DjHistoryChart
+                  hrHistory={status.hr_history}
+                  songEvents={status.queue_history ?? []}
+                />
+              </div>
+            )}
+
             {/* Queue history */}
             {status.queue_history && status.queue_history.length > 0 && (
               <div className="pt-1 border-t space-y-1">
                 <div className="text-xs text-muted-foreground/60 font-medium">Queued this session</div>
-                {[...status.queue_history].reverse().map((entry, i) => (
-                  <div key={i} className="text-xs flex items-baseline gap-1.5">
-                    <span className="text-foreground/80 truncate flex-1">{entry.name}</span>
-                    <span className="shrink-0 text-muted-foreground/50">{entry.artist}</span>
-                    <span
-                      className="shrink-0 text-muted-foreground font-medium"
-                      title={`Target: ${entry.target_bpm} BPM · Track: ${entry.track_bpm} BPM · Trigger: ${formatReason(entry.reason)}`}
-                    >
-                      {entry.track_bpm} BPM
-                    </span>
-                    <span className="shrink-0 text-muted-foreground/40 text-[10px]">
-                      {formatReason(entry.reason)}
-                    </span>
-                  </div>
-                ))}
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {[...status.queue_history].reverse().map((entry, i) => (
+                    <div key={i} className="text-xs flex items-baseline gap-1.5">
+                      <span className="text-foreground/80 truncate flex-1">{entry.name}</span>
+                      <span className="shrink-0 text-muted-foreground/50">{entry.artist}</span>
+                      <span
+                        className="shrink-0 text-muted-foreground font-medium"
+                        title={`Target: ${entry.target_bpm} BPM · Track: ${entry.track_bpm} BPM · Trigger: ${formatReason(entry.reason)}`}
+                      >
+                        {entry.track_bpm} BPM
+                      </span>
+                      <span className="shrink-0 text-muted-foreground/40 text-[10px]">
+                        {formatReason(entry.reason)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
