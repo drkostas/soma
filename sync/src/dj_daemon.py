@@ -129,39 +129,73 @@ def _spotify_put(path: str, token: str, json_body: dict | None = None) -> None:
         raise RuntimeError(f"Spotify PUT {path} failed: {resp.status_code} {resp.text}")
 
 
-def _query_tracks(target_bpm: int, genres: list[str], sources: list[str], exclude_ids: list[str]) -> list[dict]:
+def _fetch_source_track_ids(sources: list[str], token: str) -> set[str] | None:
+    """Return allowed track IDs for the given sources.
+
+    Returns None if 'liked' is in sources (= entire cached library, no filter needed).
+    Returns a set of track IDs when specific playlist IDs are given.
+    """
+    if not sources or "liked" in sources:
+        return None  # liked songs == entire DB cache — no filtering needed
+
+    ids: set[str] = set()
+    for source in sources:
+        offset = 0
+        while True:
+            data = _spotify_get(
+                f"/playlists/{source}/items?limit=100&offset={offset}"
+                f"&fields=items(track(id)),next",
+                token,
+            )
+            items = data.get("items") or []
+            for item in items:
+                track = item.get("track") or {}
+                if track.get("id"):
+                    ids.add(track["id"])
+            if len(items) < 100:
+                break
+            offset += 100
+    return ids or None
+
+
+def _query_tracks(
+    target_bpm: int,
+    genres: list[str],
+    sources: list[str],
+    exclude_ids: list[str],
+    allowed_ids: set[str] | None = None,
+) -> list[dict]:
     """Query DB for tracks matching BPM ± 5.
 
-    Note: ``sources`` is currently unused because ``spotify_track_features``
-    has no per-source column (all cached tracks are undifferentiated).
-    The parameter is kept for API compatibility and future enhancement when
-    source-based filtering (e.g. liked, playlist) is added to the table.
+    ``allowed_ids`` restricts results to specific track IDs (used for playlist sources).
+    None means no restriction (all cached tracks qualify — used when source='liked').
     """
     lo, hi = target_bpm - 5, target_bpm + 5
     conn = psycopg2.connect(DATABASE_URL)
     try:
         with conn.cursor() as cur:
+            parts: list[str] = ["WHERE tempo BETWEEN %s AND %s"]
+            params: list = [lo, hi]
+
             if genres:
-                cur.execute(
-                    """SELECT track_id, name, artist_name, artist_name as artist_id, tempo, energy
-                       FROM spotify_track_features
-                       WHERE tempo BETWEEN %s AND %s
-                       AND genres && %s
-                       AND track_id NOT IN (SELECT track_id FROM user_blacklist)
-                       AND (%s IS NULL OR track_id != ALL(%s::text[]))
-                       LIMIT 200""",
-                    (lo, hi, genres, exclude_ids or None, exclude_ids or None),
-                )
-            else:
-                cur.execute(
-                    """SELECT track_id, name, artist_name, artist_name as artist_id, tempo, energy
-                       FROM spotify_track_features
-                       WHERE tempo BETWEEN %s AND %s
-                       AND track_id NOT IN (SELECT track_id FROM user_blacklist)
-                       AND (%s IS NULL OR track_id != ALL(%s::text[]))
-                       LIMIT 200""",
-                    (lo, hi, exclude_ids or None, exclude_ids or None),
-                )
+                parts.append("AND genres && %s")
+                params.append(genres)
+
+            parts.append("AND track_id NOT IN (SELECT track_id FROM user_blacklist)")
+
+            if exclude_ids:
+                parts.append("AND track_id != ALL(%s::text[])")
+                params.append(exclude_ids)
+
+            if allowed_ids is not None:
+                parts.append("AND track_id = ANY(%s::text[])")
+                params.append(list(allowed_ids))
+
+            query = f"""SELECT track_id, name, artist_name, artist_name as artist_id, tempo, energy
+                        FROM spotify_track_features
+                        {' '.join(parts)}
+                        LIMIT 200"""
+            cur.execute(query, params)
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
     finally:
@@ -202,12 +236,26 @@ def run_daemon(
     queued_track_id: str | None = None
     queued_track_name: str | None = None
     first_queue_done = False  # queue immediately on first iteration
+    allowed_ids: set[str] | None = None  # track IDs allowed by source filter
+    source_ids_loaded = False
+    source_refresh_counter = 0
+    SOURCE_REFRESH_INTERVAL = 20  # re-fetch source IDs every 20 polls (~10 min)
+    queue_history: list[dict] = []  # rolling log of queued tracks (newest last)
 
     _write_status(status_file, {"state": "starting", "hr": None, "target_bpm": None})
 
     while not _stop_event.is_set():
         try:
             token = _get_spotify_token()
+
+            # 0. Refresh source track IDs periodically
+            if not source_ids_loaded or source_refresh_counter == 0:
+                try:
+                    allowed_ids = _fetch_source_track_ids(sources, token)
+                    source_ids_loaded = True
+                except Exception:
+                    pass  # keep previous allowed_ids on failure
+            source_refresh_counter = (source_refresh_counter + 1) % SOURCE_REFRESH_INTERVAL
 
             # 1. Poll Garmin HR
             today = date.today().isoformat()
@@ -277,7 +325,7 @@ def run_daemon(
                 if current_track_id:
                     exclude_ids.append(current_track_id)
 
-                candidates = _query_tracks(target_bpm, genres, sources, exclude_ids)
+                candidates = _query_tracks(target_bpm, genres, sources, exclude_ids, allowed_ids=allowed_ids)
                 filtered = session.filter_candidates(candidates)
                 shuffled = interleaved_shuffle(filtered, state=session)
 
@@ -299,6 +347,15 @@ def run_daemon(
                         )
                     queued_track_id = next_track_id
                     queued_track_name = next_song["name"]
+                    queue_history.append({
+                        "name": next_song["name"],
+                        "artist": next_song.get("artist_name", ""),
+                        "target_bpm": target_bpm,
+                        "track_bpm": round(next_song.get("tempo", 0)),
+                        "reason": replace_reason or "queued",
+                        "ts": time.time(),
+                    })
+                    queue_history[:] = queue_history[-10:]  # keep last 10
                     first_queue_done = True  # successful — stop forcing on every iteration
                     no_queue_reason = None
                 else:
@@ -327,6 +384,8 @@ def run_daemon(
                 "replace_reason": replace_reason,
                 "no_queue_reason": no_queue_reason,
                 "session_played_count": len(session.played),
+                "allowed_track_count": len(allowed_ids) if allowed_ids is not None else None,
+                "queue_history": queue_history,
                 "ts": time.time(),
             })
 
