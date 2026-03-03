@@ -34,6 +34,7 @@ from shuffle import SessionState, interleaved_shuffle
 POLL_INTERVAL = 30  # seconds between main loop iterations
 QUEUE_AHEAD_MS = 45_000  # queue next song when this many ms remain
 HR_SHIFT_THRESHOLD = 8  # BPM change that triggers a queue replacement
+HR_WINDOW_SECONDS = 86400  # use HR readings up to 24 hours old (Garmin syncs infrequently)
 
 
 def _get_spotify_token() -> str:
@@ -117,6 +118,17 @@ def _spotify_post(path: str, token: str, params: dict | None = None) -> None:
         raise RuntimeError(f"Spotify POST {path} failed: {resp.status_code} {resp.text}")
 
 
+def _spotify_put(path: str, token: str, json_body: dict | None = None) -> None:
+    resp = requests.put(
+        f"https://api.spotify.com/v1{path}",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json=json_body or {},
+        timeout=10,
+    )
+    if resp.status_code not in (200, 202, 204):
+        raise RuntimeError(f"Spotify PUT {path} failed: {resp.status_code} {resp.text}")
+
+
 def _query_tracks(target_bpm: int, genres: list[str], sources: list[str], exclude_ids: list[str]) -> list[dict]:
     """Query DB for tracks matching BPM ± 5.
 
@@ -185,6 +197,7 @@ def run_daemon(
     garmin = init_garmin()
     session = SessionState()
     last_hr: int | None = None
+    last_hr_ts: float | None = None  # wall-clock time of last successful HR read
     last_target_bpm: int | None = None
     queued_track_id: str | None = None
     queued_track_name: str | None = None
@@ -199,9 +212,10 @@ def run_daemon(
             # 1. Poll Garmin HR
             today = date.today().isoformat()
             hr_data = garmin.get_heart_rates(today)
-            current_hr = latest_hr_from_garmin_data(hr_data, window_seconds=120)
+            current_hr = latest_hr_from_garmin_data(hr_data, window_seconds=HR_WINDOW_SECONDS)
             if current_hr is not None:
                 last_hr = current_hr
+                last_hr_ts = time.time()
 
             target_bpm: int | None = None
             if last_hr is not None:
@@ -237,21 +251,26 @@ def run_daemon(
             # 3. Decide whether to queue
             should_queue = False
             replace_reason = None
+            no_queue_reason: str | None = None
+            is_playing = bool(
+                now_playing and now_playing.get("is_playing") and now_playing.get("item")
+            )
 
-            if target_bpm is not None:
-                if not first_queue_done:
-                    # Always queue immediately on first iteration so the next
-                    # song is BPM-matched from the start (the current song was
-                    # picked before the DJ started and is unrelated).
+            if target_bpm is None:
+                no_queue_reason = "no_hr"
+            elif not first_queue_done:
+                # Always queue/play immediately on first iteration
+                should_queue = True
+                replace_reason = "initial"
+            elif queued_track_id is not None:
+                no_queue_reason = "already_queued"
+            elif ms_remaining is not None:
+                if ms_remaining < QUEUE_AHEAD_MS:
                     should_queue = True
-                    replace_reason = "initial"
-                elif ms_remaining is not None:
-                    if ms_remaining < QUEUE_AHEAD_MS:
-                        should_queue = True
-                        replace_reason = "45s_remaining"
-                    elif last_target_bpm is not None and abs(target_bpm - last_target_bpm) >= HR_SHIFT_THRESHOLD:
-                        should_queue = True
-                        replace_reason = f"hr_shift_{last_target_bpm}_to_{target_bpm}"
+                    replace_reason = "45s_remaining"
+                elif last_target_bpm is not None and abs(target_bpm - last_target_bpm) >= HR_SHIFT_THRESHOLD:
+                    should_queue = True
+                    replace_reason = f"hr_shift_{last_target_bpm}_to_{target_bpm}"
 
             if should_queue and target_bpm is not None:
                 exclude_ids = list(session.played | session.skipped)
@@ -265,17 +284,27 @@ def run_daemon(
                 if shuffled:
                     next_song = shuffled[0]
                     next_track_id = next_song["track_id"]
-                    _spotify_post(
-                        "/me/player/queue",
-                        token,
-                        params={"uri": f"spotify:track:{next_track_id}"},
-                    )
+                    if not first_queue_done and not is_playing:
+                        # Nothing playing yet — start immediately instead of queuing
+                        _spotify_put(
+                            "/me/player/play",
+                            token,
+                            json_body={"uris": [f"spotify:track:{next_track_id}"]},
+                        )
+                    else:
+                        _spotify_post(
+                            "/me/player/queue",
+                            token,
+                            params={"uri": f"spotify:track:{next_track_id}"},
+                        )
                     queued_track_id = next_track_id
                     queued_track_name = next_song["name"]
                     first_queue_done = True  # successful — stop forcing on every iteration
+                    no_queue_reason = None
                 else:
                     queued_track_id = None
                     queued_track_name = None
+                    no_queue_reason = "no_candidates"
                     # Leave first_queue_done = False so we retry next poll
 
             # Update last_target_bpm after every successful HR read
@@ -283,9 +312,11 @@ def run_daemon(
                 last_target_bpm = target_bpm
 
             # 4. Write status
+            hr_age_s = round(time.time() - last_hr_ts) if last_hr_ts else None
             _write_status(status_file, {
                 "state": "running",
                 "hr": last_hr,
+                "hr_age_s": hr_age_s,
                 "target_bpm": target_bpm,
                 "offset": offset,
                 "current_track": current_track_name,
@@ -294,6 +325,7 @@ def run_daemon(
                 "queued_track": queued_track_name,
                 "queued_track_id": queued_track_id,
                 "replace_reason": replace_reason,
+                "no_queue_reason": no_queue_reason,
                 "session_played_count": len(session.played),
                 "ts": time.time(),
             })
