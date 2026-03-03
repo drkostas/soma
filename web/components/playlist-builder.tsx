@@ -503,14 +503,20 @@ export default function PlaylistBuilder() {
 
   function handleExclude(segIdx: number, trackId: string) {
     const isExcluding = !excludedIds.has(trackId);
-    // Compute new excluded set synchronously so generateSegmentOnly gets the updated list
     const newExcluded = new Set(excludedIds);
     if (isExcluding) { newExcluded.add(trackId); } else { newExcluded.delete(trackId); }
     setExcludedIds(newExcluded);
-    if (!isExcluding) return; // restoring — no regeneration needed
+    if (!isExcluding) return; // restoring — nothing more to do
 
-    // Auto-regenerate to get a replacement song (pass newExcluded to avoid stale closure)
-    void generateSegmentOnly(segIdx, undefined, undefined, newExcluded);
+    // Remove the song from its assignment locally (no SSE regeneration)
+    setAssignments(prev => {
+      const entry = prev[segIdx];
+      if (!entry) return prev;
+      return {
+        ...prev,
+        [segIdx]: { ...entry, songs: entry.songs.filter(s => s.track_id !== trackId) },
+      };
+    });
 
     // Find the song name/artist for the toast message
     const song = Object.values(assignments).flatMap(a => a.songs).find(s => s.track_id === trackId);
