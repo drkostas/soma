@@ -264,6 +264,9 @@ def run_daemon(
                     )
                     queued_track_id = next_track_id
                     queued_track_name = next_song["name"]
+                else:
+                    queued_track_id = None
+                    queued_track_name = None
 
             # Update last_target_bpm after every successful HR read
             if target_bpm is not None:
