@@ -40,15 +40,19 @@ function msToMinSec(ms: number): string {
 export default function LiveDjTab({ genres, sources }: Props) {
   const [hrRest, setHrRest] = useState(() => {
     if (typeof window === "undefined") return 60;
-    return parseInt(localStorage.getItem("dj_hr_rest") ?? "60", 10);
+    return parseInt(localStorage.getItem("dj_hr_rest") ?? "60", 10) || 60;
   });
   const [hrMax, setHrMax] = useState(() => {
     if (typeof window === "undefined") return 190;
-    return parseInt(localStorage.getItem("dj_hr_max") ?? "190", 10);
+    return parseInt(localStorage.getItem("dj_hr_max") ?? "190", 10) || 190;
   });
+  const [hrRestStr, setHrRestStr] = useState(() => String(typeof window !== "undefined" ? (parseInt(localStorage.getItem("dj_hr_rest") ?? "60", 10) || 60) : 60));
+  const [hrMaxStr, setHrMaxStr] = useState(() => String(typeof window !== "undefined" ? (parseInt(localStorage.getItem("dj_hr_max") ?? "190", 10) || 190) : 190));
   const [offsetMode, setOffsetMode] = useState<OffsetMode>(() => {
     if (typeof window === "undefined") return "normal";
-    return (localStorage.getItem("dj_offset_mode") as OffsetMode) ?? "normal";
+    const stored = localStorage.getItem("dj_offset_mode");
+    const validModes: OffsetMode[] = ["pump_up", "normal", "wind_down"];
+    return (validModes.includes(stored as OffsetMode) ? stored as OffsetMode : "normal");
   });
   const [status, setStatus] = useState<DjStatus>({ state: "stopped" });
   const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -62,8 +66,10 @@ export default function LiveDjTab({ genres, sources }: Props) {
   const pollStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/playlist/dj/status");
-      const data = await res.json() as DjStatus;
-      setStatus(data);
+      if (!res.ok) return;
+      const data = await res.json() as Partial<DjStatus>;
+      if (!data.state) return;
+      setStatus(data as DjStatus);
       if (data.state === "stopped" || data.state === "error") {
         clearInterval(pollRef.current);
         if (data.state === "error") toast.error("Live DJ stopped", { description: data.error });
@@ -95,11 +101,13 @@ export default function LiveDjTab({ genres, sources }: Props) {
   }
 
   async function handleStop() {
-    clearInterval(pollRef.current);
     try {
       await fetch("/api/playlist/dj/stop", { method: "POST" });
-    } catch {}
-    setStatus({ state: "stopped" });
+      clearInterval(pollRef.current);
+      setStatus({ state: "stopped" });
+    } catch {
+      toast.error("Failed to stop Live DJ — daemon may still be running");
+    }
   }
 
   // Resume polling if already running (page reload)
@@ -124,21 +132,39 @@ export default function LiveDjTab({ genres, sources }: Props) {
       {/* HR settings */}
       <div className="flex gap-4">
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Resting HR</label>
+          <label htmlFor="dj-hr-rest" className="text-xs text-muted-foreground">Resting HR</label>
           <input
+            id="dj-hr-rest"
             type="number"
-            value={hrRest}
-            onChange={e => setHrRest(Math.max(30, Math.min(100, parseInt(e.target.value) || 60)))}
+            min={30}
+            max={100}
+            step={1}
+            value={hrRestStr}
+            onChange={e => setHrRestStr(e.target.value)}
+            onBlur={e => {
+              const v = Math.max(30, Math.min(100, parseInt(e.target.value, 10) || 60));
+              setHrRest(v);
+              setHrRestStr(String(v));
+            }}
             disabled={isRunning}
             className="w-20 h-8 text-sm border rounded px-2 bg-background disabled:opacity-50"
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Max HR</label>
+          <label htmlFor="dj-hr-max" className="text-xs text-muted-foreground">Max HR</label>
           <input
+            id="dj-hr-max"
             type="number"
-            value={hrMax}
-            onChange={e => setHrMax(Math.max(140, Math.min(220, parseInt(e.target.value) || 190)))}
+            min={140}
+            max={220}
+            step={1}
+            value={hrMaxStr}
+            onChange={e => setHrMaxStr(e.target.value)}
+            onBlur={e => {
+              const v = Math.max(140, Math.min(220, parseInt(e.target.value, 10) || 190));
+              setHrMax(v);
+              setHrMaxStr(String(v));
+            }}
             disabled={isRunning}
             className="w-20 h-8 text-sm border rounded px-2 bg-background disabled:opacity-50"
           />
