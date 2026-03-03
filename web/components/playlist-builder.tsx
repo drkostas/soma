@@ -2,7 +2,9 @@
 "use client";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import PlaylistTopBar from "./playlist-top-bar";
+import LiveDjTab from "./live-dj-tab";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import RunSegmentTimeline from "./run-segment-timeline";
@@ -115,6 +117,7 @@ export default function PlaylistBuilder() {
   // Tracks the Spotify playlist ID from a loaded session — if set, Save → Update (PUT)
   const [existingPlaylistId, setExistingPlaylistId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"playlist" | "dj">("playlist");
   const [changeRunConfirm, setChangeRunConfirm] = useState(false);
   const [skipBannerDismissed, setSkipBannerDismissed] = useState(() =>
     typeof window !== "undefined" && !!localStorage.getItem("soma_skip_banner_dismissed")
@@ -508,14 +511,14 @@ export default function PlaylistBuilder() {
     setExcludedIds(newExcluded);
     if (!isExcluding) return; // restoring — nothing more to do
 
-    // Remove the song from its assignment locally (no SSE regeneration)
+    // Remove the song from ALL segment assignments locally (no SSE regeneration)
     setAssignments(prev => {
-      const entry = prev[segIdx];
-      if (!entry) return prev;
-      return {
-        ...prev,
-        [segIdx]: { ...entry, songs: entry.songs.filter(s => s.track_id !== trackId) },
-      };
+      const next: typeof prev = {};
+      for (const k of Object.keys(prev)) {
+        const n = Number(k);
+        next[n] = { ...prev[n], songs: prev[n].songs.filter(s => s.track_id !== trackId) };
+      }
+      return next;
     });
 
     // Find the song name/artist for the toast message
@@ -618,6 +621,17 @@ export default function PlaylistBuilder() {
     }
     return result;
   }, [assignments, genres]);
+
+  function handleReplace(segIdx: number, targetTrackId: string, newSong: SongData) {
+    setAssignments(prev => {
+      const entry = prev[segIdx];
+      if (!entry) return prev;
+      return {
+        ...prev,
+        [segIdx]: { ...entry, songs: entry.songs.map(s => s.track_id === targetTrackId ? { ...newSong, is_skip: s.is_skip } : s) },
+      };
+    });
+  }
 
   function resetRun() {
     abortRef.current?.abort();
@@ -725,51 +739,77 @@ export default function PlaylistBuilder() {
             />
           )}
         </div>
-        {/* Right: song assignment */}
+        {/* Right: playlist builder or live DJ */}
         <div ref={rightRef} className="flex-1 overflow-y-auto flex flex-col">
-          {/* One-time skip song explainer banner */}
-          {hasRun && sessionId !== null && !skipBannerDismissed && (
-            <div className="mx-3 mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 flex items-start gap-2 text-xs shrink-0">
-              <span className="text-lg leading-none shrink-0">◄◄</span>
-              <p className="text-muted-foreground flex-1">
-                <span className="text-foreground font-medium">How skip songs work: </span>
-                Each segment ends with a &quot;skip song&quot; — start it ~60s before your watch transitions, then skip it when your Garmin vibrates. The next segment&apos;s music begins immediately.
-              </p>
+          {/* Tab strip */}
+          <div className="flex border-b shrink-0">
+            {(["playlist", "dj"] as const).map(tab => (
               <button
+                key={tab}
                 type="button"
-                onClick={() => { localStorage.setItem("soma_skip_banner_dismissed", "1"); setSkipBannerDismissed(true); }}
-                className="text-muted-foreground hover:text-foreground shrink-0 p-0.5"
-                aria-label="Dismiss"
-              >✕</button>
-            </div>
-          )}
-          <div className="flex-1">
-          <SongAssignmentPanel
-            items={items}
-            assignments={assignmentsWithWarnings}
-            excludedIds={excludedIds}
-            selectedGenres={genres}
-            focusedIdx={focusedIdx}
-            onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
-            onExclude={handleExclude}
-            onPlace={(idx, song) => setAssignments(prev => {
-              const existing = prev[idx]?.songs ?? [];
-              if (existing.some(s => s.track_id === song.track_id)) return prev; // dedup
-              return { ...prev, [idx]: { ...prev[idx], songs: [...existing.filter(s => !s.is_skip), song, ...existing.filter(s => s.is_skip)] } };
-            })}
-            onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
-            onPreview={setPreviewSong}
-            onPumpUp={handlePumpUp}
-            onWidenBpm={handleWidenBpm}
-            onAddPlaylists={() => {
-                  toast("Open the Sources menu to add more playlists", { duration: 4000 });
-                }}
-            onBankChanged={() => setPumpUpBankKey(k => k + 1)}
-            onSave={handleSave}
-            saving={saving}
-            savedUrl={savedUrl}
-          />
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "px-4 py-2 text-xs font-medium border-b-2 transition-colors",
+                  activeTab === tab
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab === "playlist" ? "Playlist" : "Live DJ"}
+              </button>
+            ))}
           </div>
+
+          {activeTab === "dj" ? (
+            <LiveDjTab genres={genres} sources={sources} />
+          ) : (
+            <>
+              {/* One-time skip song explainer banner */}
+              {hasRun && sessionId !== null && !skipBannerDismissed && (
+                <div className="mx-3 mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 flex items-start gap-2 text-xs shrink-0">
+                  <span className="text-lg leading-none shrink-0">◄◄</span>
+                  <p className="text-muted-foreground flex-1">
+                    <span className="text-foreground font-medium">How skip songs work: </span>
+                    Each segment ends with a &quot;skip song&quot; — start it ~60s before your watch transitions, then skip it when your Garmin vibrates. The next segment&apos;s music begins immediately.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { localStorage.setItem("soma_skip_banner_dismissed", "1"); setSkipBannerDismissed(true); }}
+                    className="text-muted-foreground hover:text-foreground shrink-0 p-0.5"
+                    aria-label="Dismiss"
+                  >✕</button>
+                </div>
+              )}
+              <div className="flex-1">
+                <SongAssignmentPanel
+                  items={items}
+                  assignments={assignmentsWithWarnings}
+                  excludedIds={excludedIds}
+                  selectedGenres={genres}
+                  focusedIdx={focusedIdx}
+                  onFocus={(i) => setFocusedIdx(i === focusedIdx ? -1 : i)}
+                  onExclude={handleExclude}
+                  onReplace={handleReplace}
+                  onPlace={(idx, song) => setAssignments(prev => {
+                    const existing = prev[idx]?.songs ?? [];
+                    if (existing.some(s => s.track_id === song.track_id)) return prev;
+                    return { ...prev, [idx]: { ...prev[idx], songs: [...existing.filter(s => !s.is_skip), song, ...existing.filter(s => s.is_skip)] } };
+                  })}
+                  onReorder={(idx, songs) => setAssignments(prev => ({ ...prev, [idx]: { ...prev[idx], songs } }))}
+                  onPreview={setPreviewSong}
+                  onPumpUp={handlePumpUp}
+                  onWidenBpm={handleWidenBpm}
+                  onAddPlaylists={() => {
+                    toast("Open the Sources menu to add more playlists", { duration: 4000 });
+                  }}
+                  onBankChanged={() => setPumpUpBankKey(k => k + 1)}
+                  onSave={handleSave}
+                  saving={saving}
+                  savedUrl={savedUrl}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
       {/* Mini player */}
