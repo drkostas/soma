@@ -31,6 +31,7 @@ export default function PlaylistSourcePicker({ selected, onChange }: Props) {
   const [libraryStatus, setLibraryStatus] = useState<LibraryStatus | null>(null);
   const [analysing, setAnalysing] = useState(false);
   const [progress, setProgress] = useState<{ stage: string; pct: number } | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     fetch("/api/playlist/spotify/playlists")
@@ -41,7 +42,9 @@ export default function PlaylistSourcePicker({ selected, onChange }: Props) {
     fetch("/api/playlist/spotify/library").then(r => r.json()).then(setLibraryStatus).catch(() => {});
   }, []);
 
-  const sources: SourceEntry[] = [{ id: "liked", name: "Liked Songs", tracks: libraryStatus?.total_tracks }, ...playlists];
+  const allSources: SourceEntry[] = [{ id: "liked", name: "Liked Songs", tracks: libraryStatus?.total_tracks }, ...playlists];
+  const q = search.trim().toLowerCase();
+  const sources = q ? allSources.filter(s => s.name.toLowerCase().includes(q)) : allSources;
 
   function toggle(id: string) {
     onChange(selected.includes(id) ? selected.filter(s => s !== id) : [...selected, id]);
@@ -99,7 +102,14 @@ export default function PlaylistSourcePicker({ selected, onChange }: Props) {
   return (
     <div className="space-y-2">
       <div className="text-xs font-medium text-muted-foreground mb-1">Music sources</div>
-      <div className="max-h-52 overflow-y-auto space-y-0.5">
+      <input
+        type="search"
+        placeholder="Search playlists…"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className="w-full h-7 text-xs border rounded px-2 bg-background"
+      />
+      <div className="max-h-48 overflow-y-auto space-y-0.5">
         {loadingPlaylists && playlists.length === 0 ? (
           <>
             {[0, 1, 2].map(i => (

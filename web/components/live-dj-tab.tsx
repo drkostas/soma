@@ -79,6 +79,10 @@ export default function LiveDjTab() {
     const validModes: OffsetMode[] = ["pump_up", "normal", "wind_down"];
     return (validModes.includes(stored as OffsetMode) ? stored as OffsetMode : "normal");
   });
+  const [sourceMode, setSourceMode] = useState<"auto" | "manual">(() => {
+    if (typeof window === "undefined") return "auto";
+    return (localStorage.getItem("dj_source_mode") === "manual" ? "manual" : "auto");
+  });
   const [sources, setSources] = useState<string[]>(() => loadArray("dj_sources", ["liked"]));
   const [genres, setGenres] = useState<string[]>(() => loadArray("dj_genres", []));
   const [genreThreshold, setGenreThreshold] = useState(() => {
@@ -91,6 +95,7 @@ export default function LiveDjTab() {
 
   // Persist settings
   useEffect(() => { localStorage.setItem("dj_offset_mode", offsetMode); }, [offsetMode]);
+  useEffect(() => { localStorage.setItem("dj_source_mode", sourceMode); }, [sourceMode]);
   useEffect(() => { localStorage.setItem("dj_sources", sources.join(",")); }, [sources]);
   useEffect(() => { localStorage.setItem("dj_genres", genres.join(",")); }, [genres]);
   useEffect(() => { localStorage.setItem("dj_genre_threshold", String(genreThreshold)); }, [genreThreshold]);
@@ -132,8 +137,8 @@ export default function LiveDjTab() {
           hr_rest: hrRest,
           hr_max: hrMax,
           offset: OFFSET_VALUES[offsetMode],
-          genres,
-          sources,
+          genres: sourceMode === "auto" ? [] : genres,
+          sources: sourceMode === "auto" ? ["auto"] : sources,
         }),
       });
       if (!res.ok) throw new Error("Failed to start");
@@ -246,55 +251,85 @@ export default function LiveDjTab() {
         </div>
       </div>
 
-      {/* Sources + Genres pickers */}
-      <div className="flex gap-2">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
+      {/* Source mode */}
+      <div className="space-y-1">
+        <div className="text-xs text-muted-foreground">Source</div>
+        <div className="flex gap-1">
+          {(["auto", "manual"] as const).map(mode => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setSourceMode(mode)}
               disabled={isRunning}
-              className="flex-1 h-8 text-xs justify-between gap-1 disabled:opacity-50"
+              className={cn(
+                "flex-1 text-xs py-1.5 rounded border transition-colors disabled:opacity-50",
+                sourceMode === mode
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "hover:bg-muted"
+              )}
             >
-              <span>
-                Sources{" "}
-                <span className="text-muted-foreground">({sources.length})</span>
-              </span>
-              <ChevronDown className="w-3 h-3 shrink-0" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-72 p-3">
-            <PlaylistSourcePicker selected={sources} onChange={setSources} />
-          </PopoverContent>
-        </Popover>
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isRunning}
-              className="flex-1 h-8 text-xs justify-between gap-1 disabled:opacity-50"
-            >
-              <span>
-                Genres{" "}
-                <span className="text-muted-foreground">
-                  {genres.length > 0 ? `(${genres.length})` : "(any)"}
-                </span>
-              </span>
-              <ChevronDown className="w-3 h-3 shrink-0" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 p-3">
-            <PlaylistGenrePicker
-              selected={genres}
-              onChange={setGenres}
-              threshold={genreThreshold}
-              onThresholdChange={setGenreThreshold}
-            />
-          </PopoverContent>
-        </Popover>
+              {mode === "auto" ? "⟳ Auto (from Spotify)" : "▤ Manual"}
+            </button>
+          ))}
+        </div>
+        {sourceMode === "auto" && !isRunning && (
+          <p className="text-xs text-muted-foreground/60">
+            Play any playlist or album on Spotify — DJ will match songs from it.
+          </p>
+        )}
       </div>
+
+      {/* Manual: Sources + Genres pickers */}
+      {sourceMode === "manual" && (
+        <div className="flex gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isRunning}
+                className="flex-1 h-8 text-xs justify-between gap-1 disabled:opacity-50"
+              >
+                <span>
+                  Sources{" "}
+                  <span className="text-muted-foreground">({sources.length})</span>
+                </span>
+                <ChevronDown className="w-3 h-3 shrink-0" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-3">
+              <PlaylistSourcePicker selected={sources} onChange={setSources} />
+            </PopoverContent>
+          </Popover>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isRunning}
+                className="flex-1 h-8 text-xs justify-between gap-1 disabled:opacity-50"
+              >
+                <span>
+                  Genres{" "}
+                  <span className="text-muted-foreground">
+                    {genres.length > 0 ? `(${genres.length})` : "(any)"}
+                  </span>
+                </span>
+                <ChevronDown className="w-3 h-3 shrink-0" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-3">
+              <PlaylistGenrePicker
+                selected={genres}
+                onChange={setGenres}
+                threshold={genreThreshold}
+                onThresholdChange={setGenreThreshold}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
 
       {/* Live status card */}
       {status.state !== "stopped" && (
