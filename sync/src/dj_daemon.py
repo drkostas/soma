@@ -15,8 +15,9 @@ import json
 import os
 import signal
 import sys
+import threading
 import time
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import psycopg2
@@ -51,7 +52,6 @@ def _get_spotify_token() -> str:
                 creds = json.loads(creds)
 
         # Check expiry
-        from datetime import datetime, timezone
         expires_at_str = creds.get("expires_at")
         if expires_at_str:
             expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
@@ -79,7 +79,6 @@ def _refresh_spotify_token(conn, creds: dict) -> str:
     resp.raise_for_status()
     data = resp.json()
     new_token = data["access_token"]
-    from datetime import datetime, timezone, timedelta
     new_expires = (datetime.now(timezone.utc) + timedelta(seconds=data["expires_in"])).isoformat()
     update_payload: dict = {"access_token": new_token, "expires_at": new_expires}
     if "refresh_token" in data:
@@ -119,7 +118,13 @@ def _spotify_post(path: str, token: str, params: dict | None = None) -> None:
 
 
 def _query_tracks(target_bpm: int, genres: list[str], sources: list[str], exclude_ids: list[str]) -> list[dict]:
-    """Query DB for tracks matching BPM ± 5."""
+    """Query DB for tracks matching BPM ± 5.
+
+    Note: ``sources`` is currently unused because ``spotify_track_features``
+    has no per-source column (all cached tracks are undifferentiated).
+    The parameter is kept for API compatibility and future enhancement when
+    source-based filtering (e.g. liked, playlist) is added to the table.
+    """
     lo, hi = target_bpm - 5, target_bpm + 5
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -172,9 +177,9 @@ def run_daemon(
     Path(pid_file).write_text(str(os.getpid()))
 
     # Graceful shutdown on SIGTERM
-    running = {"value": True}
+    _stop_event = threading.Event()
     def _handle_sigterm(*_):
-        running["value"] = False
+        _stop_event.set()
     signal.signal(signal.SIGTERM, _handle_sigterm)
 
     garmin = init_garmin()
@@ -186,7 +191,7 @@ def run_daemon(
 
     _write_status(status_file, {"state": "starting", "hr": None, "target_bpm": None})
 
-    while running["value"]:
+    while not _stop_event.is_set():
         try:
             token = _get_spotify_token()
 
@@ -223,6 +228,11 @@ def run_daemon(
                         item.get("artists", [{}])[0].get("name", "").lower().replace(" ", "_")
                     )
 
+                # When queued track starts playing, clear the queued state
+                if current_track_id == queued_track_id:
+                    queued_track_id = None
+                    queued_track_name = None
+
             # 3. Decide whether to queue
             should_queue = False
             replace_reason = None
@@ -254,7 +264,10 @@ def run_daemon(
                     )
                     queued_track_id = next_track_id
                     queued_track_name = next_song["name"]
-                    last_target_bpm = target_bpm
+
+            # Update last_target_bpm after every successful HR read
+            if target_bpm is not None:
+                last_target_bpm = target_bpm
 
             # 4. Write status
             _write_status(status_file, {
@@ -279,7 +292,7 @@ def run_daemon(
                 "ts": time.time(),
             })
 
-        time.sleep(POLL_INTERVAL)
+        _stop_event.wait(timeout=POLL_INTERVAL)
 
     # Cleanup
     _write_status(status_file, {"state": "stopped"})
