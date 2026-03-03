@@ -313,10 +313,9 @@ def run_daemon(
             # 1. Poll Garmin HR
             today = date.today().isoformat()
             hr_data = garmin.get_heart_rates(today)
-            current_hr = latest_hr_from_garmin_data(hr_data, window_seconds=HR_WINDOW_SECONDS)
-            if current_hr is not None:
-                last_hr = current_hr
-                last_hr_ts = time.time()
+            current_hr_result = latest_hr_from_garmin_data(hr_data, window_seconds=HR_WINDOW_SECONDS)
+            if current_hr_result is not None:
+                last_hr, last_hr_ts = current_hr_result  # last_hr_ts = actual reading time, not fetch time
 
             target_bpm: int | None = None
             if last_hr is not None:
