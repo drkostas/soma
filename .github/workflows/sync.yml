@@ -13,6 +13,20 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - name: Circuit breaker — skip if previous sync failed
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LAST=$(gh run list --workflow=sync.yml --status=completed --limit=5 \
+            --json conclusion \
+            --jq '[.[] | select(.conclusion == "success" or .conclusion == "failure")][0].conclusion // "none"' \
+            2>/dev/null || echo "unknown")
+          if [ "$LAST" = "failure" ]; then
+            echo "::error::Auto-sync paused after previous failure. Trigger a manual run to resume."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
