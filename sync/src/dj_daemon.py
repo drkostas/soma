@@ -290,6 +290,8 @@ def run_daemon(
     last_context_uri: str | None = None  # for auto-detect mode
     observed_context_tracks: set[str] = set()  # tracks seen playing in current context (fallback when playlist fetch fails)
     queue_history: list[dict] = []  # rolling log of queued tracks (newest last)
+    hr_history: list[dict] = []  # rolling HR readings: [{ts, hr, target_bpm}]
+    HR_HISTORY_MAX_SECONDS = 7200  # keep last 2 hours
 
     _write_status(status_file, {"state": "starting", "hr": None, "target_bpm": None})
 
@@ -432,6 +434,17 @@ def run_daemon(
                 elif not ctx_uri:
                     allowed_ids = None  # no context (playing from search, etc.)
 
+            # Append HR snapshot for chart history
+            if last_hr is not None:
+                hr_history.append({
+                    "ts": time.time(),
+                    "hr": last_hr,
+                    "target_bpm": target_bpm,
+                })
+                # Trim to rolling 2-hour window
+                cutoff = time.time() - HR_HISTORY_MAX_SECONDS
+                hr_history[:] = [p for p in hr_history if p["ts"] >= cutoff]
+
             # 3. Decide whether to queue
             should_queue = False
             replace_reason = None
@@ -537,6 +550,7 @@ def run_daemon(
                 "auto_detect": auto_detect,
                 "context_name": current_context_name if auto_detect else None,
                 "queue_history": queue_history,
+                "hr_history": hr_history,
                 "ts": time.time(),
             })
 
