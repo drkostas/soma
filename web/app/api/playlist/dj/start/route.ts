@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
-import { writeFileSync, readFileSync } from "fs";
+import { writeFileSync, readFileSync, openSync } from "fs";
 import path from "path";
 
 export const runtime = "nodejs";
 
 const STATUS_FILE = "/tmp/soma-dj-status.json";
 const PID_FILE = "/tmp/soma-dj-pid";
+const LOG_FILE = "/tmp/soma-dj.log";
 const DAEMON_SCRIPT = path.join(process.cwd(), "../sync/src/dj_daemon.py");
 
 export async function POST(req: NextRequest) {
@@ -50,9 +51,10 @@ export async function POST(req: NextRequest) {
     "--pid-file", PID_FILE,
   ];
 
+  const logFd = openSync(LOG_FILE, "a");
   const proc = spawn("python3", args, {
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", logFd, logFd],
     env: { ...process.env },
   });
 
