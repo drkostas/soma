@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import PlaylistSourcePicker from "./playlist-source-picker";
+import PlaylistGenrePicker from "./playlist-genre-picker";
 
 type OffsetMode = "pump_up" | "normal" | "wind_down";
 interface DjStatus {
@@ -32,6 +36,12 @@ function msToMinSec(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+function loadArray(key: string, fallback: string[]): string[] {
+  if (typeof window === "undefined") return fallback;
+  const stored = localStorage.getItem(key) ?? "";
+  return stored ? stored.split(",").map(s => s.trim()).filter(Boolean) : fallback;
+}
+
 export default function LiveDjTab() {
   const [hrRest, setHrRest] = useState(60);
   const [hrMax, setHrMax] = useState(190);
@@ -44,15 +54,11 @@ export default function LiveDjTab() {
     const validModes: OffsetMode[] = ["pump_up", "normal", "wind_down"];
     return (validModes.includes(stored as OffsetMode) ? stored as OffsetMode : "normal");
   });
-  const [genres, setGenres] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    const stored = localStorage.getItem("dj_genres") ?? "";
-    return stored ? stored.split(",").map(g => g.trim()).filter(Boolean) : [];
-  });
-  const [genresStr, setGenresStr] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const stored = localStorage.getItem("dj_genres") ?? "";
-    return stored ? stored.split(",").map(g => g.trim()).filter(Boolean).join(", ") : "";
+  const [sources, setSources] = useState<string[]>(() => loadArray("dj_sources", ["liked"]));
+  const [genres, setGenres] = useState<string[]>(() => loadArray("dj_genres", []));
+  const [genreThreshold, setGenreThreshold] = useState(() => {
+    if (typeof window === "undefined") return 0.03;
+    return parseFloat(localStorage.getItem("dj_genre_threshold") ?? "0.03") || 0.03;
   });
   const [status, setStatus] = useState<DjStatus>({ state: "stopped" });
   const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -60,7 +66,9 @@ export default function LiveDjTab() {
 
   // Persist settings
   useEffect(() => { localStorage.setItem("dj_offset_mode", offsetMode); }, [offsetMode]);
+  useEffect(() => { localStorage.setItem("dj_sources", sources.join(",")); }, [sources]);
   useEffect(() => { localStorage.setItem("dj_genres", genres.join(",")); }, [genres]);
+  useEffect(() => { localStorage.setItem("dj_genre_threshold", String(genreThreshold)); }, [genreThreshold]);
 
   // Auto-populate HR from Garmin on mount
   useEffect(() => {
@@ -100,7 +108,7 @@ export default function LiveDjTab() {
           hr_max: hrMax,
           offset: OFFSET_VALUES[offsetMode],
           genres,
-          sources: ["liked"],
+          sources,
         }),
       });
       if (!res.ok) throw new Error("Failed to start");
@@ -213,24 +221,54 @@ export default function LiveDjTab() {
         </div>
       </div>
 
-      {/* Genres filter */}
-      <div className="space-y-1">
-        <label htmlFor="dj-genres" className="text-xs text-muted-foreground">Genres (optional)</label>
-        <input
-          id="dj-genres"
-          type="text"
-          placeholder="rock, pop, hip-hop…"
-          value={genresStr}
-          onChange={e => setGenresStr(e.target.value)}
-          onBlur={e => {
-            const parsed = e.target.value.split(",").map(g => g.trim()).filter(Boolean);
-            setGenres(parsed);
-            setGenresStr(parsed.join(", "));
-          }}
-          disabled={isRunning}
-          className="w-full h-8 text-sm border rounded px-2 bg-background disabled:opacity-50"
-        />
-        <p className="text-xs text-muted-foreground">Leave blank to use any genre from your library.</p>
+      {/* Sources + Genres pickers */}
+      <div className="flex gap-2">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isRunning}
+              className="flex-1 h-8 text-xs justify-between gap-1 disabled:opacity-50"
+            >
+              <span>
+                Sources{" "}
+                <span className="text-muted-foreground">({sources.length})</span>
+              </span>
+              <ChevronDown className="w-3 h-3 shrink-0" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-3">
+            <PlaylistSourcePicker selected={sources} onChange={setSources} />
+          </PopoverContent>
+        </Popover>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isRunning}
+              className="flex-1 h-8 text-xs justify-between gap-1 disabled:opacity-50"
+            >
+              <span>
+                Genres{" "}
+                <span className="text-muted-foreground">
+                  {genres.length > 0 ? `(${genres.length})` : "(any)"}
+                </span>
+              </span>
+              <ChevronDown className="w-3 h-3 shrink-0" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-3">
+            <PlaylistGenrePicker
+              selected={genres}
+              onChange={setGenres}
+              threshold={genreThreshold}
+              onThresholdChange={setGenreThreshold}
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Live status card */}
@@ -277,7 +315,6 @@ export default function LiveDjTab() {
           ▶ Start Live DJ
         </Button>
       )}
-
     </div>
   );
 }
