@@ -188,6 +188,7 @@ def run_daemon(
     last_target_bpm: int | None = None
     queued_track_id: str | None = None
     queued_track_name: str | None = None
+    first_queue_done = False  # queue immediately on first iteration
 
     _write_status(status_file, {"state": "starting", "hr": None, "target_bpm": None})
 
@@ -237,13 +238,20 @@ def run_daemon(
             should_queue = False
             replace_reason = None
 
-            if target_bpm is not None and ms_remaining is not None:
-                if ms_remaining < QUEUE_AHEAD_MS:
+            if target_bpm is not None:
+                if not first_queue_done:
+                    # Always queue immediately on first iteration so the next
+                    # song is BPM-matched from the start (the current song was
+                    # picked before the DJ started and is unrelated).
                     should_queue = True
-                    replace_reason = "45s_remaining"
-                elif last_target_bpm is not None and abs(target_bpm - last_target_bpm) >= HR_SHIFT_THRESHOLD:
-                    should_queue = True
-                    replace_reason = f"hr_shift_{last_target_bpm}_to_{target_bpm}"
+                    replace_reason = "initial"
+                elif ms_remaining is not None:
+                    if ms_remaining < QUEUE_AHEAD_MS:
+                        should_queue = True
+                        replace_reason = "45s_remaining"
+                    elif last_target_bpm is not None and abs(target_bpm - last_target_bpm) >= HR_SHIFT_THRESHOLD:
+                        should_queue = True
+                        replace_reason = f"hr_shift_{last_target_bpm}_to_{target_bpm}"
 
             if should_queue and target_bpm is not None:
                 exclude_ids = list(session.played | session.skipped)
@@ -264,9 +272,11 @@ def run_daemon(
                     )
                     queued_track_id = next_track_id
                     queued_track_name = next_song["name"]
+                    first_queue_done = True  # successful — stop forcing on every iteration
                 else:
                     queued_track_id = None
                     queued_track_name = None
+                    # Leave first_queue_done = False so we retry next poll
 
             # Update last_target_bpm after every successful HR read
             if target_bpm is not None:
