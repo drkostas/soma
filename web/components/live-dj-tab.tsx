@@ -8,7 +8,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PlaylistSourcePicker from "./playlist-source-picker";
 import PlaylistGenrePicker from "./playlist-genre-picker";
-import DjHistoryChart from "./dj-history-chart";
+import DjHistoryChart, { type PlayHistoryEntry } from "./dj-history-chart";
 
 type OffsetMode = "pump_up" | "normal" | "wind_down";
 interface QueueHistoryEntry {
@@ -38,6 +38,7 @@ interface DjStatus {
   auto_detect?: boolean;
   context_name?: string | null;
   queue_history?: QueueHistoryEntry[];
+  play_history?: PlayHistoryEntry[];
   hr_history?: HrPoint[];
   ts?: number;
   error?: string;
@@ -516,15 +517,15 @@ export default function LiveDjTab() {
             )}
 
             {/* HR / BPM history chart */}
-            {status.hr_history && status.hr_history.length > 0 && (
+            {(status.hr_history && status.hr_history.length > 0) || (status.play_history && status.play_history.length > 0) ? (
               <div className="pt-2 border-t">
                 <div className="text-xs text-muted-foreground/60 font-medium mb-1">Session timeline</div>
                 <DjHistoryChart
-                  hrHistory={status.hr_history}
-                  songEvents={status.queue_history ?? []}
+                  hrHistory={status.hr_history ?? []}
+                  playHistory={status.play_history ?? []}
                 />
               </div>
-            )}
+            ) : null}
 
             {/* Queue history */}
             {status.queue_history && status.queue_history.length > 0 && (

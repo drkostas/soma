@@ -5,6 +5,7 @@ Feels more random to humans than Fisher-Yates because it prevents
 clustering (birthday paradox effect).
 """
 import random
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
@@ -56,6 +57,9 @@ def interleaved_shuffle(
     if not songs:
         return []
 
+    # Fresh RNG seeded from current time so every call produces a different order
+    rng = random.Random(time.time_ns())
+
     # 1. Partition by artist_id
     by_artist: dict[str, list[Song]] = defaultdict(list)
     for song in songs:
@@ -64,7 +68,7 @@ def interleaved_shuffle(
 
     # 2. Shuffle within each partition (reverse so pop() from tail is O(1))
     for partition in by_artist.values():
-        random.shuffle(partition)
+        rng.shuffle(partition)
         partition.reverse()
 
     # 3. Interleave: sort partitions by size desc, then round-robin
