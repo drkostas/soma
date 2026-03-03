@@ -5,11 +5,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface Props {
-  genres: string[];
-  sources: string[];
-}
-
 type OffsetMode = "pump_up" | "normal" | "wind_down";
 interface DjStatus {
   state: "stopped" | "starting" | "running" | "error";
@@ -37,7 +32,7 @@ function msToMinSec(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export default function LiveDjTab({ genres, sources }: Props) {
+export default function LiveDjTab() {
   const [hrRest, setHrRest] = useState(() => {
     if (typeof window === "undefined") return 60;
     return parseInt(localStorage.getItem("dj_hr_rest") ?? "60", 10) || 60;
@@ -54,6 +49,16 @@ export default function LiveDjTab({ genres, sources }: Props) {
     const validModes: OffsetMode[] = ["pump_up", "normal", "wind_down"];
     return (validModes.includes(stored as OffsetMode) ? stored as OffsetMode : "normal");
   });
+  const [genres, setGenres] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    const stored = localStorage.getItem("dj_genres") ?? "";
+    return stored ? stored.split(",").map(g => g.trim()).filter(Boolean) : [];
+  });
+  const [genresStr, setGenresStr] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const stored = localStorage.getItem("dj_genres") ?? "";
+    return stored ? stored.split(",").map(g => g.trim()).filter(Boolean).join(", ") : "";
+  });
   const [status, setStatus] = useState<DjStatus>({ state: "stopped" });
   const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const isRunning = status.state === "running" || status.state === "starting";
@@ -62,6 +67,7 @@ export default function LiveDjTab({ genres, sources }: Props) {
   useEffect(() => { localStorage.setItem("dj_hr_rest", String(hrRest)); }, [hrRest]);
   useEffect(() => { localStorage.setItem("dj_hr_max", String(hrMax)); }, [hrMax]);
   useEffect(() => { localStorage.setItem("dj_offset_mode", offsetMode); }, [offsetMode]);
+  useEffect(() => { localStorage.setItem("dj_genres", genres.join(",")); }, [genres]);
 
   const pollStatus = useCallback(async () => {
     try {
@@ -89,7 +95,7 @@ export default function LiveDjTab({ genres, sources }: Props) {
           hr_max: hrMax,
           offset: OFFSET_VALUES[offsetMode],
           genres,
-          sources,
+          sources: ["liked"],
         }),
       });
       if (!res.ok) throw new Error("Failed to start");
@@ -196,6 +202,26 @@ export default function LiveDjTab({ genres, sources }: Props) {
         </div>
       </div>
 
+      {/* Genres filter */}
+      <div className="space-y-1">
+        <label htmlFor="dj-genres" className="text-xs text-muted-foreground">Genres (optional)</label>
+        <input
+          id="dj-genres"
+          type="text"
+          placeholder="rock, pop, hip-hop…"
+          value={genresStr}
+          onChange={e => setGenresStr(e.target.value)}
+          onBlur={e => {
+            const parsed = e.target.value.split(",").map(g => g.trim()).filter(Boolean);
+            setGenres(parsed);
+            setGenresStr(parsed.join(", "));
+          }}
+          disabled={isRunning}
+          className="w-full h-8 text-sm border rounded px-2 bg-background disabled:opacity-50"
+        />
+        <p className="text-xs text-muted-foreground">Leave blank to use any genre from your library.</p>
+      </div>
+
       {/* Live status card */}
       {isRunning && (
         <div className="rounded-lg border bg-card p-3 space-y-1 text-sm">
@@ -241,12 +267,6 @@ export default function LiveDjTab({ genres, sources }: Props) {
         </Button>
       )}
 
-      {/* Context note */}
-      <div className="text-xs text-muted-foreground">
-        Uses genre and source settings from the playlist builder.
-        {sources.length > 0 && <> Sources: {sources.join(", ")}.</>}
-        {genres.length > 0 && <> Genres: {genres.join(", ")}.</>}
-      </div>
     </div>
   );
 }
