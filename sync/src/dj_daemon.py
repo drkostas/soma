@@ -424,7 +424,13 @@ def run_daemon(
 
                 # Context display name
                 if ctx_type == "playlist":
-                    current_context_name = f"playlist:{ctx_uri.split(':')[-1]}"
+                    try:
+                        playlist_meta = _spotify_get(
+                            f"/playlists/{ctx_uri.split(':')[-1]}?fields=name", token
+                        )
+                        current_context_name = playlist_meta.get("name") or f"playlist:{ctx_uri.split(':')[-1]}"
+                    except Exception:
+                        current_context_name = f"playlist:{ctx_uri.split(':')[-1]}"
                 elif ctx_type == "album":
                     try:
                         album_meta = _spotify_get(f"/albums/{ctx_uri.split(':')[-1]}", token)
