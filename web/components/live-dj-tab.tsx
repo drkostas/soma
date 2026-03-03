@@ -33,16 +33,11 @@ function msToMinSec(ms: number): string {
 }
 
 export default function LiveDjTab() {
-  const [hrRest, setHrRest] = useState(() => {
-    if (typeof window === "undefined") return 60;
-    return parseInt(localStorage.getItem("dj_hr_rest") ?? "60", 10) || 60;
-  });
-  const [hrMax, setHrMax] = useState(() => {
-    if (typeof window === "undefined") return 190;
-    return parseInt(localStorage.getItem("dj_hr_max") ?? "190", 10) || 190;
-  });
-  const [hrRestStr, setHrRestStr] = useState(() => String(typeof window !== "undefined" ? (parseInt(localStorage.getItem("dj_hr_rest") ?? "60", 10) || 60) : 60));
-  const [hrMaxStr, setHrMaxStr] = useState(() => String(typeof window !== "undefined" ? (parseInt(localStorage.getItem("dj_hr_max") ?? "190", 10) || 190) : 190));
+  const [hrRest, setHrRest] = useState(60);
+  const [hrMax, setHrMax] = useState(190);
+  const [hrRestStr, setHrRestStr] = useState("60");
+  const [hrMaxStr, setHrMaxStr] = useState("190");
+  const [hrFromGarmin, setHrFromGarmin] = useState(false);
   const [offsetMode, setOffsetMode] = useState<OffsetMode>(() => {
     if (typeof window === "undefined") return "normal";
     const stored = localStorage.getItem("dj_offset_mode");
@@ -64,10 +59,20 @@ export default function LiveDjTab() {
   const isRunning = status.state === "running" || status.state === "starting";
 
   // Persist settings
-  useEffect(() => { localStorage.setItem("dj_hr_rest", String(hrRest)); }, [hrRest]);
-  useEffect(() => { localStorage.setItem("dj_hr_max", String(hrMax)); }, [hrMax]);
   useEffect(() => { localStorage.setItem("dj_offset_mode", offsetMode); }, [offsetMode]);
   useEffect(() => { localStorage.setItem("dj_genres", genres.join(",")); }, [genres]);
+
+  // Auto-populate HR from Garmin on mount
+  useEffect(() => {
+    fetch("/api/playlist/dj/hr-defaults")
+      .then(r => r.json())
+      .then((data: { hr_rest?: number | null; hr_max?: number | null }) => {
+        if (data.hr_rest) { setHrRest(data.hr_rest); setHrRestStr(String(data.hr_rest)); }
+        if (data.hr_max) { setHrMax(data.hr_max); setHrMaxStr(String(data.hr_max)); }
+        if (data.hr_rest || data.hr_max) setHrFromGarmin(true);
+      })
+      .catch(() => {});
+  }, []);
 
   const pollStatus = useCallback(async () => {
     try {
@@ -140,7 +145,10 @@ export default function LiveDjTab() {
       {/* HR settings */}
       <div className="flex gap-4">
         <div className="space-y-1">
-          <label htmlFor="dj-hr-rest" className="text-xs text-muted-foreground">Resting HR</label>
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="dj-hr-rest" className="text-xs text-muted-foreground">Resting HR</label>
+            {hrFromGarmin && <span className="text-xs text-muted-foreground/60 italic">Garmin</span>}
+          </div>
           <input
             id="dj-hr-rest"
             type="number"
@@ -159,7 +167,10 @@ export default function LiveDjTab() {
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="dj-hr-max" className="text-xs text-muted-foreground">Max HR</label>
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="dj-hr-max" className="text-xs text-muted-foreground">Max HR</label>
+            {hrFromGarmin && <span className="text-xs text-muted-foreground/60 italic">Garmin</span>}
+          </div>
           <input
             id="dj-hr-max"
             type="number"
