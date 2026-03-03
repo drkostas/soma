@@ -271,6 +271,7 @@ def run_daemon(
     queued_track_name: str | None = None
     first_queue_done = False  # queue immediately on first iteration
     allowed_ids: set[str] | None = None  # track IDs allowed by source filter
+    observation_fallback: bool = False  # True when allowed_ids comes from observation (not direct fetch)
     source_ids_loaded = False
     source_refresh_counter = 0
     SOURCE_REFRESH_INTERVAL = 20  # re-fetch source IDs every 20 polls (~10 min)
@@ -347,6 +348,7 @@ def run_daemon(
                     source_ids_loaded = False
                     observed_context_tracks.clear()
                     allowed_ids = None
+                    observation_fallback = False
 
                 if ctx_uri and not source_ids_loaded:
                     ctx_id = ctx_uri.split(":")[-1]
@@ -356,12 +358,15 @@ def run_daemon(
                             fetched = _fetch_source_track_ids([ctx_id], token)
                             if fetched:  # None means 'liked'/full-library; empty means fetch failed
                                 allowed_ids = fetched
+                                observation_fallback = False
                                 fetch_ok = True
                         elif ctx_type == "album":
                             allowed_ids = _fetch_album_track_ids(ctx_id, token) or None
+                            observation_fallback = False
                             fetch_ok = bool(allowed_ids)
                         else:
                             allowed_ids = None  # artist / search — no filter
+                            observation_fallback = False
                             fetch_ok = True
                     except Exception as exc:
                         print(f"[dj] Auto-detect source fetch failed: {exc}", flush=True)
@@ -377,16 +382,17 @@ def run_daemon(
                                         observed_context_tracks.add(tid)
                         except Exception:
                             pass
+                        observation_fallback = True
                         print(f"[dj] Playlist {ctx_id} inaccessible — using observation fallback ({len(observed_context_tracks)} seeds)", flush=True)
 
                     source_ids_loaded = True
 
                 # Add currently-playing track to observed set (observation fallback)
-                if auto_detect and ctx_uri and current_track_id and allowed_ids is None:
+                if auto_detect and ctx_uri and current_track_id and observation_fallback:
                     observed_context_tracks.add(current_track_id)
 
                 # Use observed tracks as filter when direct fetch failed
-                if allowed_ids is None and observed_context_tracks:
+                if observation_fallback and observed_context_tracks:
                     allowed_ids = set(observed_context_tracks)
 
                 # Context display name
@@ -431,6 +437,9 @@ def run_daemon(
                     exclude_ids.append(current_track_id)
 
                 candidates = _query_tracks(target_bpm, genres, sources, exclude_ids, allowed_ids=allowed_ids)
+                # If observation fallback has no BPM-indexed tracks yet, fall back to full library
+                if not candidates and observation_fallback:
+                    candidates = _query_tracks(target_bpm, genres, sources, exclude_ids, allowed_ids=None)
                 filtered = session.filter_candidates(candidates)
                 shuffled = interleaved_shuffle(filtered, state=session)
 
