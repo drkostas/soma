@@ -148,11 +148,10 @@ def _fetch_source_track_ids(sources: list[str], token: str) -> set[str] | None:
                     token,
                 )
             except Exception as exc:
-                # 403 = playlist not owned by user (followed from another account).
-                # Silently skip — the daemon will report no_queue_reason if ids stays empty.
                 print(f"[dj] Cannot read playlist {source}: {exc}", flush=True)
                 break
             items = data.get("items") or []
+            print(f"[dj] Playlist {source} offset={offset}: {len(items)} items, keys={list(data.keys())[:6]}", flush=True)
             for item in items:
                 track = item.get("track") or {}
                 if track.get("id"):
