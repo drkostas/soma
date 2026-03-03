@@ -18,6 +18,11 @@ interface QueueHistoryEntry {
   reason: string;
   ts: number;
 }
+interface HrPoint {
+  ts: number;
+  hr: number;
+  target_bpm: number | null;
+}
 interface DjStatus {
   state: "stopped" | "starting" | "running" | "error";
   hr?: number | null;
@@ -32,6 +37,7 @@ interface DjStatus {
   auto_detect?: boolean;
   context_name?: string | null;
   queue_history?: QueueHistoryEntry[];
+  hr_history?: HrPoint[];
   ts?: number;
   error?: string;
 }
