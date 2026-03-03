@@ -81,12 +81,15 @@ def _refresh_spotify_token(conn, creds: dict) -> str:
     new_token = data["access_token"]
     from datetime import datetime, timezone, timedelta
     new_expires = (datetime.now(timezone.utc) + timedelta(seconds=data["expires_in"])).isoformat()
+    update_payload: dict = {"access_token": new_token, "expires_at": new_expires}
+    if "refresh_token" in data:
+        update_payload["refresh_token"] = data["refresh_token"]
     with conn.cursor() as cur:
         cur.execute(
             """UPDATE platform_credentials
                SET credentials = credentials || %s::jsonb
                WHERE platform = 'spotify'""",
-            (json.dumps({"access_token": new_token, "expires_at": new_expires}),),
+            (json.dumps(update_payload),),
         )
         conn.commit()
     return new_token
@@ -128,9 +131,9 @@ def _query_tracks(target_bpm: int, genres: list[str], sources: list[str], exclud
                        WHERE tempo BETWEEN %s AND %s
                        AND genres && %s
                        AND track_id NOT IN (SELECT track_id FROM user_blacklist)
-                       AND (%(excl)s IS NULL OR track_id != ALL(%(excl)s::text[]))
+                       AND (%s IS NULL OR track_id != ALL(%s::text[]))
                        LIMIT 200""",
-                    (lo, hi, genres, {"excl": exclude_ids or None}),
+                    (lo, hi, genres, exclude_ids or None, exclude_ids or None),
                 )
             else:
                 cur.execute(
@@ -138,9 +141,9 @@ def _query_tracks(target_bpm: int, genres: list[str], sources: list[str], exclud
                        FROM spotify_track_features
                        WHERE tempo BETWEEN %s AND %s
                        AND track_id NOT IN (SELECT track_id FROM user_blacklist)
-                       AND (%(excl)s IS NULL OR track_id != ALL(%(excl)s::text[]))
+                       AND (%s IS NULL OR track_id != ALL(%s::text[]))
                        LIMIT 200""",
-                    (lo, hi, {"excl": exclude_ids or None}),
+                    (lo, hi, exclude_ids or None, exclude_ids or None),
                 )
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
