@@ -27,6 +27,7 @@ interface Props {
   onFocus: (idx: number) => void;
   onExclude: (segIdx: number, trackId: string) => void;
   onPlace: (segIdx: number, song: SongData) => void;
+  onReplace: (segIdx: number, targetTrackId: string, newSong: SongData) => void;
   onReorder: (segIdx: number, songs: SongData[]) => void;
   onPreview: (song: SongData) => void;
   onPumpUp: (segIdx: number) => void;
@@ -55,6 +56,7 @@ interface SectionProps {
   onReorder: (songs: SongData[]) => void;
   onExclude: (trackId: string) => void;
   onPlace: (song: SongData) => void;
+  onReplace: (targetTrackId: string, newSong: SongData) => void;
   onPreview: (song: SongData) => void;
   onToggleExcluded: () => void;
   onBankChanged?: () => void;
@@ -62,7 +64,7 @@ interface SectionProps {
 
 function SegmentSection({
   seg, flatIdx, label, assignment, excludedIds, allPlacedIds, selectedGenres,
-  isFocused, showExcluded, onFocus, onPumpUp, onWidenBpm, onAddPlaylists, onReorder, onExclude, onPlace, onPreview, onToggleExcluded, onBankChanged
+  isFocused, showExcluded, onFocus, onPumpUp, onWidenBpm, onAddPlaylists, onReorder, onExclude, onPlace, onReplace, onPreview, onToggleExcluded, onBankChanged
 }: SectionProps) {
   const songs = assignment?.songs ?? [];
   const excluded = songs.filter(s => excludedIds.has(s.track_id));
@@ -144,6 +146,7 @@ function SegmentSection({
                 song={song}
                 onExclude={() => onExclude(song.track_id)}
                 onPreview={() => onPreview(song)}
+                onReplace={(newSong) => onReplace(song.track_id, newSong)}
                 draggable
                 onAddToPumpUp={() => {
                   fetch("/api/playlist/pump-up", {
@@ -209,7 +212,7 @@ function SegmentSection({
 
 export default function SongAssignmentPanel({
   items, assignments, excludedIds, selectedGenres,
-  focusedIdx, onFocus, onExclude, onPlace, onReorder,
+  focusedIdx, onFocus, onExclude, onPlace, onReplace, onReorder,
   onPreview, onPumpUp, onWidenBpm, onAddPlaylists, onBankChanged, onSave, saving, savedUrl
 }: Props) {
   const [showExcluded, setShowExcluded] = useState<Record<number, boolean>>({});
@@ -257,6 +260,7 @@ export default function SongAssignmentPanel({
       onReorder: (songs) => onReorder(flatIdx, songs),
       onExclude: (trackId) => onExclude(flatIdx, trackId),
       onPlace: (song) => onPlace(flatIdx, song),
+      onReplace: (targetTrackId, newSong) => onReplace(flatIdx, targetTrackId, newSong),
       onPreview,
       onToggleExcluded: () => setShowExcluded(p => ({ ...p, [flatIdx]: !p[flatIdx] })),
       onBankChanged,
