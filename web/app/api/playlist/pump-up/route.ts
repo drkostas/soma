@@ -6,7 +6,13 @@ export const runtime = "nodejs";
 export async function GET() {
   const sql = getDb();
   return NextResponse.json(
-    await sql`SELECT * FROM pump_up_songs ORDER BY added_at DESC`
+    await sql`
+      SELECT p.track_id, p.name, p.artist_name, p.tempo, p.energy, p.added_at,
+             COALESCE(f.duration_ms, 0) AS duration_ms
+      FROM pump_up_songs p
+      LEFT JOIN spotify_track_features f ON f.track_id = p.track_id
+      ORDER BY p.added_at DESC
+    `
   );
 }
 
