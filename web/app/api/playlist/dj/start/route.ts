@@ -33,13 +33,19 @@ export async function POST(req: NextRequest) {
   const offsetRaw = Number(body.offset ?? 0);
   const offset = [-12, 0, 12].includes(offsetRaw) ? offsetRaw : 0;
 
+  const toArray = (v: unknown, fallback: string[] = []): string[] => {
+    if (Array.isArray(v)) return v.map(String);
+    if (typeof v === "string" && v.trim()) return [v.trim()];
+    return fallback;
+  };
+
   const args = [
     DAEMON_SCRIPT,
     "--hr-rest", String(hrRest),
     "--hr-max", String(hrMax),
     "--offset", String(offset),
-    "--genres", (body.genres ?? []).join(","),
-    "--sources", (body.sources ?? ["liked"]).join(","),
+    "--genres", toArray(body.genres).join(","),
+    "--sources", toArray(body.sources, ["liked"]).join(","),
     "--status-file", STATUS_FILE,
     "--pid-file", PID_FILE,
   ];
