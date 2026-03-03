@@ -19,12 +19,12 @@ interface Props {
 
 // Interleaved partition shuffle: spaces same-artist songs evenly.
 // Feels more random than Fisher-Yates because it prevents clustering.
-function interleavedShuffle<T extends { artist_name: string }>(songs: T[]): T[] {
+function interleavedShuffle<T extends { artist_name: string | null | undefined }>(songs: T[]): T[] {
   if (!songs.length) return [];
   // Partition by artist
   const byArtist = new Map<string, T[]>();
   for (const song of songs) {
-    const key = song.artist_name.toLowerCase();
+    const key = (song.artist_name ?? "").toLowerCase();
     if (!byArtist.has(key)) byArtist.set(key, []);
     byArtist.get(key)!.push(song);
   }
@@ -35,12 +35,17 @@ function interleavedShuffle<T extends { artist_name: string }>(songs: T[]): T[] 
       [partition[i], partition[j]] = [partition[j], partition[i]];
     }
   }
-  // Interleave partitions evenly (largest first)
+  // Interleave partitions evenly (largest first) — O(n) with index pointers
   const partitions = [...byArtist.values()].sort((a, b) => b.length - a.length);
+  const ptrs = new Array<number>(partitions.length).fill(0);
   const result: T[] = [];
-  while (partitions.some(p => p.length)) {
-    for (const p of partitions) {
-      if (p.length) result.push(p.shift()!);
+  let remaining = songs.length;
+  while (remaining > 0) {
+    for (let i = 0; i < partitions.length; i++) {
+      if (ptrs[i] < partitions[i].length) {
+        result.push(partitions[i][ptrs[i]++]);
+        remaining--;
+      }
     }
   }
   return result;
@@ -79,7 +84,7 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, exclud
           (s: SongData) => !placedIds.has(s.track_id) && !excludedIds.has(s.track_id)
         );
         // Shuffle on every fetch so alternatives feel fresh
-        const shuffled = interleavedShuffle<SongData>(filtered as SongData[]);
+        const shuffled = interleavedShuffle<SongData>(filtered);
         setAllSongs(shuffled);
         setVisibleCount(PAGE_SIZE);
         setPreviewUrls({});
