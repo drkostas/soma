@@ -1,4 +1,6 @@
 # sync/tests/test_bpm_formula.py
+import time
+
 from bpm_formula import hrr_to_bpm, latest_hr_from_garmin_data
 
 
@@ -21,13 +23,13 @@ def test_moderate_effort_interpolation():
 
 
 def test_clamp_below_zero():
-    """HR below rest → clamped to 70 BPM floor"""
-    assert hrr_to_bpm(hr=40, hr_rest=60, hr_max=190) == 70
+    """HR below rest → pct clamped to 0.0 → interpolates to 75 BPM (0% HRR anchor)"""
+    assert hrr_to_bpm(hr=40, hr_rest=60, hr_max=190) == 75
 
 
 def test_clamp_above_max():
-    """HR above max → clamped to 185 BPM ceiling"""
-    assert hrr_to_bpm(hr=220, hr_rest=60, hr_max=190) == 185
+    """HR above max → pct clamped to 1.0 → interpolates to 175 BPM (100% HRR anchor)"""
+    assert hrr_to_bpm(hr=220, hr_rest=60, hr_max=190) == 175
 
 
 def test_pump_up_offset():
@@ -44,7 +46,6 @@ def test_wind_down_offset():
 
 def test_latest_hr_returns_recent_reading():
     """Should return the most recent non-null reading within 2 minutes."""
-    import time
     now_ms = int(time.time() * 1000)
     data = {
         "heartRateValues": [
@@ -57,7 +58,6 @@ def test_latest_hr_returns_recent_reading():
 
 def test_latest_hr_returns_none_when_stale():
     """All readings older than window → return None."""
-    import time
     now_ms = int(time.time() * 1000)
     data = {
         "heartRateValues": [
@@ -69,7 +69,6 @@ def test_latest_hr_returns_none_when_stale():
 
 def test_latest_hr_skips_null_values():
     """Null HR readings (e.g., watch removed) should be skipped."""
-    import time
     now_ms = int(time.time() * 1000)
     data = {
         "heartRateValues": [

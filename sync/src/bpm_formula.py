@@ -42,22 +42,19 @@ def hrr_to_bpm(
 ) -> int:
     """Convert heart rate to target music BPM via %HRR piecewise formula."""
     pct = (hr - hr_rest) / max(hr_max - hr_rest, 1)
+    pct = max(0.0, min(1.0, pct))
 
-    # Out-of-range HR: return hard floor/ceiling directly (before interpolation).
-    if pct < 0.0:
-        return BPM_FLOOR
-    if pct > 1.0:
-        return BPM_CEILING
-
+    # Find the interpolated base BPM from piecewise anchors
+    base_bpm = BPM_FLOOR  # fallback (should not be reached)
     for i in range(len(_ANCHORS) - 1):
         lo_pct, lo_bpm = _ANCHORS[i]
         hi_pct, hi_bpm = _ANCHORS[i + 1]
         if lo_pct <= pct <= hi_pct:
-            t = (pct - lo_pct) / (hi_pct - lo_pct) if hi_pct > lo_pct else 0
-            bpm = lo_bpm + t * (hi_bpm - lo_bpm)
-            return int(max(BPM_FLOOR, min(BPM_CEILING, round(bpm) + offset)))
+            t = (pct - lo_pct) / (hi_pct - lo_pct) if hi_pct > lo_pct else 0.0
+            base_bpm = round(lo_bpm + t * (hi_bpm - lo_bpm))
+            break
 
-    return BPM_CEILING if pct >= 1.0 else BPM_FLOOR
+    return int(max(BPM_FLOOR, min(BPM_CEILING, base_bpm + offset)))
 
 
 def latest_hr_from_garmin_data(
