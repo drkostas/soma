@@ -60,8 +60,10 @@ def hrr_to_bpm(
 def latest_hr_from_garmin_data(
     data: dict,
     window_seconds: int = 120,
-) -> int | None:
+) -> tuple[int, float] | None:
     """Extract the most recent valid HR reading within the time window.
+
+    Returns (hr_bpm, reading_timestamp_seconds) or None.
 
     Garmin returns: {"heartRateValues": [[timestamp_ms, bpm_or_null], ...]}
     """
@@ -73,6 +75,6 @@ def latest_hr_from_garmin_data(
         if hr_value is None:
             continue
         if timestamp_ms >= cutoff_ms:
-            return int(hr_value)
+            return int(hr_value), timestamp_ms / 1000.0
 
     return None
