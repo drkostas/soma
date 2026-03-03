@@ -62,7 +62,7 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [nowX, setNowX] = useState(0);
 
-  // --- Time domain ---
+  // --- Time domain (computed before hooks so hooks are always called) ---
   const nowTs = Date.now() / 1000;
 
   const allTs: number[] = [
@@ -71,19 +71,13 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
     ...playHistory
       .filter(e => e.duration_ms)
       .map(e => e.started_at + (e.duration_ms! / 1000)),
-    nowTs + 120,   // always show 2 min into the future
+    nowTs + 120,
   ];
 
-  if (allTs.length === 0 || hrHistory.length < 2) {
-    return (
-      <div className="h-[160px] flex items-center justify-center text-xs text-muted-foreground/50">
-        Chart appears after a few minutes of data…
-      </div>
-    );
-  }
+  const hasData = allTs.length > 1 && hrHistory.length >= 2;
 
-  const timeMin = Math.min(...allTs);
-  const timeMax = Math.max(...allTs);
+  const timeMin = hasData ? Math.min(...allTs) : nowTs - 300;
+  const timeMax = hasData ? Math.max(...allTs) : nowTs + 120;
   const timeRange = Math.max(timeMax - timeMin, 60);
   const totalWidth = Math.max(timeRange * PX_PER_SEC, 200);
 
@@ -103,30 +97,27 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
     return Math.max(0, Math.min(HR_HEIGHT - 2, pct * (HR_HEIGHT - 2) + 1));
   }
 
-  // HR polyline
   const hrPoints = hrHistory
     .map(p => `${timeToX(p.ts).toFixed(1)},${hrToY(p.hr).toFixed(1)}`)
     .join(" ");
 
-  // Target BPM segmented polyline (dashed visual via multiple segments)
   const targetPoints = hrHistory
     .filter(p => p.target_bpm)
     .map(p => `${timeToX(p.ts).toFixed(1)},${hrToY(p.target_bpm!).toFixed(1)}`)
     .join(" ");
 
-  // Y-axis ticks
   const tickCount = 4;
   const yTicks: number[] = Array.from({ length: tickCount + 1 }, (_, i) =>
     Math.round(yMin + (i / tickCount) * (yMax - yMin))
   );
 
-  // X-axis ticks (time labels)
   const xTickCount = Math.min(6, Math.floor(totalWidth / 80));
   const xTicks: number[] = Array.from({ length: xTickCount + 1 }, (_, i) =>
     timeMin + (i / xTickCount) * timeRange
   );
 
-  // Auto-scroll to bring "now" into view on mount + when nowX changes
+  // ALL hooks must be before any early return
+  // Auto-scroll to bring "now" into view on mount + when data changes
   useEffect(() => {
     const x = timeToX(nowTs);
     setNowX(x);
@@ -144,6 +135,15 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeMin]);
+
+  // Early return AFTER all hooks
+  if (!hasData) {
+    return (
+      <div className="h-[160px] flex items-center justify-center text-xs text-muted-foreground/50">
+        Chart appears after a few minutes of data…
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: "relative" }}>
@@ -281,10 +281,16 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
                 overflow: "visible",
               }}
             >
-              {playHistory.map((entry) => {
-                const songEnd = entry.duration_ms
+              {playHistory.map((entry, i) => {
+                // Cap end time at next song's start (handles skips — actual play shorter than duration)
+                const nextEntry = playHistory[i + 1];
+                const maxEnd = nextEntry && nextEntry.status !== "queued"
+                  ? nextEntry.started_at
+                  : Infinity;
+                const durationEnd = entry.duration_ms
                   ? entry.started_at + entry.duration_ms / 1000
                   : entry.started_at + 240; // 4 min fallback
+                const songEnd = Math.min(durationEnd, maxEnd);
                 const x = timeToX(entry.started_at);
                 const w = Math.max(2, timeToX(songEnd) - x);
                 const isQueued = entry.status === "queued";
