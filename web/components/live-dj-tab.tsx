@@ -54,6 +54,7 @@ const OFFSET_NAMES: Record<OffsetMode, string> = {
 
 function formatReason(reason: string): string {
   if (reason === "initial") return "start";
+  if (reason === "track_started") return "song started";
   if (reason === "45s_remaining") return "45s left";
   if (reason === "queued") return "queued";
   const m = reason.match(/^hr_shift_(\d+)_to_(\d+)$/);

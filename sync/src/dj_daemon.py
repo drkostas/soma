@@ -270,6 +270,7 @@ def run_daemon(
     queued_track_id: str | None = None
     queued_track_name: str | None = None
     first_queue_done = False  # queue immediately on first iteration
+    last_current_track_id: str | None = None  # detect track changes
     allowed_ids: set[str] | None = None  # track IDs allowed by source filter
     observation_fallback: bool = False  # True when allowed_ids comes from observation (not direct fetch)
     source_ids_loaded = False
@@ -334,6 +335,14 @@ def run_daemon(
                 if current_track_id == queued_track_id:
                     queued_track_id = None
                     queued_track_name = None
+
+            # Detect track change (for immediate re-queue trigger)
+            track_just_changed = (
+                current_track_id is not None and
+                current_track_id != last_current_track_id and
+                last_current_track_id is not None  # don't trigger on very first poll
+            )
+            last_current_track_id = current_track_id
 
             # 2b. Auto-detect source context from currently-playing
             current_context_name: str | None = None
@@ -423,6 +432,10 @@ def run_daemon(
                 replace_reason = "initial"
             elif queued_track_id is not None:
                 no_queue_reason = "already_queued"
+            elif track_just_changed:
+                # New song started — queue the next one immediately
+                should_queue = True
+                replace_reason = "track_started"
             elif ms_remaining is not None:
                 if ms_remaining < QUEUE_AHEAD_MS:
                     should_queue = True
