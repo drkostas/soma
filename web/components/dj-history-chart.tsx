@@ -34,6 +34,7 @@ function CustomTooltip({ active, payload, label, songEvents }: {
       {target && target.value && <div>Target: <span className="font-medium">{target.value} BPM</span></div>}
       {song && (
         <div className="pt-1 border-t space-y-0.5">
+          <div className="text-muted-foreground/60 text-[10px] uppercase tracking-wide">Queued</div>
           <div className="font-medium text-foreground truncate">{song.name}</div>
           <div className="text-muted-foreground">{song.artist}</div>
           <div>{song.track_bpm} BPM · <span className="text-muted-foreground/70">{song.reason}</span></div>
@@ -106,7 +107,7 @@ export default function DjHistoryChart({ hrHistory, songEvents }: Props) {
           activeDot={false}
           connectNulls
         />
-        {songEvents.map((evt, i) => (
+        {songEvents.map((evt) => (
           <ReferenceLine
             key={evt.ts}
             x={evt.ts}

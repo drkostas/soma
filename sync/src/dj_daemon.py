@@ -558,6 +558,8 @@ def run_daemon(
             _write_status(status_file, {
                 "state": "error",
                 "error": str(exc),
+                "hr_history": hr_history,
+                "queue_history": queue_history,
                 "ts": time.time(),
             })
 
