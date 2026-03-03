@@ -22,59 +22,64 @@ def is_configured() -> bool:
     return bool(token and chat_id)
 
 
+def _build_multipart(chat_id: str, field: str, filename: str, image_bytes: bytes, caption: str) -> tuple[bytes, str]:
+    """Build a multipart/form-data body for Telegram sendPhoto or sendDocument."""
+    boundary = "----SomaSyncBoundary"
+    body = BytesIO()
+    body.write(f"--{boundary}\r\n".encode())
+    body.write(f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'.encode())
+    body.write(f"{chat_id}\r\n".encode())
+    if caption:
+        body.write(f"--{boundary}\r\n".encode())
+        body.write(f'Content-Disposition: form-data; name="caption"\r\n\r\n'.encode())
+        body.write(f"{caption}\r\n".encode())
+    body.write(f"--{boundary}\r\n".encode())
+    body.write(f'Content-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'.encode())
+    body.write(b"Content-Type: image/png\r\n\r\n")
+    body.write(image_bytes)
+    body.write(b"\r\n")
+    body.write(f"--{boundary}--\r\n".encode())
+    return body.getvalue(), boundary
+
+
 def send_image(image_bytes: bytes, caption: str = "", filename: str = "workout.png") -> bool:
     """Send an image to the configured Telegram chat.
 
-    Uses multipart/form-data via urllib (no external dependencies).
+    Tries sendPhoto first. If Telegram returns IMAGE_PROCESS_FAILED (RGBA PNG issue
+    on some servers), falls back to sendDocument which skips server-side processing.
     Returns True on success, False on failure.
     """
     token, chat_id = _get_creds()
     if not token or not chat_id:
         return False
 
-    url = f"{API_BASE.format(token=token)}/sendPhoto"
-    boundary = "----SomaSyncBoundary"
+    for endpoint, field in [("sendPhoto", "photo"), ("sendDocument", "document")]:
+        url = f"{API_BASE.format(token=token)}/{endpoint}"
+        data, boundary = _build_multipart(chat_id, field, filename, image_bytes, caption)
+        req = urllib.request.Request(
+            url, data=data,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read())
+                if result.get("ok", False):
+                    return True
+                print(f"    Telegram {endpoint} returned ok=false: {result}")
+                return False
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode() if e.fp else ""
+            if "IMAGE_PROCESS_FAILED" in error_body and endpoint == "sendPhoto":
+                print(f"    sendPhoto IMAGE_PROCESS_FAILED — retrying as sendDocument")
+                continue
+            print(f"    Telegram send failed (HTTP {e.code}): {error_body[:200]}")
+            return False
+        except Exception as e:
+            print(f"    Telegram send failed: {e}")
+            return False
 
-    body = BytesIO()
-
-    # chat_id field
-    body.write(f"--{boundary}\r\n".encode())
-    body.write(f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'.encode())
-    body.write(f"{chat_id}\r\n".encode())
-
-    # caption field
-    if caption:
-        body.write(f"--{boundary}\r\n".encode())
-        body.write(f'Content-Disposition: form-data; name="caption"\r\n\r\n'.encode())
-        body.write(f"{caption}\r\n".encode())
-
-    # photo file
-    body.write(f"--{boundary}\r\n".encode())
-    body.write(f'Content-Disposition: form-data; name="photo"; filename="{filename}"\r\n'.encode())
-    body.write(b"Content-Type: image/png\r\n\r\n")
-    body.write(image_bytes)
-    body.write(b"\r\n")
-
-    body.write(f"--{boundary}--\r\n".encode())
-
-    data = body.getvalue()
-    req = urllib.request.Request(
-        url, data=data,
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read())
-            return result.get("ok", False)
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode() if e.fp else ""
-        print(f"    Telegram send failed (HTTP {e.code}): {error_body[:200]}")
-        return False
-    except Exception as e:
-        print(f"    Telegram send failed: {e}")
-        return False
+    return False
 
 
 def send_workout_image(hevy_id: str, title: str, workout_date: str) -> bool:
