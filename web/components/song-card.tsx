@@ -1,15 +1,18 @@
 // web/components/song-card.tsx
 "use client";
+import { useState } from "react";
 import { motion } from "motion/react";
 import { X, SkipForward, Info, Zap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export interface SongData {
   track_id: string; name: string; artist_name: string;
   tempo: number; energy: number; duration_ms: number;
   genres?: string[];
   is_skip?: boolean; is_half_time?: boolean; has_genre_warning?: boolean;
+  preview_url?: string | null;
 }
 
 interface Props {
@@ -18,9 +21,11 @@ interface Props {
   onPreview: () => void;
   draggable?: boolean;
   onAddToPumpUp?: () => void;
+  onReplace?: (newSong: SongData) => void;
 }
 
-export default function SongCard({ song, onExclude, onPreview, draggable: _draggable, onAddToPumpUp }: Props) {
+export default function SongCard({ song, onExclude, onPreview, draggable: _draggable, onAddToPumpUp, onReplace }: Props) {
+  const [isDragOver, setIsDragOver] = useState(false);
   const durationStr = `${Math.floor(song.duration_ms / 60000)}:${String(Math.floor((song.duration_ms % 60000) / 1000)).padStart(2, "0")}`;
   const energyWidth = `${Math.round(song.energy * 100)}%`;
 
@@ -59,9 +64,18 @@ export default function SongCard({ song, onExclude, onPreview, draggable: _dragg
   return (
     <motion.div
       layout
-      whileHover={{ scale: 1.01 }}
-      className="group rounded-lg border bg-card p-2.5 cursor-pointer"
+      whileHover={{ scale: isDragOver ? 1.03 : 1.01 }}
+      className={cn("group rounded-lg border bg-card p-2.5 cursor-pointer transition-all duration-150", isDragOver && "ring-2 ring-primary scale-[1.03]")}
       onClick={onPreview}
+      onDragOver={e => { if (onReplace) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setIsDragOver(true); }}}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
+      onDrop={e => {
+        e.preventDefault();
+        setIsDragOver(false);
+        if (!onReplace) return;
+        try { onReplace(JSON.parse(e.dataTransfer.getData("application/soma-song")) as SongData); }
+        catch {}
+      }}
     >
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0">
