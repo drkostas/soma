@@ -107,6 +107,27 @@ def _spotify_get(path: str, token: str) -> dict:
     return resp.json()
 
 
+def _album_image_url(item: dict) -> str | None:
+    """Return a medium-sized album art URL from a Spotify track item."""
+    images = (item.get("album") or {}).get("images") or []
+    if not images:
+        return None
+    # Prefer ~300px (index 1 of 3), fall back to whatever's available
+    return images[min(1, len(images) - 1)]["url"]
+
+
+def _fetch_track_details(track_id: str, token: str) -> dict:
+    """Fetch duration_ms and image_url for a track from Spotify."""
+    try:
+        data = _spotify_get(f"/tracks/{track_id}", token)
+        return {
+            "duration_ms": data.get("duration_ms"),
+            "image_url": _album_image_url(data),
+        }
+    except Exception:
+        return {"duration_ms": None, "image_url": None}
+
+
 def _spotify_post(path: str, token: str, params: dict | None = None) -> None:
     resp = requests.post(
         f"https://api.spotify.com/v1{path}",
@@ -290,6 +311,7 @@ def run_daemon(
     last_context_uri: str | None = None  # for auto-detect mode
     observed_context_tracks: set[str] = set()  # tracks seen playing in current context (fallback when playlist fetch fails)
     queue_history: list[dict] = []  # rolling log of queued tracks (newest last)
+    play_history: list[dict] = []  # ordered play log: [{track_id,name,artist,track_bpm,target_bpm,started_at,duration_ms,image_url,status}]
     hr_history: list[dict] = []  # rolling HR readings: [{ts, hr, target_bpm}]
     HR_HISTORY_MAX_SECONDS = 7200  # keep last 2 hours
 
@@ -326,6 +348,10 @@ def run_daemon(
             current_track_id = None
             current_track_name = None
             ms_remaining = None
+            item: dict = {}
+            progress_ms: int = 0
+            duration_ms: int = 0
+            prev_queued_track_id = queued_track_id  # save before it may be cleared below
 
             if now_playing and now_playing.get("is_playing") and now_playing.get("item"):
                 item = now_playing["item"]
@@ -360,6 +386,76 @@ def run_daemon(
                 last_current_track_id is not None  # don't trigger on very first poll
             )
             last_current_track_id = current_track_id
+
+            # 2c. Update play_history with real song start times
+            if current_track_id and item:
+                actual_started_at = time.time() - progress_ms / 1000
+                artist_name = (item.get("artists") or [{}])[0].get("name") or ""
+
+                if not play_history:
+                    # First poll — initialize with current song
+                    play_history.append({
+                        "track_id": current_track_id,
+                        "name": current_track_name or "",
+                        "artist": artist_name,
+                        "track_bpm": None,
+                        "target_bpm": target_bpm,
+                        "started_at": actual_started_at,
+                        "duration_ms": duration_ms or None,
+                        "image_url": _album_image_url(item),
+                        "status": "current",
+                    })
+                elif track_just_changed:
+                    # Mark old current entry as played
+                    for e in play_history:
+                        if e["status"] == "current":
+                            e["status"] = "played"
+                            break
+                    if current_track_id == prev_queued_track_id:
+                        # Queued song just started — promote its entry to current
+                        promoted = False
+                        for e in play_history:
+                            if e["status"] == "queued" and e.get("track_id") == current_track_id:
+                                e["status"] = "current"
+                                e["started_at"] = actual_started_at
+                                e["image_url"] = _album_image_url(item) or e.get("image_url")
+                                e["duration_ms"] = duration_ms or e.get("duration_ms")
+                                promoted = True
+                                break
+                        if not promoted:
+                            play_history.append({
+                                "track_id": current_track_id,
+                                "name": current_track_name or "",
+                                "artist": artist_name,
+                                "track_bpm": None,
+                                "target_bpm": target_bpm,
+                                "started_at": actual_started_at,
+                                "duration_ms": duration_ms or None,
+                                "image_url": _album_image_url(item),
+                                "status": "current",
+                            })
+                    else:
+                        # User changed song manually — discard queued entry, add new current
+                        play_history[:] = [e for e in play_history if e["status"] != "queued"]
+                        play_history.append({
+                            "track_id": current_track_id,
+                            "name": current_track_name or "",
+                            "artist": artist_name,
+                            "track_bpm": None,
+                            "target_bpm": target_bpm,
+                            "started_at": actual_started_at,
+                            "duration_ms": duration_ms or None,
+                            "image_url": _album_image_url(item),
+                            "status": "current",
+                        })
+                else:
+                    # Normal poll — keep current entry fresh
+                    for e in play_history:
+                        if e["status"] == "current" and e.get("track_id") == current_track_id:
+                            e["started_at"] = actual_started_at  # re-calc from fresh progress_ms
+                            e["duration_ms"] = duration_ms or e.get("duration_ms")
+                            break
+                play_history[:] = play_history[-20:]  # keep last 20 entries
 
             # 2b. Auto-detect source context from currently-playing
             current_context_name: str | None = None
@@ -519,6 +615,26 @@ def run_daemon(
                     queue_history[:] = queue_history[-10:]  # keep last 10
                     first_queue_done = True  # successful — stop forcing on every iteration
                     no_queue_reason = None
+                    # Add queued entry to play_history with estimated start time
+                    current_ph = next((e for e in play_history if e["status"] == "current"), None)
+                    if current_ph and current_ph.get("duration_ms"):
+                        est_start = current_ph["started_at"] + current_ph["duration_ms"] / 1000
+                    else:
+                        est_start = time.time() + (ms_remaining / 1000 if ms_remaining else 300)
+                    track_info = _fetch_track_details(next_track_id, token)
+                    play_history[:] = [e for e in play_history if e["status"] != "queued"]
+                    play_history.append({
+                        "track_id": next_track_id,
+                        "name": next_song["name"],
+                        "artist": next_song.get("artist_name") or "",
+                        "track_bpm": round(next_song.get("tempo") or 0) or None,
+                        "target_bpm": target_bpm,
+                        "started_at": est_start,
+                        "duration_ms": track_info["duration_ms"],
+                        "image_url": track_info["image_url"],
+                        "status": "queued",
+                    })
+                    play_history[:] = play_history[-20:]
                     # Persist played history so next session avoids repeats
                     try:
                         all_played = list(session.played)[-200:]
@@ -555,6 +671,7 @@ def run_daemon(
                 "auto_detect": auto_detect,
                 "context_name": current_context_name if auto_detect else None,
                 "queue_history": queue_history,
+                "play_history": play_history,
                 "hr_history": hr_history,
                 "ts": time.time(),
             })
@@ -565,6 +682,7 @@ def run_daemon(
                 "error": str(exc),
                 "hr_history": hr_history,
                 "queue_history": queue_history,
+                "play_history": play_history,
                 "ts": time.time(),
             })
 
