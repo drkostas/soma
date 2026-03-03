@@ -206,14 +206,25 @@ def _query_tracks(
     sources: list[str],
     exclude_ids: list[str],
     allowed_ids: set[str] | None = None,
+    bpm_window: int = 5,
 ) -> list[dict]:
     """Query DB for candidate tracks.
 
-    Library mode (allowed_ids=None): strict BPM ±5 window against full cache.
+    Library mode (allowed_ids=None): BPM ±bpm_window against full cache.
     Playlist mode (allowed_ids set): no BPM window — returns all playlist
     tracks ordered by BPM proximity so the best match is always returned even
     when no tracks sit exactly at the target BPM.
+
+    Half/double BPM: also searches at target_bpm/2 and target_bpm*2 so tracks
+    at musically compatible tempos are included.
     """
+    # BPM targets: exact, half, double (clamped to 60-200)
+    bpm_targets = {target_bpm}
+    for mult in (0.5, 2.0):
+        alt = round(target_bpm * mult)
+        if 60 <= alt <= 200:
+            bpm_targets.add(alt)
+
     conn = psycopg2.connect(DATABASE_URL)
     try:
         with conn.cursor() as cur:
@@ -225,10 +236,13 @@ def _query_tracks(
                 where.append("track_id = ANY(%s::text[])")
                 params.append(list(allowed_ids))
             else:
-                # Library mode: strict BPM ±5 window
-                lo, hi = target_bpm - 5, target_bpm + 5
-                where.append("tempo BETWEEN %s AND %s")
-                params.extend([lo, hi])
+                # Library mode: BPM window across all target tempos
+                bpm_conditions = " OR ".join(
+                    "tempo BETWEEN %s AND %s" for _ in bpm_targets
+                )
+                where.append(f"({bpm_conditions})")
+                for t in sorted(bpm_targets):
+                    params.extend([t - bpm_window, t + bpm_window])
 
             if genres:
                 where.append("genres && %s")
@@ -579,10 +593,13 @@ def run_daemon(
                 if current_track_id:
                     exclude_ids.append(current_track_id)
 
-                candidates = _query_tracks(target_bpm, genres, sources, exclude_ids, allowed_ids=allowed_ids)
+                # Try ±5 BPM window first, then expand to ±15 if no results
+                candidates = _query_tracks(target_bpm, genres, sources, exclude_ids, allowed_ids=allowed_ids, bpm_window=5)
+                if not candidates:
+                    candidates = _query_tracks(target_bpm, genres, sources, exclude_ids, allowed_ids=allowed_ids, bpm_window=15)
                 # If observation fallback has no BPM-indexed tracks yet, fall back to full library
                 if not candidates and observation_fallback:
-                    candidates = _query_tracks(target_bpm, genres, sources, exclude_ids, allowed_ids=None)
+                    candidates = _query_tracks(target_bpm, genres, sources, exclude_ids, allowed_ids=None, bpm_window=15)
                 filtered = session.filter_candidates(candidates)
                 shuffled = interleaved_shuffle(filtered, state=session)
 
@@ -635,6 +652,9 @@ def run_daemon(
                         "status": "queued",
                     })
                     play_history[:] = play_history[-20:]
+                    # Mark queued song as played immediately so it's excluded from
+                    # future selections and persisted even if session ends before next queue
+                    session.mark_played(next_track_id)
                     # Persist played history so next session avoids repeats
                     try:
                         all_played = list(session.played)[-200:]
