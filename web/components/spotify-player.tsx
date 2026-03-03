@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Play, Pause, Volume2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "sonner";
 import { SongData } from "./song-card";
 
 interface Props { currentSong: SongData | null; }
@@ -51,8 +52,21 @@ export default function SpotifyPlayer({ currentSong }: Props) {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ uris: [`spotify:track:${trackId}`] }),
+          }).then(async r => {
+            if (!r.ok) {
+              const data = await r.json().catch(() => ({}));
+              const msg = (data as { error?: string }).error ?? "";
+              toast.error(msg.includes("Premium") ? "Spotify Premium required for preview" : "Preview failed — check Spotify connection");
+            }
           });
         }
+      });
+
+      player.addListener("account_error", () => {
+        toast.error("Spotify Premium required for song preview");
+      });
+      player.addListener("initialization_error", ({ message }: { message: string }) => {
+        console.error("Spotify player init error:", message);
       });
 
       void player.connect();
@@ -105,6 +119,12 @@ export default function SpotifyPlayer({ currentSong }: Props) {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ uris: [`spotify:track:${currentSong.track_id}`] }),
+    }).then(async r => {
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        const msg = (data as { error?: string }).error ?? "";
+        toast.error(msg.includes("Premium") ? "Spotify Premium required for preview" : "Preview failed — check Spotify connection");
+      }
     });
   }, [currentSong?.track_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
