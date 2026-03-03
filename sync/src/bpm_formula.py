@@ -45,7 +45,7 @@ def hrr_to_bpm(
     pct = max(0.0, min(1.0, pct))
 
     # Find the interpolated base BPM from piecewise anchors
-    base_bpm = BPM_FLOOR  # fallback (should not be reached)
+    base_bpm = _ANCHORS[0][1]  # fallback (should not be reached; 75 = 0% HRR anchor)
     for i in range(len(_ANCHORS) - 1):
         lo_pct, lo_bpm = _ANCHORS[i]
         hi_pct, hi_bpm = _ANCHORS[i + 1]
