@@ -15,6 +15,7 @@ export default function SpotifyPlayer({ currentSong }: Props) {
   const [volume, setVolume] = useState(0.7);
   const playerRef = useRef<Spotify.Player | null>(null);
   const deviceIdRef = useRef<string | null>(null); // Fix 3: capture device_id on ready
+  const pendingTrackRef = useRef<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => {
@@ -42,6 +43,16 @@ export default function SpotifyPlayer({ currentSong }: Props) {
       // Fix 3: store device_id when player is ready
       player.addListener("ready", ({ device_id }: { device_id: string }) => {
         deviceIdRef.current = device_id;
+        // Play any track that was requested while player was initializing
+        if (pendingTrackRef.current) {
+          const trackId = pendingTrackRef.current;
+          pendingTrackRef.current = null;
+          void fetch(`/api/playlist/spotify/play?device_id=${device_id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ uris: [`spotify:track:${trackId}`] }),
+          });
+        }
       });
 
       void player.connect();
@@ -83,9 +94,14 @@ export default function SpotifyPlayer({ currentSong }: Props) {
   // Play song when it changes
   // Fix 3: include device_id query param so Spotify targets the SDK player
   useEffect(() => {
-    if (!currentSong || !playerRef.current) return;
-    const deviceParam = deviceIdRef.current ? `?device_id=${deviceIdRef.current}` : "";
-    void fetch(`/api/playlist/spotify/play${deviceParam}`, {
+    if (!currentSong) return;
+    if (!playerRef.current || !deviceIdRef.current) {
+      // Player not ready yet — store as pending, will play when "ready" fires
+      pendingTrackRef.current = currentSong.track_id;
+      return;
+    }
+    pendingTrackRef.current = null;
+    void fetch(`/api/playlist/spotify/play?device_id=${deviceIdRef.current}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ uris: [`spotify:track:${currentSong.track_id}`] }),
