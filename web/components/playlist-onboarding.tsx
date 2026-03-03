@@ -8,14 +8,12 @@ interface Props {
   spotifyConnected: boolean;
   libraryAnalysed: boolean;
   onLibraryAnalysed: () => void;
-  onRunSelected: () => void;
 }
 
 export default function PlaylistOnboarding({
   spotifyConnected,
   libraryAnalysed,
   onLibraryAnalysed,
-  onRunSelected,
 }: Props) {
   const [analysing, setAnalysing] = useState(false);
   const [progress, setProgress] = useState<{ stage: string; pct: number } | null>(null);
@@ -86,17 +84,6 @@ export default function PlaylistOnboarding({
       action: (
         <Button size="sm" onClick={handleAnalyse} disabled={analysing}>
           {analysing ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Analysing…</> : "Analyse Library"}
-        </Button>
-      ),
-    },
-    {
-      n: 3,
-      label: "Pick a run",
-      done: false,
-      locked: !libraryAnalysed,
-      action: (
-        <Button size="sm" onClick={onRunSelected}>
-          Pick Run →
         </Button>
       ),
     },
