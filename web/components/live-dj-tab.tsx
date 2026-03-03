@@ -506,7 +506,7 @@ export default function LiveDjTab() {
             {status.auto_detect ? (
               <div className="text-xs text-muted-foreground/60">
                 {status.context_name
-                  ? <>Auto: sourcing from <span className="text-foreground">{status.context_name.replace(/^playlist:.*/, "current playlist").replace(/^album:.*/, "current album")}</span>{status.allowed_track_count != null ? ` (${status.allowed_track_count} tracks)` : ""}</>
+                  ? <>Auto: sourcing from <span className="text-foreground">{status.context_name}</span>{status.allowed_track_count != null ? ` (${status.allowed_track_count} tracks)` : ""}</>
                   : "Auto-detect: play something on Spotify to set source"}
               </div>
             ) : status.allowed_track_count != null && (
