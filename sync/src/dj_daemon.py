@@ -142,20 +142,41 @@ def _fetch_source_track_ids(sources: list[str], token: str) -> set[str] | None:
     for source in sources:
         offset = 0
         while True:
-            data = _spotify_get(
-                f"/playlists/{source}/items?limit=100&offset={offset}"
-                f"&fields=items(track(id)),next",
-                token,
-            )
+            try:
+                data = _spotify_get(
+                    f"/playlists/{source}/items?limit=50&offset={offset}",
+                    token,
+                )
+            except Exception as exc:
+                # 403 = playlist not owned by user (followed from another account).
+                # Silently skip — the daemon will report no_queue_reason if ids stays empty.
+                print(f"[dj] Cannot read playlist {source}: {exc}", flush=True)
+                break
             items = data.get("items") or []
             for item in items:
                 track = item.get("track") or {}
                 if track.get("id"):
                     ids.add(track["id"])
-            if len(items) < 100:
+            if len(items) < 50 or not data.get("next"):
                 break
-            offset += 100
+            offset += 50
     return ids or None
+
+
+def _fetch_album_track_ids(album_id: str, token: str) -> set[str]:
+    """Return all track IDs for a Spotify album."""
+    ids: set[str] = set()
+    offset = 0
+    while True:
+        data = _spotify_get(f"/albums/{album_id}/tracks?limit=50&offset={offset}", token)
+        items = data.get("items") or []
+        for item in items:
+            if item.get("id"):
+                ids.add(item["id"])
+        if len(items) < 50 or not data.get("next"):
+            break
+        offset += 50
+    return ids
 
 
 def _query_tracks(
@@ -165,37 +186,50 @@ def _query_tracks(
     exclude_ids: list[str],
     allowed_ids: set[str] | None = None,
 ) -> list[dict]:
-    """Query DB for tracks matching BPM ± 5.
+    """Query DB for candidate tracks.
 
-    ``allowed_ids`` restricts results to specific track IDs (used for playlist sources).
-    None means no restriction (all cached tracks qualify — used when source='liked').
+    Library mode (allowed_ids=None): strict BPM ±5 window against full cache.
+    Playlist mode (allowed_ids set): no BPM window — returns all playlist
+    tracks ordered by BPM proximity so the best match is always returned even
+    when no tracks sit exactly at the target BPM.
     """
-    lo, hi = target_bpm - 5, target_bpm + 5
     conn = psycopg2.connect(DATABASE_URL)
     try:
         with conn.cursor() as cur:
-            parts: list[str] = ["WHERE tempo BETWEEN %s AND %s"]
-            params: list = [lo, hi]
-
-            if genres:
-                parts.append("AND genres && %s")
-                params.append(genres)
-
-            parts.append("AND track_id NOT IN (SELECT track_id FROM user_blacklist)")
-
-            if exclude_ids:
-                parts.append("AND track_id != ALL(%s::text[])")
-                params.append(exclude_ids)
+            where: list[str] = []
+            params: list = []
 
             if allowed_ids is not None:
-                parts.append("AND track_id = ANY(%s::text[])")
+                # Playlist mode: filter to playlist tracks, sort by BPM proximity
+                where.append("track_id = ANY(%s::text[])")
                 params.append(list(allowed_ids))
+            else:
+                # Library mode: strict BPM ±5 window
+                lo, hi = target_bpm - 5, target_bpm + 5
+                where.append("tempo BETWEEN %s AND %s")
+                params.extend([lo, hi])
 
-            query = f"""SELECT track_id, name, artist_name, artist_name as artist_id, tempo, energy
-                        FROM spotify_track_features
-                        {' '.join(parts)}
-                        LIMIT 200"""
-            cur.execute(query, params)
+            if genres:
+                where.append("genres && %s")
+                params.append(genres)
+
+            where.append("track_id NOT IN (SELECT track_id FROM user_blacklist)")
+
+            if exclude_ids:
+                where.append("track_id != ALL(%s::text[])")
+                params.append(exclude_ids)
+
+            order = ""
+            if allowed_ids is not None:
+                order = "ORDER BY ABS(tempo - %s)"
+                params.append(target_bpm)
+
+            sql = f"""SELECT track_id, name, artist_name, artist_name as artist_id, tempo, energy
+                      FROM spotify_track_features
+                      WHERE {' AND '.join(where)}
+                      {order}
+                      LIMIT 200"""
+            cur.execute(sql, params)
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
     finally:
@@ -240,6 +274,7 @@ def run_daemon(
     source_ids_loaded = False
     source_refresh_counter = 0
     SOURCE_REFRESH_INTERVAL = 20  # re-fetch source IDs every 20 polls (~10 min)
+    last_context_uri: str | None = None  # for auto-detect mode
     queue_history: list[dict] = []  # rolling log of queued tracks (newest last)
 
     _write_status(status_file, {"state": "starting", "hr": None, "target_bpm": None})
@@ -248,14 +283,16 @@ def run_daemon(
         try:
             token = _get_spotify_token()
 
-            # 0. Refresh source track IDs periodically
-            if not source_ids_loaded or source_refresh_counter == 0:
-                try:
-                    allowed_ids = _fetch_source_track_ids(sources, token)
-                    source_ids_loaded = True
-                except Exception:
-                    pass  # keep previous allowed_ids on failure
-            source_refresh_counter = (source_refresh_counter + 1) % SOURCE_REFRESH_INTERVAL
+            # 0. Refresh source track IDs periodically (only when sources are explicitly set)
+            auto_detect = not sources or sources == ["auto"]
+            if not auto_detect:
+                if not source_ids_loaded or source_refresh_counter == 0:
+                    try:
+                        allowed_ids = _fetch_source_track_ids(sources, token)
+                        source_ids_loaded = True
+                    except Exception:
+                        pass  # keep previous allowed_ids on failure
+                source_refresh_counter = (source_refresh_counter + 1) % SOURCE_REFRESH_INTERVAL
 
             # 1. Poll Garmin HR
             today = date.today().isoformat()
@@ -295,6 +332,41 @@ def run_daemon(
                 if current_track_id == queued_track_id:
                     queued_track_id = None
                     queued_track_name = None
+
+            # 2b. Auto-detect source context from currently-playing
+            current_context_name: str | None = None
+            if auto_detect and now_playing:
+                ctx = now_playing.get("context") or {}
+                ctx_uri: str = ctx.get("uri") or ""
+                ctx_type: str = ctx.get("type") or ""
+                if ctx_uri and ctx_uri != last_context_uri:
+                    ctx_id = ctx_uri.split(":")[-1]
+                    last_context_uri = ctx_uri
+                    source_ids_loaded = False  # force re-fetch
+                if ctx_uri and not source_ids_loaded:
+                    ctx_id = ctx_uri.split(":")[-1]
+                    try:
+                        if ctx_type == "playlist":
+                            allowed_ids = _fetch_source_track_ids([ctx_id], token)
+                        elif ctx_type == "album":
+                            allowed_ids = _fetch_album_track_ids(ctx_id, token)
+                        else:
+                            allowed_ids = None  # artist / unknown — use full library
+                        source_ids_loaded = True
+                    except Exception as exc:
+                        print(f"[dj] Auto-detect source fetch failed: {exc}", flush=True)
+                # Resolve display name from context
+                if ctx_type == "playlist":
+                    current_context_name = f"playlist:{ctx_uri.split(':')[-1]}"
+                elif ctx_type == "album":
+                    try:
+                        album_meta = _spotify_get(f"/albums/{ctx_uri.split(':')[-1]}", token)
+                        current_context_name = album_meta.get("name")
+                    except Exception:
+                        current_context_name = "album"
+                elif not ctx_uri:
+                    # Nothing playing or playing from search/etc — no context
+                    allowed_ids = None
 
             # 3. Decide whether to queue
             should_queue = False
@@ -385,6 +457,8 @@ def run_daemon(
                 "no_queue_reason": no_queue_reason,
                 "session_played_count": len(session.played),
                 "allowed_track_count": len(allowed_ids) if allowed_ids is not None else None,
+                "auto_detect": auto_detect,
+                "context_name": current_context_name if auto_detect else None,
                 "queue_history": queue_history,
                 "ts": time.time(),
             })

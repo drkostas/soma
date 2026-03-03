@@ -29,6 +29,8 @@ interface DjStatus {
   no_queue_reason?: string | null;
   session_played_count?: number;
   allowed_track_count?: number | null;
+  auto_detect?: boolean;
+  context_name?: string | null;
   queue_history?: QueueHistoryEntry[];
   ts?: number;
   error?: string;
@@ -391,8 +393,14 @@ export default function LiveDjTab() {
             </div>
           )}
 
-          {/* Source pool size */}
-          {status.allowed_track_count != null && (
+          {/* Source pool / auto-detect context */}
+          {status.auto_detect ? (
+            <div className="text-xs text-muted-foreground/60">
+              {status.context_name
+                ? <>Auto: sourcing from <span className="text-foreground">{status.context_name.replace(/^playlist:.*/, "current playlist").replace(/^album:.*/, "current album")}</span>{status.allowed_track_count != null ? ` (${status.allowed_track_count} tracks)` : ""}</>
+                : "Auto-detect: play something on Spotify to set source"}
+            </div>
+          ) : status.allowed_track_count != null && (
             <div className="text-xs text-muted-foreground/50">
               Pool: {status.allowed_track_count} tracks from selected source
             </div>
