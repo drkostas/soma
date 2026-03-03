@@ -36,7 +36,6 @@ interface Props {
   onSave: () => void;
   saving: boolean;
   savedUrl?: string;
-  saveLabel?: string;
 }
 
 interface SectionProps {
@@ -211,7 +210,7 @@ function SegmentSection({
 export default function SongAssignmentPanel({
   items, assignments, excludedIds, selectedGenres,
   focusedIdx, onFocus, onExclude, onPlace, onReorder,
-  onPreview, onPumpUp, onWidenBpm, onAddPlaylists, onBankChanged, onSave, saving, savedUrl, saveLabel
+  onPreview, onPumpUp, onWidenBpm, onAddPlaylists, onBankChanged, onSave, saving, savedUrl
 }: Props) {
   const [showExcluded, setShowExcluded] = useState<Record<number, boolean>>({});
 
@@ -335,15 +334,14 @@ export default function SongAssignmentPanel({
         <span className="text-xs text-muted-foreground flex-1">
           {totalPlaced} songs · {totalSkip} skip songs
         </span>
-        {savedUrl ? (
-          <Button size="sm" asChild className="text-xs h-7">
+        {savedUrl && (
+          <Button size="sm" variant="outline" asChild className="text-xs h-7">
             <a href={savedUrl} target="_blank" rel="noopener noreferrer">✓ Open in Spotify ↗</a>
           </Button>
-        ) : (
-          <Button size="sm" onClick={onSave} disabled={saving || totalPlaced === 0} className="text-xs h-7">
-            {saving ? "Saving…" : (saveLabel ?? "Save to Spotify →")}
-          </Button>
         )}
+        <Button size="sm" onClick={onSave} disabled={saving || totalPlaced === 0} className="text-xs h-7">
+          {saving ? "Saving…" : (savedUrl ? "Update Playlist →" : "Save to Spotify →")}
+        </Button>
       </div>
     </div>
   );

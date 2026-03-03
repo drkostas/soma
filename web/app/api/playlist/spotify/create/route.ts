@@ -7,7 +7,8 @@ import path from "path";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const { session_id, name, track_ids, description, cover_image } = await req.json();
+  const body = await req.json();
+  const { session_id, name, track_ids, description, cover_image, song_assignments } = body;
 
   if (!(await isSpotifyConnected())) {
     return NextResponse.json({ error: "Spotify not connected. Re-connect in Sources." }, { status: 401 });
@@ -72,6 +73,14 @@ export async function POST(req: NextRequest) {
         updated_at = NOW()
       WHERE id = ${session_id}
     `;
+    // Persist current song_assignments to session for future restore
+    if (song_assignments) {
+      await sql`
+        UPDATE playlist_sessions
+        SET song_assignments = ${JSON.stringify(song_assignments)}::jsonb
+        WHERE id = ${session_id}
+      `;
+    }
   }
 
   return NextResponse.json({
@@ -81,7 +90,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const { playlist_id, session_id, track_ids } = await req.json();
+  const { playlist_id, session_id, track_ids, song_assignments } = await req.json();
 
   if (!(await isSpotifyConnected())) {
     return NextResponse.json({ error: "Spotify not connected. Re-connect in Sources." }, { status: 401 });
@@ -121,6 +130,14 @@ export async function PUT(req: NextRequest) {
       SET updated_at = NOW()
       WHERE id = ${session_id}
     `;
+    // Persist current song_assignments to session for future restore
+    if (song_assignments) {
+      await sql`
+        UPDATE playlist_sessions
+        SET song_assignments = ${JSON.stringify(song_assignments)}::jsonb
+        WHERE id = ${session_id}
+      `;
+    }
   }
 
   // Fetch playlist URL (it doesn't change on update)

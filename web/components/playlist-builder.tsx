@@ -457,7 +457,14 @@ export default function PlaylistBuilder() {
         const res = await fetch("/api/playlist/spotify/create", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ playlist_id: existingPlaylistId, session_id: sessionId, track_ids: allTracks }),
+          body: JSON.stringify({
+            playlist_id: existingPlaylistId,
+            session_id: sessionId,
+            track_ids: allTracks,
+            song_assignments: Object.fromEntries(
+              Object.entries(assignments).map(([k, v]) => [k, v.songs])
+            ),
+          }),
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -470,7 +477,14 @@ export default function PlaylistBuilder() {
         const res = await fetch("/api/playlist/spotify/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, name, track_ids: allTracks }),
+          body: JSON.stringify({
+            session_id: sessionId,
+            name,
+            track_ids: allTracks,
+            song_assignments: Object.fromEntries(
+              Object.entries(assignments).map(([k, v]) => [k, v.songs])
+            ),
+          }),
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -748,7 +762,6 @@ export default function PlaylistBuilder() {
             onSave={handleSave}
             saving={saving}
             savedUrl={savedUrl}
-            saveLabel={existingPlaylistId && !savedUrl ? "Update Playlist →" : undefined}
           />
           </div>
         </div>
