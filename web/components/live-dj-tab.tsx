@@ -70,9 +70,11 @@ export default function LiveDjTab({ genres, sources }: Props) {
       const data = await res.json() as Partial<DjStatus>;
       if (!data.state) return;
       setStatus(data as DjStatus);
-      if (data.state === "stopped" || data.state === "error") {
+      if (data.state === "stopped") {
         clearInterval(pollRef.current);
-        if (data.state === "error") toast.error("Live DJ stopped", { description: data.error });
+      } else if (data.state === "error") {
+        toast.error("Live DJ error", { description: data.error });
+        // daemon retries automatically — keep polling
       }
     } catch {}
   }, []);
