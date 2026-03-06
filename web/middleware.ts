@@ -7,8 +7,12 @@ export default auth((req) => {
 
   const { pathname } = req.nextUrl;
 
-  // Always allow auth routes and login page
-  if (pathname.startsWith("/api/auth") || pathname === "/login") {
+  // Always allow auth routes, login page, and image API (used by sync pipeline)
+  if (
+    pathname.startsWith("/api/auth") ||
+    pathname === "/login" ||
+    pathname.match(/^\/api\/(workout|activity)\/[^/]+\/image$/)
+  ) {
     return NextResponse.next();
   }
 
@@ -22,5 +26,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|soma-icon.png).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|soma-icon.png|sw\\.js|manifest\\.webmanifest).*)"],
 };
