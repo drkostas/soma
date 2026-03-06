@@ -889,6 +889,87 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
     except Exception as e:
         print(f"  Telegram backfill error (non-fatal): {e}")
 
+    # --- Backfill Push notifications ---
+    print(f"\nBackfilling Push notifications...")
+    try:
+        from push_notify import send_push, is_configured as push_configured
+        if push_configured():
+            push_sent = 0
+            # Runs with images but no push notification (last 48h)
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT g.activity_id, g.raw_json->>'activityName' as name,
+                               g.raw_json->>'startTimeGMT' as start_time
+                        FROM garmin_activity_raw g
+                        JOIN activity_sync_log img ON img.source_id = g.activity_id::text
+                            AND img.source_platform = 'garmin' AND img.destination = 'garmin_image'
+                            AND img.status = 'sent'
+                        WHERE g.activity_id::text NOT IN (
+                            SELECT source_id FROM activity_sync_log
+                            WHERE source_platform = 'garmin' AND destination = 'push' AND status = 'sent'
+                        )
+                        AND g.raw_json->>'startTimeGMT' >= to_char(NOW() - INTERVAL '48 hours', 'YYYY-MM-DD')
+                        ORDER BY g.raw_json->>'startTimeGMT' DESC
+                        LIMIT 10
+                    """)
+                    run_rows = cur.fetchall()
+
+            for activity_id, name, start_time in run_rows:
+                run_date = str(start_time or "")[:10]
+                ok = send_push(
+                    title="Run Synced",
+                    body=f"{name} - {run_date}",
+                    url="/running",
+                    event_type="sync_run",
+                )
+                if ok > 0:
+                    with get_connection() as conn:
+                        log_activity_sync(conn, source_platform="garmin",
+                            source_id=str(activity_id), destination="push",
+                            destination_id="push", rule_id=None, status="sent")
+                    push_sent += 1
+
+            # Workouts with no push notification (last 2 days)
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT we.hevy_id, we.hevy_title, we.workout_date
+                        FROM workout_enrichment we
+                        WHERE we.status IN ('enriched', 'uploaded')
+                          AND we.hevy_id NOT IN (
+                            SELECT source_id FROM activity_sync_log
+                            WHERE source_platform = 'hevy' AND destination = 'push' AND status = 'sent'
+                          )
+                          AND we.workout_date >= CURRENT_DATE - INTERVAL '2 days'
+                        ORDER BY we.workout_date DESC
+                        LIMIT 10
+                    """)
+                    workout_rows = cur.fetchall()
+
+            for hevy_id, title, workout_date in workout_rows:
+                ok = send_push(
+                    title="Workout Synced",
+                    body=f"{title} - {str(workout_date)[:10]}",
+                    url="/workouts",
+                    event_type="sync_workout",
+                )
+                if ok > 0:
+                    with get_connection() as conn:
+                        log_activity_sync(conn, source_platform="hevy",
+                            source_id=hevy_id, destination="push",
+                            destination_id="push", rule_id=None, status="sent")
+                    push_sent += 1
+
+            if push_sent:
+                print(f"  Sent: {push_sent} push notifications")
+            else:
+                print(f"  No pending push notifications")
+        else:
+            print(f"  Push not configured, skipping")
+    except Exception as e:
+        print(f"  Push backfill error (non-fatal): {e}")
+
     # --- Reconcile Strava syncs ---
     print(f"\nReconciling Strava syncs...")
     try:
