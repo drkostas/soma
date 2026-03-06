@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface CadenceStrideEntry {
   date: string;
@@ -31,27 +32,8 @@ export function CadenceStrideChart({
     );
   }
 
-  const spanDays = data.length > 1
-    ? (new Date(data[data.length - 1].date).getTime() - new Date(data[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    const unique = data
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-    if (unique.length > 8) {
-      const step = Math.ceil(unique.length / 8);
-      return unique.filter((_, i) => i % step === 0 || i === unique.length - 1);
-    }
-    return unique;
-  })() : undefined;
+  const longRange = isLongRange(data);
+  const tickDates = buildChartTicks(data);
 
   return (
     <ResponsiveContainer width="100%" height={250}>
@@ -61,12 +43,7 @@ export function CadenceStrideChart({
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(v) => {
-            const d = new Date(v);
-            return longRange
-              ? d.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(v) => formatChartTick(v, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(data.length / 6)) })}
         />
         <YAxis
@@ -102,10 +79,10 @@ export function CadenceStrideChart({
         <ReferenceLine
           yAxisId="cadence"
           y={180}
-          stroke="#22c55e"
+          stroke="oklch(62% 0.17 142)"
           strokeDasharray="4 4"
           strokeWidth={1.5}
-          label={{ value: "180 spm", position: "left", fontSize: 10, fill: "#22c55e" }}
+          label={{ value: "180 spm", position: "left", fontSize: 10, fill: "oklch(62% 0.17 142)" }}
         />
         <Bar
           yAxisId="cadence"
@@ -118,7 +95,7 @@ export function CadenceStrideChart({
           yAxisId="stride"
           type="monotone"
           dataKey="stride"
-          stroke="#f59e0b"
+          stroke="oklch(80% 0.18 80)"
           strokeWidth={2}
           dot={false}
         />

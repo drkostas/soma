@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface WeeklyEntry {
   week: string;
@@ -29,27 +30,9 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
   const avgKm =
     data.reduce((s, d) => s + d.km, 0) / data.length;
 
-  const spanDays = data.length > 1
-    ? (new Date(data[data.length - 1].week).getTime() - new Date(data[0].week).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    const unique = data
-      .filter((d) => {
-        const key = new Date(d.week).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.week);
-    if (unique.length > 8) {
-      const step = Math.ceil(unique.length / 8);
-      return unique.filter((_, i) => i % step === 0 || i === unique.length - 1);
-    }
-    return unique;
-  })() : undefined;
+  const weekAsDate = data.map((d) => ({ date: d.week }));
+  const longRange = isLongRange(weekAsDate);
+  const tickDates = buildChartTicks(weekAsDate);
 
   return (
     <ResponsiveContainer width="100%" height={250}>
@@ -59,12 +42,7 @@ export function WeeklyDistanceChart({ data }: { data: WeeklyEntry[] }) {
           dataKey="week"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(v) => {
-            const d = new Date(v);
-            return longRange
-              ? d.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(v) => formatChartTick(v, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(data.length / 6)) })}
         />
         <YAxis className="text-xs" />

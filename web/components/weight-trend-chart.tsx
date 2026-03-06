@@ -9,7 +9,9 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface WeightPoint {
   date: string;
@@ -30,22 +32,10 @@ export function WeightTrendChart({ data }: { data: WeightPoint[] }) {
   const minF = fats.length > 0 ? Math.floor(Math.min(...fats) - 1) : 15;
   const maxF = fats.length > 0 ? Math.ceil(Math.max(...fats) + 1) : 25;
 
-  const spanDays = recent.length > 1
-    ? (new Date(recent[recent.length - 1].date).getTime() - new Date(recent[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
+  const avgWeight = Math.round(weights.reduce((s, w) => s + w, 0) / weights.length * 10) / 10;
 
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return recent
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(recent);
+  const tickDates = buildChartTicks(recent);
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -54,12 +44,7 @@ export function WeightTrendChart({ data }: { data: WeightPoint[] }) {
         <XAxis
           dataKey="date"
           tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(recent.length / 6), 1) })}
         />
         <YAxis
@@ -103,19 +88,20 @@ export function WeightTrendChart({ data }: { data: WeightPoint[] }) {
             yAxisId="bf"
             type="monotone"
             dataKey="body_fat"
-            stroke="hsl(280, 60%, 65%)"
-            fill="hsl(280, 60%, 65%)"
+            stroke="oklch(65% 0.18 270)"
+            fill="oklch(65% 0.18 270)"
             fillOpacity={0.15}
             strokeWidth={1}
             connectNulls
             dot={false}
           />
         )}
+        <ReferenceLine yAxisId="weight" y={avgWeight} stroke="oklch(80% 0.18 87)" strokeDasharray="4 2" strokeOpacity={0.5} label={{ value: `avg ${avgWeight}kg`, position: "insideTopRight", fontSize: 9, fill: "oklch(80% 0.18 87)" }} />
         <Line
           yAxisId="weight"
           type="monotone"
           dataKey="weight_kg"
-          stroke="hsl(60, 70%, 60%)"
+          stroke="oklch(80% 0.18 87)"
           strokeWidth={2}
           dot={false}
           connectNulls

@@ -11,6 +11,7 @@ import {
   Cell,
   ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface ReadinessDataPoint {
   date: string;
@@ -19,9 +20,9 @@ interface ReadinessDataPoint {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 70) return "hsl(142, 71%, 45%)"; // green
-  if (score >= 40) return "hsl(48, 96%, 53%)";  // yellow
-  return "hsl(0, 84%, 60%)";                     // red
+  if (score >= 70) return "oklch(62% 0.17 142)"; // green
+  if (score >= 40) return "oklch(80% 0.18 87)";  // yellow
+  return "oklch(60% 0.22 25)";                    // red
 }
 
 export function TrainingReadinessChart({ data }: { data: ReadinessDataPoint[] }) {
@@ -33,22 +34,8 @@ export function TrainingReadinessChart({ data }: { data: ReadinessDataPoint[] })
     level: d.level,
   }));
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -57,12 +44,7 @@ export function TrainingReadinessChart({ data }: { data: ReadinessDataPoint[] })
         <XAxis
           dataKey="date"
           tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis
@@ -91,8 +73,20 @@ export function TrainingReadinessChart({ data }: { data: ReadinessDataPoint[] })
             "Score",
           ]}
         />
-        <ReferenceLine y={70} stroke="hsl(142, 71%, 45%)" strokeDasharray="3 3" opacity={0.5} />
-        <ReferenceLine y={40} stroke="hsl(48, 96%, 53%)" strokeDasharray="3 3" opacity={0.5} />
+        <ReferenceLine
+          y={70}
+          stroke="oklch(62% 0.17 142)"
+          strokeDasharray="3 3"
+          strokeOpacity={0.5}
+          label={{ value: "Ready", position: "insideTopRight", fontSize: 9, fill: "oklch(62% 0.17 142)" }}
+        />
+        <ReferenceLine
+          y={40}
+          stroke="oklch(80% 0.18 87)"
+          strokeDasharray="3 3"
+          strokeOpacity={0.5}
+          label={{ value: "Moderate", position: "insideTopRight", fontSize: 9, fill: "oklch(80% 0.18 87)" }}
+        />
         <Bar dataKey="score" radius={[3, 3, 0, 0]}>
           {chartData.map((entry, index) => (
             <Cell key={index} fill={scoreColor(entry.score)} opacity={0.7} />

@@ -10,6 +10,7 @@ import {
   Scatter,
   Line,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface PaceEntry {
   date: string;
@@ -21,6 +22,15 @@ function formatPace(mins: number) {
   const m = Math.floor(mins);
   const s = Math.round((mins - m) * 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function computeRadius(distanceKm: number) {
+  const MIN_R = 2;
+  const MAX_R = 7;
+  const MIN_D = 3;
+  const MAX_D = 15;
+  const clamped = Math.max(MIN_D, Math.min(MAX_D, distanceKm));
+  return MIN_R + ((clamped - MIN_D) / (MAX_D - MIN_D)) * (MAX_R - MIN_R);
 }
 
 function movingAverage(data: { pace: number }[], window: number) {
@@ -56,28 +66,8 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
   const minP = Math.floor(Math.min(...paces) - 0.3);
   const maxP = Math.ceil(Math.max(...paces) + 0.3);
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    const unique = chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-    // Sub-sample if too many ticks
-    if (unique.length > 8) {
-      const step = Math.ceil(unique.length / 8);
-      return unique.filter((_, i) => i % step === 0 || i === unique.length - 1);
-    }
-    return unique;
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -86,12 +76,7 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
         <XAxis
           dataKey="date"
           tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
-          tickFormatter={(d) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis
@@ -124,15 +109,22 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
         />
         <Scatter
           dataKey="pace"
-          fill="hsl(168, 70%, 45%)"
-          fillOpacity={0.4}
-          r={3}
+          fill="oklch(65% 0.14 175)"
           name="pace"
+          shape={(props: any) => (
+            <circle
+              cx={props.cx}
+              cy={props.cy}
+              r={computeRadius(props.payload.distance)}
+              fill={props.fill}
+              opacity={0.5}
+            />
+          )}
         />
         <Line
           type="monotone"
           dataKey="trend"
-          stroke="hsl(168, 70%, 55%)"
+          stroke="oklch(72% 0.14 175)"
           strokeWidth={2}
           dot={false}
           name="trend"

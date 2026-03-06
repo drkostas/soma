@@ -96,9 +96,25 @@ export function SyncButton() {
     if (state.status === "running") return;
     setState((prev) => ({ ...prev, status: "running" }));
     try {
-      await fetch("/api/sync", { method: "POST" });
+      const res = await fetch("/api/sync", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          // Already running — just let polling track it
+          return;
+        }
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          error: (data as { error?: string }).error ?? `Sync failed (${res.status})`,
+        }));
+      }
     } catch {
-      // Fast polling will pick up the actual status
+      setState((prev) => ({
+        ...prev,
+        status: "error",
+        error: "Network error — could not trigger sync",
+      }));
     }
   };
 
