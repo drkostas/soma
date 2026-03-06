@@ -30,7 +30,7 @@ export default function RootLayout({
             <DemoBanner repoUrl="https://github.com/drkostas/soma" />
           )}
           <Sidebar />
-          <main className={`ml-16 min-h-screen bg-background${isDemo ? " pt-8" : ""}`}>
+          <main className={`ml-0 md:ml-16 min-h-screen bg-background pb-16 md:pb-0${isDemo ? " pt-8" : ""}`}>
             {children}
           </main>
           <Toaster richColors />

@@ -23,25 +23,27 @@ function TimeRangeSelectorInner() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex flex-wrap gap-1">
-      {RANGES.map((r) => (
-        <button
-          key={r.value}
-          onClick={() => {
-            localStorage.setItem(STORAGE_KEY, r.value);
-            const params = new URLSearchParams(searchParams.toString());
-            params.set("range", r.value);
-            router.push(`?${params.toString()}`);
-          }}
-          className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-            current === r.value
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {r.label}
-        </button>
-      ))}
+    <div className="overflow-x-auto scrollbar-none -mx-1 px-1">
+      <div className="flex gap-1 w-max">
+        {RANGES.map((r) => (
+          <button
+            key={r.value}
+            onClick={() => {
+              localStorage.setItem(STORAGE_KEY, r.value);
+              const params = new URLSearchParams(searchParams.toString());
+              params.set("range", r.value);
+              router.push(`?${params.toString()}`);
+            }}
+            className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[36px] ${
+              current === r.value
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
