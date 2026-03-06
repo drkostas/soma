@@ -12,11 +12,13 @@ interface Props {
 
 export default function PlaylistClient({ spotifyConnected }: Props) {
   const [libraryAnalysed, setLibraryAnalysed] = useState(false);
-  const [activeTab, setActiveTab] = useState<"playlist" | "dj">(() => {
-    if (typeof window === "undefined") return "playlist";
+  const [activeTab, setActiveTab] = useState<"playlist" | "dj">("playlist");
+
+  // Restore persisted tab after mount to avoid hydration mismatch
+  useEffect(() => {
     const stored = localStorage.getItem("playlist_active_tab");
-    return stored === "dj" ? "dj" : "playlist";
-  });
+    if (stored === "dj") setActiveTab("dj");
+  }, []);
 
   // Check library status on mount
   useEffect(() => {
