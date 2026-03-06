@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/sidebar";
 import { DemoBanner } from "@/components/demo-banner";
 import { Toaster } from "sonner";
+import { SWRegister } from "@/components/sw-register";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -15,6 +16,24 @@ export const metadata: Metadata = {
     template: "Soma: %s",
   },
   description: "Science-driven personal health dashboard",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Soma",
+  },
+  icons: {
+    apple: "/icons/apple-touch-icon.png",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#10b981",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -35,6 +54,7 @@ export default function RootLayout({
           </main>
           <Toaster richColors />
         </TooltipProvider>
+        <SWRegister />
       </body>
     </html>
   );
