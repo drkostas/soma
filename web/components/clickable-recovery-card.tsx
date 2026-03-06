@@ -7,7 +7,7 @@ export function ClickableRecoveryCard({ children }: { children: React.ReactNode 
   const [open, setOpen] = useState(false);
   return (
     <>
-      <div onClick={() => setOpen(true)} className="cursor-pointer transition-colors hover:bg-muted/50 rounded-xl">
+      <div onClick={() => setOpen(true)} className="cursor-pointer transition-colors hover:bg-muted/50 active:scale-[0.99] rounded-xl">
         {children}
       </div>
       <StatDetailDialog metric="recovery" open={open} onOpenChange={setOpen} />

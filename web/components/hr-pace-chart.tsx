@@ -27,14 +27,14 @@ function formatPace(mins: number) {
 }
 
 const YEAR_COLORS: Record<string, string> = {
-  "2026": "#22d3ee",
-  "2025": "#4ade80",
-  "2024": "#facc15",
-  "2023": "#f97316",
-  "2022": "#a78bfa",
-  "2021": "#f472b6",
-  "2020": "#94a3b8",
-  "2019": "#6ee7b7",
+  "2026": "oklch(75% 0.14 195)",
+  "2025": "oklch(72% 0.19 150)",
+  "2024": "oklch(85% 0.17 90)",
+  "2023": "oklch(72% 0.19 50)",
+  "2022": "oklch(68% 0.16 285)",
+  "2021": "oklch(70% 0.18 350)",
+  "2020": "oklch(70% 0.02 250)",
+  "2019": "oklch(82% 0.15 165)",
 };
 
 export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
@@ -77,13 +77,13 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
     <div>
       <div className="flex flex-wrap gap-2 mb-2 justify-center">
         {years.map((year) => {
-          const color = YEAR_COLORS[year] || "#888";
+          const color = YEAR_COLORS[year] || "oklch(60% 0.02 250)";
           const active = !hidden.has(year);
           return (
             <button
               key={year}
               onClick={() => toggle(year)}
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer"
               style={{
                 color: active ? color : "var(--muted-foreground)",
                 borderColor: active ? color : "transparent",
@@ -141,7 +141,7 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
                 key={year}
                 name={year}
                 data={byYear.get(year)}
-                fill={YEAR_COLORS[year] || "#888"}
+                fill={YEAR_COLORS[year] || "oklch(60% 0.02 250)"}
                 fillOpacity={year === years[years.length - 1] ? 0.8 : 0.4}
               />
             );

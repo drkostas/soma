@@ -10,6 +10,8 @@ interface StatCardData {
   value: string | number;
   subtitle?: string;
   icon: React.ReactNode;
+  info?: string;
+  trend?: { value: number; label?: string } | null;
 }
 
 interface ClickableStatCardsProps {
@@ -34,6 +36,8 @@ export function ClickableStatCards({
             value={card.value}
             subtitle={card.subtitle}
             icon={card.icon}
+            info={card.info}
+            trend={card.trend}
             onClick={() => setOpenMetric(card.metric)}
           />
         ))}
@@ -48,6 +52,8 @@ export function ClickableStatCards({
             value={card.value}
             subtitle={card.subtitle}
             icon={card.icon}
+            info={card.info}
+            trend={card.trend}
             onClick={() => setOpenMetric(card.metric)}
           />
         ))}

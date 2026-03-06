@@ -177,7 +177,7 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
         <div className="flex flex-wrap gap-1.5 mb-3">
           <button
             onClick={() => { setTypeFilter(null); setPage(0); }}
-            className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
+            className={`px-3 py-2 min-h-[36px] rounded-full text-xs transition-colors ${
               !typeFilter ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent text-muted-foreground"
             }`}
           >
@@ -187,7 +187,7 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
             <button
               key={label}
               onClick={() => { setTypeFilter(label); setPage(0); }}
-              className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
+              className={`px-3 py-2 min-h-[36px] rounded-full text-xs transition-colors ${
                 typeFilter === label ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent text-muted-foreground"
               }`}
             >
@@ -295,41 +295,50 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
             <button
               onClick={() => setPage(Math.max(0, page - 1))}
               disabled={page === 0}
-              className="px-3 py-1.5 rounded border border-border text-xs hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-2 rounded border border-border text-xs hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Previous
             </button>
             <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 7) {
-                  pageNum = i;
-                } else if (page < 3) {
-                  pageNum = i;
-                } else if (page > totalPages - 4) {
-                  pageNum = totalPages - 7 + i;
-                } else {
-                  pageNum = page - 3 + i;
-                }
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setPage(pageNum)}
-                    className={`w-8 h-8 rounded text-xs transition-colors ${
-                      page === pageNum
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent"
-                    }`}
-                  >
-                    {pageNum + 1}
-                  </button>
+              {(() => {
+                const getVisiblePages = (): (number | "ellipsis")[] => {
+                  if (totalPages <= 5) {
+                    return Array.from({ length: totalPages }, (_, i) => i);
+                  }
+                  const pages: (number | "ellipsis")[] = [0];
+                  if (page > 2) pages.push("ellipsis");
+                  for (let i = Math.max(1, page - 1); i <= Math.min(totalPages - 2, page + 1); i++) {
+                    pages.push(i);
+                  }
+                  if (page < totalPages - 3) pages.push("ellipsis");
+                  if (totalPages > 1) pages.push(totalPages - 1);
+                  return pages;
+                };
+                return getVisiblePages().map((p, idx) =>
+                  p === "ellipsis" ? (
+                    <span key={`ellipsis-${idx}`} className="w-9 h-9 flex items-center justify-center text-xs text-muted-foreground">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`w-9 h-9 rounded text-xs transition-colors ${
+                        page === p
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-accent"
+                      }`}
+                    >
+                      {p + 1}
+                    </button>
+                  )
                 );
-              })}
+              })()}
             </div>
             <button
               onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
               disabled={page === totalPages - 1}
-              className="px-3 py-1.5 rounded border border-border text-xs hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-2 rounded border border-border text-xs hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>

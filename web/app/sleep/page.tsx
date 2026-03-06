@@ -485,7 +485,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             </div>
             {/* Sleep stage bars */}
             {lastNight.total > 0 && (
-              <div className="mt-4 flex h-3 rounded-full overflow-hidden">
+              <div className="mt-4 flex h-4 sm:h-3 rounded-full overflow-hidden">
                 <div className="bg-indigo-500" style={{ width: `${(lastNight.deep / lastNight.total) * 100}%` }} />
                 <div className="bg-indigo-300" style={{ width: `${(lastNight.light / lastNight.total) * 100}%` }} />
                 <div className="bg-purple-400" style={{ width: `${(lastNight.rem / lastNight.total) * 100}%` }} />

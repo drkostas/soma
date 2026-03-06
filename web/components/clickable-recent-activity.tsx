@@ -90,7 +90,7 @@ export function ClickableRecentActivity({ activities }: { activities: RecentActi
           return (
             <div
               key={i}
-              className="flex items-center gap-3 text-sm cursor-pointer hover:bg-accent/20 -mx-2 px-2 py-1 rounded transition-colors"
+              className="flex items-center gap-3 text-sm cursor-pointer hover:bg-accent/20 active:bg-accent/30 -mx-2 px-2 py-1 rounded transition-colors"
               onClick={() => {
                 if (isGym && a.workout_id) {
                   setSelectedWorkoutId(a.workout_id);

@@ -15,7 +15,7 @@ export function ClickableLastWorkout({
     <>
       <div
         onClick={() => setOpen(true)}
-        className="cursor-pointer transition-colors hover:bg-muted/50 rounded-xl"
+        className="cursor-pointer transition-colors hover:bg-muted/50 active:scale-[0.99] rounded-xl"
       >
         {children}
       </div>
