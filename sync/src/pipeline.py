@@ -298,8 +298,7 @@ def _backfill_telegram_notifications() -> int:
                 SELECT we.hevy_id, we.hevy_title, we.workout_date, h.raw_json
                 FROM workout_enrichment we
                 JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
-                WHERE COALESCE(we.telegram_sent, false) = false
-                  AND COALESCE(we.garmin_enriched, false) = true
+                WHERE we.status IN ('enriched', 'uploaded')
                   AND we.hevy_id NOT IN (
                     SELECT source_id FROM activity_sync_log
                     WHERE source_platform = 'hevy' AND destination = 'telegram' AND status = 'sent'
@@ -334,11 +333,6 @@ def _backfill_telegram_notifications() -> int:
         ok = send_image(image_bytes, caption=f"\U0001f4aa {title} — {date_str}", filename=f"{hevy_id}.png")
         if ok:
             with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "UPDATE workout_enrichment SET telegram_sent = true WHERE hevy_id = %s",
-                        (hevy_id,),
-                    )
                 log_activity_sync(
                     conn,
                     source_platform="hevy",
@@ -362,7 +356,7 @@ def _backfill_garmin_enrichment(garmin_client) -> int:
 
     Only runs when a hevy → garmin sync rule exists. Checks for 'uploaded'
     workouts that have a garmin_activity_id but were never enriched (tracked
-    via garmin_enriched flag).
+    via activity_sync_log destination='garmin_enrichment').
     """
     from garmin_client import rate_limited_call
 
@@ -387,7 +381,11 @@ def _backfill_garmin_enrichment(garmin_client) -> int:
                 JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
                 WHERE we.status = 'uploaded'
                   AND we.garmin_activity_id IS NOT NULL
-                  AND COALESCE(we.garmin_enriched, false) = false
+                  AND we.hevy_id NOT IN (
+                    SELECT source_id FROM activity_sync_log
+                    WHERE source_platform = 'hevy' AND destination = 'garmin_enrichment'
+                      AND status = 'sent'
+                  )
                 ORDER BY we.workout_date DESC
                 LIMIT 10
             """)
@@ -415,13 +413,17 @@ def _backfill_garmin_enrichment(garmin_client) -> int:
             raw, enrichment, hr_samples, hr_source or "unknown",
         )
 
-        # Mark as enriched
+        # Log enrichment for dedup
         with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE workout_enrichment SET garmin_enriched = true WHERE hevy_id = %s",
-                    (hevy_id,),
-                )
+            log_activity_sync(
+                conn,
+                source_platform="hevy",
+                source_id=hevy_id,
+                destination="garmin_enrichment",
+                destination_id=str(garmin_id),
+                rule_id=None,
+                status="sent",
+            )
         count += 1
 
     print(f"  Backfilled {count} Garmin activities")
@@ -518,11 +520,15 @@ def _upload_enriched_to_garmin(garmin_client) -> int:
                     raw, enrichment, hr_samples, hr_source or "unknown",
                 )
                 with get_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE workout_enrichment SET garmin_enriched = true WHERE hevy_id = %s",
-                            (hevy_id,),
-                        )
+                    log_activity_sync(
+                        conn,
+                        source_platform="hevy",
+                        source_id=hevy_id,
+                        destination="garmin_enrichment",
+                        destination_id=str(garmin_id),
+                        rule_id=garmin_rules[0]["id"],
+                        status="sent",
+                    )
                     log_activity_sync(
                         conn,
                         source_platform="hevy",
