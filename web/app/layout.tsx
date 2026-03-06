@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar";
 import { DemoBanner } from "@/components/demo-banner";
 import { Toaster } from "sonner";
 import { SWRegister } from "@/components/sw-register";
+import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -56,6 +57,7 @@ export default function RootLayout({
           <Toaster richColors />
         </TooltipProvider>
         <SWRegister />
+        <PWAInstallPrompt />
       </body>
     </html>
   );
