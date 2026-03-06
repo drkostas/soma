@@ -8,7 +8,9 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface CaloriePoint {
   date: string;
@@ -21,10 +23,12 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
 
   const recent = data.slice(-21);
 
-  const spanDays = recent.length > 1
-    ? (new Date(recent[recent.length - 1].date).getTime() - new Date(recent[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
+  const avgBmr = recent.length > 0
+    ? Math.round(recent.reduce((s, d) => s + d.bmr, 0) / recent.length)
+    : null;
+
+  const longRange = isLongRange(recent);
+  const tickDates = buildChartTicks(recent);
 
   return (
     <ResponsiveContainer width="100%" height={180}>
@@ -34,13 +38,8 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
-          interval={Math.max(Math.floor(recent.length / 5), 1)}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
+          {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(recent.length / 5), 1) })}
         />
         <YAxis
           className="text-[10px]"
@@ -48,6 +47,15 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
           width={45}
           tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
         />
+        {avgBmr !== null && (
+          <ReferenceLine
+            y={avgBmr}
+            stroke="var(--muted-foreground)"
+            strokeDasharray="4 2"
+            strokeOpacity={0.6}
+            label={{ value: `BMR ~${avgBmr}`, position: "insideTopRight", fontSize: 9, fill: "var(--muted-foreground)" }}
+          />
+        )}
         <Tooltip
           contentStyle={{
             background: "var(--card)",
@@ -81,8 +89,8 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
           type="monotone"
           dataKey="active"
           stackId="1"
-          stroke="hsl(25, 80%, 55%)"
-          fill="hsl(25, 80%, 55%)"
+          stroke="oklch(68% 0.19 45)"
+          fill="oklch(68% 0.19 45)"
           fillOpacity={0.4}
           strokeWidth={1.5}
         />

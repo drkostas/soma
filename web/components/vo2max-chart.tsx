@@ -8,7 +8,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface VO2Entry {
   date: string;
@@ -29,27 +31,12 @@ export function VO2MaxChart({ data }: { data: VO2Entry[] }) {
     vo2max: Number(d.vo2max),
   }));
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
+  const avgVo2 = chartData.length > 0
+    ? Number((chartData.reduce((s, d) => s + d.vo2max, 0) / chartData.length).toFixed(1))
+    : null;
 
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    const unique = chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-    if (unique.length > 8) {
-      const step = Math.ceil(unique.length / 8);
-      return unique.filter((_, i) => i % step === 0 || i === unique.length - 1);
-    }
-    return unique;
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -59,18 +46,22 @@ export function VO2MaxChart({ data }: { data: VO2Entry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
         <YAxis
           className="text-xs"
           domain={["dataMin - 1", "dataMax + 1"]}
         />
+        {avgVo2 !== null && (
+          <ReferenceLine
+            y={avgVo2}
+            stroke="oklch(62% 0.17 142)"
+            strokeDasharray="4 2"
+            strokeOpacity={0.5}
+            label={{ value: `avg ${avgVo2}`, position: "insideTopRight", fontSize: 9, fill: "oklch(62% 0.17 142)" }}
+          />
+        )}
         <Tooltip
           formatter={(value: any) => [`${value} ml/kg/min`, "VO2max"]}
           labelFormatter={(label) =>
@@ -90,7 +81,7 @@ export function VO2MaxChart({ data }: { data: VO2Entry[] }) {
         <Line
           type="monotone"
           dataKey="vo2max"
-          stroke="#22c55e"
+          stroke="oklch(62% 0.17 142)"
           strokeWidth={2}
           dot={{ r: 3 }}
           activeDot={{ r: 5 }}

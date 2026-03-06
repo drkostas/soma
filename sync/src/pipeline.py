@@ -208,25 +208,6 @@ def _enrich_garmin_activity(garmin_client, garmin_activity_id: int, hevy_id: str
                 image_bytes = resp.read()
                 upload_activity_image(garmin_client, garmin_activity_id, image_bytes)
                 print(f"    Image uploaded ({len(image_bytes) // 1024}KB)")
-                # Notify Telegram with the same image
-                try:
-                    from telegram_notify import send_image, is_configured
-                    if is_configured():
-                        title = raw_json.get("title", "Workout")
-                        workout_date = str(raw_json.get("start_time", ""))[:10]
-                        ok = send_image(image_bytes, caption=f"\U0001f4aa {title} — {workout_date}", filename=f"{hevy_id}.png")
-                        if ok:
-                            print(f"    Telegram: notified")
-                            with get_connection() as _conn:
-                                with _conn.cursor() as _cur:
-                                    _cur.execute(
-                                        "UPDATE workout_enrichment SET telegram_sent = true WHERE hevy_id = %s",
-                                        (hevy_id,),
-                                    )
-                        else:
-                            print(f"    Telegram: send_image returned False")
-                except Exception as _te:
-                    print(f"    Telegram: {_te}")
             else:
                 print(f"    Image skipped (HTTP {resp.status})")
     except Exception as e:
@@ -319,6 +300,10 @@ def _backfill_telegram_notifications() -> int:
                 JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
                 WHERE COALESCE(we.telegram_sent, false) = false
                   AND COALESCE(we.garmin_enriched, false) = true
+                  AND we.hevy_id NOT IN (
+                    SELECT source_id FROM activity_sync_log
+                    WHERE source_platform = 'hevy' AND destination = 'telegram' AND status = 'sent'
+                  )
                 ORDER BY we.workout_date DESC
                 LIMIT 20
             """)
@@ -354,6 +339,15 @@ def _backfill_telegram_notifications() -> int:
                         "UPDATE workout_enrichment SET telegram_sent = true WHERE hevy_id = %s",
                         (hevy_id,),
                     )
+                log_activity_sync(
+                    conn,
+                    source_platform="hevy",
+                    source_id=hevy_id,
+                    destination="telegram",
+                    destination_id="telegram",
+                    rule_id=None,
+                    status="sent",
+                )
             print(f"    Sent and marked")
             sent += 1
         else:
@@ -610,6 +604,7 @@ def _enrich_garmin_run_activities(garmin_client) -> int:
             print(f"    Description failed: {e}")
 
         # Upload share image
+        image_ok = False
         try:
             url = f"{os.environ.get('SOMA_WEB_URL', 'http://localhost:3456')}/api/activity/{activity_id}/image"
             req = urllib.request.Request(url, method="GET")
@@ -618,47 +613,27 @@ def _enrich_garmin_run_activities(garmin_client) -> int:
                     image_bytes = resp.read()
                     upload_activity_image(garmin_client, int(activity_id), image_bytes, filename=f"run_{activity_id}.png")
                     print(f"    Image uploaded ({len(image_bytes) // 1024} KB)")
-                    # Notify Telegram with the same image
-                    try:
-                        from telegram_notify import send_image, is_configured
-                        if is_configured():
-                            run_date = summary.get("startTimeGMT", "")[:10]
-                            ok = send_image(image_bytes, caption=f"\U0001f3c3 {name} — {run_date}", filename=f"run_{activity_id}.png")
-                            if ok:
-                                print(f"    Telegram: notified")
-                                with get_connection() as _conn:
-                                    log_activity_sync(
-                                        _conn,
-                                        source_platform="garmin",
-                                        source_id=str(activity_id),
-                                        destination="telegram",
-                                        destination_id=str(activity_id),
-                                        rule_id=None,
-                                        status="sent",
-                                    )
-                            else:
-                                print(f"    Telegram: send_image returned False")
-                    except Exception as _te:
-                        print(f"    Telegram: {_te}")
+                    image_ok = True
                 else:
                     print(f"    Image skipped (HTTP {resp.status})")
         except Exception as e:
             print(f"    Image skipped: {e}")
 
-        # Log to prevent re-processing
-        try:
-            with get_connection() as conn:
-                log_activity_sync(
-                    conn,
-                    source_platform="garmin",
-                    source_id=str(activity_id),
-                    destination="garmin_image",
-                    destination_id=str(activity_id),
-                    rule_id=None,
-                    status="sent",
-                )
-        except Exception as e:
-            print(f"    Log failed: {e}")
+        # Log to prevent re-processing (only on success so failures can be retried)
+        if image_ok:
+            try:
+                with get_connection() as conn:
+                    log_activity_sync(
+                        conn,
+                        source_platform="garmin",
+                        source_id=str(activity_id),
+                        destination="garmin_image",
+                        destination_id=str(activity_id),
+                        rule_id=None,
+                        status="sent",
+                    )
+            except Exception as e:
+                print(f"    Log failed: {e}")
 
         enriched += 1
 
@@ -716,15 +691,17 @@ def _route_garmin_activities(strava_client=None, garmin_client=None) -> int:
             "source_id": str(activity_id),
         }
 
-        results = execute_routes(
-            rules=rules,
-            source_platform="garmin",
-            activity_type=activity_type,
-            workout=workout,
-            hr_samples=None,
-            strava_client=strava_client,
-            garmin_client=garmin_client,
-        )
+        with get_connection() as conn:
+            results = execute_routes(
+                rules=rules,
+                source_platform="garmin",
+                activity_type=activity_type,
+                workout=workout,
+                hr_samples=None,
+                strava_client=strava_client,
+                garmin_client=garmin_client,
+                conn=conn,
+            )
 
         for r in results:
             if r["status"] == "sent":

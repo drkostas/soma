@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface ScoreEntry {
   date: string;
@@ -36,22 +37,8 @@ export function SleepScoreChart({ data }: { data: ScoreEntry[] }) {
     score: Number(d.score),
   }));
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -61,16 +48,11 @@ export function SleepScoreChart({ data }: { data: ScoreEntry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis className="text-xs" domain={[0, 100]} />
-        <ReferenceLine y={80} stroke="var(--muted-foreground)" strokeDasharray="3 3" />
+        <ReferenceLine y={80} stroke="var(--muted-foreground)" strokeDasharray="3 3" label={{ value: "Good", position: "insideTopRight", fontSize: 9, fill: "var(--muted-foreground)" }} />
         <Tooltip
           formatter={(value: any) => [`${value}`, "Sleep Score"]}
           labelFormatter={(label) =>
@@ -90,8 +72,8 @@ export function SleepScoreChart({ data }: { data: ScoreEntry[] }) {
         <Area
           type="monotone"
           dataKey="score"
-          stroke="#818cf8"
-          fill="#818cf8"
+          stroke="oklch(65% 0.18 270)"
+          fill="oklch(65% 0.18 270)"
           fillOpacity={0.2}
           strokeWidth={2}
         />

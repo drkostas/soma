@@ -18,10 +18,10 @@ interface ProgressEntry {
 }
 
 const COLORS: Record<string, string> = {
-  "Bench Press (Barbell)": "#f97316",
-  "Overhead Press (Barbell)": "#3b82f6",
-  "Leg Press (Machine)": "#22c55e",
-  "Iso-Lateral Row (Machine)": "#a855f7",
+  "Bench Press (Barbell)": "oklch(72% 0.19 50)",
+  "Overhead Press (Barbell)": "oklch(65% 0.18 250)",
+  "Leg Press (Machine)": "oklch(62% 0.17 142)",
+  "Iso-Lateral Row (Machine)": "oklch(58% 0.22 290)",
 };
 
 const SHORT_NAMES: Record<string, string> = {
@@ -61,7 +61,7 @@ export function ExerciseProgressChart({ data }: { data: ProgressEntry[] }) {
         const latest = points[points.length - 1];
         const first = points[0];
         const change = latest.weight - first.weight;
-        const color = COLORS[exercise] || "#888";
+        const color = COLORS[exercise] || "oklch(60% 0.02 250)";
         const name = SHORT_NAMES[exercise] || exercise;
 
         return (

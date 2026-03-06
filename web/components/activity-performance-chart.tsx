@@ -28,13 +28,13 @@ interface ActivityPerformanceChartProps {
 }
 
 const METRICS = [
-  { key: "pace", label: "Pace", color: "#60a5fa", unit: "/km" },
-  { key: "hr", label: "Heart Rate", color: "#ef4444", unit: " bpm" },
-  { key: "elevation", label: "Elevation", color: "#4ade80", unit: " m" },
-  { key: "cadence", label: "Cadence", color: "#f97316", unit: " spm" },
-  { key: "power", label: "Power", color: "#a78bfa", unit: " W" },
-  { key: "respiration", label: "Breathing", color: "#38bdf8", unit: " br/min" },
-  { key: "stride", label: "Stride", color: "#f472b6", unit: " cm" },
+  { key: "pace", label: "Pace", color: "oklch(70% 0.15 250)", unit: "/km" },
+  { key: "hr", label: "Heart Rate", color: "oklch(60% 0.22 25)", unit: " bpm" },
+  { key: "elevation", label: "Elevation", color: "oklch(72% 0.19 150)", unit: " m" },
+  { key: "cadence", label: "Cadence", color: "oklch(72% 0.19 50)", unit: " spm" },
+  { key: "power", label: "Power", color: "oklch(68% 0.16 285)", unit: " W" },
+  { key: "respiration", label: "Breathing", color: "oklch(72% 0.15 230)", unit: " br/min" },
+  { key: "stride", label: "Stride", color: "oklch(70% 0.18 350)", unit: " cm" },
 ] as const;
 
 type MetricKey = (typeof METRICS)[number]["key"];
@@ -311,7 +311,7 @@ export function ActivityPerformanceChart({
               reversed
               tickFormatter={(v: number) => formatPaceValue(v)}
               tick={{ fontSize: 10 }}
-              stroke="#60a5fa"
+              stroke="oklch(70% 0.15 250)"
               tickLine={false}
               axisLine={false}
               width={40}
@@ -348,7 +348,7 @@ export function ActivityPerformanceChart({
               orientation={showRightAxis ? "left" : "right"}
               domain={cadenceDomain}
               tick={{ fontSize: 10 }}
-              stroke="#f97316"
+              stroke="oklch(72% 0.19 50)"
               tickLine={false}
               axisLine={false}
               width={35}
@@ -363,7 +363,7 @@ export function ActivityPerformanceChart({
               orientation={showRightAxis ? "left" : "right"}
               domain={strideDomain}
               tick={{ fontSize: 10 }}
-              stroke="#f472b6"
+              stroke="oklch(70% 0.18 350)"
               tickLine={false}
               axisLine={false}
               width={35}
@@ -388,9 +388,9 @@ export function ActivityPerformanceChart({
             <Area
               yAxisId="elevation"
               dataKey="elevation"
-              fill="#4ade80"
+              fill="oklch(72% 0.19 150)"
               fillOpacity={0.12}
-              stroke="#4ade80"
+              stroke="oklch(72% 0.19 150)"
               strokeWidth={1}
               strokeOpacity={0.4}
               dot={false}
@@ -404,7 +404,7 @@ export function ActivityPerformanceChart({
             <Line
               yAxisId="pace"
               dataKey="pace"
-              stroke="#60a5fa"
+              stroke="oklch(70% 0.15 250)"
               strokeWidth={1.5}
               dot={false}
               isAnimationActive={false}
@@ -417,7 +417,7 @@ export function ActivityPerformanceChart({
             <Line
               yAxisId="right"
               dataKey="hr"
-              stroke="#ef4444"
+              stroke="oklch(60% 0.22 25)"
               strokeWidth={1.5}
               dot={false}
               isAnimationActive={false}
@@ -430,7 +430,7 @@ export function ActivityPerformanceChart({
             <Line
               yAxisId="cadence"
               dataKey="cadence"
-              stroke="#f97316"
+              stroke="oklch(72% 0.19 50)"
               strokeWidth={1.5}
               dot={false}
               isAnimationActive={false}
@@ -443,7 +443,7 @@ export function ActivityPerformanceChart({
             <Line
               yAxisId="right"
               dataKey="power"
-              stroke="#a78bfa"
+              stroke="oklch(68% 0.16 285)"
               strokeWidth={1.5}
               dot={false}
               isAnimationActive={false}
@@ -456,7 +456,7 @@ export function ActivityPerformanceChart({
             <Line
               yAxisId="right"
               dataKey="respiration"
-              stroke="#38bdf8"
+              stroke="oklch(72% 0.15 230)"
               strokeWidth={1.5}
               dot={false}
               isAnimationActive={false}
@@ -469,7 +469,7 @@ export function ActivityPerformanceChart({
             <Line
               yAxisId="stride"
               dataKey="stride"
-              stroke="#f472b6"
+              stroke="oklch(70% 0.18 350)"
               strokeWidth={1.5}
               dot={false}
               isAnimationActive={false}

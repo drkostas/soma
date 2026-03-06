@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface RespirationEntry {
   date: string;
@@ -28,10 +29,6 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
   }
 
   const filtered = data.filter((d) => d.sleep_resp && Number(d.sleep_resp) > 0);
-  const spanDays = filtered.length > 1
-    ? (new Date(filtered[filtered.length - 1].date).getTime() - new Date(filtered[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
 
   const chartData = filtered.map((d) => ({
       date: d.date,
@@ -47,17 +44,8 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
   const minVal = Math.max(Math.floor(Math.min(...allVals) - 2), 0);
   const maxVal = Math.ceil(Math.max(...allVals) + 2);
 
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={180}>
@@ -70,12 +58,7 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
         <YAxis
@@ -104,8 +87,8 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
         <Area
           type="monotone"
           dataKey="sleep"
-          stroke="#38bdf8"
-          fill="#38bdf8"
+          stroke="oklch(72% 0.15 230)"
+          fill="oklch(72% 0.15 230)"
           fillOpacity={0.1}
           strokeWidth={2}
           dot={false}
@@ -114,7 +97,7 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
         <Area
           type="monotone"
           dataKey="awake"
-          stroke="#94a3b8"
+          stroke="oklch(70% 0.02 250)"
           fill="transparent"
           fillOpacity={0}
           strokeWidth={1}

@@ -66,11 +66,12 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
           }
           formatter={(value: any) => [Number(value).toLocaleString(), "Steps"]}
         />
-        <ReferenceLine y={goal} stroke="var(--muted-foreground)" strokeDasharray="4 4" opacity={0.5} />
+        <ReferenceLine y={goal} stroke="oklch(65% 0.18 220)" strokeDasharray="4 2" strokeOpacity={0.5}
+          label={{ value: "10K goal", position: "insideTopRight", fontSize: 9, fill: "oklch(65% 0.18 220)" }} />
         <Bar
           dataKey="steps"
           radius={[2, 2, 0, 0]}
-          fill="hsl(168, 70%, 45%)"
+          fill="oklch(65% 0.14 175)"
         />
       </BarChart>
     </ResponsiveContainer>

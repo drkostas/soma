@@ -9,6 +9,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "requests>=2.31",
     "fit-tool>=0.9.15",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]

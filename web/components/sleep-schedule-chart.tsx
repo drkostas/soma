@@ -9,6 +9,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface SleepSchedulePoint {
   date: string;
@@ -43,22 +44,46 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
   // Get last 30 data points
   const recent = chartData.slice(-30);
 
-  const spanDays = recent.length > 1
-    ? (new Date(recent[recent.length - 1].date).getTime() - new Date(recent[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
+  const longRange = isLongRange(recent);
+  const tickDates = buildChartTicks(recent);
 
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return recent
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  // Compute dynamic Y-axis domain from actual data
+  const bedtimes = recent.map((d) => d.bedtime).filter((v): v is number => v !== null);
+  const wakes = recent.map((d) => d.wake).filter((v): v is number => v !== null);
+  const allValues = [...bedtimes, ...wakes];
+
+  let domainMin: number;
+  let domainMax: number;
+
+  if (allValues.length === 0) {
+    domainMin = 5;
+    domainMax = 27;
+  } else {
+    const dataMin = Math.min(...allValues);
+    const dataMax = Math.max(...allValues);
+    // Pad by 1 hour on each side
+    domainMin = Math.floor(dataMin) - 1;
+    domainMax = Math.ceil(dataMax) + 1;
+    // Clamp to reasonable bounds: min at least 18 (6 PM) side for bedtime display is wrong —
+    // since wake times can be as low as 5 AM, we keep domainMin flexible but floor at 0
+    // For the reversed axis: lower number = top, higher = bottom
+    // Wake times (small numbers) should be at top, bedtimes (large numbers) at bottom
+    domainMin = Math.max(domainMin, 0);
+    domainMax = Math.min(domainMax, 33); // 9 AM next day max
+    // Ensure at least 6 hours span for readability
+    if (domainMax - domainMin < 6) {
+      const mid = (domainMin + domainMax) / 2;
+      domainMin = Math.floor(mid - 3);
+      domainMax = Math.ceil(mid + 3);
+    }
+  }
+
+  // Generate ticks every 2 hours within domain
+  const yTicks: number[] = [];
+  const firstTick = Math.ceil(domainMin / 2) * 2;
+  for (let t = firstTick; t <= domainMax; t += 2) {
+    yTicks.push(t);
+  }
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -68,24 +93,19 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(recent.length / 5), 1) })}
         />
         <YAxis
           className="text-[10px]"
           tickLine={false}
-          domain={[5, 27]}
+          domain={[domainMin, domainMax]}
           reversed
           tickFormatter={(h: number) => {
             const actual = h >= 24 ? h - 24 : h;
             return formatHour(actual);
           }}
-          ticks={[7, 9, 22, 24, 26]}
+          ticks={yTicks}
           width={60}
         />
         <Tooltip
@@ -97,7 +117,7 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
             color: "var(--card-foreground)",
           }}
           labelFormatter={(d: any) =>
-            new Date(String(d)).toLocaleDateString("en-US", {
+            new Date(d instanceof Date ? d.toISOString() : String(d)).toLocaleDateString("en-US", {
               weekday: "short",
               month: "short",
               day: "numeric",
@@ -113,8 +133,8 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
         <Area
           type="monotone"
           dataKey="bedtime"
-          stroke="hsl(250, 60%, 55%)"
-          fill="hsl(250, 60%, 55%)"
+          stroke="oklch(50% 0.22 275)"
+          fill="oklch(50% 0.22 275)"
           fillOpacity={0.15}
           strokeWidth={2}
           dot={false}
@@ -123,8 +143,8 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
         <Area
           type="monotone"
           dataKey="wake"
-          stroke="hsl(40, 80%, 55%)"
-          fill="hsl(40, 80%, 55%)"
+          stroke="oklch(80% 0.16 75)"
+          fill="oklch(80% 0.16 75)"
           fillOpacity={0.15}
           strokeWidth={2}
           dot={false}

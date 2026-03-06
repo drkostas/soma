@@ -8,7 +8,9 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface StressPoint {
   date: string;
@@ -25,30 +27,16 @@ export function StressChart({ data }: { data: StressPoint[] }) {
     max: Number(d.max_stress),
   }));
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={200}>
       <AreaChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
         <defs>
           <linearGradient id="stressGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="hsl(48, 96%, 53%)" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="hsl(48, 96%, 53%)" stopOpacity={0} />
+            <stop offset="5%" stopColor="oklch(85% 0.18 90)" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="oklch(85% 0.18 90)" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
@@ -56,12 +44,7 @@ export function StressChart({ data }: { data: StressPoint[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 5), 1) })}
         />
         <YAxis
@@ -69,6 +52,27 @@ export function StressChart({ data }: { data: StressPoint[] }) {
           tickLine={false}
           domain={[0, 100]}
           width={30}
+        />
+        <ReferenceLine
+          y={25}
+          stroke="oklch(65% 0.18 220)"
+          strokeDasharray="3 3"
+          strokeOpacity={0.4}
+          label={{ value: "low", position: "insideTopRight", fontSize: 8, fill: "oklch(65% 0.18 220)" }}
+        />
+        <ReferenceLine
+          y={50}
+          stroke="oklch(80% 0.18 87)"
+          strokeDasharray="3 3"
+          strokeOpacity={0.5}
+          label={{ value: "med", position: "insideTopRight", fontSize: 8, fill: "oklch(80% 0.18 87)" }}
+        />
+        <ReferenceLine
+          y={75}
+          stroke="oklch(60% 0.22 25)"
+          strokeDasharray="3 3"
+          strokeOpacity={0.5}
+          label={{ value: "high", position: "insideTopRight", fontSize: 8, fill: "oklch(60% 0.22 25)" }}
         />
         <Tooltip
           contentStyle={{
@@ -93,7 +97,7 @@ export function StressChart({ data }: { data: StressPoint[] }) {
         <Area
           type="monotone"
           dataKey="max"
-          stroke="hsl(0, 70%, 55%)"
+          stroke="oklch(55% 0.20 25)"
           fill="none"
           strokeWidth={1}
           strokeDasharray="3 3"
@@ -103,7 +107,7 @@ export function StressChart({ data }: { data: StressPoint[] }) {
         <Area
           type="monotone"
           dataKey="avg"
-          stroke="hsl(48, 96%, 53%)"
+          stroke="oklch(85% 0.18 90)"
           fill="url(#stressGrad)"
           strokeWidth={2}
           dot={false}

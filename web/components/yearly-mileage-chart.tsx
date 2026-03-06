@@ -18,14 +18,14 @@ interface YearlyData {
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const YEAR_COLORS = [
-  "#22d3ee", // cyan (most recent)
-  "#4ade80", // green
-  "#facc15", // yellow
-  "#f97316", // orange
-  "#a78bfa", // purple
-  "#f472b6", // pink
-  "#94a3b8", // slate
-  "#6ee7b7", // emerald
+  "oklch(75% 0.14 195)", // cyan (most recent)
+  "oklch(72% 0.19 150)", // green
+  "oklch(85% 0.17 90)", // yellow
+  "oklch(72% 0.19 50)", // orange
+  "oklch(68% 0.16 285)", // purple
+  "oklch(70% 0.18 350)", // pink
+  "oklch(70% 0.02 250)", // slate
+  "oklch(82% 0.15 165)", // emerald
 ];
 
 export function YearlyMileageChart({

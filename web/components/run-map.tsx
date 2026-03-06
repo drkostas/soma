@@ -186,6 +186,40 @@ export function RunMap({ points, height = 340 }: RunMapProps) {
           <span style={{ fontSize: 9, color: "#00e5ff" }}>Slow</span>
         </div>
       </div>
+
+      {/* Map attribution — required by CartoDB terms */}
+      <div style={{
+        position: "absolute",
+        bottom: 4,
+        right: 4,
+        fontSize: 9,
+        color: "rgba(255,255,255,0.5)",
+        background: "rgba(0,0,0,0.3)",
+        padding: "1px 4px",
+        borderRadius: 3,
+        zIndex: 10,
+        pointerEvents: "none",
+      }}>
+        {"© "}
+        <a
+          href="https://carto.com"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: "inherit", textDecoration: "underline", pointerEvents: "auto" }}
+        >
+          CartoDB
+        </a>
+        {" | © "}
+        <a
+          href="https://openstreetmap.org"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: "inherit", textDecoration: "underline", pointerEvents: "auto" }}
+        >
+          OpenStreetMap
+        </a>
+        {" contributors"}
+      </div>
     </div>
   );
 }

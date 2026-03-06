@@ -8,6 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  LabelList,
 } from "recharts";
 
 interface MonthlyActivityEntry {
@@ -16,16 +17,16 @@ interface MonthlyActivityEntry {
 }
 
 const SPORT_COLORS: Record<string, string> = {
-  Kiteboarding: "#22d3ee",
-  Snowboarding: "#93c5fd",
-  Hiking: "#4ade80",
-  "E-Bike": "#facc15",
-  Swimming: "#60a5fa",
-  Walking: "#34d399",
-  Cycling: "#fbbf24",
-  Cardio: "#f87171",
-  SUP: "#38bdf8",
-  Other: "#a78bfa",
+  Kiteboarding: "oklch(75% 0.14 195)",
+  Snowboarding: "oklch(80% 0.11 250)",
+  Hiking: "oklch(72% 0.19 150)",
+  "E-Bike": "oklch(85% 0.17 90)",
+  Swimming: "oklch(70% 0.15 250)",
+  Walking: "oklch(72% 0.17 165)",
+  Cycling: "oklch(83% 0.17 87)",
+  Cardio: "oklch(68% 0.19 25)",
+  SUP: "oklch(72% 0.15 230)",
+  Other: "oklch(68% 0.16 285)",
 };
 
 export function MonthlyActivityChart({
@@ -42,6 +43,11 @@ export function MonthlyActivityChart({
       </div>
     );
   }
+
+  const enriched = data.map(d => ({
+    ...d,
+    _total: sports.reduce((sum, sport) => sum + (Number(d[sport]) || 0), 0),
+  }));
 
   const tickMonths = (() => {
     if (data.length <= 12) return undefined;
@@ -62,7 +68,7 @@ export function MonthlyActivityChart({
 
   return (
     <ResponsiveContainer width="100%" height={250}>
-      <BarChart data={data} margin={{ bottom: 10, left: 0 }}>
+      <BarChart data={enriched} margin={{ bottom: 10, left: 0, top: 16 }}>
         <XAxis
           dataKey="month"
           className="text-xs"
@@ -98,14 +104,23 @@ export function MonthlyActivityChart({
           iconType="circle"
           iconSize={8}
         />
-        {sports.map((sport) => (
+        {sports.map((sport, idx) => (
           <Bar
             key={sport}
             dataKey={sport}
             stackId="a"
             fill={SPORT_COLORS[sport] || "var(--primary)"}
-            radius={sport === sports[sports.length - 1] ? [2, 2, 0, 0] : [0, 0, 0, 0]}
-          />
+            radius={idx === sports.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]}
+          >
+            {idx === sports.length - 1 && (
+              <LabelList
+                dataKey="_total"
+                position="top"
+                style={{ fontSize: 9, fill: "var(--muted-foreground)" }}
+                formatter={(v: unknown) => (typeof v === "number" && v > 0) ? String(v) : ""}
+              />
+            )}
+          </Bar>
         ))}
       </BarChart>
     </ResponsiveContainer>

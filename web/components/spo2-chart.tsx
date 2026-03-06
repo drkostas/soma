@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface SpO2Entry {
   date: string;
@@ -28,10 +29,6 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
   }
 
   const filtered = data.filter((d) => d.avg_spo2 && Number(d.avg_spo2) > 0);
-  const spanDays = filtered.length > 1
-    ? (new Date(filtered[filtered.length - 1].date).getTime() - new Date(filtered[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
 
   const chartData = filtered.map((d) => ({
       date: d.date,
@@ -43,19 +40,11 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
   const allVals = chartData.flatMap((d) =>
     [d.avg, d.low, d.sleep].filter((v): v is number => v !== null)
   );
+  if (!allVals.length) return <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">No SpO2 data</div>;
   const minVal = Math.max(Math.floor(Math.min(...allVals) - 2), 80);
 
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -68,12 +57,7 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
         <YAxis
@@ -100,15 +84,16 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
         />
         <ReferenceLine
           y={95}
-          stroke="#4ade80"
+          stroke="oklch(62% 0.17 142)"
           strokeDasharray="3 3"
-          strokeOpacity={0.4}
+          strokeOpacity={0.5}
+          label={{ value: "95% normal", position: "insideTopRight", fontSize: 9, fill: "oklch(62% 0.17 142)" }}
         />
         <Area
           type="monotone"
           dataKey="avg"
-          stroke="#60a5fa"
-          fill="#60a5fa"
+          stroke="oklch(70% 0.15 250)"
+          fill="oklch(70% 0.15 250)"
           fillOpacity={0.08}
           strokeWidth={2}
           dot={false}
@@ -117,7 +102,7 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
         <Area
           type="monotone"
           dataKey="sleep"
-          stroke="#a78bfa"
+          stroke="oklch(68% 0.16 285)"
           fill="transparent"
           fillOpacity={0}
           strokeWidth={1.5}
@@ -128,7 +113,7 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
         <Area
           type="monotone"
           dataKey="low"
-          stroke="#f87171"
+          stroke="oklch(68% 0.19 25)"
           fill="transparent"
           fillOpacity={0}
           strokeWidth={1}

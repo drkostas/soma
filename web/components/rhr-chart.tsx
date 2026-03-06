@@ -8,7 +8,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface RHREntry {
   date: string;
@@ -29,22 +31,12 @@ export function RHRChart({ data }: { data: RHREntry[] }) {
     rhr: Number(d.rhr),
   }));
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
+  const avgRhr = chartData.length > 0
+    ? Math.round(chartData.reduce((s, d) => s + d.rhr, 0) / chartData.length)
+    : null;
 
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -54,15 +46,19 @@ export function RHRChart({ data }: { data: RHREntry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis className="text-xs" domain={["dataMin - 2", "dataMax + 2"]} />
+        {avgRhr !== null && (
+          <ReferenceLine
+            y={avgRhr}
+            stroke="oklch(60% 0.22 25)"
+            strokeDasharray="4 2"
+            strokeOpacity={0.5}
+            label={{ value: `avg ${avgRhr}`, position: "insideTopRight", fontSize: 9, fill: "oklch(60% 0.22 25)" }}
+          />
+        )}
         <Tooltip
           formatter={(value: any) => [`${value} bpm`, "Resting HR"]}
           labelFormatter={(label) =>
@@ -82,7 +78,7 @@ export function RHRChart({ data }: { data: RHREntry[] }) {
         <Line
           type="monotone"
           dataKey="rhr"
-          stroke="#f87171"
+          stroke="oklch(68% 0.19 25)"
           strokeWidth={2}
           dot={{ r: 3 }}
           activeDot={{ r: 5 }}
