@@ -75,6 +75,14 @@ function msToMinSec(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+function formatElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  return `${m}m ${s % 60}s`;
+}
+
 function loadArray(key: string, fallback: string[]): string[] {
   if (typeof window === "undefined") return fallback;
   const stored = localStorage.getItem(key) ?? "";
@@ -112,8 +120,28 @@ export default function LiveDjTab() {
     return parseFloat(localStorage.getItem("dj_genre_threshold") ?? "0.03") || 0.03;
   });
   const [status, setStatus] = useState<DjStatus>({ state: "stopped" });
+  const [showHelp, setShowHelp] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const sessionStartRef = useRef<number | null>(null);
   const isRunning = status.state === "running" || status.state === "starting";
+
+  // Tick every second so the "polled N ago" display stays current
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Track session start/stop for elapsed time display
+  useEffect(() => {
+    if (isRunning) {
+      if (sessionStartRef.current === null) {
+        sessionStartRef.current = Date.now();
+      }
+    } else {
+      sessionStartRef.current = null;
+    }
+  }, [isRunning]);
 
   // Persist settings
   useEffect(() => { localStorage.setItem("dj_offset_mode", offsetMode); }, [offsetMode]);
@@ -184,6 +212,57 @@ export default function LiveDjTab() {
     }
   }
 
+  async function handleSkip() {
+    if (!isRunning) return;
+    try {
+      const res = await fetch("/api/playlist/dj/skip", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to skip");
+      toast.success("Skipped to next track");
+      void pollStatus();
+    } catch {
+      toast.error("Failed to skip track");
+    }
+  }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      switch (e.key) {
+        case " ":
+          e.preventDefault();
+          if (isRunning) void handleStop();
+          else void handleStart();
+          break;
+        case "n":
+        case "N":
+          if (isRunning) void handleSkip();
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          setOffsetValues(prev => ({
+            ...prev,
+            [offsetMode]: Math.min(prev[offsetMode] + 5, 30),
+          }));
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          setOffsetValues(prev => ({
+            ...prev,
+            [offsetMode]: Math.max(prev[offsetMode] - 5, -30),
+          }));
+          break;
+        case "?":
+          setShowHelp(h => !h);
+          break;
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
   // Resume polling if already running (page reload)
   useEffect(() => {
     void pollStatus().then(() => {
@@ -198,15 +277,23 @@ export default function LiveDjTab() {
   }, [pollStatus]);
 
   return (
-    <div className="p-4">
+    <div className={cn(
+      "p-4",
+      !isRunning && "flex items-start justify-center pt-[8vh]"
+    )}>
       <div className={cn(
         "flex gap-4",
-        isRunning ? "items-start" : "flex-col max-w-sm"
+        isRunning ? "items-start" : "flex-col w-full max-w-md"
       )}>
         {/* Settings panel */}
         <div className={cn("space-y-4 shrink-0", isRunning && "w-72")}>
+          {!isRunning && (
+            <h2 className="text-lg font-semibold tracking-tight">Live DJ</h2>
+          )}
           <div className="text-sm text-muted-foreground">
-            Live DJ polls your Garmin HR and automatically queues the next song to match your effort.
+            {isRunning
+              ? "Live DJ is matching songs to your heart rate."
+              : "Polls your Garmin HR in real time and automatically queues songs that match your effort."}
           </div>
 
           {/* HR settings */}
@@ -404,6 +491,11 @@ export default function LiveDjTab() {
               ▶ Start Live DJ
             </Button>
           )}
+
+          {/* Shortcuts hint */}
+          <div className="text-[10px] text-muted-foreground/40 select-none text-center">
+            Space: play/pause · N: next · ←→: offset · ?: help
+          </div>
         </div>
 
         {/* LIVE card */}
@@ -428,12 +520,47 @@ export default function LiveDjTab() {
                  status.state === "starting" ? "STARTING…" :
                  "LIVE"}
               </span>
-              {status.ts && (
-                <span className="text-xs text-muted-foreground/60 ml-auto">
-                  polled {Math.round((Date.now() / 1000 - status.ts) / 60)}m ago
-                </span>
-              )}
+              <span className="ml-auto flex items-center gap-2">
+                {sessionStartRef.current !== null && (
+                  <span className="text-xs text-muted-foreground">
+                    Session: {formatElapsed(Date.now() - sessionStartRef.current)}
+                  </span>
+                )}
+                {status.ts && (() => {
+                  const elapsedS = Math.floor(Date.now() / 1000 - status.ts);
+                  const label = elapsedS < 60
+                    ? `${elapsedS}s ago`
+                    : `${Math.floor(elapsedS / 60)}m ago`;
+                  return (
+                    <span className="text-xs text-muted-foreground/60">
+                      polled {label}
+                    </span>
+                  );
+                })()}
+              </span>
             </div>
+
+            {/* Session stats summary */}
+            {status.play_history && status.play_history.length > 0 && (() => {
+              const played = status.play_history.filter(e => e.status !== "queued");
+              if (played.length === 0) return null;
+              const matchPcts = played
+                .filter(e => e.track_bpm && e.target_bpm)
+                .map(e => Math.round(100 - (Math.abs(e.track_bpm! - e.target_bpm!) / e.target_bpm!) * 100));
+              const avgMatch = matchPcts.length > 0
+                ? Math.round(matchPcts.reduce((a, b) => a + b, 0) / matchPcts.length)
+                : null;
+              const hrs = (status.hr_history ?? []).map(p => p.hr).filter(h => h > 0);
+              const hrMin = hrs.length > 0 ? Math.min(...hrs) : null;
+              const hrMax = hrs.length > 0 ? Math.max(...hrs) : null;
+              return (
+                <div className="text-xs text-muted-foreground">
+                  {played.length} song{played.length !== 1 ? "s" : ""}
+                  {avgMatch !== null && <> · avg match: {avgMatch}%</>}
+                  {hrMin !== null && hrMax !== null && <> · HR range: {hrMin}–{hrMax}</>}
+                </div>
+              );
+            })()}
 
             {/* Error message */}
             {status.state === "error" && status.error && (
@@ -553,6 +680,41 @@ export default function LiveDjTab() {
           </div>
         )}
       </div>
+
+      {/* Shortcuts help overlay */}
+      {showHelp && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={() => setShowHelp(false)}
+        >
+          <div className="absolute inset-0 bg-black/60" />
+          <div
+            className="relative rounded-lg border bg-card p-5 shadow-lg max-w-xs w-full"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-sm font-medium mb-3">Keyboard shortcuts</div>
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+              <kbd className="px-1.5 py-0.5 rounded border bg-muted text-center font-mono text-[11px]">Space</kbd>
+              <span className="text-muted-foreground">Toggle play / pause</span>
+              <kbd className="px-1.5 py-0.5 rounded border bg-muted text-center font-mono text-[11px]">N</kbd>
+              <span className="text-muted-foreground">Skip to next song</span>
+              <kbd className="px-1.5 py-0.5 rounded border bg-muted text-center font-mono text-[11px]">←</kbd>
+              <span className="text-muted-foreground">Decrease BPM offset by 5</span>
+              <kbd className="px-1.5 py-0.5 rounded border bg-muted text-center font-mono text-[11px]">→</kbd>
+              <span className="text-muted-foreground">Increase BPM offset by 5</span>
+              <kbd className="px-1.5 py-0.5 rounded border bg-muted text-center font-mono text-[11px]">?</kbd>
+              <span className="text-muted-foreground">Toggle this help</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowHelp(false)}
+              className="mt-4 w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Press ? or click anywhere to close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
