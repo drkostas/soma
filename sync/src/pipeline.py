@@ -225,7 +225,8 @@ def _backfill_telegram_run_notifications() -> int:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT g.activity_id, g.raw_json->>'activityName' as name,
+                SELECT g.activity_id,
+                       COALESCE(g.raw_json->>'activityName', g.raw_json->>'name', 'Run') as name,
                        g.raw_json->>'startTimeGMT' as start_time
                 FROM garmin_activity_raw g
                 JOIN activity_sync_log img ON img.source_id = g.activity_id::text
@@ -235,8 +236,9 @@ def _backfill_telegram_run_notifications() -> int:
                     SELECT source_id FROM activity_sync_log
                     WHERE source_platform = 'garmin' AND destination = 'telegram' AND status = 'sent'
                 )
+                AND (g.raw_json->>'startTimeGMT')::timestamp >= NOW() - INTERVAL '3 days'
                 ORDER BY g.raw_json->>'startTimeGMT' DESC
-                LIMIT 20
+                LIMIT 5
             """)
             rows = cur.fetchall()
 
@@ -245,6 +247,7 @@ def _backfill_telegram_run_notifications() -> int:
 
     sent = 0
     for activity_id, name, start_time in rows:
+        name = name or "Run"
         run_date = str(start_time or "")[:10]
         print(f"  Telegram run backfill: {name} ({run_date})...")
         try:
@@ -303,8 +306,9 @@ def _backfill_telegram_notifications() -> int:
                     SELECT source_id FROM activity_sync_log
                     WHERE source_platform = 'hevy' AND destination = 'telegram' AND status = 'sent'
                   )
+                  AND we.workout_date >= CURRENT_DATE - INTERVAL '3 days'
                 ORDER BY we.workout_date DESC
-                LIMIT 20
+                LIMIT 5
             """)
             rows = cur.fetchall()
 
@@ -899,7 +903,8 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        SELECT g.activity_id, g.raw_json->>'activityName' as name,
+                        SELECT g.activity_id,
+                               COALESCE(g.raw_json->>'activityName', g.raw_json->>'name', 'Run') as name,
                                g.raw_json->>'startTimeGMT' as start_time
                         FROM garmin_activity_raw g
                         JOIN activity_sync_log img ON img.source_id = g.activity_id::text
@@ -909,7 +914,7 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
                             SELECT source_id FROM activity_sync_log
                             WHERE source_platform = 'garmin' AND destination = 'push' AND status = 'sent'
                         )
-                        AND g.raw_json->>'startTimeGMT' >= to_char(NOW() - INTERVAL '48 hours', 'YYYY-MM-DD')
+                        AND (g.raw_json->>'startTimeGMT')::timestamp >= NOW() - INTERVAL '48 hours'
                         ORDER BY g.raw_json->>'startTimeGMT' DESC
                         LIMIT 10
                     """)
