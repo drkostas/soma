@@ -106,7 +106,7 @@ export default function SongCard({ song, onExclude, onPreview, draggable: _dragg
             <div className="h-full bg-primary/60 rounded-full" style={{ width: energyWidth }} />
           </div>
           {song.duration_ms > 0 && (
-            <span className="text-xs text-muted-foreground hidden group-hover:block">{durationStr}</span>
+            <span className="text-xs text-muted-foreground hidden md:block group-hover:block">{durationStr}</span>
           )}
         </div>
         {onAddToPumpUp && (

@@ -18,9 +18,9 @@ interface ProgressEntry {
 }
 
 const PALETTE = [
-  "#f97316", "#3b82f6", "#22c55e", "#a855f7", "#ef4444",
-  "#14b8a6", "#f59e0b", "#ec4899", "#6366f1", "#84cc16",
-  "#06b6d4", "#f43f5e", "#8b5cf6", "#10b981", "#e11d48",
+  "oklch(72% 0.19 50)", "oklch(65% 0.18 250)", "oklch(62% 0.17 142)", "oklch(58% 0.22 290)", "oklch(60% 0.22 25)",
+  "oklch(65% 0.14 175)", "oklch(80% 0.18 80)", "oklch(62% 0.22 350)", "oklch(55% 0.22 270)", "oklch(72% 0.19 125)",
+  "oklch(65% 0.15 195)", "oklch(60% 0.22 10)", "oklch(58% 0.22 280)", "oklch(62% 0.15 160)", "oklch(55% 0.24 10)",
 ];
 
 function formatDate(dateStr: string): string {
@@ -155,13 +155,14 @@ export function ConfigurableStrengthChart({
       )}
 
       {/* Charts */}
+      <div className={selected.length > 4 ? "max-h-[60vh] overflow-y-auto" : ""}>
       <div className="space-y-3">
         {Array.from(byExercise.entries()).map(([exercise, points]) => {
           const sorted = [...points].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
           const latest = sorted[sorted.length - 1];
           const first = sorted[0];
           const change = latest.weight - first.weight;
-          const color = colorMap[exercise] || "#888";
+          const color = colorMap[exercise] || "oklch(60% 0.02 250)";
 
           return (
             <div key={exercise}>
@@ -209,6 +210,7 @@ export function ConfigurableStrengthChart({
             Select exercises above to view progression
           </div>
         )}
+      </div>
       </div>
     </div>
   );

@@ -532,7 +532,7 @@ export default async function ConnectionsPage() {
           const Icon = config.icon;
 
           return (
-            <Card key={platform}>
+            <Card key={platform} className="transition-all duration-200 hover:shadow-md hover:border-primary/20">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">

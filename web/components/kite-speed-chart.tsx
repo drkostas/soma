@@ -67,6 +67,7 @@ export function KiteSpeedChart({ data }: { data: KiteSession[] }) {
           }}
         />
         <Tooltip
+          cursor={{ stroke: "var(--primary)", strokeWidth: 1, strokeDasharray: "4 4" }}
           content={({ active, payload }) => {
             if (!active || !payload?.[0]) return null;
             const d = payload[0].payload;
@@ -83,10 +84,10 @@ export function KiteSpeedChart({ data }: { data: KiteSession[] }) {
             );
           }}
         />
-        <Scatter dataKey="maxSpeedKts" fill="#22d3ee" fillOpacity={0.5} r={4} />
+        <Scatter dataKey="maxSpeedKts" fill="oklch(75% 0.14 195)" fillOpacity={0.5} r={4} />
         <Line
           dataKey="trend"
-          stroke="#22d3ee"
+          stroke="oklch(75% 0.14 195)"
           strokeWidth={2}
           dot={false}
           connectNulls

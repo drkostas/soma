@@ -66,9 +66,11 @@ export function ClickableWeeklyFrequency({ data }: { data: WeekData[] }) {
               return (
                 <div
                   key={i}
-                  className="flex-1 flex items-end justify-center cursor-pointer group"
+                  className="flex-1 flex items-end justify-center cursor-pointer group focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   style={{ height: "80px" }}
                   onClick={() => count > 0 && setSelectedWeek(w)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (count > 0) setSelectedWeek(w); } }}
+                  {...(count > 0 ? { tabIndex: 0, role: "button" as const } : {})}
                 >
                   <div
                     className={`w-full rounded-t-sm ${color} group-hover:opacity-80 transition-opacity`}

@@ -288,7 +288,7 @@ export function ActivityHeatmap({ data }: { data: DayData[] }) {
       {floatingMenu && (
         <div
           ref={menuRef}
-          className="absolute z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 min-w-[180px]"
+          className="absolute z-50 bg-popover border border-border rounded-lg shadow-lg p-1.5 min-w-[180px] animate-in fade-in-0 zoom-in-95 duration-150"
           style={{
             left: `${floatingMenu.x}px`,
             top: `${floatingMenu.y}px`,

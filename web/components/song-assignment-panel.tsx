@@ -88,12 +88,28 @@ function SegmentSection({
   const coverageStr = totalPlacedMs > 0
     ? `${covMin}:${String(covSec).padStart(2, "0")} / ${durationMin} min`
     : `${durationMin} min`;
+  const coveragePct = seg.duration_s > 0 ? Math.min(100, (totalPlacedMs / 1000) / seg.duration_s * 100) : 0;
+  const coverageColor = coveragePct >= 80
+    ? "oklch(62% 0.17 142)"   // green
+    : coveragePct >= 50
+      ? "oklch(80% 0.18 87)"  // yellow
+      : "oklch(60% 0.22 25)"; // red
+
+  // Pool count color
+  const poolCount = assignment?.poolCount;
+  const poolCountColor = poolCount === undefined
+    ? undefined
+    : poolCount > 20
+      ? "oklch(62% 0.17 142)"   // green
+      : poolCount > 5
+        ? "oklch(80% 0.18 87)"  // yellow
+        : "oklch(60% 0.22 25)"; // red
 
   return (
     <div>
       {/* Section header */}
       <div
-        className="w-full flex items-center gap-2 text-left mb-2 cursor-pointer"
+        className="w-full flex items-center gap-2 text-left mb-2 cursor-pointer hover:bg-accent/10 rounded-md -mx-1 px-1 py-0.5 transition-colors"
         role="button" tabIndex={0}
         onClick={onFocus}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onFocus(); } }}
@@ -108,11 +124,19 @@ function SegmentSection({
         </button>
         {assignment && (
           <span className="text-xs text-muted-foreground shrink-0">
-            Pool: {assignment.poolCount ?? "?"} · {nonSkip.length} placed
+            Pool: <span style={poolCountColor ? { color: poolCountColor } : undefined}>{assignment.poolCount ?? "?"}</span> · {nonSkip.length} placed
             {assignment.poolCount !== undefined && ` · ${Math.max(0, assignment.poolCount - nonSkip.length)} left`}
           </span>
         )}
       </div>
+
+      {/* Coverage progress bar */}
+      {totalPlacedMs > 0 && (
+        <div className="relative w-full h-1 rounded-full overflow-hidden mb-2">
+          <div className="absolute inset-0 bg-muted opacity-30 rounded-full" />
+          <div className="relative h-full rounded-full transition-all duration-300" style={{ width: `${coveragePct}%`, backgroundColor: coverageColor }} />
+        </div>
+      )}
 
       {/* Pool exhaustion warning */}
       {assignment && assignment.poolCount !== undefined && assignment.poolCount < POOL_EXHAUSTION_THRESHOLD && !assignment.loading && (
@@ -177,6 +201,11 @@ function SegmentSection({
 
       {/* Alternatives strip */}
       <div className="mt-2">
+        {assignment && assignment.poolCount !== undefined && assignment.poolCount > 0 && !assignment.loading && (
+          <div className="text-[10px] text-muted-foreground mb-1" style={poolCountColor ? { color: poolCountColor } : undefined}>
+            Pool: {assignment.poolCount} available
+          </div>
+        )}
         <SongAlternativesStrip
           segmentConfig={{ bpm_min: seg.bpm_min, bpm_max: seg.bpm_max, bpm_tolerance: seg.bpm_tolerance, valence_min: seg.valence_min, valence_max: seg.valence_max, min_energy: 0.5, genres: selectedGenres }}
           placedIds={allPlacedIds}
@@ -334,7 +363,7 @@ export default function SongAssignmentPanel({
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t flex items-center gap-3">
+      <div className="p-3 border-t flex items-center gap-3 sticky bottom-0 bg-background z-10">
         <span className="text-xs text-muted-foreground flex-1">
           {totalPlaced} songs · {totalSkip} skip songs
         </span>
