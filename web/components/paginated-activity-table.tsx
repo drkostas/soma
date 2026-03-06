@@ -12,6 +12,10 @@ import {
   Heart,
   Activity,
   Footprints,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  Search,
 } from "lucide-react";
 
 const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
@@ -62,6 +66,9 @@ interface Activity {
   elev_gain: number;
 }
 
+type SortKey = "date" | "distance_km" | "duration_min" | "avg_hr" | "calories" | "elev_gain";
+type SortDir = "asc" | "desc";
+
 const PAGE_SIZE = 20;
 
 function formatDuration(mins: number) {
@@ -73,41 +80,114 @@ function formatDuration(mins: number) {
 export function PaginatedActivityTable({ activities }: { activities: Activity[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  // Get unique types for filter
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+    setPage(0);
+  }
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col)
+      return <ChevronsUpDown className="h-3 w-3 opacity-30 inline ml-1" />;
+    return sortDir === "asc" ? (
+      <ChevronUp className="h-3 w-3 inline ml-1" />
+    ) : (
+      <ChevronDown className="h-3 w-3 inline ml-1" />
+    );
+  }
+
+  const searchLower = search.toLowerCase();
+  const searchFiltered = search
+    ? activities.filter((a) => a.name.toLowerCase().includes(searchLower))
+    : activities;
+
+  // Get unique types for filter (from search-filtered set)
   const typeCounts = new Map<string, number>();
-  for (const a of activities) {
+  for (const a of searchFiltered) {
     const label = ACTIVITY_LABELS[a.type_key] || a.type_key;
     typeCounts.set(label, (typeCounts.get(label) || 0) + 1);
   }
   const typeOptions = Array.from(typeCounts.entries()).sort((a, b) => b[1] - a[1]);
 
   const filtered = typeFilter
-    ? activities.filter((a) => (ACTIVITY_LABELS[a.type_key] || a.type_key) === typeFilter)
-    : activities;
+    ? searchFiltered.filter((a) => (ACTIVITY_LABELS[a.type_key] || a.type_key) === typeFilter)
+    : searchFiltered;
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const pageActivities = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const sorted = [...filtered].sort((a, b) => {
+    let av: number, bv: number;
+    switch (sortKey) {
+      case "date":
+        av = new Date(a.date).getTime();
+        bv = new Date(b.date).getTime();
+        break;
+      case "distance_km":
+        av = a.distance_km;
+        bv = b.distance_km;
+        break;
+      case "duration_min":
+        av = a.duration_min;
+        bv = b.duration_min;
+        break;
+      case "avg_hr":
+        av = a.avg_hr ?? 0;
+        bv = b.avg_hr ?? 0;
+        break;
+      case "calories":
+        av = a.calories ?? 0;
+        bv = b.calories ?? 0;
+        break;
+      case "elev_gain":
+        av = a.elev_gain;
+        bv = b.elev_gain;
+        break;
+      default:
+        av = 0;
+        bv = 0;
+    }
+    return sortDir === "asc" ? av - bv : bv - av;
+  });
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const pageActivities = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <>
+      {/* Search */}
+      <div className="flex items-center gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm w-full max-w-xs mb-3">
+        <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+        <input
+          type="text"
+          placeholder="Search activities..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+          className="bg-transparent outline-none w-full placeholder:text-muted-foreground/60"
+        />
+      </div>
+
       {/* Type Filter */}
       {typeOptions.length > 1 && (
         <div className="flex flex-wrap gap-1.5 mb-3">
           <button
             onClick={() => { setTypeFilter(null); setPage(0); }}
-            className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
               !typeFilter ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent text-muted-foreground"
             }`}
           >
-            All ({activities.length})
+            All ({searchFiltered.length})
           </button>
           {typeOptions.map(([label, count]) => (
             <button
               key={label}
               onClick={() => { setTypeFilter(label); setPage(0); }}
-              className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-xs transition-colors ${
                 typeFilter === label ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent text-muted-foreground"
               }`}
             >
@@ -120,32 +200,62 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-muted-foreground">
-              <th className="text-left py-2 font-medium">Date</th>
+            <tr className="border-b border-border text-muted-foreground sticky top-0 z-10 bg-card">
+              <th
+                className="text-left py-2 font-medium cursor-pointer hover:text-foreground select-none"
+                onClick={() => toggleSort("date")}
+              >
+                Date <SortIcon col="date" />
+              </th>
               <th className="text-left py-2 font-medium">Type</th>
               <th className="text-left py-2 font-medium">Name</th>
-              <th className="text-right py-2 font-medium">Distance</th>
-              <th className="text-right py-2 font-medium">Duration</th>
-              <th className="text-right py-2 font-medium">HR</th>
-              <th className="text-right py-2 font-medium">Cal</th>
-              <th className="text-right py-2 font-medium">Elev</th>
+              <th
+                className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none"
+                onClick={() => toggleSort("distance_km")}
+              >
+                Distance <SortIcon col="distance_km" />
+              </th>
+              <th
+                className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none"
+                onClick={() => toggleSort("duration_min")}
+              >
+                Duration <SortIcon col="duration_min" />
+              </th>
+              <th
+                className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none hidden sm:table-cell"
+                onClick={() => toggleSort("avg_hr")}
+              >
+                HR <SortIcon col="avg_hr" />
+              </th>
+              <th
+                className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none hidden sm:table-cell"
+                onClick={() => toggleSort("calories")}
+              >
+                Cal <SortIcon col="calories" />
+              </th>
+              <th
+                className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none hidden lg:table-cell"
+                onClick={() => toggleSort("elev_gain")}
+              >
+                Elev <SortIcon col="elev_gain" />
+              </th>
             </tr>
           </thead>
           <tbody>
             {pageActivities.map((a) => (
               <tr
                 key={a.activity_id}
-                className="border-b border-border/50 cursor-pointer hover:bg-accent/30 transition-colors"
+                className="border-b border-border/50 cursor-pointer hover:bg-accent/30 active:bg-accent/40 transition-colors"
                 onClick={() => setSelectedId(a.activity_id)}
               >
-                <td className="py-2 text-muted-foreground whitespace-nowrap">
+                <td className="py-2.5 text-muted-foreground whitespace-nowrap">
                   {new Date(a.date).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                     year: "2-digit",
                   })}
                 </td>
-                <td className="py-2">
+                <td className="py-2.5">
                   <span className="flex items-center gap-1.5">
                     {ACTIVITY_ICONS[a.type_key] || null}
                     <span className="text-xs">
@@ -153,20 +263,20 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
                     </span>
                   </span>
                 </td>
-                <td className="py-2 max-w-[200px] truncate">{a.name}</td>
-                <td className="py-2 text-right">
+                <td className="py-2.5 max-w-[200px] truncate"><span title={a.name}>{a.name}</span></td>
+                <td className="py-2.5 text-right">
                   {a.distance_km.toFixed(1)} km
                 </td>
-                <td className="py-2 text-right whitespace-nowrap">
+                <td className="py-2.5 text-right whitespace-nowrap">
                   {formatDuration(a.duration_min)}
                 </td>
-                <td className="py-2 text-right">
+                <td className="py-2.5 text-right hidden sm:table-cell">
                   {a.avg_hr ? Math.round(a.avg_hr) : "—"}
                 </td>
-                <td className="py-2 text-right text-muted-foreground">
+                <td className="py-2.5 text-right text-muted-foreground hidden sm:table-cell">
                   {a.calories ? Math.round(a.calories) : "—"}
                 </td>
-                <td className="py-2 text-right text-muted-foreground">
+                <td className="py-2.5 text-right text-muted-foreground hidden lg:table-cell">
                   {a.elev_gain > 0 ? `${a.elev_gain.toLocaleString()}m` : "—"}
                 </td>
               </tr>
@@ -179,13 +289,13 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4 text-sm">
           <span className="text-muted-foreground">
-            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage(Math.max(0, page - 1))}
               disabled={page === 0}
-              className="px-3 py-1 rounded border border-border text-xs hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1.5 rounded border border-border text-xs hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Previous
             </button>
@@ -205,7 +315,7 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
                   <button
                     key={pageNum}
                     onClick={() => setPage(pageNum)}
-                    className={`w-7 h-7 rounded text-xs transition-colors ${
+                    className={`w-8 h-8 rounded text-xs transition-colors ${
                       page === pageNum
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-accent"
@@ -219,7 +329,7 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
             <button
               onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
               disabled={page === totalPages - 1}
-              className="px-3 py-1 rounded border border-border text-xs hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1.5 rounded border border-border text-xs hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>

@@ -34,7 +34,7 @@ export function ExpandableChartCard({
   return (
     <>
       <Card
-        className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20 group ${className || ""}`}
+        className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:shadow-primary/5 hover:border-primary/20 group ${className || ""}`}
         onClick={() => setOpen(true)}
       >
         <CardHeader className="pb-2">
@@ -46,14 +46,16 @@ export function ExpandableChartCard({
             ) : subtitle ? (
               <span className="ml-auto">{subtitle}</span>
             ) : null}
-            <Maximize2 className="h-3.5 w-3.5 ml-auto opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
+            <Maximize2 className="h-3.5 w-3.5 ml-auto opacity-40 md:opacity-0 md:group-hover:opacity-60 transition-opacity duration-200 shrink-0" />
           </CardTitle>
         </CardHeader>
-        <CardContent>{renderChildren(false)}</CardContent>
+        <CardContent className="[&_.recharts-responsive-container]:!h-[160px] sm:[&_.recharts-responsive-container]:!h-auto">
+          {renderChildren(false)}
+        </CardContent>
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {icon}

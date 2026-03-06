@@ -7,13 +7,10 @@ import { ExpandableStrengthChart } from "@/components/expandable-strength-chart"
 
 export const metadata: Metadata = { title: "Gym" };
 import { WorkoutHrTrendChart } from "@/components/workout-hr-trend-chart";
-import { ExerciseHrChart } from "@/components/exercise-hr-chart";
-import { MuscleGroupHrChart } from "@/components/muscle-group-hr-chart";
 import { ClickableWorkoutList } from "@/components/clickable-workout-list";
 import { ClickableWeeklyFrequency } from "@/components/clickable-weekly-frequency";
 import { ClickableSummaryStats } from "@/components/clickable-summary-stats";
 import { WorkoutCalendar } from "@/components/workout-calendar";
-import { MuscleVolumeDistribution } from "@/components/muscle-volume-distribution";
 import { MuscleBodyMapSection } from "@/components/muscle-body-map-section";
 import { ClickableTopExercises } from "@/components/clickable-top-exercises";
 import { ClickablePersonalRecords } from "@/components/clickable-personal-records";
@@ -127,21 +124,55 @@ async function getGarminCalorieStats(cutoff: string) {
 async function getTopExercises(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
-    SELECT
-      e->>'title' as exercise,
-      COUNT(DISTINCT raw_json->>'id') as workout_count,
-      MAX((s->>'weight_kg')::float) as best_weight,
-      ROUND(AVG((s->>'weight_kg')::float)::numeric, 1) as avg_weight
-    FROM hevy_raw_data,
-      jsonb_array_elements(raw_json->'exercises') as e,
-      jsonb_array_elements(e->'sets') as s
-    WHERE endpoint_name = 'workout'
-      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
-      AND s->>'type' = 'normal'
-      AND (s->>'weight_kg')::float > 0
-    GROUP BY e->>'title'
-    ORDER BY workout_count DESC
-    LIMIT 10
+    WITH base AS (
+      SELECT
+        e->>'title' as exercise,
+        COUNT(DISTINCT raw_json->>'id') as workout_count,
+        MAX((s->>'weight_kg')::float) as best_weight,
+        ROUND(AVG((s->>'weight_kg')::float)::numeric, 1) as avg_weight,
+        MAX((raw_json->>'start_time')::date) as last_performed
+      FROM hevy_raw_data,
+        jsonb_array_elements(raw_json->'exercises') as e,
+        jsonb_array_elements(e->'sets') as s
+      WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
+        AND s->>'type' = 'normal'
+        AND (s->>'weight_kg')::float > 0
+      GROUP BY e->>'title'
+      ORDER BY workout_count DESC
+      LIMIT 10
+    ),
+    recent_w AS (
+      SELECT
+        e->>'title' as exercise,
+        (raw_json->>'start_time')::date as wdate,
+        MAX((s->>'weight_kg')::float) as max_weight
+      FROM hevy_raw_data,
+        jsonb_array_elements(raw_json->'exercises') as e,
+        jsonb_array_elements(e->'sets') as s
+      WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
+        AND s->>'type' = 'normal'
+        AND (s->>'weight_kg')::float > 0
+        AND e->>'title' IN (SELECT exercise FROM base)
+      GROUP BY e->>'title', wdate
+    ),
+    ranked AS (
+      SELECT exercise, max_weight,
+        ROW_NUMBER() OVER (PARTITION BY exercise ORDER BY wdate DESC) as rn
+      FROM recent_w
+    ),
+    agg AS (
+      SELECT exercise,
+        array_agg(max_weight ORDER BY rn DESC) as recent_weights
+      FROM ranked
+      WHERE rn <= 8
+      GROUP BY exercise
+    )
+    SELECT b.*, COALESCE(a.recent_weights, ARRAY[]::float[]) as recent_weights
+    FROM base b
+    LEFT JOIN agg a ON a.exercise = b.exercise
+    ORDER BY b.workout_count DESC
   `;
   return rows;
 }
@@ -194,48 +225,7 @@ async function getExercisePRs() {
   return rows;
 }
 
-async function getMuscleGroupVolume(cutoff: string) {
-  const sql = getDb();
-  // Map exercise titles to muscle groups since Hevy workout data doesn't include muscle_group
-  const rows = await sql`
-    WITH exercise_muscles AS (
-      SELECT
-        e->>'title' as exercise,
-        CASE
-          WHEN e->>'title' ILIKE '%bench%' OR e->>'title' ILIKE '%chest%' OR e->>'title' ILIKE '%dip%' THEN 'chest'
-          WHEN e->>'title' ILIKE '%row%' OR e->>'title' ILIKE '%pull up%' OR e->>'title' ILIKE '%lat %' OR e->>'title' ILIKE '%deadlift%' OR e->>'title' ILIKE '%back extension%' THEN 'back'
-          WHEN e->>'title' ILIKE '%shoulder%' OR e->>'title' ILIKE '%overhead press%' OR e->>'title' ILIKE '%lateral raise%' OR e->>'title' ILIKE '%front raise%' OR e->>'title' ILIKE '%face pull%' OR e->>'title' ILIKE '%rear delt%' OR e->>'title' ILIKE '%reverse fly%' THEN 'shoulders'
-          WHEN e->>'title' ILIKE '%curl%' OR e->>'title' ILIKE '%hammer%' OR e->>'title' ILIKE '%preacher%' OR e->>'title' ILIKE '%concentration%' THEN 'biceps'
-          WHEN e->>'title' ILIKE '%tricep%' OR e->>'title' ILIKE '%pushdown%' THEN 'triceps'
-          WHEN e->>'title' ILIKE '%leg press%' OR e->>'title' ILIKE '%leg extension%' OR e->>'title' ILIKE '%squat%' OR e->>'title' ILIKE '%leg curl%' OR e->>'title' ILIKE '%romanian%' OR e->>'title' ILIKE '%hip%' THEN 'legs'
-          WHEN e->>'title' ILIKE '%calf%' THEN 'calves'
-          WHEN e->>'title' ILIKE '%crunch%' OR e->>'title' ILIKE '%plank%' OR e->>'title' ILIKE '%leg raise%' OR e->>'title' ILIKE '%side bend%' OR e->>'title' ILIKE '%russian twist%' OR e->>'title' ILIKE '%superman%' OR e->>'title' ILIKE '%torso%' THEN 'core'
-          WHEN e->>'title' ILIKE '%wrist%' THEN 'forearms'
-          ELSE 'other'
-        END as muscle_group,
-        s
-      FROM hevy_raw_data,
-        jsonb_array_elements(raw_json->'exercises') as e,
-        jsonb_array_elements(e->'sets') as s
-      WHERE endpoint_name = 'workout'
-        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
-        AND s->>'type' = 'normal'
-        AND (s->>'weight_kg')::float > 0
-        AND (s->>'reps')::int > 0
-    )
-    SELECT
-      muscle_group,
-      COUNT(*) as total_sets,
-      SUM((s->>'reps')::int) as total_reps,
-      COUNT(DISTINCT exercise) as exercise_count,
-      ROUND(SUM((s->>'weight_kg')::float * (s->>'reps')::int)::numeric) as total_volume
-    FROM exercise_muscles
-    WHERE muscle_group != 'other'
-    GROUP BY muscle_group
-    ORDER BY total_volume DESC
-  `;
-  return rows;
-}
+
 
 async function getBodyMapVolumes(cutoff: string) {
   const sql = getDb();
@@ -314,55 +304,6 @@ async function getWorkoutHrTrend(cutoff: string) {
       AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
       AND we.avg_hr IS NOT NULL
     ORDER BY date ASC
-  `;
-  return rows;
-}
-
-async function getExerciseAvgHr(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    WITH exercise_hr AS (
-      SELECT
-        e->>'title' as exercise,
-        we.avg_hr,
-        we.max_hr
-      FROM hevy_raw_data h
-      JOIN workout_enrichment we ON we.hevy_id = h.raw_json->>'id'
-      CROSS JOIN jsonb_array_elements(h.raw_json->'exercises') as e
-      WHERE h.endpoint_name = 'workout'
-        AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
-        AND we.avg_hr IS NOT NULL
-    )
-    SELECT
-      exercise,
-      ROUND(AVG(avg_hr)::numeric) as avg_hr,
-      ROUND(MAX(max_hr)::numeric) as max_hr,
-      COUNT(*) as session_count
-    FROM exercise_hr
-    GROUP BY exercise
-    HAVING COUNT(*) >= 3
-    ORDER BY avg_hr DESC
-    LIMIT 15
-  `;
-  return rows;
-}
-
-async function getExerciseHrDetail(cutoff: string) {
-  const sql = getDb();
-  // Per-workout HR data for each exercise (for per-exercise HR trends)
-  const rows = await sql`
-    SELECT
-      e->>'title' as exercise,
-      (h.raw_json->>'start_time')::date as workout_date,
-      we.avg_hr,
-      we.max_hr
-    FROM hevy_raw_data h
-    JOIN workout_enrichment we ON we.hevy_id = h.raw_json->>'id'
-    CROSS JOIN jsonb_array_elements(h.raw_json->'exercises') as e
-    WHERE h.endpoint_name = 'workout'
-      AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
-      AND we.avg_hr IS NOT NULL
-    ORDER BY workout_date ASC
   `;
   return rows;
 }
@@ -526,17 +467,6 @@ async function getTrainingCalendar() {
   return rows;
 }
 
-function formatDuration(startTime: string, endTime: string): string {
-  const ms = new Date(endTime).getTime() - new Date(startTime).getTime();
-  const min = Math.round(ms / 60000);
-  if (min >= 60) {
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    return `${h}h ${m}m`;
-  }
-  return `${min}m`;
-}
-
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   const now = new Date();
@@ -548,26 +478,11 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: number } {
-  let totalSets = 0;
-  let totalVolume = 0;
-  for (const ex of exercises) {
-    const sets = Array.isArray(ex.sets) ? ex.sets : [];
-    for (const s of sets) {
-      if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
-        totalSets++;
-        totalVolume += s.weight_kg * s.reps;
-      }
-    }
-  }
-  return { totalSets, totalVolume };
-}
-
 export default async function WorkoutsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const params = await searchParams;
   const rangeDays = rangeToDays(params.range);
   const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
-  const [recent, weeklyVolume, configurableProgression, stats, topExercises, programSplit, exercisePRs, calendar, muscleGroups, weeklyFreqDetailed, monthlyMuscle, calorieStats, totalWorkoutCount, bodyMapVolumes, hrTrend, exerciseHr, exerciseHrDetail, workoutTimeline] =
+  const [recent, weeklyVolume, configurableProgression, stats, topExercises, programSplit, exercisePRs, calendar, weeklyFreqDetailed, monthlyMuscle, calorieStats, totalWorkoutCount, bodyMapVolumes, hrTrend, workoutTimeline] =
     await Promise.all([
       getRecentWorkouts(cutoff, 50),
       getWeeklyVolume(cutoff),
@@ -577,15 +492,12 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
       getProgramSplit(cutoff),
       getExercisePRs(),
       getTrainingCalendar(),
-      getMuscleGroupVolume(cutoff),
       getWorkoutFrequencyByWeekDetailed(cutoff),
       getMonthlyMuscleVolume(cutoff),
       getGarminCalorieStats(cutoff),
       getWorkoutCount(),
       getBodyMapVolumes(cutoff),
       getWorkoutHrTrend(cutoff),
-      getExerciseAvgHr(cutoff),
-      getExerciseHrDetail(cutoff),
       getWorkoutTimeline(),
     ]);
 
@@ -618,12 +530,12 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
     .map(([month, count]) => ({ date: month + "-01", value: count }));
 
   return (
-    <div className="container mx-auto px-6 py-8 max-w-7xl">
+    <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
       {/* Header */}
-      <div className="mb-8 flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Workouts</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Workouts</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Training history and progression
           </p>
         </div>
@@ -698,64 +610,115 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
         />
       </div>
 
-      {/* Weekly Workout Frequency (clickable) */}
+      {/* Training Calendar + Weekly Frequency */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Training Calendar
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <WorkoutCalendar data={calendar as any} />
+        </CardContent>
+      </Card>
+
       {(weeklyFreqDetailed as any[]).length > 0 && (
         <ClickableWeeklyFrequency data={weeklyFreqDetailed as any} />
       )}
 
-      {/* Heart Rate Analysis */}
-      {((hrTrend as any[]).length > 0 || (exerciseHr as any[]).length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          <ExpandableChartCard title="Avg Heart Rate per Workout" icon={<Heart className="h-4 w-4 text-red-400" />}>
-            <WorkoutHrTrendChart data={(hrTrend as any[]).map((r: any) => ({
-              date: normalizeDate(r.date),
-              avg_hr: Number(r.avg_hr),
-              max_hr: Number(r.max_hr),
-              title: String(r.title),
-              duration_min: Number(r.duration_min),
+      {/* Top Exercises + Personal Records */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-purple-400" />
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Top Exercises
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ClickableTopExercises exercises={topExercises.map((e: any) => ({
+              exercise: String(e.exercise),
+              workout_count: Number(e.workout_count),
+              best_weight: Number(e.best_weight),
+              avg_weight: Number(e.avg_weight),
+              last_performed: e.last_performed instanceof Date
+                ? e.last_performed.toISOString().split("T")[0]
+                : e.last_performed ? String(e.last_performed).slice(0, 10) : undefined,
+              recent_weights: Array.isArray(e.recent_weights)
+                ? e.recent_weights.map(Number)
+                : [],
             }))} />
-          </ExpandableChartCard>
-          <ExpandableChartCard title="Avg Heart Rate by Exercise" icon={<Heart className="h-4 w-4 text-red-400" />} subtitle="Click exercise for trend">
-            <ExerciseHrChart
-              data={(exerciseHr as any[]).map((r: any) => ({
-                exercise: String(r.exercise),
-                avg_hr: Number(r.avg_hr),
-                max_hr: Number(r.max_hr),
-                session_count: Number(r.session_count),
-              }))}
-              detail={(exerciseHrDetail as any[]).map((r: any) => ({
-                exercise: String(r.exercise),
-                workout_date: normalizeDate(r.workout_date),
-                avg_hr: Number(r.avg_hr),
-                max_hr: Number(r.max_hr),
-              }))}
-            />
-          </ExpandableChartCard>
-          <ExpandableChartCard title="Heart Rate by Muscle Group" icon={<Heart className="h-4 w-4 text-red-400" />}>
-            <MuscleGroupHrChart data={(exerciseHrDetail as any[]).map((r: any) => ({
-              exercise: String(r.exercise),
-              workout_date: normalizeDate(r.workout_date),
-              avg_hr: Number(r.avg_hr),
-              max_hr: Number(r.max_hr),
-            }))} />
-          </ExpandableChartCard>
-        </div>
-      )}
+          </CardContent>
+        </Card>
 
-      {/* Muscle Group Distribution */}
-      {muscleGroups.length > 0 && (
-        <Card className="mb-6">
+        <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Target className="h-4 w-4 text-purple-400" />
-              Muscle Group Volume Distribution
+              <TrendingUp className="h-4 w-4 text-yellow-400" />
+              Personal Records
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <MuscleVolumeDistribution data={muscleGroups as any} />
+            <ClickablePersonalRecords records={exercisePRs.map((pr: any) => ({
+              exercise: String(pr.exercise),
+              pr_weight: Number(pr.pr_weight),
+              reps_at_pr: pr.reps_at_pr ? Number(pr.reps_at_pr) : null,
+            }))} />
           </CardContent>
         </Card>
-      )}
+      </div>
+
+      {/* Recent Workouts + Program Split */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+              <span>Recent Workouts</span>
+              <span className="text-xs font-normal">{totalWorkoutCount} total</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ClickableWorkoutList
+              workouts={(recent as any[]).map((w: any) => ({
+                id: w.id,
+                title: w.title,
+                start_time: w.start_time,
+                end_time: w.end_time,
+                exercise_count: Number(w.exercise_count),
+                exercises: typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises,
+                avg_hr: w.avg_hr ? Number(w.avg_hr) : undefined,
+                max_hr: w.max_hr ? Number(w.max_hr) : undefined,
+                garmin_calories: w.garmin_calories ? Number(w.garmin_calories) : undefined,
+              }))}
+              totalCount={totalWorkoutCount}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Program Split
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {programSplit.map((p: any) => (
+              <div key={p.program} className="flex items-center justify-between text-sm">
+                <span className="font-medium truncate mr-2">{p.program}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-muted-foreground">{Number(p.sessions)}x</span>
+                  <span className="text-xs text-muted-foreground">
+                    ~{Number(p.avg_duration)}m
+                  </span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Monthly Volume by Muscle Group */}
       {(monthlyMuscle as any[]).length > 0 && (
@@ -782,7 +745,6 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
               const months = Array.from(monthMap.keys()).sort().slice(-12);
               const groups = ["Legs", "Back", "Chest", "Shoulders", "Arms", "Core"].filter(g => allGroups.has(g));
 
-              // Find max total for scaling
               const maxTotal = Math.max(...months.map(m => {
                 const mg = monthMap.get(m)!;
                 return Array.from(mg.values()).reduce((s, v) => s + v, 0);
@@ -835,106 +797,18 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
         </Card>
       )}
 
-      {/* Bottom Row: Program Split + Top Exercises + Recent Workouts */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Program Split */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Program Split
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {programSplit.map((p: any) => (
-              <div key={p.program} className="flex items-center justify-between text-sm">
-                <span className="font-medium truncate mr-2">{p.program}</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-muted-foreground">{Number(p.sessions)}x</span>
-                  <span className="text-xs text-muted-foreground">
-                    ~{Number(p.avg_duration)}m
-                  </span>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Top Exercises */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-purple-400" />
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Top Exercises
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ClickableTopExercises exercises={topExercises.map((e: any) => ({
-              exercise: String(e.exercise),
-              workout_count: Number(e.workout_count),
-              best_weight: Number(e.best_weight),
-              avg_weight: Number(e.avg_weight),
-            }))} />
-          </CardContent>
-        </Card>
-
-        {/* Recent Workouts */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
-              <span>Recent Workouts</span>
-              <span className="text-xs font-normal">{totalWorkoutCount} total</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ClickableWorkoutList
-              workouts={(recent as any[]).map((w: any) => ({
-                id: w.id,
-                title: w.title,
-                start_time: w.start_time,
-                end_time: w.end_time,
-                exercise_count: Number(w.exercise_count),
-                exercises: typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises,
-                avg_hr: w.avg_hr ? Number(w.avg_hr) : undefined,
-                max_hr: w.max_hr ? Number(w.max_hr) : undefined,
-                garmin_calories: w.garmin_calories ? Number(w.garmin_calories) : undefined,
-              }))}
-              totalCount={totalWorkoutCount}
-            />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Training Calendar */}
-      <Card className="mt-6 mb-6">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Training Calendar
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <WorkoutCalendar data={calendar as any} />
-        </CardContent>
-      </Card>
-
-      {/* Exercise PRs */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-yellow-400" />
-            Personal Records
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ClickablePersonalRecords records={exercisePRs.map((pr: any) => ({
-            exercise: String(pr.exercise),
-            pr_weight: Number(pr.pr_weight),
-            reps_at_pr: pr.reps_at_pr ? Number(pr.reps_at_pr) : null,
+      {/* Heart Rate (single card) */}
+      {(hrTrend as any[]).length > 0 && (
+        <ExpandableChartCard title="Avg Heart Rate per Workout" icon={<Heart className="h-4 w-4 text-red-400" />}>
+          <WorkoutHrTrendChart data={(hrTrend as any[]).map((r: any) => ({
+            date: normalizeDate(r.date),
+            avg_hr: Number(r.avg_hr),
+            max_hr: Number(r.max_hr),
+            title: String(r.title),
+            duration_min: Number(r.duration_min),
           }))} />
-        </CardContent>
-      </Card>
+        </ExpandableChartCard>
+      )}
     </div>
   );
 }

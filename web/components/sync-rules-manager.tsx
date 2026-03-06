@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Route, Plus, Trash2, ToggleLeft, ToggleRight, ArrowRight } from "lucide-react";
 
 interface SyncRule {
@@ -47,6 +52,7 @@ export function SyncRulesManager({ initialRules }: SyncRulesManagerProps) {
   const [rules, setRules] = useState<SyncRule[]>(initialRules);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   // Form state
   const [newSource, setNewSource] = useState("hevy");
@@ -233,7 +239,7 @@ export function SyncRulesManager({ initialRules }: SyncRulesManagerProps) {
                   <button
                     onClick={() => handleToggle(rule)}
                     disabled={loading === rule.id}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-muted-foreground hover:text-foreground transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
                     title={rule.enabled ? "Disable rule" : "Enable rule"}
                   >
                     {rule.enabled ? (
@@ -261,9 +267,8 @@ export function SyncRulesManager({ initialRules }: SyncRulesManagerProps) {
                 </div>
                 <Button
                   variant="ghost"
-                  size="icon-xs"
-                  onClick={() => handleDelete(rule.id)}
-                  disabled={loading === rule.id}
+                  size="icon"
+                  onClick={() => setConfirmDeleteId(rule.id)}
                   className="text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -273,6 +278,31 @@ export function SyncRulesManager({ initialRules }: SyncRulesManagerProps) {
           </div>
         )}
       </CardContent>
+
+      <AlertDialog open={confirmDeleteId !== null} onOpenChange={(open: boolean) => !open && setConfirmDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete sync rule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This rule will be permanently removed and will no longer sync activities.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (confirmDeleteId !== null) {
+                  void handleDelete(confirmDeleteId);
+                  setConfirmDeleteId(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

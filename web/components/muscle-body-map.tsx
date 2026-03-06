@@ -200,6 +200,18 @@ export function MuscleBodyMap({ volumes, onMuscleClick, hoveredMuscle: externalH
     onHoverChange(null);
   }, [onHoverChange]);
 
+  // Touch support: tap a muscle polygon to toggle its highlight on/off
+  const handleSvgClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as SVGElement;
+    if (target.tagName === "polygon") {
+      const muscle = target.getAttribute("data-muscle") as MuscleGroup | null;
+      if (muscle) {
+        onHoverChange(hoveredMuscle === muscle ? null : muscle);
+        return;
+      }
+    }
+  }, [onHoverChange, hoveredMuscle]);
+
   const svgSize = compact ? { width: 140, height: 260 } : { width: 180, height: 340 };
   const hoveredData = hoveredMuscle ? volumes[hoveredMuscle] : null;
 
@@ -212,6 +224,7 @@ export function MuscleBodyMap({ volumes, onMuscleClick, hoveredMuscle: externalH
           className="relative"
           onMouseOver={handleSvgMouseOver}
           onMouseLeave={handleSvgMouseLeave}
+          onClick={handleSvgClick}
         >
           <p className="text-[10px] text-muted-foreground text-center mb-1">Front</p>
           <Model
@@ -230,6 +243,7 @@ export function MuscleBodyMap({ volumes, onMuscleClick, hoveredMuscle: externalH
           className="relative"
           onMouseOver={handleSvgMouseOver}
           onMouseLeave={handleSvgMouseLeave}
+          onClick={handleSvgClick}
         >
           <p className="text-[10px] text-muted-foreground text-center mb-1">Back</p>
           <Model
@@ -280,7 +294,10 @@ export function MuscleBodyMap({ volumes, onMuscleClick, hoveredMuscle: externalH
                 }`}
                 onMouseEnter={() => onHoverChange(mg)}
                 onMouseLeave={() => onHoverChange(null)}
-                onClick={() => onMuscleClick?.(mg)}
+                onClick={() => {
+                  onHoverChange(hoveredMuscle === mg ? null : mg);
+                  onMuscleClick?.(mg);
+                }}
               >
                 <span
                   className="w-2 h-2 rounded-sm"

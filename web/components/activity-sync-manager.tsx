@@ -177,7 +177,7 @@ function ActivityRow({
   const activeSourceObj = activity.sources.find((s) => s.platform === activeSource) || activity.sources[0];
 
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border/50 last:border-0">
+    <div className="flex items-center gap-3 py-3 border-b border-border/50 last:border-0">
       {/* Icon */}
       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent shrink-0">
         <Icon className="h-4 w-4 text-accent-foreground" />
@@ -214,7 +214,7 @@ function ActivityRow({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-xs gap-1"
+            className="h-8 text-xs gap-1"
             onClick={() => onSync(activeSourceObj.platform, activeSourceObj.source_id)}
           >
             <ExternalLink className="h-3 w-3" />
@@ -222,7 +222,7 @@ function ActivityRow({
           </Button>
         )}
         {syncing && (
-          <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
+          <Button variant="outline" size="sm" className="h-8 text-xs" disabled>
             <Loader2 className="h-3 w-3 animate-spin" />
           </Button>
         )}
@@ -342,21 +342,21 @@ export function ActivitySyncManager({
       <CardContent>
         <Tabs defaultValue="all">
           <TabsList variant="line" className="w-full justify-start">
-            <TabsTrigger value="all" className="gap-1.5 text-xs">
+            <TabsTrigger value="all" className="gap-1.5 text-xs min-h-[36px]">
               All
               <span className="text-muted-foreground">{counts.all}</span>
             </TabsTrigger>
-            <TabsTrigger value="running" className="gap-1.5 text-xs">
+            <TabsTrigger value="running" className="gap-1.5 text-xs min-h-[36px]">
               <Footprints className="h-3.5 w-3.5" />
               Running
               <span className="text-muted-foreground">{counts.running}</span>
             </TabsTrigger>
-            <TabsTrigger value="strength" className="gap-1.5 text-xs">
+            <TabsTrigger value="strength" className="gap-1.5 text-xs min-h-[36px]">
               <Dumbbell className="h-3.5 w-3.5" />
               Strength
               <span className="text-muted-foreground">{counts.strength}</span>
             </TabsTrigger>
-            <TabsTrigger value="cycling" className="gap-1.5 text-xs">
+            <TabsTrigger value="cycling" className="gap-1.5 text-xs min-h-[36px]">
               <Bike className="h-3.5 w-3.5" />
               Cycling
               <span className="text-muted-foreground">{counts.cycling}</span>

@@ -66,6 +66,28 @@ async function getWeeklyAverages() {
   return rows[0] || null;
 }
 
+async function getPreviousWeekAverages() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      ROUND(AVG(total_steps)) as avg_steps,
+      ROUND(AVG(sleep_time_seconds)) as avg_sleep,
+      ROUND(AVG(resting_heart_rate)) as avg_rhr,
+      ROUND(AVG(avg_stress_level)) as avg_stress,
+      ROUND(AVG(active_kilocalories)) as avg_active_cal,
+      COUNT(*) as days_count
+    FROM daily_health_summary
+    WHERE date >= CURRENT_DATE - 14 AND date < CURRENT_DATE - 7
+  `;
+  return rows[0] || null;
+}
+
+/** Compute % change between two numbers. Returns null if prev is 0/null. */
+function pctChange(current: number | null, previous: number | null): number | null {
+  if (!current || !previous || previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+}
+
 async function getWorkoutStats() {
   const sql = getDb();
   const rows = await sql`
@@ -392,31 +414,6 @@ async function getWeightTrend(cutoff: string) {
   return rows;
 }
 
-async function getTrainingByDayOfWeek(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    WITH all_activities AS (
-      SELECT (raw_json->>'startTimeLocal')::timestamp as ts
-      FROM garmin_activity_raw
-      WHERE endpoint_name = 'summary'
-        AND raw_json->'activityType'->>'typeKey' NOT IN ('strength_training', 'gym')
-        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-      UNION ALL
-      SELECT (raw_json->>'start_time')::timestamp as ts
-      FROM hevy_raw_data
-      WHERE endpoint_name = 'workout'
-        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
-    )
-    SELECT
-      EXTRACT(DOW FROM ts) as dow,
-      COUNT(*) as count
-    FROM all_activities
-    GROUP BY dow
-    ORDER BY dow ASC
-  `;
-  return rows;
-}
-
 async function getRecoverySummary() {
   const sql = getDb();
   // Get latest body battery, HRV, and training readiness
@@ -503,55 +500,7 @@ async function getRestingHRTrend(cutoff: string) {
   return rows;
 }
 
-async function getFloorsTrend(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    SELECT
-      date::text as date,
-      (
-        SELECT COALESCE(SUM((elem->2)::float), 0)
-        FROM jsonb_array_elements(raw_json->'floorValuesArray') as elem
-      ) as floors_up,
-      (
-        SELECT COALESCE(SUM((elem->3)::float), 0)
-        FROM jsonb_array_elements(raw_json->'floorValuesArray') as elem
-      ) as floors_down
-    FROM garmin_raw_data
-    WHERE endpoint_name = 'floors'
-      AND date >= ${cutoff}
-      AND (
-        SELECT COALESCE(SUM((elem->2)::float), 0)
-        FROM jsonb_array_elements(raw_json->'floorValuesArray') as elem
-      ) > 0
-    ORDER BY date ASC
-  `;
-  return rows;
-}
 
-async function getTrainingTimeOfDay(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    WITH all_activities AS (
-      SELECT (raw_json->>'startTimeLocal')::timestamp as ts
-      FROM garmin_activity_raw
-      WHERE endpoint_name = 'summary'
-        AND raw_json->'activityType'->>'typeKey' NOT IN ('strength_training', 'gym')
-        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-      UNION ALL
-      SELECT (raw_json->>'start_time')::timestamp as ts
-      FROM hevy_raw_data
-      WHERE endpoint_name = 'workout'
-        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
-    )
-    SELECT
-      EXTRACT(HOUR FROM ts) as hour,
-      COUNT(*) as count
-    FROM all_activities
-    GROUP BY hour
-    ORDER BY hour ASC
-  `;
-  return rows;
-}
 
 async function getActivityHeatmap(cutoff: string) {
   const sql = getDb();
@@ -769,13 +718,13 @@ export default async function HomePage({
   const { range: rangeParam } = await searchParams;
   const rangeDays = rangeToDays(rangeParam);
   const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
-  const floorsCutoff = new Date(Date.now() - Math.min(rangeDays, 90) * 86400000).toISOString().split("T")[0];
   const heatmapCutoff = new Date(Date.now() - Math.min(rangeDays, 365) * 86400000).toISOString().split("T")[0];
 
-  const [health, weekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, dayOfWeekData, timeOfDayData, latestSleep, recovery, rhrTrend, stressTrend, floorsTrend] =
+  const [health, weekly, prevWeekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, latestSleep, recovery, rhrTrend, stressTrend] =
     await Promise.all([
       getTodayHealth(),
       getWeeklyAverages(),
+      getPreviousWeekAverages(),
       getWorkoutStats(),
       getGymFrequency(cutoff),
       getRunningStats(cutoff),
@@ -790,14 +739,18 @@ export default async function HomePage({
       getWeightTrend(cutoff),
       getCalorieTrend(cutoff),
       getActivityHeatmap(heatmapCutoff),
-      getTrainingByDayOfWeek(cutoff),
-      getTrainingTimeOfDay(cutoff),
       getLatestSleep(),
       getRecoverySummary(),
       getRestingHRTrend(cutoff),
       getStressTrend(cutoff),
-      getFloorsTrend(floorsCutoff),
     ]);
+
+  // Compute 7-day vs prior-7-day trends
+  const stepsTrendPct = pctChange(Number(weekly?.avg_steps), Number(prevWeekly?.avg_steps));
+  const calTrendPct = pctChange(Number(weekly?.avg_active_cal), Number(prevWeekly?.avg_active_cal));
+  const rhrTrendPct = pctChange(Number(weekly?.avg_rhr), Number(prevWeekly?.avg_rhr));
+  const sleepTrendPct = pctChange(Number(weekly?.avg_sleep), Number(prevWeekly?.avg_sleep));
+  const stressTrendPct = pctChange(Number(weekly?.avg_stress), Number(prevWeekly?.avg_stress));
 
   // Merge duplicate activity types
   const mergedCounts: { type_key: string; cnt: number }[] = [];
@@ -816,12 +769,12 @@ export default async function HomePage({
   const totalActivities = mergedCounts.reduce((s, r) => s + r.cnt, 0);
 
   return (
-    <div className="container mx-auto px-6 py-8 max-w-7xl">
+    <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Overview</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {health?.date
               ? `Latest: ${new Date(health.date).toLocaleDateString("en-US", {
                   weekday: "long",
@@ -845,6 +798,8 @@ export default async function HomePage({
               ? `${(health.total_distance_meters / 1000).toFixed(1)} km`
               : undefined,
             icon: <Footprints className="h-4 w-4 text-muted-foreground" />,
+            info: "Daily step count from your Garmin watch",
+            trend: stepsTrendPct != null ? { value: stepsTrendPct, label: "7-day avg vs prior week" } : null,
           },
           {
             metric: "calories",
@@ -854,6 +809,8 @@ export default async function HomePage({
               ? `${health.total_kilocalories.toLocaleString()} total`
               : undefined,
             icon: <Flame className="h-4 w-4 text-orange-400" />,
+            info: "Calories burned above your BMR through activity",
+            trend: calTrendPct != null ? { value: calTrendPct, label: "7-day avg vs prior week" } : null,
           },
           {
             metric: "rhr",
@@ -863,6 +820,9 @@ export default async function HomePage({
               ? `Range: ${health.min_heart_rate}–${health.max_heart_rate} bpm`
               : undefined,
             icon: <HeartPulse className="h-4 w-4 text-red-400" />,
+            info: "Lower resting HR generally indicates better cardiovascular fitness. Elite athletes: 40-50 bpm",
+            // For RHR, lower is better — invert so a decrease shows green
+            trend: rhrTrendPct != null ? { value: -rhrTrendPct, label: "7-day avg vs prior week (lower is better)" } : null,
           },
           {
             metric: "vo2max",
@@ -870,6 +830,7 @@ export default async function HomePage({
             value: runStats?.vo2max ? `${Number(runStats.vo2max).toFixed(1)}` : "—",
             subtitle: "ml/kg/min",
             icon: <Zap className="h-4 w-4 text-yellow-400" />,
+            info: "Maximum oxygen uptake. Higher is better. Excellent: 50+ ml/kg/min",
           },
         ]}
         secondaryCards={[
@@ -882,26 +843,20 @@ export default async function HomePage({
             })(),
             subtitle: latestSleep?.score ? `Score: ${latestSleep.score}` : undefined,
             icon: <Moon className="h-4 w-4 text-indigo-400" />,
+            info: "Total sleep time from Garmin sleep tracking. Recommended: 7-9 hours",
+            trend: sleepTrendPct != null ? { value: sleepTrendPct, label: "7-day avg vs prior week" } : null,
           },
           {
             metric: "stress",
             title: "Avg Stress",
-            value: health?.avg_stress_level ?? "—",
+            value: health?.avg_stress_level ? health.avg_stress_level : "—",
             subtitle: health?.max_stress_level
               ? `Peak: ${health.max_stress_level}`
               : undefined,
             icon: <Brain className="h-4 w-4 text-yellow-400" />,
-          },
-          {
-            metric: "body_battery",
-            title: "Body Battery",
-            value: health?.body_battery_charged
-              ? `+${health.body_battery_charged}`
-              : "—",
-            subtitle: health?.body_battery_drained
-              ? `−${health.body_battery_drained} drained`
-              : undefined,
-            icon: <BatteryCharging className="h-4 w-4 text-green-400" />,
+            info: "Garmin stress score (0-100). Lower is better. 0-25 = Rest, 26-50 = Low, 51-75 = Medium, 76-100 = High",
+            // For stress, lower is better — invert so a decrease shows green
+            trend: stressTrendPct != null ? { value: -stressTrendPct, label: "7-day avg vs prior week (lower is better)" } : null,
           },
           {
             metric: "activities",
@@ -909,6 +864,7 @@ export default async function HomePage({
             value: totalActivities,
             subtitle: `${Number(runStats?.total_km || 0).toFixed(0)} km running`,
             icon: <Activity className="h-4 w-4 text-purple-400" />,
+            info: "Total tracked activities across all sports in this period",
           },
         ]}
       />
@@ -1213,53 +1169,6 @@ export default async function HomePage({
         );
       })()}
 
-      {/* Floors Climbed */}
-      {(floorsTrend as any[]).length > 0 && (
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Mountain className="h-4 w-4 text-blue-400" />
-              Floors Climbed
-              {(() => {
-                const data = floorsTrend as any[];
-                const avg = data.reduce((s: number, d: any) => s + Number(d.floors_up), 0) / data.length;
-                const today = data[data.length - 1];
-                return (
-                  <span className="ml-auto text-xs font-normal">
-                    Today: {Math.round(Number(today?.floors_up || 0))} · avg {Math.round(avg)}
-                  </span>
-                );
-              })()}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-2 h-24">
-              {(floorsTrend as any[]).map((d: any, i: number) => {
-                const up = Number(d.floors_up);
-                const maxFloors = Math.max(...(floorsTrend as any[]).map((x: any) => Number(x.floors_up)));
-                const pct = maxFloors > 0 ? (up / maxFloors) * 100 : 0;
-                const dayLabel = new Date(d.date).toLocaleDateString("en-US", { weekday: "short" });
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center">
-                    {pct > 40 && (
-                      <span className="text-[9px] text-muted-foreground mb-0.5">{Math.round(up)}</span>
-                    )}
-                    <div className="w-full flex items-end justify-center" style={{ height: "64px" }}>
-                      <div
-                        className="w-full rounded-t-sm bg-blue-400/70"
-                        style={{ height: `${Math.max(pct, up > 0 ? 4 : 0)}%` }}
-                        title={`${d.date}: ${Math.round(up)} floors up, ${Math.round(Number(d.floors_down))} down`}
-                      />
-                    </div>
-                    <span className="text-[9px] text-muted-foreground mt-0.5">{dayLabel}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Activity Heatmap */}
       {(heatmapData as any[]).length > 0 && (
         <Card className="mb-6">
@@ -1294,16 +1203,33 @@ export default async function HomePage({
         </Card>
       )}
 
-      {/* Training Day & Time + Activity Breakdown + Gym Frequency (Interactive) */}
+      {/* Recent Activity Feed */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Recent Activity
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ClickableRecentActivity
+            activities={(recentActivities as any[]).map((a: any) => ({
+              type_key: a.type_key,
+              date: a.date,
+              name: a.name,
+              distance_km: Number(a.distance_km),
+              duration_min: Number(a.duration_min),
+              calories: a.calories ? Number(a.calories) : null,
+              activity_id: a.activity_id,
+              workout_id: a.workout_id || undefined,
+            }))}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Activity Breakdown + Gym Frequency (Interactive) */}
       <InteractiveChartCards
-        dayOfWeekData={(dayOfWeekData as any[]).map((r: any) => ({
-          dow: Number(r.dow),
-          count: Number(r.count),
-        }))}
-        timeOfDayData={(timeOfDayData as any[]).map((r: any) => ({
-          hour: Number(r.hour),
-          count: Number(r.count),
-        }))}
+        dayOfWeekData={[]}
+        timeOfDayData={[]}
         activityCounts={mergedCounts}
         gymFrequency={(gymFreq as any[]).map((r: any) => ({
           month: r.month,
@@ -1379,29 +1305,6 @@ export default async function HomePage({
           </Card>
         )}
       </InteractiveChartCards>
-
-      {/* Recent Activity Feed */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Recent Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ClickableRecentActivity
-            activities={(recentActivities as any[]).map((a: any) => ({
-              type_key: a.type_key,
-              date: a.date,
-              name: a.name,
-              distance_km: Number(a.distance_km),
-              duration_min: Number(a.duration_min),
-              calories: a.calories ? Number(a.calories) : null,
-              activity_id: a.activity_id,
-              workout_id: a.workout_id || undefined,
-            }))}
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }
