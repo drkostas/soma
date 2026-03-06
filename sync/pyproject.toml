@@ -10,6 +10,7 @@ dependencies = [
     "requests>=2.31",
     "fit-tool>=0.9.15",
     "Pillow>=10.0",
+    "pywebpush>=2.0",
 ]
 
 [project.optional-dependencies]

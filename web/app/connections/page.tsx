@@ -24,7 +24,10 @@ import {
   Activity,
   Database,
   Send,
+  Bell,
 } from "lucide-react";
+import { PushNotificationManager } from "@/components/push-notification-manager";
+import { NotificationPreferences } from "@/components/notification-preferences";
 import { isSpotifyConnected, getSpotifyProfile } from "@/lib/spotify-client";
 
 export const revalidate = 30;
@@ -180,6 +183,11 @@ async function getPageData() {
   );
   const telegramConfigured = !!telegramCred ||
     (!!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID);
+
+  // Push subscription count
+  const pushSubCount = await sql`SELECT COUNT(*)::int as count FROM push_subscriptions`.then(
+    (r) => Number(r[0]?.count ?? 0)
+  ).catch(() => 0);
 
   // Spotify connection status
   const spotifyConnected = await isSpotifyConnected();
@@ -364,6 +372,7 @@ async function getPageData() {
     syncRunLogs: syncRunLogs as unknown as any[],
     mergedActivities,
     telegramConfigured,
+    pushSubCount,
     spotifyConnected,
     spotifyProfile,
     spotifyLibraryStatus: spotifyLibraryStatus as { tracks_with_bpm: string | number; total_tracks: string | number; last_synced: string | null } | null,
@@ -403,7 +412,7 @@ function StatusBadge({ status, hint }: { status: string; hint?: string }) {
 }
 
 export default async function ConnectionsPage() {
-  const { credentials, rules, syncLog, syncServiceStatus, backfillProgress, dataCounts, syncRunLogs, mergedActivities, telegramConfigured, spotifyConnected, spotifyProfile, spotifyLibraryStatus } =
+  const { credentials, rules, syncLog, syncServiceStatus, backfillProgress, dataCounts, syncRunLogs, mergedActivities, telegramConfigured, pushSubCount, spotifyConnected, spotifyProfile, spotifyLibraryStatus } =
     await getPageData();
 
   const credMap = Object.fromEntries(
@@ -645,6 +654,40 @@ export default async function ConnectionsPage() {
                 </div>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Push Notifications Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
+                  <Bell className="h-5 w-5 text-accent-foreground" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Push Notifications</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Get notified when workouts sync, milestones hit, and more
+                  </p>
+                </div>
+              </div>
+              {pushSubCount > 0 ? (
+                <Badge variant="default" className="bg-green-600 text-xs">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Active
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs text-muted-foreground">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Inactive
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <PushNotificationManager deviceCount={pushSubCount} />
+            {pushSubCount > 0 && <NotificationPreferences />}
           </CardContent>
         </Card>
       </div>
