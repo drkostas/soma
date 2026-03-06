@@ -38,8 +38,10 @@ def should_sync(source_platform, destination, conn=None, source_id=None):
     if source_platform == destination:
         return False
 
-    if conn is not None and source_id is not None:
-        if was_already_synced(conn, source_platform, source_id, destination):
+    if source_id is not None:
+        if conn is None:
+            logger.warning("should_sync called without conn for source_id=%s — dedup check skipped", source_id)
+        elif was_already_synced(conn, source_platform, source_id, destination):
             return False
 
     return True
@@ -142,11 +144,11 @@ def execute_routes(
                         workout_date=str(workout.get("date", "")),
                     )
                 status = "sent" if ok else "error"
-                # Log to activity_sync_log for dedup
+                # Log to activity_sync_log for dedup (use passed conn if available)
                 try:
-                    with get_connection() as log_conn:
+                    if conn:
                         log_activity_sync(
-                            log_conn,
+                            conn,
                             source_platform=source_platform,
                             source_id=source_id,
                             destination="telegram",
@@ -155,6 +157,18 @@ def execute_routes(
                             status=status,
                             error_message=None if ok else "Telegram send failed",
                         )
+                    else:
+                        with get_connection() as log_conn:
+                            log_activity_sync(
+                                log_conn,
+                                source_platform=source_platform,
+                                source_id=source_id,
+                                destination="telegram",
+                                destination_id="telegram",
+                                rule_id=rule_id,
+                                status=status,
+                                error_message=None if ok else "Telegram send failed",
+                            )
                 except Exception as log_err:
                     logger.warning("Failed to log telegram sync: %s", log_err)
                 results.append({

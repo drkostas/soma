@@ -15,7 +15,7 @@ export async function POST() {
       SELECT id, started_at
       FROM sync_log
       WHERE status = 'running'
-        AND started_at >= NOW() - INTERVAL '10 minutes'
+        AND started_at >= NOW() - INTERVAL '30 minutes'
       ORDER BY started_at DESC
       LIMIT 1
     `;

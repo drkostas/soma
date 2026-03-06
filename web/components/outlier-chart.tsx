@@ -127,7 +127,7 @@ function ChartTooltip({ active, payload }: any) {
 function DotLegend() {
   const items = [
     { label: "Normal", color: "var(--primary)" },
-    { label: "Outlier", color: "hsl(0 84% 60%)" },
+    { label: "Outlier", color: "oklch(60% 0.22 25)" },
     { label: "Fixed", color: "var(--muted-foreground)", opacity: 0.3 },
   ];
   return (
@@ -274,7 +274,7 @@ export function OutlierChart({
                       fixed
                         ? "var(--muted-foreground)"
                         : outlier
-                          ? "hsl(0 84% 60%)"
+                          ? "oklch(60% 0.22 25)"
                           : "var(--primary)"
                     }
                     fillOpacity={fixed ? 0.3 : 1}

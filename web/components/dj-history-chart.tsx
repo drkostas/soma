@@ -159,6 +159,25 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
             position: "relative",
           }}
         >
+          {/* Y-axis label */}
+          <div
+            style={{
+              position: "absolute",
+              top: HR_HEIGHT / 2,
+              left: -2,
+              transform: "rotate(-90deg) translateX(-50%)",
+              transformOrigin: "0 0",
+              fontSize: 8,
+              fontWeight: 600,
+              letterSpacing: "0.04em",
+              color: "var(--muted-foreground)",
+              opacity: 0.55,
+              whiteSpace: "nowrap",
+              userSelect: "none",
+            }}
+          >
+            HR (BPM)
+          </div>
           {yTicks.map(bpm => (
             <div
               key={bpm}
@@ -196,6 +215,32 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
               width={totalWidth}
               height={HR_HEIGHT}
             >
+              {/* HR zone background bands */}
+              {([
+                [100, 120, "oklch(65% 0.18 220)"],
+                [120, 140, "oklch(62% 0.17 142)"],
+                [140, 155, "oklch(80% 0.18 87)"],
+                [155, 170, "oklch(72% 0.19 50)"],
+                [170, 190, "oklch(60% 0.22 25)"],
+              ] as const).map(([lo, hi, color]) => {
+                const cLo = Math.max(lo, yMin);
+                const cHi = Math.min(hi, yMax);
+                if (cLo >= cHi) return null;
+                const rY = hrToY(cHi);
+                const rH = hrToY(cLo) - rY;
+                return (
+                  <rect
+                    key={`zone-${lo}`}
+                    x={0}
+                    width={totalWidth}
+                    y={rY}
+                    height={rH}
+                    fill={color}
+                    opacity={0.06}
+                  />
+                );
+              })}
+
               {/* Grid lines */}
               {yTicks.map(bpm => (
                 <line
@@ -310,10 +355,15 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
                       borderRadius: 3,
                       borderRight: "1px solid rgba(0,0,0,0.25)",
                       overflow: "hidden",
-                      cursor: "default",
+                      cursor: isQueued ? "default" : "pointer",
                       display: "flex",
                       alignItems: "stretch",
                       boxSizing: "border-box",
+                    }}
+                    onClick={() => {
+                      if (!isQueued) {
+                        window.open(`https://open.spotify.com/track/${entry.track_id}`, "_blank");
+                      }
                     }}
                     onMouseEnter={(e) =>
                       setTooltip({ entry, x: e.clientX, y: e.clientY })

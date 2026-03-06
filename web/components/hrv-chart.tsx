@@ -9,7 +9,9 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface HRVDataPoint {
   date: string;
@@ -28,22 +30,13 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
     status: d.status,
   }));
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
+  const nonZero = chartData.filter(d => d.weeklyAvg > 0);
+  const avgHrv = nonZero.length > 0
+    ? Math.round(nonZero.reduce((s, d) => s + d.weeklyAvg, 0) / nonZero.length)
+    : null;
 
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -52,12 +45,7 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
         <XAxis
           dataKey="date"
           tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis
@@ -65,6 +53,15 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
           tickLine={false}
           domain={["auto", "auto"]}
         />
+        {avgHrv !== null && (
+          <ReferenceLine
+            y={avgHrv}
+            stroke="oklch(75% 0.17 160)"
+            strokeDasharray="4 2"
+            strokeOpacity={0.6}
+            label={{ value: `avg ${avgHrv}ms`, position: "insideTopRight", fontSize: 9, fill: "oklch(75% 0.17 160)" }}
+          />
+        )}
         <Tooltip
           cursor={{ fill: "var(--muted)", opacity: 0.3 }}
           contentStyle={{
@@ -88,14 +85,14 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
         />
         <Bar
           dataKey="nightly"
-          fill="hsl(160, 80%, 55%)"
+          fill="oklch(72% 0.17 160)"
           opacity={0.6}
           radius={[2, 2, 0, 0]}
         />
         <Line
           type="monotone"
           dataKey="weeklyAvg"
-          stroke="hsl(160, 80%, 75%)"
+          stroke="oklch(82% 0.12 160)"
           strokeWidth={2}
           dot={false}
           strokeDasharray="5 5"

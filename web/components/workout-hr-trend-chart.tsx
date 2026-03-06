@@ -96,7 +96,7 @@ export function WorkoutHrTrendChart({ data }: { data: HrDataPoint[] }) {
           <Scatter
             data={data}
             dataKey="avg_hr"
-            fill="#ef4444"
+            fill="oklch(60% 0.22 25)"
             fillOpacity={0.7}
             r={3}
           />

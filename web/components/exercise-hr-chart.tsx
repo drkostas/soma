@@ -130,9 +130,9 @@ function ExerciseTrendView({
           <Line
             type="monotone"
             dataKey="avg_hr"
-            stroke="#ef4444"
+            stroke="oklch(60% 0.22 25)"
             strokeWidth={2}
-            dot={{ r: 3, fill: "#ef4444" }}
+            dot={{ r: 3, fill: "oklch(60% 0.22 25)" }}
             activeDot={{ r: 5 }}
           />
         </LineChart>
@@ -206,7 +206,7 @@ export function ExerciseHrChart({
                 className="h-full rounded-full transition-all"
                 style={{
                   width: `${Math.max(pct, 5)}%`,
-                  backgroundColor: `hsl(${hue}, 70%, 50%)`,
+                  backgroundColor: `oklch(${55 + (1 - intensity) * 20}% 0.20 ${25 + (1 - intensity) * 195})`,
                   opacity: 0.8,
                 }}
               />

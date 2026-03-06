@@ -10,6 +10,7 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface FitnessScorePoint {
   date: string;
@@ -38,27 +39,8 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
   const hillMax = hillValues.length > 0 ? Math.max(...hillValues) : 100;
   const hillPad = Math.max((hillMax - hillMin) * 0.15, 3);
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    const unique = chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-    if (unique.length > 8) {
-      const step = Math.ceil(unique.length / 8);
-      return unique.filter((_, i) => i % step === 0 || i === unique.length - 1);
-    }
-    return unique;
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -67,23 +49,18 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
         <XAxis
           dataKey="date"
           tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
         <YAxis
           yAxisId="endurance"
-          tick={{ fontSize: 10, fill: "hsl(210, 80%, 60%)" }}
+          tick={{ fontSize: 10, fill: "oklch(65% 0.18 250)" }}
           orientation="left"
           domain={[Math.floor(endMin - endPad), Math.ceil(endMax + endPad)]}
         />
         <YAxis
           yAxisId="hill"
-          tick={{ fontSize: 10, fill: "hsl(25, 80%, 55%)" }}
+          tick={{ fontSize: 10, fill: "oklch(68% 0.19 45)" }}
           orientation="right"
           domain={[Math.floor(hillMin - hillPad), Math.ceil(hillMax + hillPad)]}
           width={35}
@@ -118,7 +95,7 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
           yAxisId="endurance"
           type="monotone"
           dataKey="endurance"
-          stroke="hsl(210, 80%, 60%)"
+          stroke="oklch(65% 0.18 250)"
           strokeWidth={2}
           dot={false}
           connectNulls
@@ -127,7 +104,7 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
           yAxisId="hill"
           type="monotone"
           dataKey="hill"
-          stroke="hsl(25, 80%, 55%)"
+          stroke="oklch(68% 0.19 45)"
           strokeWidth={2}
           dot={false}
           connectNulls

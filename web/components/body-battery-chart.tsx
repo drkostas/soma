@@ -11,6 +11,7 @@ import {
   Cell,
   ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface BodyBatteryPoint {
   date: string;
@@ -28,22 +29,8 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
     net: Number(d.charged) - Number(d.drained),
   }));
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -53,12 +40,7 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 5), 1) })}
         />
         <YAxis
@@ -91,12 +73,12 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
         <ReferenceLine y={0} stroke="var(--muted-foreground)" opacity={0.3} />
         <Bar dataKey="charged" stackId="a" radius={[3, 3, 0, 0]}>
           {chartData.map((_, index) => (
-            <Cell key={index} fill="#22c55e" opacity={0.6} />
+            <Cell key={index} fill="oklch(62% 0.17 142)" opacity={0.6} />
           ))}
         </Bar>
         <Bar dataKey="drained" stackId="a" radius={[0, 0, 3, 3]}>
           {chartData.map((_, index) => (
-            <Cell key={index} fill="#ef4444" opacity={0.5} />
+            <Cell key={index} fill="oklch(60% 0.22 25)" opacity={0.5} />
           ))}
         </Bar>
       </BarChart>

@@ -1,8 +1,9 @@
 "use client";
 
 import {
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -10,6 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface TrainingLoadEntry {
   date: string;
@@ -28,48 +30,41 @@ export function TrainingLoadChart({ data }: { data: TrainingLoadEntry[] }) {
   }
 
   const filtered = data.filter((d) => d.acute !== null && d.chronic !== null);
-  const spanDays = filtered.length > 1
-    ? (new Date(filtered[filtered.length - 1].date).getTime() - new Date(filtered[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
 
   const chartData = filtered.map((d) => ({
       date: d.date,
       acute: Math.round(Number(d.acute)),
       chronic: Math.round(Number(d.chronic)),
-      acwr: Number(Number(d.acwr).toFixed(2)),
+      acwr: d.acwr !== null ? Number(d.acwr.toFixed(2)) : null,
     }));
 
-  // For long-range data, pick one tick per unique month to avoid duplicate labels
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
+
+  const hasAcwr = chartData.some((d) => d.acwr !== null);
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+    <ResponsiveContainer width="100%" height={220}>
+      <ComposedChart data={chartData} margin={{ top: 5, right: hasAcwr ? 36 : 10, left: 0, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d: string) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d: string) => formatChartTick(d, longRange)}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(0, Math.floor(chartData.length / 6)) })}
         />
-        <YAxis className="text-[10px]" tickLine={false} />
+        <YAxis yAxisId="left" className="text-[10px]" tickLine={false} />
+        {hasAcwr && (
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            className="text-[10px]"
+            tickLine={false}
+            domain={[0, 2.5]}
+            tickFormatter={(v: number) => v.toFixed(1)}
+          />
+        )}
         <Tooltip
           contentStyle={{
             backgroundColor: "var(--card)",
@@ -84,26 +79,71 @@ export function TrainingLoadChart({ data }: { data: TrainingLoadEntry[] }) {
           }}
         />
         <Area
+          yAxisId="left"
           type="monotone"
           dataKey="chronic"
-          stroke="#60a5fa"
-          fill="#60a5fa"
+          stroke="oklch(70% 0.15 250)"
+          fill="oklch(70% 0.15 250)"
           fillOpacity={0.15}
           strokeWidth={2}
           dot={false}
           name="chronic"
         />
         <Area
+          yAxisId="left"
           type="monotone"
           dataKey="acute"
-          stroke="#f97316"
-          fill="#f97316"
+          stroke="oklch(72% 0.19 50)"
+          fill="oklch(72% 0.19 50)"
           fillOpacity={0.1}
           strokeWidth={2}
           dot={false}
           name="acute"
         />
-      </AreaChart>
+        {hasAcwr && (
+          <Line
+            yAxisId="right"
+            type="monotone"
+            dataKey="acwr"
+            stroke="oklch(80% 0.18 87)"
+            strokeWidth={2}
+            dot={false}
+            name="acwr"
+            strokeDasharray="4 2"
+            connectNulls={false}
+          />
+        )}
+        {hasAcwr && (
+          <ReferenceLine
+            yAxisId="right"
+            y={0.8}
+            stroke="oklch(65% 0.18 220)"
+            strokeDasharray="3 3"
+            strokeOpacity={0.5}
+            label={{ value: "0.8", position: "right", fontSize: 9, fill: "oklch(65% 0.18 220)" }}
+          />
+        )}
+        {hasAcwr && (
+          <ReferenceLine
+            yAxisId="right"
+            y={1.3}
+            stroke="oklch(80% 0.18 87)"
+            strokeDasharray="3 3"
+            strokeOpacity={0.5}
+            label={{ value: "1.3", position: "right", fontSize: 9, fill: "oklch(80% 0.18 87)" }}
+          />
+        )}
+        {hasAcwr && (
+          <ReferenceLine
+            yAxisId="right"
+            y={1.5}
+            stroke="oklch(60% 0.22 25)"
+            strokeDasharray="3 3"
+            strokeOpacity={0.5}
+            label={{ value: "1.5 ⚠", position: "right", fontSize: 9, fill: "oklch(60% 0.22 25)" }}
+          />
+        )}
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
