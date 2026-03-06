@@ -6,17 +6,14 @@ import { PaceChart } from "@/components/pace-chart";
 import { MileageChart } from "@/components/mileage-chart";
 
 export const metadata: Metadata = { title: "Running" };
-import { HRZoneChart } from "@/components/hr-zone-chart";
 import { VO2MaxChart } from "@/components/vo2max-chart";
 import { HRPaceChart } from "@/components/hr-pace-chart";
-import { WeeklyDistanceChart } from "@/components/weekly-distance-chart";
 import { CadenceStrideChart } from "@/components/cadence-stride-chart";
 import { ClickableRunTable } from "@/components/clickable-run-table";
 import { RecentRoutesGallery } from "@/components/recent-routes-gallery";
 import { RunHeatmapCard } from "@/components/run-heatmap-card";
 import { FitnessScoresChart } from "@/components/fitness-scores-chart";
 import { TrainingLoadChart } from "@/components/training-load-chart";
-import { YearlyMileageChart } from "@/components/yearly-mileage-chart";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
@@ -26,14 +23,11 @@ import {
   HeartPulse,
   Zap,
   Trophy,
-  TrendingUp,
   Footprints,
   Activity,
   Mountain,
   Gauge,
   BarChart3,
-  Thermometer,
-  Cloud,
 } from "lucide-react";
 
 export const revalidate = 300;
@@ -112,38 +106,6 @@ async function getVO2MaxTrend(cutoff: string) {
   return rows;
 }
 
-async function getLatestHRZones() {
-  const sql = getDb();
-  // Get the latest running activity ID
-  const latest = await sql`
-    SELECT activity_id
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-    ORDER BY (raw_json->>'startTimeLocal')::text DESC
-    LIMIT 1
-  `;
-  if (!latest[0]) return [];
-
-  const rows = await sql`
-    SELECT raw_json
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'hr_zones' AND activity_id = ${latest[0].activity_id}
-  `;
-  if (!rows[0]) return [];
-
-  // raw_json is a list of zone objects
-  const zones = rows[0].raw_json;
-  if (!Array.isArray(zones)) return [];
-
-  return zones.map((z: any) => ({
-    zone: z.zoneNumber,
-    seconds: z.secsInZone || 0,
-    low: z.zoneLowBoundary || 0,
-    high: z.zoneHighBoundary || 999,
-  }));
-}
-
 async function getHRPaceData(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
@@ -165,22 +127,6 @@ async function getHRPaceData(cutoff: string) {
   return rows;
 }
 
-async function getWeeklyDistance(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    SELECT
-      TO_CHAR(DATE_TRUNC('week', (raw_json->>'startTimeLocal')::timestamp), 'YYYY-MM-DD') as week,
-      COUNT(*) as runs,
-      SUM((raw_json->>'distance')::float) / 1000.0 as km
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-    GROUP BY week ORDER BY week ASC
-  `;
-  return rows;
-}
-
 async function getCadenceStride(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
@@ -194,25 +140,6 @@ async function getCadenceStride(cutoff: string) {
       AND raw_json->>'averageRunningCadenceInStepsPerMinute' IS NOT NULL
       AND (raw_json->>'averageRunningCadenceInStepsPerMinute')::float >= 120
       AND (raw_json->>'distance')::float > 1000
-      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-    ORDER BY (raw_json->>'startTimeLocal')::text ASC
-  `;
-  return rows;
-}
-
-async function getTrainingEffects(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    SELECT
-      (raw_json->>'startTimeLocal')::text as date,
-      (raw_json->>'activityName')::text as name,
-      ROUND((raw_json->>'aerobicTrainingEffect')::numeric, 1) as aerobic_te,
-      ROUND((raw_json->>'anaerobicTrainingEffect')::numeric, 1) as anaerobic_te,
-      (raw_json->>'distance')::float / 1000.0 as distance
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND raw_json->>'aerobicTrainingEffect' IS NOT NULL
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
@@ -422,107 +349,6 @@ async function getPersonalRecords() {
   };
 }
 
-async function getYearlyRunningStats() {
-  const sql = getDb();
-  const rows = await sql`
-    SELECT
-      EXTRACT(YEAR FROM (raw_json->>'startTimeLocal')::timestamp)::int as year,
-      COUNT(*) as runs,
-      SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
-      AVG((raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0) as avg_pace,
-      AVG((raw_json->>'averageHR')::float) as avg_hr,
-      MAX((raw_json->>'distance')::float) / 1000.0 as longest_km,
-      SUM((raw_json->>'calories')::float) as total_cal
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'distance')::float > 500
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - INTERVAL '10 years'
-    GROUP BY year
-    ORDER BY year DESC
-  `;
-  return rows;
-}
-
-async function getPaceDistribution(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    WITH paces AS (
-      SELECT
-        (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace
-      FROM garmin_activity_raw
-      WHERE endpoint_name = 'summary'
-        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'distance')::float > 1000
-        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-    )
-    SELECT
-      CASE
-        WHEN pace < 4.5 THEN 'Sub 4:30'
-        WHEN pace < 5.0 THEN '4:30-5:00'
-        WHEN pace < 5.5 THEN '5:00-5:30'
-        WHEN pace < 6.0 THEN '5:30-6:00'
-        WHEN pace < 6.5 THEN '6:00-6:30'
-        WHEN pace < 7.0 THEN '6:30-7:00'
-        WHEN pace < 7.5 THEN '7:00-7:30'
-        WHEN pace < 8.0 THEN '7:30-8:00'
-        ELSE '8:00+'
-      END as zone,
-      COUNT(*) as count,
-      CASE
-        WHEN pace < 4.5 THEN 1
-        WHEN pace < 5.0 THEN 2
-        WHEN pace < 5.5 THEN 3
-        WHEN pace < 6.0 THEN 4
-        WHEN pace < 6.5 THEN 5
-        WHEN pace < 7.0 THEN 6
-        WHEN pace < 7.5 THEN 7
-        WHEN pace < 8.0 THEN 8
-        ELSE 9
-      END as sort_order
-    FROM paces
-    GROUP BY zone, sort_order
-    ORDER BY sort_order ASC
-  `;
-  return rows;
-}
-
-async function getDistanceDistribution(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    WITH distances AS (
-      SELECT
-        (raw_json->>'distance')::float / 1000.0 as km
-      FROM garmin_activity_raw
-      WHERE endpoint_name = 'summary'
-        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-    )
-    SELECT
-      CASE
-        WHEN km < 3 THEN 'Under 3k'
-        WHEN km < 5 THEN '3-5k'
-        WHEN km < 8 THEN '5-8k'
-        WHEN km < 10 THEN '8-10k'
-        WHEN km < 15 THEN '10-15k'
-        ELSE '15k+'
-      END as bucket,
-      COUNT(*) as count,
-      CASE
-        WHEN km < 3 THEN 1
-        WHEN km < 5 THEN 2
-        WHEN km < 8 THEN 3
-        WHEN km < 10 THEN 4
-        WHEN km < 15 THEN 5
-        ELSE 6
-      END as sort_order
-    FROM distances
-    GROUP BY bucket, sort_order
-    ORDER BY sort_order ASC
-  `;
-  return rows;
-}
-
 async function getOverallHRDistribution(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
@@ -556,74 +382,6 @@ async function getOverallHRDistribution(cutoff: string) {
   return rows;
 }
 
-async function getMonthlyElevation(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    SELECT
-      TO_CHAR((raw_json->>'startTimeLocal')::timestamp, 'YYYY-MM') as month,
-      SUM((raw_json->>'elevationGain')::float) as total_gain,
-      AVG((raw_json->>'elevationGain')::float) as avg_gain,
-      COUNT(*) as runs
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND raw_json->>'elevationGain' IS NOT NULL
-      AND (raw_json->>'elevationGain')::float > 0
-      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-    GROUP BY month
-    ORDER BY month ASC
-  `;
-  return rows;
-}
-
-async function getRunningConsistency(cutoff: string) {
-  const sql = getDb();
-  const rows = await sql`
-    WITH weeks AS (
-      SELECT
-        DATE_TRUNC('week', (raw_json->>'startTimeLocal')::timestamp)::date as week,
-        COUNT(*) as runs
-      FROM garmin_activity_raw
-      WHERE endpoint_name = 'summary'
-        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-      GROUP BY week
-      ORDER BY week ASC
-    )
-    SELECT
-      COUNT(*) as weeks_with_runs,
-      AVG(runs) as avg_runs_per_week,
-      MAX(runs) as max_runs_week,
-      MIN(runs) as min_runs_week
-    FROM weeks
-  `;
-  // Also get longest gap between runs
-  const gaps = await sql`
-    SELECT
-      (raw_json->>'startTimeLocal')::date as run_date
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-    ORDER BY run_date ASC
-  `;
-  let maxGap = 0;
-  for (let i = 1; i < gaps.length; i++) {
-    const gap = (new Date(gaps[i].run_date).getTime() - new Date(gaps[i - 1].run_date).getTime()) / (24 * 60 * 60 * 1000);
-    if (gap > maxGap) maxGap = gap;
-  }
-  const r = rows[0] || {};
-  const totalWeeks = Math.round((Date.now() - new Date(cutoff).getTime()) / (7 * 86400000));
-  return {
-    weeks_with_runs: Number(r.weeks_with_runs || 0),
-    avg_runs_per_week: Number(r.avg_runs_per_week || 0),
-    max_runs_week: Number(r.max_runs_week || 0),
-    min_runs_week: Number(r.min_runs_week || 0),
-    longest_gap_days: Math.round(maxGap),
-    total_weeks: totalWeeks,
-  };
-}
-
 async function getRecentRuns(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
@@ -640,7 +398,11 @@ async function getRecentRuns(cutoff: string) {
       w.raw_json->>'temp' as temp_f,
       w.raw_json->'weatherTypeDTO'->>'desc' as weather_desc
     FROM garmin_activity_raw s
-    LEFT JOIN garmin_activity_raw w ON w.activity_id = s.activity_id AND w.endpoint_name = 'weather'
+    LEFT JOIN LATERAL (
+      SELECT raw_json FROM garmin_activity_raw
+      WHERE activity_id = s.activity_id AND endpoint_name = 'weather'
+      LIMIT 1
+    ) w ON true
     WHERE s.endpoint_name = 'summary'
       AND s.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
       AND (s.raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
@@ -787,26 +549,18 @@ export default async function RunningPage({
   const cutoffDays = Math.min(rangeDays, 730);
   const cutoff = new Date(Date.now() - cutoffDays * 86400000).toISOString().split("T")[0];
 
-  const [stats, paceHistory, mileage, vo2max, hrZones, hrPaceData, weeklyDist, cadenceStride, trainingEffects, records, recentRuns, fitnessScores, trainingStatus, paceDistribution, distanceDistribution, yearlyStats, monthlyElevation, runConsistency, hrDistribution, shoeMileage, splitAnalysis, bestSplits, trainingLoadTrend] =
+  const [stats, paceHistory, mileage, vo2max, hrPaceData, cadenceStride, records, recentRuns, fitnessScores, trainingStatus, hrDistribution, shoeMileage, splitAnalysis, bestSplits, trainingLoadTrend] =
     await Promise.all([
       getRunningStats(cutoff),
       getPaceHistory(cutoff),
       getMonthlyMileage(cutoff),
       getVO2MaxTrend(cutoff),
-      getLatestHRZones(),
       getHRPaceData(cutoff),
-      getWeeklyDistance(cutoff),
       getCadenceStride(cutoff),
-      getTrainingEffects(cutoff),
       getPersonalRecords(),
       getRecentRuns(cutoff),
       getFitnessScores(),
       getTrainingStatus(),
-      getPaceDistribution(cutoff),
-      getDistanceDistribution(cutoff),
-      getYearlyRunningStats(),
-      getMonthlyElevation(cutoff),
-      getRunningConsistency(cutoff),
       getOverallHRDistribution(cutoff),
       getShoeMileage(),
       getSplitAnalysis(cutoff),
@@ -815,12 +569,12 @@ export default async function RunningPage({
     ]);
 
   return (
-    <div className="container mx-auto px-6 py-8 max-w-7xl">
+    <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Running</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Running</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {stats?.total_runs
               ? `${Number(stats.total_runs)} runs tracked · ${Number(stats.total_km).toFixed(0)} km total`
               : "No runs tracked yet."}
@@ -855,7 +609,96 @@ export default async function RunningPage({
         />
       </div>
 
-      {/* Charts Row 1: Pace + Monthly Mileage */}
+      {/* Training Status + Training Load (most actionable — "should I run today?") */}
+      {trainingStatus && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-blue-400" />
+              Training Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Status</div>
+                <div className="text-lg font-bold">
+                  {(() => {
+                    const statusMap: Record<string, { label: string; color: string }> = {
+                      "7": { label: "Productive", color: "text-green-400" },
+                      "6": { label: "Maintaining", color: "text-blue-400" },
+                      "5": { label: "Recovery", color: "text-yellow-400" },
+                      "4": { label: "Unproductive", color: "text-orange-400" },
+                      "3": { label: "Detraining", color: "text-red-400" },
+                      "2": { label: "Peaking", color: "text-purple-400" },
+                      "1": { label: "Overreaching", color: "text-red-400" },
+                    };
+                    const s = statusMap[trainingStatus.status_code] || { label: trainingStatus.feedback || "Unknown", color: "text-muted-foreground" };
+                    return <span className={s.color}>{s.label}</span>;
+                  })()}
+                </div>
+                <div className="text-xs text-muted-foreground capitalize">
+                  {trainingStatus.sport?.toLowerCase()}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">VO2 Max</div>
+                <div className="text-lg font-bold">
+                  {trainingStatus.vo2max ? Number(trainingStatus.vo2max).toFixed(1) : "—"}
+                </div>
+                <div className="text-xs text-muted-foreground">ml/kg/min</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Training Load</div>
+                <div className="text-lg font-bold">
+                  {trainingStatus.acute_load ? Math.round(Number(trainingStatus.acute_load)) : "—"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {trainingStatus.chronic_load ? `Chronic: ${Math.round(Number(trainingStatus.chronic_load))}` : ""}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">ACWR</div>
+                <div className="text-lg font-bold">
+                  {trainingStatus.acwr ? Number(trainingStatus.acwr).toFixed(2) : "—"}
+                </div>
+                <div className={`text-xs capitalize ${
+                  trainingStatus.acwr_status === "OPTIMAL" ? "text-green-400" :
+                  trainingStatus.acwr_status === "HIGH" ? "text-yellow-400" : "text-muted-foreground"
+                }`}>
+                  {trainingStatus.acwr_status?.toLowerCase()}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Training Load Trend */}
+      {(trainingLoadTrend as any[]).length > 2 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Activity className="h-4 w-4 text-orange-400" />
+              Training Load Trend
+              <span className="ml-auto text-xs font-normal flex items-center gap-3">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500" />Acute</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" />Chronic</span>
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TrainingLoadChart data={(trainingLoadTrend as any[]).map((d: any) => ({
+              date: d.date,
+              acute: d.acute ? Number(d.acute) : null,
+              chronic: d.chronic ? Number(d.chronic) : null,
+              acwr: d.acwr ? Number(d.acwr) : null,
+            }))} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pace + Monthly Mileage */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <ExpandableChartCard title="Pace Progression">
           <PaceChart data={paceHistory as any} />
@@ -866,177 +709,68 @@ export default async function RunningPage({
         </ExpandableChartCard>
       </div>
 
-      {/* Year-over-Year Monthly Mileage */}
-      {(mileage as any[]).length > 12 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-cyan-400" />
-              Year-over-Year Mileage
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const yearMap = new Map<string, Map<number, number>>();
-              for (const m of mileage as any[]) {
-                const [year, month] = m.month.split("-");
-                if (!yearMap.has(year)) yearMap.set(year, new Map());
-                yearMap.get(year)!.set(parseInt(month), Number(Number(m.km).toFixed(1)));
-              }
-              const years = Array.from(yearMap.keys()).sort();
-              const chartData = Array.from({ length: 12 }, (_, i) => {
-                const entry: Record<string, number> = { month: i + 1 };
-                for (const year of years) {
-                  entry[year] = yearMap.get(year)?.get(i + 1) || 0;
-                }
-                return entry;
-              });
-              return <YearlyMileageChart data={chartData as any} years={years} />;
-            })()}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Weekly Distance — last 52 weeks */}
+      {/* Route Heatmap + Recent Routes */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" />
-            Weekly Distance (Last Year)
+            <MapPin className="h-4 w-4 text-blue-400" />
+            Route Heatmap
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <WeeklyDistanceChart
-            data={(weeklyDist as any[])
-              .slice(-52)
-              .map((w: any) => ({
-                week: w.week,
-                km: Number(Number(w.km).toFixed(1)),
-                runs: Number(w.runs),
-              }))}
-          />
+        <CardContent className="p-0 overflow-hidden rounded-b-lg">
+          <RunHeatmapCard />
         </CardContent>
       </Card>
 
-      {/* Charts Row 2: VO2max + HR Zones */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-blue-400" />
+            Recent Routes
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <RecentRoutesGallery />
+        </CardContent>
+      </Card>
+
+      {/* VO2max + HR vs Pace */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <ExpandableChartCard title="VO2max Trend">
           <VO2MaxChart data={vo2max as any} />
         </ExpandableChartCard>
 
-        <ExpandableChartCard title="HR Zones (Latest Run)">
-          <HRZoneChart zones={hrZones as any} />
-        </ExpandableChartCard>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <HeartPulse className="h-4 w-4 text-red-400" />
+              Heart Rate vs Pace
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <HRPaceChart data={hrPaceData as any} />
+          </CardContent>
+        </Card>
       </div>
 
-      {/* HR vs Pace Scatter */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <HeartPulse className="h-4 w-4 text-red-400" />
-            Heart Rate vs Pace
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <HRPaceChart data={hrPaceData as any} />
-        </CardContent>
-      </Card>
+      {/* Cadence & Stride */}
+      <ExpandableChartCard title="Cadence & Stride Length" className="mb-6">
+        <CadenceStrideChart
+          data={(cadenceStride as any[]).map((c: any) => ({
+            date: c.date,
+            cadence: Number(c.cadence),
+            stride: Number(c.stride),
+          }))}
+        />
+      </ExpandableChartCard>
 
-      {/* Pace & Distance Distribution */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {/* Pace Distribution */}
-        {(paceDistribution as any[]).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Timer className="h-4 w-4 text-green-400" />
-                Pace Distribution
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {(() => {
-                  const zones = paceDistribution as any[];
-                  const maxCount = Math.max(...zones.map((z: any) => Number(z.count)));
-                  const total = zones.reduce((s: number, z: any) => s + Number(z.count), 0);
-                  const colors = [
-                    "bg-red-500", "bg-orange-500", "bg-amber-500", "bg-yellow-500",
-                    "bg-lime-500", "bg-green-500", "bg-emerald-500", "bg-teal-500", "bg-cyan-500",
-                  ];
-                  return zones.map((z: any, i: number) => {
-                    const count = Number(z.count);
-                    const pct = (count / maxCount) * 100;
-                    const sharePct = ((count / total) * 100).toFixed(0);
-                    return (
-                      <div key={z.zone} className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-20 text-right font-mono">{z.zone}</span>
-                        <div className="flex-1 h-5 bg-muted rounded-sm overflow-hidden">
-                          <div
-                            className={`h-full ${colors[i] || "bg-primary"} rounded-sm`}
-                            style={{ width: `${Math.max(pct, 3)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs w-8 text-right font-medium">{count}</span>
-                        <span className="text-xs w-10 text-right text-muted-foreground">{sharePct}%</span>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Distance Distribution */}
-        {(distanceDistribution as any[]).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-blue-400" />
-                Distance Distribution
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {(() => {
-                  const buckets = distanceDistribution as any[];
-                  const maxCount = Math.max(...buckets.map((b: any) => Number(b.count)));
-                  const total = buckets.reduce((s: number, b: any) => s + Number(b.count), 0);
-                  const colors = [
-                    "bg-blue-300", "bg-blue-400", "bg-blue-500", "bg-blue-600", "bg-indigo-500", "bg-violet-500",
-                  ];
-                  return buckets.map((b: any, i: number) => {
-                    const count = Number(b.count);
-                    const pct = (count / maxCount) * 100;
-                    const sharePct = ((count / total) * 100).toFixed(0);
-                    return (
-                      <div key={b.bucket} className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-20 text-right font-mono">{b.bucket}</span>
-                        <div className="flex-1 h-5 bg-muted rounded-sm overflow-hidden">
-                          <div
-                            className={`h-full ${colors[i] || "bg-primary"} rounded-sm`}
-                            style={{ width: `${Math.max(pct, 3)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs w-8 text-right font-medium">{count}</span>
-                        <span className="text-xs w-10 text-right text-muted-foreground">{sharePct}%</span>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Overall HR Zone Distribution */}
+      {/* Training Intensity Distribution */}
       {(hrDistribution as any[]).length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <HeartPulse className="h-4 w-4 text-red-400" />
-              Training Intensity Distribution (All Runs)
+              Training Intensity Distribution
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1048,7 +782,6 @@ export default async function RunningPage({
               ];
               return (
                 <div className="space-y-3">
-                  {/* Stacked bar showing proportion */}
                   <div className="flex h-6 rounded-full overflow-hidden">
                     {zones.map((z: any, i: number) => {
                       const pct = total > 0 ? (Number(z.count) / total) * 100 : 0;
@@ -1065,7 +798,6 @@ export default async function RunningPage({
                       );
                     })}
                   </div>
-                  {/* Zone details */}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     {zones.map((z: any, i: number) => (
                       <div key={z.zone} className="text-center">
@@ -1086,74 +818,6 @@ export default async function RunningPage({
           </CardContent>
         </Card>
       )}
-
-      {/* Cadence & Stride + Training Effect */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <ExpandableChartCard title="Cadence & Stride Length">
-          <CadenceStrideChart
-            data={(cadenceStride as any[]).map((c: any) => ({
-              date: c.date,
-              cadence: Number(c.cadence),
-              stride: Number(c.stride),
-            }))}
-          />
-        </ExpandableChartCard>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Training Effect Distribution
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const te = (trainingEffects as any[]).filter((t: any) => Number(t.aerobic_te) > 0);
-              if (te.length === 0) return <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">No data</div>;
-
-              // Categorize training effects
-              const categories = [
-                { label: "Minor", range: "0-1.9", color: "bg-slate-400", min: 0, max: 2 },
-                { label: "Maintaining", range: "2.0-2.9", color: "bg-blue-400", min: 2, max: 3 },
-                { label: "Improving", range: "3.0-3.9", color: "bg-green-400", min: 3, max: 4 },
-                { label: "Highly Improving", range: "4.0-4.9", color: "bg-orange-400", min: 4, max: 5 },
-                { label: "Overreaching", range: "5.0", color: "bg-red-400", min: 5, max: 6 },
-              ];
-
-              const counts = categories.map((cat) => ({
-                ...cat,
-                count: te.filter((t: any) => {
-                  const v = Number(t.aerobic_te);
-                  return v >= cat.min && v < cat.max;
-                }).length,
-              }));
-
-              const maxCount = Math.max(...counts.map((c) => c.count));
-              const avgTE = te.reduce((s: number, t: any) => s + Number(t.aerobic_te), 0) / te.length;
-
-              return (
-                <div className="space-y-3">
-                  <div className="text-center mb-4">
-                    <div className="text-2xl font-bold">{avgTE.toFixed(1)}</div>
-                    <div className="text-xs text-muted-foreground">Avg Aerobic TE</div>
-                  </div>
-                  {counts.filter((c) => c.count > 0).map((cat) => (
-                    <div key={cat.label} className="flex items-center gap-3">
-                      <div className="w-28 text-xs text-muted-foreground">{cat.label}</div>
-                      <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${cat.color} rounded-full transition-all`}
-                          style={{ width: `${(cat.count / maxCount) * 100}%` }}
-                        />
-                      </div>
-                      <div className="w-8 text-xs text-right text-muted-foreground">{cat.count}</div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Per-KM Split Analysis */}
       {(splitAnalysis as any[]).length > 0 && (
@@ -1241,95 +905,6 @@ export default async function RunningPage({
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Training Status */}
-      {trainingStatus && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Gauge className="h-4 w-4 text-blue-400" />
-              Training Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Status</div>
-                <div className="text-lg font-bold">
-                  {(() => {
-                    const statusMap: Record<string, { label: string; color: string }> = {
-                      "7": { label: "Productive", color: "text-green-400" },
-                      "6": { label: "Maintaining", color: "text-blue-400" },
-                      "5": { label: "Recovery", color: "text-yellow-400" },
-                      "4": { label: "Unproductive", color: "text-orange-400" },
-                      "3": { label: "Detraining", color: "text-red-400" },
-                      "2": { label: "Peaking", color: "text-purple-400" },
-                      "1": { label: "Overreaching", color: "text-red-400" },
-                    };
-                    const s = statusMap[trainingStatus.status_code] || { label: trainingStatus.feedback || "Unknown", color: "text-muted-foreground" };
-                    return <span className={s.color}>{s.label}</span>;
-                  })()}
-                </div>
-                <div className="text-xs text-muted-foreground capitalize">
-                  {trainingStatus.sport?.toLowerCase()}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">VO2 Max</div>
-                <div className="text-lg font-bold">
-                  {trainingStatus.vo2max ? Number(trainingStatus.vo2max).toFixed(1) : "—"}
-                </div>
-                <div className="text-xs text-muted-foreground">ml/kg/min</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Training Load</div>
-                <div className="text-lg font-bold">
-                  {trainingStatus.acute_load ? Math.round(Number(trainingStatus.acute_load)) : "—"}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {trainingStatus.chronic_load ? `Chronic: ${Math.round(Number(trainingStatus.chronic_load))}` : ""}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">ACWR</div>
-                <div className="text-lg font-bold">
-                  {trainingStatus.acwr ? Number(trainingStatus.acwr).toFixed(2) : "—"}
-                </div>
-                <div className={`text-xs capitalize ${
-                  trainingStatus.acwr_status === "OPTIMAL" ? "text-green-400" :
-                  trainingStatus.acwr_status === "HIGH" ? "text-yellow-400" : "text-muted-foreground"
-                }`}>
-                  {trainingStatus.acwr_status?.toLowerCase()}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Training Load Trend */}
-      {(trainingLoadTrend as any[]).length > 2 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Activity className="h-4 w-4 text-orange-400" />
-              Training Load Trend
-              <span className="ml-auto text-xs font-normal flex items-center gap-3">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500" />Acute</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" />Chronic</span>
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TrainingLoadChart data={(trainingLoadTrend as any[]).map((d: any) => ({
-              date: d.date,
-              acute: d.acute ? Number(d.acute) : null,
-              chronic: d.chronic ? Number(d.chronic) : null,
-              acwr: d.acwr ? Number(d.acwr) : null,
-            }))} />
           </CardContent>
         </Card>
       )}
@@ -1571,192 +1146,6 @@ export default async function RunningPage({
           </CardContent>
         </Card>
       )}
-
-      {/* Running Consistency (Last 26 Weeks) */}
-      {runConsistency?.weeks_with_runs && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Activity className="h-4 w-4 text-emerald-400" />
-              Running Consistency (Last 6 Months)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Active Weeks</div>
-                <div className="text-2xl font-bold">
-                  {Number(runConsistency.weeks_with_runs)}/{runConsistency.total_weeks}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {Math.round((Number(runConsistency.weeks_with_runs) / runConsistency.total_weeks) * 100)}% consistency
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Avg Runs/Week</div>
-                <div className="text-2xl font-bold">
-                  {Number(runConsistency.avg_runs_per_week).toFixed(1)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Best Week</div>
-                <div className="text-2xl font-bold text-green-400">
-                  {Number(runConsistency.max_runs_week)} {Number(runConsistency.max_runs_week) === 1 ? "run" : "runs"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Min Week</div>
-                <div className="text-2xl font-bold">
-                  {Number(runConsistency.min_runs_week)} {Number(runConsistency.min_runs_week) === 1 ? "run" : "runs"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Longest Gap</div>
-                <div className="text-2xl font-bold text-yellow-400">
-                  {runConsistency.longest_gap_days}d
-                </div>
-              </div>
-            </div>
-            {/* Consistency bar */}
-            <div className="mt-4 h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-green-400 rounded-full"
-                style={{ width: `${Math.round((Number(runConsistency.weeks_with_runs) / runConsistency.total_weeks) * 100)}%` }}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Monthly Elevation Gain */}
-      {(monthlyElevation as any[]).length > 0 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Mountain className="h-4 w-4 text-amber-400" />
-              Monthly Elevation Gain
-              <span className="ml-auto text-xs font-normal">
-                {(() => {
-                  const data = monthlyElevation as any[];
-                  const total = data.reduce((s: number, m: any) => s + Number(m.total_gain || 0), 0);
-                  return `${Math.round(total).toLocaleString()}m total`;
-                })()}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-[3px] h-28">
-              {(monthlyElevation as any[]).slice(-24).map((m: any, i: number) => {
-                const gain = Number(m.total_gain || 0);
-                const maxGain = Math.max(...(monthlyElevation as any[]).slice(-24).map((x: any) => Number(x.total_gain || 0)));
-                const pct = maxGain > 0 ? (gain / maxGain) * 100 : 0;
-                const monthDate = new Date(m.month + "-01");
-                const label = monthDate.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center">
-                    {pct > 40 && (
-                      <span className="text-[8px] text-muted-foreground mb-0.5">
-                        {Math.round(gain)}m
-                      </span>
-                    )}
-                    <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
-                      <div
-                        className="w-full rounded-t-sm bg-amber-400/70"
-                        style={{ height: `${Math.max(pct, gain > 0 ? 4 : 0)}%` }}
-                        title={`${label}: ${Math.round(gain)}m gain (${m.runs} runs)`}
-                      />
-                    </div>
-                    {i % 3 === 0 && (
-                      <span className="text-[9px] text-muted-foreground mt-0.5">
-                        {label}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Yearly Summary */}
-      {(yearlyStats as any[]).length > 1 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-blue-400" />
-              Year-over-Year Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/50">
-                    <th className="text-left py-2 text-xs font-medium text-muted-foreground">Year</th>
-                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Runs</th>
-                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Distance</th>
-                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Avg Pace</th>
-                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Avg HR</th>
-                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Longest</th>
-                    <th className="text-right py-2 text-xs font-medium text-muted-foreground">Calories</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(yearlyStats as any[]).map((y: any, i: number) => {
-                    const prevYear = (yearlyStats as any[])[i + 1];
-                    const kmDiff = prevYear ? Number(y.total_km) - Number(prevYear.total_km) : null;
-                    return (
-                      <tr key={y.year} className="border-b border-border/20 hover:bg-muted/30">
-                        <td className="py-2 font-medium">{y.year}</td>
-                        <td className="py-2 text-right">{Number(y.runs)}</td>
-                        <td className="py-2 text-right">
-                          {Number(y.total_km).toFixed(0)} km
-                          {kmDiff !== null && (
-                            <span className={`ml-1 text-xs ${kmDiff >= 0 ? "text-green-400" : "text-red-400"}`}>
-                              {kmDiff >= 0 ? "+" : ""}{kmDiff.toFixed(0)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 text-right font-mono">{y.avg_pace ? formatPace(Number(y.avg_pace)) : "—"}</td>
-                        <td className="py-2 text-right">{y.avg_hr ? Math.round(Number(y.avg_hr)) : "—"}</td>
-                        <td className="py-2 text-right">{Number(y.longest_km).toFixed(1)} km</td>
-                        <td className="py-2 text-right text-muted-foreground">{y.total_cal ? Math.round(Number(y.total_cal)).toLocaleString() : "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Route Heatmap */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-blue-400" />
-            Route Heatmap
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0 overflow-hidden rounded-b-lg">
-          <RunHeatmapCard />
-        </CardContent>
-      </Card>
-
-      {/* Recent Routes Gallery */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-blue-400" />
-            Recent Routes
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RecentRoutesGallery />
-        </CardContent>
-      </Card>
 
       {/* Recent Runs Table */}
       <Card>

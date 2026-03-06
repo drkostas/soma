@@ -452,12 +452,12 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
     .slice(0, 5);
 
   return (
-    <div className="container mx-auto px-6 py-8 max-w-7xl">
+    <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
       {/* Header */}
-      <div className="mb-8 flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Activities</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Activities</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Kiteboarding, snowboarding, hiking & more
           </p>
         </div>
@@ -473,18 +473,18 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
         />
         <StatCard
           title="Total Distance"
-          value={`${totalKm.toFixed(0)} km`}
+          value={totalKm > 0 ? `${totalKm.toFixed(0)} km` : "—"}
           icon={<MapPin className="h-4 w-4 text-blue-400" />}
         />
         <StatCard
           title="Total Time"
-          value={`${totalHours.toFixed(0)}h`}
+          value={totalHours > 0 ? `${totalHours.toFixed(0)}h` : "—"}
           icon={<Clock className="h-4 w-4 text-green-400" />}
         />
         <StatCard
           title="Total Calories"
-          value={`${Math.round(totalCal).toLocaleString()}`}
-          subtitle="kcal"
+          value={totalCal > 0 ? `${Math.round(totalCal).toLocaleString()}` : "—"}
+          subtitle={totalCal > 0 ? "kcal" : undefined}
           icon={<Flame className="h-4 w-4 text-orange-400" />}
         />
       </div>
@@ -604,17 +604,17 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <StatCard
               title="Top Speed"
-              value={`${topSpeed.toFixed(1)} kts`}
+              value={topSpeed > 0 ? `${topSpeed.toFixed(1)} kts` : "—"}
               icon={<Gauge className="h-4 w-4 text-cyan-400" />}
             />
             <StatCard
               title="Avg Max Speed"
-              value={`${avgSpeed.toFixed(1)} kts`}
+              value={avgSpeed > 0 ? `${avgSpeed.toFixed(1)} kts` : "—"}
               icon={<Wind className="h-4 w-4 text-cyan-400" />}
             />
             <StatCard
               title="Total Distance"
-              value={`${totalKiteKm.toFixed(0)} km`}
+              value={totalKiteKm > 0 ? `${totalKiteKm.toFixed(0)} km` : "—"}
               icon={<MapPin className="h-4 w-4 text-cyan-400" />}
             />
             {bestJump > 0 ? (
@@ -781,17 +781,17 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <StatCard
               title="Total Vertical"
-              value={`${totalVertical.toLocaleString()}m`}
+              value={totalVertical > 0 ? `${totalVertical.toLocaleString()}m` : "—"}
               icon={<ArrowUp className="h-4 w-4 text-blue-300" />}
             />
             <StatCard
               title="Top Speed"
-              value={`${topSnowSpeed.toFixed(0)} km/h`}
+              value={topSnowSpeed > 0 ? `${topSnowSpeed.toFixed(0)} km/h` : "—"}
               icon={<Gauge className="h-4 w-4 text-blue-300" />}
             />
             <StatCard
               title="Total Distance"
-              value={`${totalSnowKm.toFixed(0)} km`}
+              value={totalSnowKm > 0 ? `${totalSnowKm.toFixed(0)} km` : "—"}
               icon={<MapPin className="h-4 w-4 text-blue-300" />}
             />
             <StatCard
@@ -973,9 +973,9 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
               return (
                 <>
                   <StatCard title="Total Walks" value={walks.length} icon={<PersonStanding className="h-4 w-4 text-emerald-400" />} />
-                  <StatCard title="Total Distance" value={`${totalDist.toFixed(0)} km`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
-                  <StatCard title="Avg Duration" value={formatDuration(avgDuration)} icon={<Clock className="h-4 w-4 text-green-400" />} />
-                  <StatCard title="Total Elevation" value={`${totalElev.toFixed(0)}m`} icon={<ArrowUp className="h-4 w-4 text-amber-400" />} />
+                  <StatCard title="Total Distance" value={totalDist > 0 ? `${totalDist.toFixed(0)} km` : "—"} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Avg Duration" value={avgDuration > 0 ? formatDuration(avgDuration) : "—"} icon={<Clock className="h-4 w-4 text-green-400" />} />
+                  <StatCard title="Total Elevation" value={totalElev > 0 ? `${totalElev.toFixed(0)}m` : "—"} icon={<ArrowUp className="h-4 w-4 text-amber-400" />} />
                 </>
               );
             })()}
@@ -1024,9 +1024,9 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
               return (
                 <>
                   <StatCard title="Total Rides" value={rides.length} icon={<Bike className="h-4 w-4 text-yellow-400" />} />
-                  <StatCard title="Total Distance" value={`${totalDist.toFixed(0)} km`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
-                  <StatCard title="Top Speed" value={`${topSpeed.toFixed(0)} km/h`} icon={<Gauge className="h-4 w-4 text-red-400" />} />
-                  <StatCard title="Total Elevation" value={`${totalElev.toFixed(0)}m`} icon={<ArrowUp className="h-4 w-4 text-green-400" />} />
+                  <StatCard title="Total Distance" value={totalDist > 0 ? `${totalDist.toFixed(0)} km` : "—"} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Top Speed" value={topSpeed > 0 ? `${topSpeed.toFixed(0)} km/h` : "—"} icon={<Gauge className="h-4 w-4 text-red-400" />} />
+                  <StatCard title="Total Elevation" value={totalElev > 0 ? `${totalElev.toFixed(0)}m` : "—"} icon={<ArrowUp className="h-4 w-4 text-green-400" />} />
                 </>
               );
             })()}
@@ -1075,9 +1075,9 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
               return (
                 <>
                   <StatCard title="Total Swims" value={swims.length} icon={<Waves className="h-4 w-4 text-blue-400" />} />
-                  <StatCard title="Total Distance" value={`${(totalDist / 1000).toFixed(1)} km`} subtitle={`${swims.length} sessions`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
-                  <StatCard title="Avg Distance" value={avgDist >= 1000 ? `${(avgDist / 1000).toFixed(1)} km` : `${Math.round(avgDist)}m`} icon={<Activity className="h-4 w-4 text-blue-400" />} />
-                  <StatCard title="Total Time" value={`${Math.round(totalDuration / 60)}h`} subtitle={`${Math.round(totalCal).toLocaleString()} kcal`} icon={<Clock className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Total Distance" value={totalDist > 0 ? `${(totalDist / 1000).toFixed(1)} km` : "—"} subtitle={`${swims.length} sessions`} icon={<MapPin className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Avg Distance" value={avgDist > 0 ? (avgDist >= 1000 ? `${(avgDist / 1000).toFixed(1)} km` : `${Math.round(avgDist)}m`) : "—"} icon={<Activity className="h-4 w-4 text-blue-400" />} />
+                  <StatCard title="Total Time" value={totalDuration > 0 ? `${Math.round(totalDuration / 60)}h` : "—"} subtitle={totalCal > 0 ? `${Math.round(totalCal).toLocaleString()} kcal` : undefined} icon={<Clock className="h-4 w-4 text-blue-400" />} />
                 </>
               );
             })()}

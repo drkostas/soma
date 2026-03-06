@@ -239,6 +239,7 @@ async function getSpO2Trend(cutoff: string) {
     FROM garmin_raw_data s
     FULL OUTER JOIN garmin_raw_data p
       ON s.date = p.date AND p.endpoint_name = 'spo2_data' AND p.raw_json->>'averageSpO2' IS NOT NULL
+      AND p.date >= ${cutoff}
     WHERE s.endpoint_name = 'sleep_data'
       AND (s.raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
       AND s.date >= ${cutoff}
@@ -400,12 +401,12 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
     ]);
 
   return (
-    <div className="container mx-auto px-6 py-8 max-w-7xl">
+    <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
       {/* Header */}
-      <div className="mb-8 flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Sleep & Recovery</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Sleep & Recovery</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {stats?.total_nights
               ? `${Number(stats.total_nights)} nights tracked`
               : "No sleep data yet."}
@@ -420,24 +421,28 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
           title="Avg Sleep"
           value={stats?.avg_hours ? `${Number(stats.avg_hours).toFixed(1)}h` : "—"}
           icon={<Moon className="h-4 w-4 text-indigo-400" />}
+          info="Average total sleep time per night. Recommended: 7-9 hours"
         />
         <StatCard
           title="Avg Score"
           value={stats?.avg_score ? `${Math.round(Number(stats.avg_score))}` : "—"}
           subtitle="out of 100"
           icon={<Sparkles className="h-4 w-4 text-yellow-400" />}
+          info="Garmin sleep score (0-100) based on duration, quality, and restoration. 80+ = Excellent"
         />
         <StatCard
           title="Avg Deep Sleep"
           value={stats?.avg_deep_pct ? `${Math.round(Number(stats.avg_deep_pct))}%` : "—"}
           subtitle={stats?.avg_rem_pct ? `REM: ${Math.round(Number(stats.avg_rem_pct))}%` : undefined}
           icon={<Brain className="h-4 w-4 text-purple-400" />}
+          info="Percentage of sleep in deep (slow-wave) stage. Ideal: 15-25%. Critical for physical recovery"
         />
         <StatCard
           title="Avg Sleep HR"
           value={stats?.avg_sleep_hr ? `${Math.round(Number(stats.avg_sleep_hr))} bpm` : "—"}
           subtitle={stats?.avg_spo2 ? `SpO2: ${Math.round(Number(stats.avg_spo2))}%` : undefined}
           icon={<HeartPulse className="h-4 w-4 text-red-400" />}
+          info="Average heart rate during sleep. Lower values indicate better recovery and cardiovascular health"
         />
       </div>
 
@@ -452,7 +457,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Total</div>
                 <div className="text-lg font-bold">{formatDuration(lastNight.total)}</div>
@@ -624,7 +629,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
                 { label: "Avg Duration", weekday: `${Number(weekdayWeekend.weekday.avg_hours).toFixed(1)}h`, weekend: `${Number(weekdayWeekend.weekend.avg_hours).toFixed(1)}h`, diff: Number(weekdayWeekend.weekend.avg_hours) - Number(weekdayWeekend.weekday.avg_hours) },
                 { label: "Avg Score", weekday: Math.round(Number(weekdayWeekend.weekday.avg_score)), weekend: Math.round(Number(weekdayWeekend.weekend.avg_score)), diff: Number(weekdayWeekend.weekend.avg_score) - Number(weekdayWeekend.weekday.avg_score) },
@@ -652,240 +657,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
         </Card>
       )}
 
-      {/* Charts Row 2: RHR + Body Battery */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <ExpandableChartCard title="Resting Heart Rate" icon={<HeartPulse className="h-4 w-4 text-red-400" />}>
-          <RHRChart data={rhrTrend as any} />
-        </ExpandableChartCard>
-
-        <ExpandableChartCard title="Body Battery" icon={<BatteryCharging className="h-4 w-4 text-green-400" />}>
-          {bodyBattery.length > 0 ? (
-            <BodyBatteryChart
-              data={(bodyBattery as any[]).map((bb: any) => ({
-                date: bb.date,
-                charged: Number(bb.charged),
-                drained: Number(bb.drained),
-              }))}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
-              No body battery data
-            </div>
-          )}
-        </ExpandableChartCard>
-      </div>
-
-      {/* Stress Trend */}
-      {stressTrend.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Brain className="h-4 w-4 text-yellow-400" />
-              Stress Trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              {(() => {
-                const latest = stressTrend[stressTrend.length - 1] as any;
-                const recentAvg = stressTrend.slice(-7).reduce((s: number, d: any) => s + Number(d.avg_stress), 0) / Math.min(stressTrend.length, 7);
-                return (
-                  <>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Today&apos;s Avg</div>
-                      <div className="text-2xl font-bold">{latest?.avg_stress ?? "—"}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">7-Day Avg</div>
-                      <div className="text-2xl font-bold">{Math.round(recentAvg)}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Today&apos;s Peak</div>
-                      <div className="text-2xl font-bold">{latest?.max_stress ?? "—"}</div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-            <StressChart
-              data={(stressTrend as any[]).map((s: any) => ({
-                date: s.date,
-                avg_stress: Number(s.avg_stress),
-                max_stress: Number(s.max_stress),
-              }))}
-            />
-            <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-1 rounded bg-yellow-400" style={{ display: "inline-block" }} /> Average
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-0.5 rounded bg-red-400/50" style={{ display: "inline-block", borderTop: "1px dashed" }} /> Peak
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Respiration */}
-      {(respiration as any[]).length > 0 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Wind className="h-4 w-4 text-sky-400" />
-              Respiration Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const data = (respiration as any[]);
-              const latest = data[data.length - 1];
-              const recent7 = data.slice(-7);
-              const avgSleep = recent7.reduce((s: number, d: any) => s + Number(d.sleep_resp || 0), 0) / recent7.length;
-              return (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Awake</div>
-                    <div className="text-2xl font-bold">{latest?.awake_resp ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground">breaths/min</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Sleep</div>
-                    <div className="text-2xl font-bold">{latest?.sleep_resp ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground">breaths/min</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Range</div>
-                    <div className="text-2xl font-bold">{latest?.low_resp}–{latest?.high_resp}</div>
-                    <div className="text-xs text-muted-foreground">breaths/min</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">7-Day Sleep Avg</div>
-                    <div className="text-2xl font-bold">{avgSleep.toFixed(1)}</div>
-                    <div className="text-xs text-muted-foreground">breaths/min</div>
-                  </div>
-                </div>
-              );
-            })()}
-            <RespirationChart data={respiration as any[]} />
-            <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-sky-400 inline-block" /> Sleep</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-slate-400 inline-block" style={{ borderTop: "2px dashed" }} /> Awake</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* SpO2 Trend */}
-      {(spo2Trend as any[]).length > 0 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Activity className="h-4 w-4 text-blue-400" />
-              Blood Oxygen (SpO2)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const data = (spo2Trend as any[]).filter((d: any) => d.avg_spo2 > 0);
-              if (data.length === 0) return <p className="text-sm text-muted-foreground">No SpO2 data</p>;
-              const latest = data[data.length - 1];
-              const recent7 = data.slice(-7);
-              const avg7 = recent7.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / recent7.length;
-              const allAvg = data.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / data.length;
-              const lowVals = data.filter((d: any) => d.low_spo2 && Number(d.low_spo2) > 0).map((d: any) => Number(d.low_spo2));
-              const minSpo2 = lowVals.length > 0 ? Math.min(...lowVals) : null;
-              return (
-                <>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Last Night</div>
-                      <div className="text-2xl font-bold">{Number(latest.avg_spo2).toFixed(0)}%</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">7-Day Avg</div>
-                      <div className="text-2xl font-bold">{avg7.toFixed(0)}%</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Overall Avg</div>
-                      <div className="text-2xl font-bold">{allAvg.toFixed(0)}%</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Lowest Recorded</div>
-                      <div className="text-2xl font-bold">{minSpo2 && minSpo2 < 100 ? `${minSpo2}%` : "—"}</div>
-                    </div>
-                  </div>
-                  <SpO2Chart data={data} />
-                  <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground">
-                    <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-blue-400 inline-block" /> Average</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-purple-400 inline-block" style={{ borderTop: "2px dashed" }} /> Sleep</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-red-400 inline-block" /> Lowest</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-[2px] bg-green-400 inline-block" style={{ borderTop: "2px dashed" }} /> 95% normal</span>
-                  </div>
-                </>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* HRV Trend */}
-      {hrvTrend.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Activity className="h-4 w-4 text-emerald-400" />
-              Heart Rate Variability (HRV)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <div className="text-xs text-muted-foreground">Latest Weekly Avg</div>
-                <div className="text-2xl font-bold">
-                  {Number(hrvTrend[hrvTrend.length - 1]?.weekly_avg) || "—"}
-                  <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Last Night</div>
-                <div className="text-2xl font-bold">
-                  {Number(hrvTrend[hrvTrend.length - 1]?.last_night_avg) || "—"}
-                  <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Status</div>
-                <div className="text-2xl font-bold capitalize">
-                  {(() => {
-                    const s = hrvTrend[hrvTrend.length - 1]?.status as string;
-                    if (!s) return "—";
-                    const colors: Record<string, string> = {
-                      BALANCED: "text-green-400",
-                      LOW: "text-red-400",
-                      UNBALANCED: "text-yellow-400",
-                    };
-                    return <span className={colors[s] || ""}>{s.toLowerCase()}</span>;
-                  })()}
-                </div>
-              </div>
-            </div>
-            <HRVChart
-              data={(hrvTrend as any[]).map((h: any) => ({
-                date: h.date,
-                weekly_avg: Number(h.weekly_avg),
-                last_night_avg: Number(h.last_night_avg),
-                status: h.status,
-              }))}
-            />
-            <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400/60" /> Last Night</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-emerald-400/80" style={{ display: "inline-block" }} /> Weekly Avg</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Training Readiness */}
+      {/* Training Readiness (composite summary — before its component breakdowns) */}
       {trainingReadiness.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
@@ -973,6 +745,213 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
           </CardContent>
         </Card>
       )}
+
+      {/* Cardiac: HRV + RHR */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {hrvTrend.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Activity className="h-4 w-4 text-emerald-400" />
+                Heart Rate Variability (HRV)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">Weekly Avg</div>
+                  <div className="text-2xl font-bold">
+                    {Number(hrvTrend[hrvTrend.length - 1]?.weekly_avg) || "—"}
+                    <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Last Night</div>
+                  <div className="text-2xl font-bold">
+                    {Number(hrvTrend[hrvTrend.length - 1]?.last_night_avg) || "—"}
+                    <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Status</div>
+                  <div className="text-2xl font-bold capitalize">
+                    {(() => {
+                      const s = hrvTrend[hrvTrend.length - 1]?.status as string;
+                      if (!s) return "—";
+                      const colors: Record<string, string> = {
+                        BALANCED: "text-green-400",
+                        LOW: "text-red-400",
+                        UNBALANCED: "text-yellow-400",
+                      };
+                      return <span className={colors[s] || ""}>{s.toLowerCase()}</span>;
+                    })()}
+                  </div>
+                </div>
+              </div>
+              <HRVChart
+                data={(hrvTrend as any[]).map((h: any) => ({
+                  date: h.date,
+                  weekly_avg: Number(h.weekly_avg),
+                  last_night_avg: Number(h.last_night_avg),
+                  status: h.status,
+                }))}
+              />
+              <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400/60" /> Last Night</span>
+                <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-emerald-400/80" style={{ display: "inline-block" }} /> Weekly Avg</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <ExpandableChartCard title="Resting Heart Rate" icon={<HeartPulse className="h-4 w-4 text-red-400" />}>
+          <RHRChart data={rhrTrend as any} />
+        </ExpandableChartCard>
+      </div>
+
+      {/* Energy: Stress + Body Battery */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {stressTrend.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Brain className="h-4 w-4 text-yellow-400" />
+                Stress Trend
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                {(() => {
+                  const latest = stressTrend[stressTrend.length - 1] as any;
+                  const recentAvg = stressTrend.slice(-7).reduce((s: number, d: any) => s + Number(d.avg_stress), 0) / Math.min(stressTrend.length, 7);
+                  return (
+                    <>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Today&apos;s Avg</div>
+                        <div className="text-2xl font-bold">{latest?.avg_stress ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">7-Day Avg</div>
+                        <div className="text-2xl font-bold">{Math.round(recentAvg)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Peak</div>
+                        <div className="text-2xl font-bold">{latest?.max_stress ?? "—"}</div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+              <StressChart
+                data={(stressTrend as any[]).map((s: any) => ({
+                  date: s.date,
+                  avg_stress: Number(s.avg_stress),
+                  max_stress: Number(s.max_stress),
+                }))}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        <ExpandableChartCard title="Body Battery" icon={<BatteryCharging className="h-4 w-4 text-green-400" />}>
+          {bodyBattery.length > 0 ? (
+            <BodyBatteryChart
+              data={(bodyBattery as any[]).map((bb: any) => ({
+                date: bb.date,
+                charged: Number(bb.charged),
+                drained: Number(bb.drained),
+              }))}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+              No body battery data
+            </div>
+          )}
+        </ExpandableChartCard>
+      </div>
+
+      {/* Respiratory: SpO2 + Respiration */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {(spo2Trend as any[]).length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Activity className="h-4 w-4 text-blue-400" />
+                Blood Oxygen (SpO2)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const data = (spo2Trend as any[]).filter((d: any) => d.avg_spo2 > 0);
+                if (data.length === 0) return <p className="text-sm text-muted-foreground">No SpO2 data</p>;
+                const latest = data[data.length - 1];
+                const recent7 = data.slice(-7);
+                const avg7 = recent7.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / recent7.length;
+                const lowVals = data.filter((d: any) => d.low_spo2 && Number(d.low_spo2) > 0).map((d: any) => Number(d.low_spo2));
+                const minSpo2 = lowVals.length > 0 ? Math.min(...lowVals) : null;
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Last Night</div>
+                        <div className="text-2xl font-bold">{Number(latest.avg_spo2).toFixed(0)}%</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">7-Day Avg</div>
+                        <div className="text-2xl font-bold">{avg7.toFixed(0)}%</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Lowest</div>
+                        <div className="text-2xl font-bold">{minSpo2 && minSpo2 < 100 ? `${minSpo2}%` : "—"}</div>
+                      </div>
+                    </div>
+                    <SpO2Chart data={data} />
+                  </>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        )}
+
+        {(respiration as any[]).length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Wind className="h-4 w-4 text-sky-400" />
+                Respiration Rate
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const data = (respiration as any[]);
+                const latest = data[data.length - 1];
+                const recent7 = data.slice(-7);
+                const avgSleep = recent7.reduce((s: number, d: any) => s + Number(d.sleep_resp || 0), 0) / recent7.length;
+                return (
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Awake</div>
+                      <div className="text-2xl font-bold">{latest?.awake_resp ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">breaths/min</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Sleep</div>
+                      <div className="text-2xl font-bold">{latest?.sleep_resp ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">breaths/min</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">7-Day Avg</div>
+                      <div className="text-2xl font-bold">{avgSleep.toFixed(1)}</div>
+                      <div className="text-xs text-muted-foreground">breaths/min</div>
+                    </div>
+                  </div>
+                );
+              })()}
+              <RespirationChart data={respiration as any[]} />
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
