@@ -107,8 +107,11 @@ export function InteractiveThisWeek({ metrics, streak }: InteractiveThisWeekProp
     <>
       {/* Card view - identical to original inline rendering */}
       <Card
-        className="mb-6 cursor-pointer transition-colors hover:bg-muted/50 active:scale-[0.99]"
+        className="mb-6 cursor-pointer transition-colors hover:bg-muted/50 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         onClick={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
+        tabIndex={0}
+        role="button"
       >
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">

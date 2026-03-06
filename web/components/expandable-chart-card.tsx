@@ -49,7 +49,7 @@ export function ExpandableChartCard({
             ) : subtitle ? (
               <span className="ml-auto">{subtitle}</span>
             ) : null}
-            <Maximize2 className="h-3.5 w-3.5 ml-auto opacity-40 md:opacity-0 md:group-hover:opacity-60 transition-opacity duration-200 shrink-0" />
+            <Maximize2 className="h-3.5 w-3.5 ml-auto opacity-40 md:opacity-30 md:group-hover:opacity-60 transition-opacity duration-200 shrink-0" />
           </CardTitle>
         </CardHeader>
         <CardContent className="[&_.recharts-responsive-container]:!h-[200px] sm:[&_.recharts-responsive-container]:!h-auto">

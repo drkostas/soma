@@ -75,7 +75,7 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-2 justify-center">
+      <div className="flex flex-wrap gap-2 mb-2">
         {years.map((year) => {
           const color = YEAR_COLORS[year] || "oklch(60% 0.02 250)";
           const active = !hidden.has(year);

@@ -245,7 +245,7 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
             {pageActivities.map((a) => (
               <tr
                 key={a.activity_id}
-                className="border-b border-border/50 cursor-pointer hover:bg-accent/30 active:bg-accent/40 transition-colors"
+                className="border-b border-border/50 cursor-pointer hover:bg-accent/30 active:bg-accent/40 active:scale-[0.998] transition-all"
                 onClick={() => setSelectedId(a.activity_id)}
               >
                 <td className="py-2.5 text-muted-foreground whitespace-nowrap">

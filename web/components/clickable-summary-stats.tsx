@@ -47,8 +47,11 @@ export function ClickableSummaryStats({ stats }: { stats: StatCard[] }) {
         {stats.map((stat) => (
           <Card
             key={stat.label}
-            className="cursor-pointer hover:bg-accent/5 active:scale-[0.99] transition-colors"
+            className="cursor-pointer hover:bg-muted/50 active:scale-[0.99] transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             onClick={() => stat.timelineData.length > 0 && setSelected(stat)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (stat.timelineData.length > 0) setSelected(stat); } }}
+            tabIndex={0}
+            role="button"
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">

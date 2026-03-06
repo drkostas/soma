@@ -175,7 +175,7 @@ export function InteractiveChartCards({
     return h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
   })();
 
-  const cardClass = "cursor-pointer transition-colors hover:bg-muted/50";
+  const cardClass = "cursor-pointer transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
   return (
     <>
@@ -186,6 +186,9 @@ export function InteractiveChartCards({
           <Card
             className={cardClass}
             onClick={() => setOpenDialog("training-days")}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenDialog("training-days"); } }}
+            tabIndex={0}
+            role="button"
           >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -228,6 +231,9 @@ export function InteractiveChartCards({
           <Card
             className={cardClass}
             onClick={() => setOpenDialog("training-time")}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenDialog("training-time"); } }}
+            tabIndex={0}
+            role="button"
           >
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -287,6 +293,9 @@ export function InteractiveChartCards({
         <Card
           className={cardClass}
           onClick={() => setOpenDialog("activity-breakdown")}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenDialog("activity-breakdown"); } }}
+          tabIndex={0}
+          role="button"
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -303,7 +312,7 @@ export function InteractiveChartCards({
               return (
                 <div key={a.type_key} className="flex items-center gap-2 text-sm">
                   {icon}
-                  <span className="text-muted-foreground w-20 truncate">{label}</span>
+                  <span className="text-muted-foreground w-28 truncate">{label}</span>
                   <div className="flex-1 h-4 bg-muted rounded-sm overflow-hidden">
                     <div
                       className={`h-full ${barColor} rounded-sm`}
@@ -321,6 +330,9 @@ export function InteractiveChartCards({
         <Card
           className={cardClass}
           onClick={() => setOpenDialog("gym-frequency")}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenDialog("gym-frequency"); } }}
+          tabIndex={0}
+          role="button"
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">

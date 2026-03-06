@@ -8,7 +8,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  ReferenceLine,
 } from "recharts";
+import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
 
 interface SleepEntry {
   date: string;
@@ -35,22 +37,8 @@ export function SleepStagesChart({ data }: { data: SleepEntry[] }) {
     Awake: Number((d.awake / 3600).toFixed(1)),
   }));
 
-  const spanDays = chartData.length > 1
-    ? (new Date(chartData[chartData.length - 1].date).getTime() - new Date(chartData[0].date).getTime()) / 86400000
-    : 0;
-  const longRange = spanDays > 60;
-
-  const tickDates = longRange ? (() => {
-    const seen = new Set<string>();
-    return chartData
-      .filter((d) => {
-        const key = new Date(d.date).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((d) => d.date);
-  })() : undefined;
+  const longRange = isLongRange(chartData);
+  const tickDates = buildChartTicks(chartData);
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -59,12 +47,7 @@ export function SleepStagesChart({ data }: { data: SleepEntry[] }) {
           dataKey="date"
           className="text-[10px]"
           tickLine={false}
-          tickFormatter={(d) => {
-            const date = new Date(d);
-            return longRange
-              ? date.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
-              : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          }}
+          tickFormatter={(d) => formatChartTick(d, longRange)}
           tick={{ fontSize: 10 }}
           {...(tickDates ? { ticks: tickDates } : { interval: Math.max(Math.floor(chartData.length / 6), 1) })}
         />
@@ -91,10 +74,24 @@ export function SleepStagesChart({ data }: { data: SleepEntry[] }) {
           }}
         />
         <Legend />
-        <Bar dataKey="Deep" stackId="sleep" fill="#6366f1" radius={[0, 0, 0, 0]} />
-        <Bar dataKey="Light" stackId="sleep" fill="#818cf8" radius={[0, 0, 0, 0]} />
-        <Bar dataKey="REM" stackId="sleep" fill="#a78bfa" radius={[0, 0, 0, 0]} />
-        <Bar dataKey="Awake" stackId="sleep" fill="#f87171" radius={[4, 4, 0, 0]} />
+        <ReferenceLine
+          y={7}
+          stroke="oklch(65% 0.18 220)"
+          strokeDasharray="4 2"
+          strokeOpacity={0.5}
+          label={{ value: "7h min", position: "insideBottomRight", fontSize: 9, fill: "oklch(65% 0.18 220)" }}
+        />
+        <ReferenceLine
+          y={9}
+          stroke="oklch(62% 0.17 142)"
+          strokeDasharray="4 2"
+          strokeOpacity={0.4}
+          label={{ value: "9h target", position: "insideTopRight", fontSize: 9, fill: "oklch(62% 0.17 142)" }}
+        />
+        <Bar dataKey="Deep" stackId="sleep" fill="oklch(55% 0.22 270)" radius={[0, 0, 0, 0]} />
+        <Bar dataKey="Light" stackId="sleep" fill="oklch(65% 0.18 270)" radius={[0, 0, 0, 0]} />
+        <Bar dataKey="REM" stackId="sleep" fill="oklch(68% 0.16 285)" radius={[0, 0, 0, 0]} />
+        <Bar dataKey="Awake" stackId="sleep" fill="oklch(68% 0.19 25)" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

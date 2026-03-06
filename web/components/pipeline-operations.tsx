@@ -204,7 +204,7 @@ function SyncRunsTab({ syncLogs }: { syncLogs: SyncLogEntry[] }) {
           {syncLogs.map((log) => (
             <div
               key={log.id}
-              className="grid grid-cols-4 text-sm py-2 border-b border-border/50 last:border-0"
+              className="grid grid-cols-4 text-sm py-2 border-b border-border/50 last:border-0 hover:bg-accent/10 -mx-2 px-2 rounded transition-colors"
             >
               <span className="font-medium">{log.sync_type}</span>
               <span>
@@ -229,14 +229,17 @@ export function PipelineOperations({
   dataCounts,
   syncLogs,
 }: PipelineOperationsProps) {
-  const [syncState, setSyncState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [syncState, setSyncState] = useState<"idle" | "loading" | "done" | "running" | "error">("idle");
 
   async function triggerSync() {
     setSyncState("loading");
     try {
       const resp = await fetch("/api/sync", { method: "POST" });
-      if (resp.ok || resp.status === 409) {
+      if (resp.ok) {
         setSyncState("done");
+        setTimeout(() => setSyncState("idle"), 4000);
+      } else if (resp.status === 409) {
+        setSyncState("running");
         setTimeout(() => setSyncState("idle"), 4000);
       } else {
         setSyncState("error");
@@ -262,10 +265,10 @@ export function PipelineOperations({
             size="sm"
             className="gap-2"
             onClick={triggerSync}
-            disabled={syncState === "loading"}
+            disabled={syncState !== "idle"}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${syncState === "loading" ? "animate-spin" : ""}`} />
-            {syncState === "loading" ? "Triggering…" : syncState === "done" ? "Triggered!" : syncState === "error" ? "Failed" : "Sync Now"}
+            {syncState === "loading" ? "Triggering…" : syncState === "done" ? "Triggered!" : syncState === "running" ? "Already running" : syncState === "error" ? "Failed" : "Sync Now"}
           </Button>
         )}
       </div>
