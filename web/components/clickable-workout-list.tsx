@@ -67,7 +67,7 @@ function WorkoutRow({
   const { totalSets, totalVolume } = getWorkingSets(exercises);
   return (
     <div
-      className="border-b border-border/50 last:border-0 pb-3 last:pb-0 cursor-pointer hover:bg-accent/20 -mx-2 px-2 py-1 rounded transition-colors"
+      className="border-b border-border/50 last:border-0 pb-3 last:pb-0 cursor-pointer hover:bg-accent/20 active:bg-accent/30 -mx-2 px-2 py-1 rounded transition-colors"
       onClick={onClick}
     >
       <div className="flex items-center justify-between mb-1">

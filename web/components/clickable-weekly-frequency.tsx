@@ -85,7 +85,7 @@ export function ClickableWeeklyFrequency({ data }: { data: WeekData[] }) {
               const prev = i > 0 ? new Date(weeks[i - 1].week + "T00:00:00") : null;
               const isNewMonth = !prev || d.getMonth() !== prev.getMonth();
               return (
-                <div key={i} className="flex-1 text-[9px] text-muted-foreground overflow-hidden">
+                <div key={i} className="flex-1 text-[10px] text-muted-foreground overflow-hidden">
                   {isNewMonth ? d.toLocaleDateString("en-US", { month: "short" }) : ""}
                 </div>
               );

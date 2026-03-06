@@ -87,19 +87,19 @@ const ACTIVITY_BAR_COLORS: Record<string, string> = {
 };
 
 const ACTIVITY_RECHARTS_COLORS: Record<string, string> = {
-  running: "#22c55e",
-  strength_training: "#f97316",
-  kiteboarding_v2: "#06b6d4",
-  resort_snowboarding: "#60a5fa",
-  hiking: "#10b981",
-  walking: "#34d399",
-  lap_swimming: "#3b82f6",
-  cycling: "#eab308",
-  e_bike_fitness: "#eab308",
-  indoor_cardio: "#f87171",
-  indoor_cycling: "#eab308",
-  stand_up_paddleboarding_v2: "#67e8f9",
-  other: "#a78bfa",
+  running: "oklch(62% 0.17 142)",
+  strength_training: "oklch(72% 0.19 50)",
+  kiteboarding_v2: "oklch(65% 0.15 195)",
+  resort_snowboarding: "oklch(70% 0.15 250)",
+  hiking: "oklch(62% 0.15 160)",
+  walking: "oklch(72% 0.17 165)",
+  lap_swimming: "oklch(65% 0.18 250)",
+  cycling: "oklch(80% 0.18 87)",
+  e_bike_fitness: "oklch(80% 0.18 87)",
+  indoor_cardio: "oklch(68% 0.19 25)",
+  indoor_cycling: "oklch(80% 0.18 87)",
+  stand_up_paddleboarding_v2: "oklch(82% 0.11 195)",
+  other: "oklch(68% 0.16 285)",
 };
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -303,7 +303,7 @@ export function InteractiveChartCards({
               return (
                 <div key={a.type_key} className="flex items-center gap-2 text-sm">
                   {icon}
-                  <span className="text-muted-foreground w-14 truncate">{label}</span>
+                  <span className="text-muted-foreground w-20 truncate">{label}</span>
                   <div className="flex-1 h-4 bg-muted rounded-sm overflow-hidden">
                     <div
                       className={`h-full ${barColor} rounded-sm`}
@@ -518,10 +518,10 @@ function TrainingTimeExpanded({ todCounts }: { todCounts: number[] }) {
   const nightCount = total - morningCount - afternoonCount - eveningCount;
 
   const categoryColors: Record<string, string> = {
-    morning: "#fbbf24",
-    afternoon: "#f97316",
-    evening: "#818cf8",
-    night: "#6b7280",
+    morning: "oklch(83% 0.17 87)",
+    afternoon: "oklch(72% 0.19 50)",
+    evening: "oklch(65% 0.18 270)",
+    night: "oklch(55% 0.02 250)",
   };
 
   return (
@@ -623,7 +623,7 @@ function ActivityBreakdownExpanded({
     type_key: a.type_key,
     label: ACTIVITY_LABELS[a.type_key] || a.type_key.replace(/_/g, " "),
     count: a.cnt,
-    fill: ACTIVITY_RECHARTS_COLORS[a.type_key] || "#a78bfa",
+    fill: ACTIVITY_RECHARTS_COLORS[a.type_key] || "oklch(68% 0.16 285)",
   }));
 
   return (
@@ -689,7 +689,7 @@ function ActivityBreakdownExpanded({
                     className="h-full rounded-full"
                     style={{
                       width: `${Math.max((a.cnt / activityCounts[0].cnt) * 100, 2)}%`,
-                      backgroundColor: ACTIVITY_RECHARTS_COLORS[a.type_key] || "#a78bfa",
+                      backgroundColor: ACTIVITY_RECHARTS_COLORS[a.type_key] || "oklch(68% 0.16 285)",
                       opacity: 0.7,
                     }}
                   />
@@ -807,7 +807,7 @@ function GymFrequencyExpanded({
             <Line
               type="monotone"
               dataKey="avg"
-              stroke="#f97316"
+              stroke="oklch(72% 0.19 50)"
               strokeWidth={2}
               dot={false}
               strokeOpacity={0.8}

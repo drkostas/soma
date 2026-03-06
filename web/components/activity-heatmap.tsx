@@ -228,7 +228,7 @@ export function ActivityHeatmap({ data }: { data: DayData[] }) {
               className="flex items-center justify-end"
               style={{ aspectRatio: "auto", minHeight: "14px" }}
             >
-              <span className="text-[9px] text-muted-foreground w-5 text-right leading-none">
+              <span className="text-[10px] text-muted-foreground w-5 text-right leading-none">
                 {label}
               </span>
             </div>
@@ -254,7 +254,7 @@ export function ActivityHeatmap({ data }: { data: DayData[] }) {
                     !cellStyle ? "bg-muted/20" : ""
                   } ${
                     isClickable
-                      ? "cursor-pointer hover:ring-1 hover:ring-foreground/30 hover:brightness-110"
+                      ? "cursor-pointer hover:ring-1 hover:ring-foreground/30 hover:brightness-110 active:brightness-125 active:ring-1 active:ring-foreground/40"
                       : "hover:bg-muted/40"
                   }`}
                   style={{ aspectRatio: "1", ...(cellStyle || {}) }}
@@ -293,6 +293,7 @@ export function ActivityHeatmap({ data }: { data: DayData[] }) {
             left: `${floatingMenu.x}px`,
             top: `${floatingMenu.y}px`,
             transform: "translateX(-50%)",
+            maxWidth: "calc(100vw - 24px)",
           }}
         >
           <div className="text-[10px] text-muted-foreground px-2 py-1 border-b border-border mb-1">
@@ -310,7 +311,7 @@ export function ActivityHeatmap({ data }: { data: DayData[] }) {
             return (
               <button
                 key={i}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-accent/50 transition-colors text-left"
+                className="w-full flex items-center gap-2 px-2.5 py-2.5 min-h-[44px] rounded-md text-xs hover:bg-accent/50 transition-colors text-left"
                 onClick={() => handleMenuActivityClick(activity)}
               >
                 {icon}

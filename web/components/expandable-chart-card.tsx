@@ -34,8 +34,11 @@ export function ExpandableChartCard({
   return (
     <>
       <Card
-        className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:shadow-primary/5 hover:border-primary/20 group ${className || ""}`}
+        className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:shadow-primary/5 hover:border-primary/20 active:scale-[0.99] active:shadow-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background group ${className || ""}`}
         onClick={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
+        tabIndex={0}
+        role="button"
       >
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -49,7 +52,7 @@ export function ExpandableChartCard({
             <Maximize2 className="h-3.5 w-3.5 ml-auto opacity-40 md:opacity-0 md:group-hover:opacity-60 transition-opacity duration-200 shrink-0" />
           </CardTitle>
         </CardHeader>
-        <CardContent className="[&_.recharts-responsive-container]:!h-[160px] sm:[&_.recharts-responsive-container]:!h-auto">
+        <CardContent className="[&_.recharts-responsive-container]:!h-[200px] sm:[&_.recharts-responsive-container]:!h-auto">
           {renderChildren(false)}
         </CardContent>
       </Card>

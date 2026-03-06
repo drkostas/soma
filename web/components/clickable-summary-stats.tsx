@@ -47,7 +47,7 @@ export function ClickableSummaryStats({ stats }: { stats: StatCard[] }) {
         {stats.map((stat) => (
           <Card
             key={stat.label}
-            className="cursor-pointer hover:bg-accent/5 transition-colors"
+            className="cursor-pointer hover:bg-accent/5 active:scale-[0.99] transition-colors"
             onClick={() => stat.timelineData.length > 0 && setSelected(stat)}
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
