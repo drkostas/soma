@@ -178,6 +178,59 @@ def execute_routes(
                     "strava_activity_id": None,
                     "error": None if ok else "Telegram send failed",
                 })
+            elif destination == "push":
+                from push_notify import send_push, is_configured as push_configured
+                if not push_configured():
+                    logger.warning("Push not configured, skipping rule %s", rule_id)
+                    continue
+                if source_platform == "garmin":
+                    activity_name = workout.get("name", workout.get("activityName", "Run"))
+                    run_date = str(workout.get("date", workout.get("startTimeLocal", "")[:10]))
+                    ok = send_push(
+                        title="Run Synced",
+                        body=f"{activity_name} - {run_date}",
+                        url="/running",
+                        event_type="sync_run",
+                    )
+                else:
+                    ok = send_push(
+                        title="Workout Synced",
+                        body=f"{workout.get('hevy_title', 'Workout')} - {str(workout.get('date', ''))}",
+                        url="/workouts",
+                        event_type="sync_workout",
+                    )
+                status = "sent" if ok > 0 else "skipped"
+                try:
+                    if conn:
+                        log_activity_sync(
+                            conn,
+                            source_platform=source_platform,
+                            source_id=source_id,
+                            destination="push",
+                            destination_id="push",
+                            rule_id=rule_id,
+                            status=status,
+                        )
+                    else:
+                        with get_connection() as log_conn:
+                            log_activity_sync(
+                                log_conn,
+                                source_platform=source_platform,
+                                source_id=source_id,
+                                destination="push",
+                                destination_id="push",
+                                rule_id=rule_id,
+                                status=status,
+                            )
+                except Exception as log_err:
+                    logger.warning("Failed to log push sync: %s", log_err)
+                results.append({
+                    "destination": destination,
+                    "rule_id": rule_id,
+                    "status": status,
+                    "strava_activity_id": None,
+                    "error": None if ok > 0 else "No subscribers or disabled",
+                })
             else:
                 logger.warning(
                     "No connector available for destination %r (rule %s)",
