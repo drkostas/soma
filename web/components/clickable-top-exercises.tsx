@@ -57,7 +57,7 @@ export function ClickableTopExercises({ exercises }: { exercises: Exercise[] }) 
           return (
             <div
               key={e.exercise}
-              className="flex items-center justify-between text-sm cursor-pointer hover:bg-accent/10 active:bg-accent/20 -mx-1.5 px-1.5 py-0.5 rounded transition-colors"
+              className="flex items-center justify-between text-sm cursor-pointer hover:bg-accent/10 active:bg-accent/20 active:scale-[0.99] -mx-1.5 px-1.5 py-0.5 rounded transition-all"
               onClick={() => setSelected(e.exercise)}
             >
               <div className="flex items-center gap-2 truncate mr-2">

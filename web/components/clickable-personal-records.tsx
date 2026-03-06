@@ -18,7 +18,7 @@ export function ClickablePersonalRecords({ records }: { records: PR[] }) {
         {records.map((pr) => (
           <div
             key={pr.exercise}
-            className="border border-border/50 rounded-lg p-3 cursor-pointer hover:bg-accent/10 active:bg-accent/20 hover:border-border transition-colors"
+            className="border border-border/50 rounded-lg p-3 cursor-pointer hover:bg-accent/10 active:bg-accent/20 active:scale-[0.99] hover:border-border transition-all"
             onClick={() => setSelected(pr.exercise)}
           >
             <div className="text-xs text-muted-foreground truncate mb-1">{pr.exercise}</div>

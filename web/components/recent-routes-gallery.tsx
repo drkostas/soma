@@ -38,6 +38,7 @@ function formatPace(distance_km: number, duration_s: number): string {
 export function RecentRoutesGallery() {
   const [routes, setRoutes] = useState<RouteItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(6);
 
   useEffect(() => {
     fetch("/api/running/recent-routes")
@@ -48,10 +49,14 @@ export function RecentRoutesGallery() {
 
   if (!routes.length) return null;
 
+  const visibleRoutes = routes.slice(0, visibleCount);
+  const hasMore = visibleCount < routes.length;
+
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {routes.map((run) => {
+      <p className="text-xs text-muted-foreground mb-2">{routes.length} routes</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {visibleRoutes.map((run) => {
           const dateStr = run.date.slice(5).replace("-", "/");
           const pace = formatPace(run.distance_km, run.duration_s);
           const hasGps = run.gps_points.length > 10;
@@ -59,8 +64,11 @@ export function RecentRoutesGallery() {
           return (
             <Card
               key={run.activity_id}
-              className="overflow-hidden cursor-pointer hover:ring-1 hover:ring-primary/40 transition-all"
+              className="overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/60 hover:scale-[1.02] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               onClick={() => setSelectedId(run.activity_id)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(run.activity_id); } }}
+              tabIndex={0}
+              role="button"
             >
               <div className="relative">
                 {hasGps ? (
@@ -88,6 +96,16 @@ export function RecentRoutesGallery() {
           );
         })}
       </div>
+
+      {hasMore && (
+        <button
+          type="button"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-3"
+          onClick={() => setVisibleCount((c) => c + 6)}
+        >
+          Show more
+        </button>
+      )}
 
       <ActivityDetailModal
         activityId={selectedId}

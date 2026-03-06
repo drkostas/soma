@@ -90,7 +90,7 @@ export function ClickableRecentActivity({ activities }: { activities: RecentActi
           return (
             <div
               key={i}
-              className="flex items-center gap-3 text-sm cursor-pointer hover:bg-accent/20 active:bg-accent/30 -mx-2 px-2 py-1 rounded transition-colors"
+              className="flex items-center gap-3 text-sm cursor-pointer hover:bg-accent/20 active:bg-accent/30 -mx-2 px-2 py-1 rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               onClick={() => {
                 if (isGym && a.workout_id) {
                   setSelectedWorkoutId(a.workout_id);
@@ -98,6 +98,18 @@ export function ClickableRecentActivity({ activities }: { activities: RecentActi
                   setSelectedActivityId(a.activity_id);
                 }
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  if (isGym && a.workout_id) {
+                    setSelectedWorkoutId(a.workout_id);
+                  } else if (a.activity_id) {
+                    setSelectedActivityId(a.activity_id);
+                  }
+                }
+              }}
+              tabIndex={0}
+              role="button"
             >
               <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted shrink-0">
                 {icon}
