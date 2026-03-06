@@ -64,7 +64,7 @@ export function MuscleBodyMapSection({ allMetrics }: Props) {
               <button
                 key={k}
                 onClick={() => setMetric(k)}
-                className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors ${
+                className={`px-2.5 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
                   metric === k
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent/50"

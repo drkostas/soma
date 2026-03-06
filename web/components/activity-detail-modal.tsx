@@ -130,7 +130,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
         {!loading && summary && (
           <Tabs defaultValue={hasGpsRoute ? "map" : "overview"} className="mt-4">
-            <TabsList className="flex w-full h-9">
+            <TabsList className="flex w-full h-11">
               {hasGpsRoute && <TabsTrigger value="map" className="flex-1 text-xs px-1">Map</TabsTrigger>}
               <TabsTrigger value="overview" className="flex-1 text-xs px-1">Overview</TabsTrigger>
               {hasTimeSeries && <TabsTrigger value="performance" className="flex-1 text-xs px-1">Charts</TabsTrigger>}

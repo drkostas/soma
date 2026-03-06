@@ -107,7 +107,7 @@ export function InteractiveThisWeek({ metrics, streak }: InteractiveThisWeekProp
     <>
       {/* Card view - identical to original inline rendering */}
       <Card
-        className="mb-6 cursor-pointer transition-colors hover:bg-muted/50"
+        className="mb-6 cursor-pointer transition-colors hover:bg-muted/50 active:scale-[0.99]"
         onClick={() => setOpen(true)}
       >
         <CardHeader className="pb-2">

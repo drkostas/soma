@@ -25,6 +25,15 @@ const PROGRAM_PALETTE = [
   "#10b981", // emerald
 ];
 
+// Deterministic hash: maps a string to a palette index
+function hashStringToIndex(str: string, len: number): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) % len;
+  }
+  return hash;
+}
+
 export function WorkoutCalendar({ data }: Props) {
   const [weeksBack, setWeeksBack] = useState(0); // 0 = current 26 weeks
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
@@ -38,14 +47,12 @@ export function WorkoutCalendar({ data }: Props) {
 
   const WEEKS_SHOWN = 26;
 
-  // Build program → color map
+  // Build program → color map (hash-based so each program always gets the same color)
   const programColors = useMemo(() => {
     const colors: Record<string, string> = {};
-    let idx = 0;
     for (const c of data) {
       if (c.program && !colors[c.program]) {
-        colors[c.program] = PROGRAM_PALETTE[idx % PROGRAM_PALETTE.length];
-        idx++;
+        colors[c.program] = PROGRAM_PALETTE[hashStringToIndex(c.program, PROGRAM_PALETTE.length)];
       }
     }
     return colors;
@@ -66,6 +73,12 @@ export function WorkoutCalendar({ data }: Props) {
   }, [data]);
 
   // Compute the date range for the current view
+  // Today's date string for the "today" ring indicator
+  const todayStr = useMemo(() => {
+    const t = new Date();
+    return t.toISOString().split("T")[0];
+  }, []);
+
   const { startMon, endDate, weeks } = useMemo(() => {
     const today = new Date();
     const currentDay = today.getDay();
@@ -184,7 +197,7 @@ export function WorkoutCalendar({ data }: Props) {
           <button
             onClick={() => setWeeksBack(w => w + WEEKS_SHOWN)}
             disabled={!hasOlderData}
-            className="p-1 rounded-md hover:bg-accent/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-md hover:bg-accent/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             title="Earlier"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -192,7 +205,7 @@ export function WorkoutCalendar({ data }: Props) {
           <button
             onClick={() => setWeeksBack(w => Math.max(0, w - WEEKS_SHOWN))}
             disabled={!canGoNewer}
-            className="p-1 rounded-md hover:bg-accent/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-md hover:bg-accent/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             title="Later"
           >
             <ChevronRight className="h-4 w-4" />
@@ -200,7 +213,7 @@ export function WorkoutCalendar({ data }: Props) {
           {weeksBack > 0 && (
             <button
               onClick={() => setWeeksBack(0)}
-              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded border border-border/50"
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded border border-border/50"
             >
               Today
             </button>
@@ -238,7 +251,7 @@ export function WorkoutCalendar({ data }: Props) {
               className="flex items-center justify-end"
               style={{ minHeight: "14px", aspectRatio: "auto" }}
             >
-              <span className="text-[9px] text-muted-foreground w-5 text-right leading-none">
+              <span className="text-[10px] text-muted-foreground w-5 text-right leading-none">
                 {label}
               </span>
             </div>
@@ -255,6 +268,7 @@ export function WorkoutCalendar({ data }: Props) {
               }
               const count = cell.workouts.length;
               const isActive = count > 0;
+              const isToday = cell.date === todayStr;
               const program = cell.workouts[0]?.program;
               const color = program ? programColors[program] : undefined;
               const opacity = count >= 3 ? 1.0 : count >= 2 ? 0.75 : count >= 1 ? 0.5 : 0;
@@ -266,8 +280,10 @@ export function WorkoutCalendar({ data }: Props) {
                     !isActive ? "bg-muted/20" : ""
                   } ${
                     isActive
-                      ? "cursor-pointer hover:ring-1 hover:ring-foreground/30 hover:brightness-110"
+                      ? "cursor-pointer hover:ring-1 hover:ring-foreground/30 hover:brightness-110 active:brightness-125 active:ring-1 active:ring-foreground/40"
                       : "hover:bg-muted/40"
+                  } ${
+                    isToday ? "ring-2 ring-primary" : ""
                   }`}
                   style={{
                     aspectRatio: "1",

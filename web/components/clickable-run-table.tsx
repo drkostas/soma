@@ -127,29 +127,29 @@ export function ClickableRunTable({ runs }: { runs: Run[] }) {
                 className="border-b border-border/50 cursor-pointer hover:bg-accent/30 active:bg-accent/40 transition-colors"
                 onClick={() => setSelectedId(run.activity_id)}
               >
-                <td className="py-2.5 text-muted-foreground">
+                <td className="py-3 text-muted-foreground">
                   {new Date(run.date).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                   })}
                 </td>
-                <td className="py-2.5 max-w-[140px] sm:max-w-[200px] truncate" title={run.name}>{run.name}</td>
-                <td className="py-2.5 text-right">
+                <td className="py-3 max-w-[140px] sm:max-w-[200px] truncate" title={run.name}>{run.name}</td>
+                <td className="py-3 text-right">
                   {run.distance.toFixed(1)} km
                 </td>
-                <td className="py-2.5 text-right">
+                <td className="py-3 text-right">
                   {Math.round(run.duration_min)} min
                 </td>
-                <td className="py-2.5 text-right font-medium">
+                <td className="py-3 text-right font-medium">
                   {run.pace ? formatPace(run.pace) : "—"}
                 </td>
-                <td className="py-2.5 text-right">
+                <td className="py-3 text-right">
                   {run.avg_hr ? Math.round(run.avg_hr) : "—"}
                 </td>
-                <td className="py-2.5 text-right text-muted-foreground hidden sm:table-cell">
+                <td className="py-3 text-right text-muted-foreground hidden sm:table-cell">
                   {run.calories ? Math.round(run.calories) : "—"}
                 </td>
-                <td className="py-2.5 text-right text-muted-foreground hidden sm:table-cell">
+                <td className="py-3 text-right text-muted-foreground hidden sm:table-cell">
                   {run.temp_c != null ? `${Math.round(run.temp_c)}°C` : "—"}
                 </td>
               </tr>
