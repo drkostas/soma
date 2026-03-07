@@ -45,3 +45,7 @@ docs/
 
 # Git worktrees
 .worktrees/
+web/.agents/
+web/.claude
+prompt.md
+multiple_messages

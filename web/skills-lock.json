@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "pwa-development": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "0b8f1e6f78708bc73de3c1fa04c0ad0c3a698fa308fe0311f5078703ca4b6359"
+    }
+  }
+}
