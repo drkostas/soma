@@ -10,6 +10,7 @@ import { FitnessTrajectoryChart } from "@/components/fitness-trajectory-chart";
 import { DataProvenanceCard } from "@/components/data-provenance-card";
 import { PaceAdjustmentCard } from "@/components/pace-adjustment-card";
 import { TrainingPacesCard } from "@/components/training-paces-card";
+import { DeltaSimulator } from "@/components/delta-simulator";
 import { TrajectoryChart } from "@/components/trajectory-chart";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { getDb } from "@/lib/db";
@@ -361,6 +362,14 @@ export default async function TrainingPage() {
             <div className="space-y-4">
               <PaceAdjustmentCard data={paceData as any} />
               <TrainingPacesCard />
+              {paceData && (
+                <DeltaSimulator
+                  basePace={paceData.adjusted_pace}
+                  optimalPace={270}
+                  currentVdot={fitnessData.length > 0 ? Number(fitnessData[fitnessData.length - 1]?.vo2max || 50) : 50}
+                  goalVdot={52}
+                />
+              )}
             </div>
             <div className="md:col-span-2">
               <ExpandableChartCard
