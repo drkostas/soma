@@ -192,6 +192,20 @@ export default async function TrainingPage() {
   const todayEntry = planDays.find((d: any) => d.day_date === today);
   const currentWeek = todayEntry?.week_number ?? 1;
 
+  // Check for leg day conflict (48h between heavy leg strength and quality running)
+  let legDayConflict = false;
+  if (todayEntry && ["tempo", "intervals", "threshold"].includes(todayEntry.run_type)) {
+    const sql = getDb();
+    const recentGym = await sql`
+      SELECT day_date::text as day_date, gym_workout
+      FROM training_plan_day
+      WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
+        AND day_date BETWEEN (${today}::date - INTERVAL '2 days') AND (${today}::date - INTERVAL '1 day')
+        AND gym_workout IN ('legs', 'lower')
+    `;
+    legDayConflict = recentGym.length > 0;
+  }
+
   const completedDays = planDays.filter((d: any) => d.completed).length;
   const totalDays = planDays.length;
 
@@ -338,6 +352,7 @@ export default async function TrainingPage() {
                 targetKm={todayEntry.target_distance_km}
                 adjustedPace={paceData?.adjusted_pace ?? null}
                 compositeScore={Number(readiness?.composite_score || 0)}
+                legDayConflict={legDayConflict}
               />
             </div>
           )}

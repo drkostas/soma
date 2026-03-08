@@ -10,6 +10,7 @@ interface RecommendationProps {
   targetKm: number | null;
   adjustedPace: number | null; // sec/km
   compositeScore: number;
+  legDayConflict?: boolean;
 }
 
 function formatPace(sec: number): string {
@@ -19,7 +20,7 @@ function formatPace(sec: number): string {
 }
 
 export function TodaysRecommendation({
-  trafficLight, runType, runTitle, targetKm, adjustedPace, compositeScore,
+  trafficLight, runType, runTitle, targetKm, adjustedPace, compositeScore, legDayConflict,
 }: RecommendationProps) {
   if (!runType) return null;
 
@@ -67,6 +68,11 @@ export function TodaysRecommendation({
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold truncate">{headline}</div>
           {detail && <div className="text-xs text-muted-foreground">{detail}</div>}
+          {legDayConflict && !isRest && ((trafficLight === "green" && isHard) || trafficLight === "yellow") && (
+            <div className="text-[10px] mt-0.5" style={{ color: "oklch(80% 0.18 87)" }}>
+              ⚠ Legs within 48h — consider reducing intensity
+            </div>
+          )}
         </div>
         {targetKm && targetKm > 0 && !isRest && trafficLight !== "red" && (
           <div className="text-sm font-mono tabular-nums text-muted-foreground shrink-0">
