@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, Dumbbell, Check, Upload, AlertCircle } from "lucide-react";
+import { ChevronDown, Dumbbell, Upload, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WorkoutCompletionButton } from "@/components/workout-completion-button";
 
 interface TrainingDay {
+  id: number;
   day_date: string;
   week_number: number;
   day_of_week: number;
@@ -258,12 +260,7 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
                           {/* Title & description */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
-                              {day.completed && (
-                                <Check
-                                  className="h-3.5 w-3.5 shrink-0"
-                                  style={{ color: "oklch(62% 0.17 142)" }}
-                                />
-                              )}
+                              <WorkoutCompletionButton dayId={day.id} completed={day.completed} />
                               <span
                                 className={cn(
                                   "text-sm font-medium truncate",
