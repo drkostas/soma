@@ -15,6 +15,7 @@ import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { getDb } from "@/lib/db";
 import { Target, Footprints, Dumbbell, CalendarCheck, TrendingUp } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
+import { TodaysRecommendation } from "@/components/todays-recommendation";
 
 export const metadata: Metadata = { title: "Training" };
 export const revalidate = 300;
@@ -319,6 +320,20 @@ export default async function TrainingPage() {
               }
             />
           </div>
+
+          {/* Today's Recommendation */}
+          {todayEntry && (
+            <div className="mb-6">
+              <TodaysRecommendation
+                trafficLight={readiness?.traffic_light || "green"}
+                runType={todayEntry.run_type}
+                runTitle={todayEntry.run_title}
+                targetKm={todayEntry.target_distance_km}
+                adjustedPace={paceData?.adjusted_pace ?? null}
+                compositeScore={Number(readiness?.composite_score || 0)}
+              />
+            </div>
+          )}
 
           {/* Readiness + Provenance + PMC Row */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
