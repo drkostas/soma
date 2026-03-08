@@ -51,6 +51,12 @@ const runTypeColors: Record<string, { bg: string; text: string }> = {
 
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+function formatPace(secPerKm: number): string {
+  const m = Math.floor(secPerKm / 60);
+  const s = Math.round(secPerKm % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -271,6 +277,28 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
                               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                                 {day.run_description}
                               </p>
+                            )}
+                            {day.workout_steps && Array.isArray(day.workout_steps) && day.workout_steps.length > 0 && (
+                              <div className="mt-1.5 space-y-0.5">
+                                {day.workout_steps.map((step: any, i: number) => (
+                                  <div key={i} className="flex items-center gap-2 text-[10px] text-muted-foreground/70">
+                                    <span className="w-1 h-1 rounded-full bg-muted-foreground/40 shrink-0" />
+                                    <span>{step.name || step.type}</span>
+                                    {step.target_pace && (
+                                      <span className="font-mono">@ {formatPace(step.target_pace)}/km</span>
+                                    )}
+                                    {step.distance_meters && (
+                                      <span>{(step.distance_meters / 1000).toFixed(1)}km</span>
+                                    )}
+                                    {step.duration_minutes && (
+                                      <span>{step.duration_minutes}min</span>
+                                    )}
+                                    {step.repeats && step.repeats > 1 && (
+                                      <span>&times;{step.repeats}</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
 
