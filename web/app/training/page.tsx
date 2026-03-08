@@ -3,8 +3,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { RaceCountdown } from "@/components/race-countdown";
 import { TrainingPlanView } from "@/components/training-plan-view";
+import { ReadinessCard } from "@/components/readiness-card";
+import { PMCChart } from "@/components/pmc-chart";
+import { FitnessTrajectoryChart } from "@/components/fitness-trajectory-chart";
+import { DataProvenanceCard } from "@/components/data-provenance-card";
+import { PaceAdjustmentCard } from "@/components/pace-adjustment-card";
+import { TrainingPacesCard } from "@/components/training-paces-card";
+import { TrajectoryChart } from "@/components/trajectory-chart";
+import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { getDb } from "@/lib/db";
-import { Target, Footprints, Dumbbell, CalendarCheck } from "lucide-react";
+import { Target, Footprints, Dumbbell, CalendarCheck, TrendingUp } from "lucide-react";
+import { TrainingControls } from "@/components/training-controls";
 
 export const metadata: Metadata = { title: "Training" };
 export const revalidate = 300;
@@ -12,7 +21,8 @@ export const revalidate = 300;
 async function getTrainingPlan() {
   const sql = getDb();
   return sql`
-    SELECT d.*, p.plan_name, p.race_date::text as race_date, p.goal_time_seconds
+    SELECT d.*, d.day_date::text as day_date,
+           p.plan_name, p.race_date::text as race_date, p.goal_time_seconds
     FROM training_plan_day d
     JOIN training_plan p ON d.plan_id = p.id
     WHERE p.status = 'active'
@@ -31,13 +41,139 @@ async function getRaceInfo() {
   return rows[0] || null;
 }
 
+async function getReadiness() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT hrv_z_score, sleep_z_score, rhr_z_score,
+           body_battery_z_score, composite_score, traffic_light, flags
+    FROM daily_readiness
+    ORDER BY date DESC
+    LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
+async function getPMC() {
+  const sql = getDb();
+  return sql`
+    SELECT date::text as date, ctl, atl, tsb
+    FROM pmc_daily
+    WHERE date >= NOW() - INTERVAL '90 days'
+    ORDER BY date
+  `;
+}
+
+async function getFitnessTrajectory() {
+  const sql = getDb();
+  return sql`
+    SELECT date::text as date, vo2max, efficiency_factor, decoupling_pct, vdot_adjusted
+    FROM fitness_trajectory
+    WHERE date >= NOW() - INTERVAL '90 days'
+    ORDER BY date
+  `;
+}
+
+async function getPaceAdjustment() {
+  const sql = getDb();
+  const readiness = await sql`
+    SELECT composite_score, traffic_light FROM daily_readiness ORDER BY date DESC LIMIT 1
+  `;
+  const pmc = await sql`
+    SELECT tsb FROM pmc_daily ORDER BY date DESC LIMIT 1
+  `;
+  const weight = await sql`
+    SELECT weight_kg, vdot_adjusted FROM fitness_trajectory
+    WHERE weight_kg IS NOT NULL ORDER BY date DESC LIMIT 1
+  `;
+  if (!readiness[0] || !pmc[0]) return null;
+
+  const compositeScore = Number(readiness[0].composite_score || 0);
+  const tsb = Number(pmc[0].tsb || 0);
+
+  // Readiness factor (mirrors merge.py)
+  let rf = 1.0;
+  if (compositeScore <= -2.0) return null;
+  if (compositeScore >= 1.0) rf = 0.97;
+  else if (compositeScore >= 0) rf = 1.00 - 0.03 * compositeScore;
+  else if (compositeScore >= -1.0) rf = 1.00 - 0.05 * compositeScore;
+  else rf = 1.05;
+
+  // Fatigue factor (mirrors merge.py)
+  let ff = 1.0;
+  if (tsb >= 10) ff = 0.98;
+  else if (tsb <= -20) ff = 1.03;
+  else if (tsb >= 0) ff = 1.00 - 0.002 * tsb;
+  else ff = 1.00 - 0.0015 * tsb;
+
+  // Weight factor
+  const calibrationWeight = 80.5;
+  let wf = 1.0;
+  if (weight[0]?.weight_kg) {
+    wf = Number(weight[0].weight_kg) / calibrationWeight;
+  }
+
+  const basePace = 284; // B-goal 4:44/km
+  return {
+    base_pace: basePace,
+    readiness_factor: rf,
+    fatigue_factor: ff,
+    weight_factor: wf,
+    adjusted_pace: basePace * rf * ff * wf,
+    traffic_light: readiness[0].traffic_light,
+  };
+}
+
+async function getTrajectoryData(raceDate: string) {
+  const sql = getDb();
+  const actuals = await sql`
+    SELECT date::text as date, vo2max
+    FROM fitness_trajectory
+    WHERE vo2max IS NOT NULL
+    ORDER BY date
+  `;
+
+  if (actuals.length === 0) return [];
+
+  const currentVo2 = Number(actuals[actuals.length - 1].vo2max);
+  const goalVo2 = 52; // VDOT needed for A-goal (1:35)
+
+  const start = new Date(actuals[0].date + "T00:00:00");
+  const end = new Date(raceDate + "T00:00:00");
+  const totalDays = Math.max(1, (end.getTime() - start.getTime()) / 86400000);
+
+  const actualMap = new Map(actuals.map((a: any) => [a.date, Number(a.vo2max)]));
+
+  const trajectory: { date: string; optimal: number; actual: number | null }[] = [];
+  const current = new Date(start);
+  while (current <= end) {
+    const dateStr = current.toISOString().split("T")[0];
+    const dayNum = (current.getTime() - start.getTime()) / 86400000;
+    const optimal = currentVo2 + (goalVo2 - currentVo2) * (dayNum / totalDays);
+    trajectory.push({
+      date: dateStr,
+      optimal,
+      actual: actualMap.get(dateStr) ?? null,
+    });
+    current.setDate(current.getDate() + 1);
+  }
+
+  return trajectory;
+}
+
 export default async function TrainingPage() {
-  const [planDays, raceInfo] = await Promise.all([
+  const [planDays, raceInfo, readiness, pmcData, fitnessData, paceData] = await Promise.all([
     getTrainingPlan(),
     getRaceInfo(),
+    getReadiness(),
+    getPMC(),
+    getFitnessTrajectory(),
+    getPaceAdjustment(),
   ]);
 
   const today = new Date().toISOString().split("T")[0];
+
+  // Trajectory data (depends on raceInfo)
+  const trajectoryData = raceInfo ? await getTrajectoryData(raceInfo.race_date) : [];
 
   // Compute stats
   const totalWeeks = planDays.length > 0
@@ -76,6 +212,20 @@ export default async function TrainingPage() {
 
   const hasNoPlan = planDays.length === 0;
 
+  // Build provenance data from readiness + pmc + fitness
+  const provenanceData = readiness && pmcData.length > 0 ? {
+    hrv_z: Number(readiness.hrv_z_score || 0),
+    sleep_z: Number(readiness.sleep_z_score || 0),
+    rhr_z: Number(readiness.rhr_z_score || 0),
+    bb_z: Number(readiness.body_battery_z_score || 0),
+    ctl: Number(pmcData[pmcData.length - 1]?.ctl || 0),
+    atl: Number(pmcData[pmcData.length - 1]?.atl || 0),
+    tsb: Number(pmcData[pmcData.length - 1]?.tsb || 0),
+    vo2max: fitnessData.length > 0 ? fitnessData[fitnessData.length - 1]?.vo2max : null,
+    weight_kg: fitnessData.length > 0 ? fitnessData[fitnessData.length - 1]?.weight_kg : null,
+    decoupling_pct: fitnessData.length > 0 ? fitnessData[fitnessData.length - 1]?.decoupling_pct : null,
+  } : null;
+
   return (
     <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
       {/* Header */}
@@ -90,6 +240,7 @@ export default async function TrainingPage() {
               : `${raceInfo?.plan_name || "Training Plan"} — ${totalDays} days, ${totalPlanKm.toFixed(0)} km total`}
           </p>
         </div>
+        {!hasNoPlan && <TrainingControls />}
       </div>
 
       {hasNoPlan ? (
@@ -166,6 +317,55 @@ export default async function TrainingPage() {
               }
             />
           </div>
+
+          {/* Readiness + Provenance + PMC Row */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <ReadinessCard data={readiness as any} />
+            <DataProvenanceCard data={provenanceData as any} />
+            <div className="md:col-span-2">
+              <ExpandableChartCard
+                title="Performance Management"
+                subtitle="CTL / ATL / TSB"
+                icon={<TrendingUp className="h-4 w-4" style={{ color: "oklch(65% 0.15 250)" }} />}
+              >
+                <PMCChart data={pmcData as any} />
+              </ExpandableChartCard>
+            </div>
+          </div>
+
+          {/* Pace + Paces + Fitness Trajectory Row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="space-y-4">
+              <PaceAdjustmentCard data={paceData as any} />
+              <TrainingPacesCard />
+            </div>
+            <div className="md:col-span-2">
+              <ExpandableChartCard
+                title="Fitness Trajectory"
+                subtitle="VO2max + Decoupling"
+                icon={<TrendingUp className="h-4 w-4" style={{ color: "oklch(60% 0.2 300)" }} />}
+              >
+                <FitnessTrajectoryChart data={fitnessData as any} />
+              </ExpandableChartCard>
+            </div>
+          </div>
+
+          {/* Trajectory Chart (Optimal vs Actual) */}
+          {raceInfo && trajectoryData.length > 0 && (
+            <ExpandableChartCard
+              title="Training Trajectory"
+              subtitle="Optimal vs Actual"
+              icon={<Target className="h-4 w-4" style={{ color: "oklch(60% 0.2 300)" }} />}
+              className="mb-6"
+            >
+              <TrajectoryChart
+                data={trajectoryData as any}
+                raceDate={raceInfo.race_date}
+                today={today}
+                goalVdot={52}
+              />
+            </ExpandableChartCard>
+          )}
 
           {/* This Week's Schedule - quick 7-day row */}
           <Card className="mb-6">
