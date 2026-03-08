@@ -96,7 +96,7 @@ export function GraphNodeComponent({
         fill={node.color}
         fillOpacity={0.15}
         stroke={node.color}
-        strokeWidth={1.2}
+        strokeWidth={hasShadow ? 2 : 1}
       />
 
       {/* Shadow highlight overlay */}
@@ -154,7 +154,7 @@ export function GraphNodeComponent({
             pointerEvents: "none",
           }}
         >
-          {formatValue(shadowValue, node.unit)}
+          → {formatValue(shadowValue, node.unit)}
         </text>
       )}
 
