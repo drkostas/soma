@@ -10,8 +10,7 @@ import { FitnessTrajectoryChart } from "@/components/fitness-trajectory-chart";
 import { DataProvenanceCard } from "@/components/data-provenance-card";
 import { PaceAdjustmentCard } from "@/components/pace-adjustment-card";
 import { TrainingPacesCard } from "@/components/training-paces-card";
-import { DeltaSimulator } from "@/components/delta-simulator";
-import { TrajectoryChart } from "@/components/trajectory-chart";
+import { TrajectorySection } from "@/components/trajectory-section";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { getDb } from "@/lib/db";
 import { Target, Footprints, Dumbbell, CalendarCheck, TrendingUp } from "lucide-react";
@@ -399,14 +398,6 @@ export default async function TrainingPage() {
             <div className="space-y-4">
               <PaceAdjustmentCard data={paceData as any} />
               <TrainingPacesCard />
-              {paceData && (
-                <DeltaSimulator
-                  basePace={paceData.adjusted_pace}
-                  optimalPace={270}
-                  currentVdot={fitnessData.length > 0 ? Number(fitnessData[fitnessData.length - 1]?.vo2max || 50) : 50}
-                  goalVdot={52}
-                />
-              )}
             </div>
             <div className="md:col-span-2">
               <ExpandableChartCard
@@ -419,21 +410,19 @@ export default async function TrainingPage() {
             </div>
           </div>
 
-          {/* Trajectory Chart (Optimal vs Actual) */}
+          {/* Trajectory Chart + Delta Simulator (linked) */}
           {raceInfo && trajectoryData.length > 0 && (
-            <ExpandableChartCard
-              title="Training Trajectory"
-              subtitle="Optimal vs Actual"
-              icon={<Target className="h-4 w-4" style={{ color: "oklch(60% 0.2 300)" }} />}
-              className="mb-6"
-            >
-              <TrajectoryChart
-                data={trajectoryData as any}
+            <div className="mb-6">
+              <TrajectorySection
+                baseTrajectory={trajectoryData as any}
                 raceDate={raceInfo.race_date}
                 today={today}
                 goalVdot={52}
+                currentVdot={fitnessData.length > 0 ? Number(fitnessData[fitnessData.length - 1]?.vo2max || 50) : 50}
+                basePace={paceData?.adjusted_pace ?? 284}
+                optimalPace={270}
               />
-            </ExpandableChartCard>
+            </div>
           )}
 
           {/* This Week's Schedule - quick 7-day row */}
