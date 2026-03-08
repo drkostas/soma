@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Dumbbell,
   Footprints,
+  Target,
   Mountain,
   Moon,
   Cable,
@@ -24,11 +25,12 @@ import { SomaLogo } from "@/components/soma-logo";
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Overview", shortcut: "1" },
   { href: "/running", icon: Footprints, label: "Running", shortcut: "2" },
-  { href: "/workouts", icon: Dumbbell, label: "Gym", shortcut: "3" },
-  { href: "/activities", icon: Mountain, label: "Activities", shortcut: "4" },
-  { href: "/sleep", icon: Moon, label: "Sleep", shortcut: "5" },
-  { href: "/playlist", icon: Music2, label: "Playlist", shortcut: "6" },
-  { href: "/connections", icon: Cable, label: "Sync", shortcut: "7" },
+  { href: "/training", icon: Target, label: "Training", shortcut: "3" },
+  { href: "/workouts", icon: Dumbbell, label: "Gym", shortcut: "4" },
+  { href: "/activities", icon: Mountain, label: "Activities", shortcut: "5" },
+  { href: "/sleep", icon: Moon, label: "Sleep", shortcut: "6" },
+  { href: "/playlist", icon: Music2, label: "Playlist", shortcut: "7" },
+  { href: "/connections", icon: Cable, label: "Sync", shortcut: "8" },
 ];
 
 export function Sidebar() {
