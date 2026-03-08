@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, Dumbbell, Upload, AlertCircle } from "lucide-react";
+import { ChevronDown, Dumbbell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkoutCompletionButton } from "@/components/workout-completion-button";
+import { GarminPushButton } from "@/components/garmin-push-button";
 
 interface TrainingDay {
   id: number;
@@ -64,23 +65,6 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-function GarminStatus({ status }: { status: string }) {
-  if (status === "pushed" || status === "success") {
-    return (
-      <span title="Pushed to Garmin" className="text-green-400">
-        <Upload className="h-3.5 w-3.5" />
-      </span>
-    );
-  }
-  if (status === "failed" || status === "error") {
-    return (
-      <span title="Push failed" className="text-red-400">
-        <AlertCircle className="h-3.5 w-3.5" />
-      </span>
-    );
-  }
-  return null;
-}
 
 export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
   // Group days by week
@@ -322,9 +306,13 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
                             )}
                           </div>
 
-                          {/* Garmin status */}
+                          {/* Garmin push */}
                           <div className="w-[20px] shrink-0 flex justify-center">
-                            <GarminStatus status={day.garmin_push_status} />
+                            <GarminPushButton
+                              dayId={day.id}
+                              status={day.garmin_push_status}
+                              hasSteps={Array.isArray(day.workout_steps) && day.workout_steps.length > 0}
+                            />
                           </div>
                         </div>
                       );
