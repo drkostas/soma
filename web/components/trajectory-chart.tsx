@@ -100,7 +100,7 @@ export function TrajectoryChart({ data, raceDate, today, goalVdot }: TrajectoryC
             const dt = new Date(d + "T00:00:00");
             return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
           }}
-          interval={Math.max(Math.floor(chartData.length / 7), 1)}
+          interval={Math.max(Math.floor(chartData.length / 6), 1)}
         />
         <YAxis
           className="text-[10px]"
