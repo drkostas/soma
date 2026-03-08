@@ -223,6 +223,31 @@ export default async function TrainingPage() {
     legDayConflict = recentGym.length > 0;
   }
 
+  // Compute today's plan adaptation
+  let todayAdaptation: { action: string; adjustedType: string; adjustedKm: number; paceFactor: number; reason: string } | null = null;
+  if (todayEntry && readiness && pmcData.length > 0) {
+    const tl = readiness.traffic_light || "green";
+    const tsb = Number(pmcData[pmcData.length - 1]?.tsb || 0);
+    const isHard = ["tempo", "intervals", "threshold"].includes(todayEntry.run_type);
+    const isRest = todayEntry.run_type === "rest";
+
+    if (isRest) {
+      todayAdaptation = { action: "as_planned", adjustedType: "rest", adjustedKm: 0, paceFactor: 1.0, reason: "Rest day" };
+    } else if (tl === "red" && isHard) {
+      todayAdaptation = { action: "downgrade_to_rest", adjustedType: "easy", adjustedKm: 4.0, paceFactor: 1.10, reason: "RED readiness" };
+    } else if (tl === "red") {
+      todayAdaptation = { action: "reduce", adjustedType: todayEntry.run_type, adjustedKm: Math.min(todayEntry.target_distance_km, 4.0), paceFactor: 1.10, reason: "RED readiness" };
+    } else if (tl === "yellow" && isHard) {
+      todayAdaptation = { action: "swap_to_easy", adjustedType: "easy", adjustedKm: Math.round(todayEntry.target_distance_km * 0.85 * 10) / 10, paceFactor: 1.05, reason: "YELLOW readiness" };
+    } else if (tsb < -20) {
+      todayAdaptation = { action: "reduce", adjustedType: todayEntry.run_type, adjustedKm: Math.round(todayEntry.target_distance_km * 0.85 * 10) / 10, paceFactor: 1.03, reason: `Accumulated fatigue (TSB ${tsb.toFixed(0)})` };
+    } else if (tsb < -15) {
+      todayAdaptation = { action: "reduce", adjustedType: todayEntry.run_type, adjustedKm: Math.round(todayEntry.target_distance_km * 0.90 * 10) / 10, paceFactor: 1.02, reason: `Moderate fatigue (TSB ${tsb.toFixed(0)})` };
+    } else {
+      todayAdaptation = { action: "as_planned", adjustedType: todayEntry.run_type, adjustedKm: todayEntry.target_distance_km, paceFactor: 1.0, reason: "All signals green" };
+    }
+  }
+
   const completedDays = planDays.filter((d: any) => d.completed).length;
   const totalDays = planDays.length;
 
@@ -370,6 +395,7 @@ export default async function TrainingPage() {
                 adjustedPace={paceData?.adjusted_pace ?? null}
                 compositeScore={Number(readiness?.composite_score || 0)}
                 legDayConflict={legDayConflict}
+                adaptation={todayAdaptation}
               />
             </div>
           )}
@@ -500,7 +526,7 @@ export default async function TrainingPage() {
             <h2 className="text-sm font-medium text-muted-foreground mb-3">
               Full Plan
             </h2>
-            <TrainingPlanView days={planDays as any} today={today} />
+            <TrainingPlanView days={planDays as any} today={today} todayAdaptation={todayAdaptation} />
           </div>
         </>
       )}

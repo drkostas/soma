@@ -33,6 +33,11 @@ interface TrainingDay {
 interface TrainingPlanViewProps {
   days: TrainingDay[];
   today: string;
+  todayAdaptation?: {
+    action: string;
+    adjustedType: string;
+    adjustedKm: number;
+  } | null;
 }
 
 const weekTitles: Record<number, string> = {
@@ -68,7 +73,7 @@ function formatDate(dateStr: string): string {
 }
 
 
-export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
+export function TrainingPlanView({ days, today, todayAdaptation }: TrainingPlanViewProps) {
   // Group days by week
   const weeks = new Map<number, TrainingDay[]>();
   for (const day of days) {
@@ -277,12 +282,21 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
                               <span
                                 className={cn(
                                   "text-sm font-medium truncate",
-                                  day.completed && "line-through"
+                                  day.completed && "line-through",
+                                  isToday && todayAdaptation && todayAdaptation.action !== "as_planned" && "opacity-60"
                                 )}
                               >
                                 {day.run_title || "Rest"}
                               </span>
                             </div>
+                            {isToday && todayAdaptation && todayAdaptation.action !== "as_planned" && (
+                              <span
+                                className="text-[10px] font-medium ml-1.5"
+                                style={{ color: "oklch(65% 0.15 250)" }}
+                              >
+                                &rarr; {todayAdaptation.adjustedType} {todayAdaptation.adjustedKm.toFixed(1)} km
+                              </span>
+                            )}
                             {day.run_description && (
                               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                                 {day.run_description}

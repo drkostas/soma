@@ -11,6 +11,13 @@ interface RecommendationProps {
   adjustedPace: number | null; // sec/km
   compositeScore: number;
   legDayConflict?: boolean;
+  adaptation?: {
+    action: string;
+    adjustedType: string;
+    adjustedKm: number;
+    paceFactor: number;
+    reason: string;
+  } | null;
 }
 
 function formatPace(sec: number): string {
@@ -20,7 +27,7 @@ function formatPace(sec: number): string {
 }
 
 export function TodaysRecommendation({
-  trafficLight, runType, runTitle, targetKm, adjustedPace, compositeScore, legDayConflict,
+  trafficLight, runType, runTitle, targetKm, adjustedPace, compositeScore, legDayConflict, adaptation,
 }: RecommendationProps) {
   if (!runType) return null;
 
@@ -71,6 +78,11 @@ export function TodaysRecommendation({
           {legDayConflict && !isRest && ((trafficLight === "green" && isHard) || trafficLight === "yellow") && (
             <div className="text-[10px] mt-0.5" style={{ color: "oklch(80% 0.18 87)" }}>
               ⚠ Legs within 48h — consider reducing intensity
+            </div>
+          )}
+          {adaptation && adaptation.action !== "as_planned" && (
+            <div className="text-[10px] mt-0.5" style={{ color: "oklch(65% 0.15 250)" }}>
+              Adapted: {adaptation.adjustedType} {adaptation.adjustedKm.toFixed(1)} km — {adaptation.reason}
             </div>
           )}
         </div>
