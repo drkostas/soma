@@ -94,6 +94,8 @@ def velocity_at_vo2max(vdot: float) -> float:
     b = 0.182258
     c = -4.60 - vdot
     discriminant = b * b - 4 * a * c
+    if discriminant < 0:
+        raise ValueError(f"Cannot compute velocity for VDOT {vdot}")
     return (-b + math.sqrt(discriminant)) / (2 * a)
 
 
@@ -298,4 +300,6 @@ def adjust_vdot_for_weight(vdot: float, old_weight: float, new_weight: float) ->
     Returns:
         Adjusted VDOT.
     """
+    if new_weight <= 0 or old_weight <= 0:
+        return vdot
     return vdot * old_weight / new_weight
