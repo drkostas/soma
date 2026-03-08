@@ -72,7 +72,13 @@ function ZBar({ label, value }: { label: string; value: number | null }) {
   );
 }
 
-export function ReadinessCard({ data }: { data: ReadinessData | null }) {
+interface ReadinessCardProps {
+  data: ReadinessData | null;
+  garminScore?: number | null;
+  garminLevel?: string | null;
+}
+
+export function ReadinessCard({ data, garminScore, garminLevel }: ReadinessCardProps) {
   if (!data) {
     return (
       <Card>
@@ -135,6 +141,15 @@ export function ReadinessCard({ data }: { data: ReadinessData | null }) {
                 {f.replace(/_/g, " ")}
               </span>
             ))}
+          </div>
+        )}
+
+        {garminScore != null && (
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground">
+            <span>Garmin Readiness</span>
+            <span className="font-mono">
+              {garminScore} <span className="capitalize">({garminLevel || "\u2014"})</span>
+            </span>
           </div>
         )}
       </CardContent>

@@ -47,10 +47,13 @@ async function getRaceInfo() {
 async function getReadiness() {
   const sql = getDb();
   const rows = await sql`
-    SELECT hrv_z_score, sleep_z_score, rhr_z_score,
-           body_battery_z_score, composite_score, traffic_light, flags
-    FROM daily_readiness
-    ORDER BY date DESC
+    SELECT r.hrv_z_score, r.sleep_z_score, r.rhr_z_score,
+           r.body_battery_z_score, r.composite_score, r.traffic_light, r.flags,
+           h.training_readiness_score AS garmin_readiness_score,
+           h.training_readiness_level AS garmin_readiness_level
+    FROM daily_readiness r
+    LEFT JOIN daily_health_summary h ON r.date = h.date
+    ORDER BY r.date DESC
     LIMIT 1
   `;
   return rows[0] || null;
@@ -374,7 +377,11 @@ export default async function TrainingPage() {
 
           {/* Readiness + Provenance + PMC Row */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <ReadinessCard data={readiness as any} />
+            <ReadinessCard
+              data={readiness as any}
+              garminScore={readiness?.garmin_readiness_score ?? null}
+              garminLevel={readiness?.garmin_readiness_level ?? null}
+            />
             <DataProvenanceCard data={provenanceData as any} />
             <div className="md:col-span-2">
               <ExpandableChartCard
