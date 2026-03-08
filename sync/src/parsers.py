@@ -35,6 +35,8 @@ def parse_daily_health(sync_date: date, raw_data: dict) -> dict:
         "body_battery_charged": raw_data.get("bodyBatteryChargedValue"),
         "body_battery_drained": raw_data.get("bodyBatteryDrainedValue"),
         "sleep_time_seconds": raw_data.get("sleepingTimeInSeconds"),
+        "body_battery_at_wake": raw_data.get("bodyBatteryAtWakeTime"),
+        "rhr_7day_avg": raw_data.get("lastSevenDaysAvgRestingHeartRate"),
     }
 
 
@@ -73,6 +75,7 @@ def parse_sleep(raw_data: dict) -> dict | None:
         "sleep_score": overall_score,
         "sleep_start": _ms_to_datetime(dto.get("sleepStartTimestampLocal")),
         "sleep_end": _ms_to_datetime(dto.get("sleepEndTimestampLocal")),
+        "avg_sleep_stress": dto.get("avgSleepStress"),
     }
 
 
@@ -80,10 +83,37 @@ def parse_hrv(raw_data: dict) -> dict:
     """Extract HRV fields from hrv_data raw JSON."""
     # HRV data is nested under hrvSummary
     summary = raw_data.get("hrvSummary", raw_data)
+    baseline = summary.get("baseline") or {}
     return {
         "hrv_weekly_avg": summary.get("weeklyAvg"),
         "hrv_last_night_avg": summary.get("lastNightAvg"),
         "hrv_status": summary.get("status"),
+        "avg_overnight_hrv": summary.get("lastNightAvg"),
+        "hrv_baseline": baseline.get("balancedLow"),
+    }
+
+
+def parse_training_readiness(raw_data) -> dict:
+    """Extract training readiness from training_readiness raw JSON.
+
+    The raw data is a list of readiness snapshots. We prefer the latest
+    entry where ``validSleep`` is ``True`` (post-sleep calculation).
+    Falls back to the first entry if none have valid sleep.
+    """
+    if not raw_data or not isinstance(raw_data, list):
+        return {"training_readiness_score": None, "training_readiness_level": None}
+
+    # Prefer validSleep=True entries, take the last one (most recent)
+    best = None
+    for entry in raw_data:
+        if entry.get("validSleep"):
+            best = entry
+    if best is None and raw_data:
+        best = raw_data[0]
+
+    return {
+        "training_readiness_score": best.get("score") if best else None,
+        "training_readiness_level": best.get("level") if best else None,
     }
 
 
@@ -168,10 +198,18 @@ def process_day(sync_date: date):
                 parsed.update(hrv)
 
             # Merge sleep duration from sleep_data if user_summary lacks it
-            if not parsed.get("sleep_time_seconds") and "sleep_data" in raw_by_endpoint:
+            if "sleep_data" in raw_by_endpoint:
                 sleep = parse_sleep(raw_by_endpoint["sleep_data"])
-                if sleep and sleep.get("total_sleep_seconds"):
-                    parsed["sleep_time_seconds"] = sleep["total_sleep_seconds"]
+                if sleep:
+                    if not parsed.get("sleep_time_seconds") and sleep.get("total_sleep_seconds"):
+                        parsed["sleep_time_seconds"] = sleep["total_sleep_seconds"]
+                    if sleep.get("avg_sleep_stress") is not None:
+                        parsed["avg_sleep_stress"] = sleep["avg_sleep_stress"]
+
+            # Merge training readiness if available
+            if "training_readiness" in raw_by_endpoint:
+                tr = parse_training_readiness(raw_by_endpoint["training_readiness"])
+                parsed.update(tr)
 
             upsert_daily_health(conn, parsed)
 
