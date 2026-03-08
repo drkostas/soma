@@ -19,13 +19,15 @@ export function WorkoutCompletionButton({
     setLoading(true);
     const newState = !completed;
     try {
-      await fetch(`/api/training/day/${dayId}`, {
+      const res = await fetch(`/api/training/day/${dayId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ completed: newState }),
       });
-      setCompleted(newState);
-      router.refresh();
+      if (res.ok) {
+        setCompleted(newState);
+        router.refresh();
+      }
     } finally {
       setLoading(false);
     }

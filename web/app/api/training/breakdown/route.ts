@@ -4,7 +4,9 @@ import { getDb } from "@/lib/db";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
-  if (!date) return NextResponse.json({ error: "date required" }, { status: 400 });
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+  }
 
   const sql = getDb();
   const [readiness] = await sql`

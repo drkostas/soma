@@ -146,10 +146,10 @@ def compute_daily_readiness(conn, target_date: date) -> dict:
 
     if not rows:
         return {
-            "hrv_z_score": 0.0,
-            "sleep_z_score": 0.0,
-            "rhr_z_score": 0.0,
-            "body_battery_z_score": 0.0,
+            "hrv_z_score": None,
+            "sleep_z_score": None,
+            "rhr_z_score": None,
+            "body_battery_z_score": None,
             "composite_score": 0.0,
             "traffic_light": "green",
             "flags": ["no_data"],
@@ -167,10 +167,10 @@ def compute_daily_readiness(conn, target_date: date) -> dict:
 
     if target_row is None:
         return {
-            "hrv_z_score": 0.0,
-            "sleep_z_score": 0.0,
-            "rhr_z_score": 0.0,
-            "body_battery_z_score": 0.0,
+            "hrv_z_score": None,
+            "sleep_z_score": None,
+            "rhr_z_score": None,
+            "body_battery_z_score": None,
             "composite_score": 0.0,
             "traffic_light": "green",
             "flags": ["no_target_data"],
