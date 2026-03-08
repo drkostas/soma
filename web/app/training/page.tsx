@@ -137,6 +137,14 @@ async function getTrajectoryData(raceDate: string) {
 
   if (actuals.length === 0) return [];
 
+  // Query rest days from the active plan to filter them from the X-axis
+  const restDays = await sql`
+    SELECT day_date::text as day_date FROM training_plan_day
+    WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
+      AND run_type = 'rest'
+  `;
+  const restDatesSet = new Set(restDays.map((r: any) => r.day_date));
+
   const currentVo2 = Number(actuals[actuals.length - 1].vo2max);
   const goalVo2 = 52; // VDOT needed for A-goal (1:35)
 
@@ -150,6 +158,13 @@ async function getTrajectoryData(raceDate: string) {
   const current = new Date(start);
   while (current <= end) {
     const dateStr = current.toISOString().split("T")[0];
+
+    // Skip rest days (but always include if there's actual data for that day)
+    if (restDatesSet.has(dateStr) && !actualMap.has(dateStr)) {
+      current.setDate(current.getDate() + 1);
+      continue;
+    }
+
     const dayNum = (current.getTime() - start.getTime()) / 86400000;
     // Logistic S-curve: fast early gains, plateau, slight taper supercompensation
     const progress = dayNum / totalDays;
