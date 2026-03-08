@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { RaceCountdown } from "@/components/race-countdown";
+import { RaceSplitsCard } from "@/components/race-splits-card";
 import { TrainingPlanView } from "@/components/training-plan-view";
 import { ReadinessCard } from "@/components/readiness-card";
 import { PMCChart } from "@/components/pmc-chart";
@@ -258,9 +259,9 @@ export default async function TrainingPage() {
         </Card>
       ) : (
         <>
-          {/* Race Countdown */}
+          {/* Race Countdown + Splits */}
           {raceInfo && (
-            <div className="mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <RaceCountdown
                 raceName={raceInfo.plan_name}
                 raceDate={raceInfo.race_date}
@@ -270,6 +271,7 @@ export default async function TrainingPage() {
                 completedDays={completedDays}
                 totalDays={totalDays}
               />
+              <RaceSplitsCard />
             </div>
           )}
 
