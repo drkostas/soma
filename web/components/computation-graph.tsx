@@ -277,15 +277,18 @@ export function ComputationGraphView({
       {/* Slider control */}
       <div className="flex items-center gap-3 px-1">
         <span className="text-[10px] text-muted-foreground whitespace-nowrap">Conservative</span>
-        <input
-          type="range"
-          min={0}
-          max={1.5}
-          step={0.05}
-          value={sliderValue}
-          onChange={(e) => onSliderChange(parseFloat(e.target.value))}
-          className="flex-1 h-1.5 accent-primary cursor-pointer"
-        />
+        <div className="relative flex-1">
+          <input
+            type="range"
+            min={0}
+            max={1.5}
+            step={0.05}
+            value={sliderValue}
+            onChange={(e) => onSliderChange(parseFloat(e.target.value))}
+            className="w-full h-1.5 accent-primary cursor-pointer"
+          />
+          <span className="absolute left-2/3 -translate-x-1/2 -top-4 text-[9px] text-muted-foreground/60">Optimal</span>
+        </div>
         <span className="text-[10px] text-muted-foreground whitespace-nowrap">Push</span>
         <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-8 text-right">
           {sliderValue.toFixed(2)}
