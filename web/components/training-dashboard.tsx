@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Save, Check, X } from "lucide-react";
 import { ComputationGraphView } from "@/components/computation-graph";
 import { TrajectorySection } from "@/components/trajectory-section";
 import { ReferencePanel, type ReferenceMetric } from "@/components/reference-panel";
@@ -176,6 +176,20 @@ export function TrainingDashboard({
   const [activityMatches, setActivityMatches] = useState<ActivityMatch[]>([]);
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<"idle" | "success" | "error">("idle");
+
+  const isDirty = sliderValue !== 1.0;
+
+  // Refetchable data loader — used on mount and after save
+  const refetchData = useCallback(async () => {
+    const [graphRes, matchRes] = await Promise.all([
+      fetch(`/api/training/graph?date=${today}`),
+      fetch("/api/training/activity-match"),
+    ]);
+    if (graphRes.ok) setGraphData(await graphRes.json());
+    if (matchRes.ok) setActivityMatches(await matchRes.json());
+  }, [today]);
 
   // Fetch graph data and activity matches on mount
   useEffect(() => {
@@ -183,22 +197,7 @@ export function TrainingDashboard({
 
     async function fetchData() {
       try {
-        const [graphRes, matchRes] = await Promise.all([
-          fetch(`/api/training/graph?date=${today}`),
-          fetch("/api/training/activity-match"),
-        ]);
-
-        if (cancelled) return;
-
-        if (graphRes.ok) {
-          const data = await graphRes.json();
-          setGraphData(data);
-        }
-
-        if (matchRes.ok) {
-          const data = await matchRes.json();
-          setActivityMatches(data);
-        }
+        await refetchData();
       } catch {
         // Silently handle errors — graceful degradation
       } finally {
@@ -208,7 +207,7 @@ export function TrainingDashboard({
 
     fetchData();
     return () => { cancelled = true; };
-  }, [today]);
+  }, [refetchData]);
 
   // Shadow graph recomputed when slider changes
   const shadowGraph = useMemo<ComputationGraph | null>(() => {
@@ -280,6 +279,45 @@ export function TrainingDashboard({
     setHoveredDate(date);
   }, []);
 
+  const handleSave = useCallback(async () => {
+    if (deltaWorkouts.length === 0) return;
+    setSaving(true);
+    setSaveResult("idle");
+
+    try {
+      const res = await fetch("/api/training/delta/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sliderFactor: sliderValue,
+          updatedWorkouts: deltaWorkouts.map((w) => ({
+            dayId: w.dayId,
+            newDistance: w.newDistance,
+            newType: w.newType,
+          })),
+        }),
+      });
+
+      if (res.ok) {
+        setSaveResult("success");
+        // Reset slider after brief success display
+        setTimeout(() => {
+          setSliderValue(1.0);
+          setSaveResult("idle");
+          refetchData();
+        }, 1500);
+      } else {
+        setSaveResult("error");
+        setTimeout(() => setSaveResult("idle"), 3000);
+      }
+    } catch {
+      setSaveResult("error");
+      setTimeout(() => setSaveResult("idle"), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }, [deltaWorkouts, sliderValue, refetchData]);
+
   // Loading state
   if (loading) {
     return (
@@ -332,6 +370,27 @@ export function TrainingDashboard({
         activityMatches={activityMatches}
         deltaWorkouts={deltaWorkouts}
       />
+
+      {/* Delta save button */}
+      {isDirty && (
+        <div className="sticky bottom-4 flex justify-center z-40">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all disabled:opacity-60"
+          >
+            {saving ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+            ) : saveResult === "success" ? (
+              <><Check className="h-4 w-4" /> Saved!</>
+            ) : saveResult === "error" ? (
+              <><X className="h-4 w-4" /> Error — try again</>
+            ) : (
+              <><Save className="h-4 w-4" /> Apply Changes ({deltaWorkouts.length} workouts)</>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
