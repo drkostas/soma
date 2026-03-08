@@ -150,7 +150,13 @@ async function getTrajectoryData(raceDate: string) {
   while (current <= end) {
     const dateStr = current.toISOString().split("T")[0];
     const dayNum = (current.getTime() - start.getTime()) / 86400000;
-    const optimal = currentVo2 + (goalVo2 - currentVo2) * (dayNum / totalDays);
+    // Logistic S-curve: fast early gains, plateau, slight taper supercompensation
+    const progress = dayNum / totalDays;
+    // S-curve: sigmoid with steeper early phase
+    const sCurve = 1 / (1 + Math.exp(-8 * (progress - 0.4)));
+    // Taper bump: small supercompensation in last 15% of plan
+    const taperBump = progress > 0.85 ? 0.3 * Math.sin((progress - 0.85) / 0.15 * Math.PI) : 0;
+    const optimal = currentVo2 + (goalVo2 - currentVo2) * (sCurve + taperBump * 0.1);
     trajectory.push({
       date: dateStr,
       optimal,
