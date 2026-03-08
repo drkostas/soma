@@ -330,7 +330,7 @@ export default async function TrainingPage() {
                 subtitle="CTL / ATL / TSB"
                 icon={<TrendingUp className="h-4 w-4" style={{ color: "oklch(65% 0.15 250)" }} />}
               >
-                <PMCChart data={pmcData as any} />
+                <PMCChart data={pmcData as any} raceDate={raceInfo?.race_date} />
               </ExpandableChartCard>
             </div>
           </div>
