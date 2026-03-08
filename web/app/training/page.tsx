@@ -216,10 +216,10 @@ export default async function TrainingPage() {
 
   // Build provenance data from readiness + pmc + fitness
   const provenanceData = readiness && pmcData.length > 0 ? {
-    hrv_z: Number(readiness.hrv_z_score || 0),
-    sleep_z: Number(readiness.sleep_z_score || 0),
-    rhr_z: Number(readiness.rhr_z_score || 0),
-    bb_z: Number(readiness.body_battery_z_score || 0),
+    hrv_z: readiness.hrv_z_score != null ? Number(readiness.hrv_z_score) : null,
+    sleep_z: readiness.sleep_z_score != null ? Number(readiness.sleep_z_score) : null,
+    rhr_z: readiness.rhr_z_score != null ? Number(readiness.rhr_z_score) : null,
+    bb_z: readiness.body_battery_z_score != null ? Number(readiness.body_battery_z_score) : null,
     ctl: Number(pmcData[pmcData.length - 1]?.ctl || 0),
     atl: Number(pmcData[pmcData.length - 1]?.atl || 0),
     tsb: Number(pmcData[pmcData.length - 1]?.tsb || 0),
