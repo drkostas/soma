@@ -447,8 +447,6 @@ export default async function TrainingPage() {
                 today={today}
                 goalVdot={52}
                 currentVdot={fitnessData.length > 0 ? Number(fitnessData[fitnessData.length - 1]?.vo2max || 50) : 50}
-                basePace={paceData?.adjusted_pace ?? 284}
-                optimalPace={270}
               />
             </div>
           )}

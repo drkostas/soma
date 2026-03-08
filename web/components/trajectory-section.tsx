@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { DeltaSimulator } from "@/components/delta-simulator";
 import { TrajectoryChart } from "@/components/trajectory-chart";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { Target } from "lucide-react";
@@ -18,15 +17,32 @@ interface TrajectorySectionProps {
   today: string;
   goalVdot: number;
   currentVdot: number;
-  basePace: number;
-  optimalPace: number;
+  /** Slider controlled by parent (computation graph). Falls back to internal state when omitted. */
+  sliderValue?: number;
+  onSliderChange?: (value: number) => void;
+  /** Shadow trajectory from delta simulation */
+  shadowTrajectory?: TrajectoryEntry[] | null;
+  /** Hover sync with computation graph */
+  onHoverDate?: (date: string | null) => void;
 }
 
 export function TrajectorySection({
-  baseTrajectory, raceDate, today, goalVdot, currentVdot,
-  basePace, optimalPace,
+  baseTrajectory,
+  raceDate,
+  today,
+  goalVdot,
+  currentVdot,
+  sliderValue,
+  onSliderChange,
+  shadowTrajectory,
+  onHoverDate,
 }: TrajectorySectionProps) {
-  const [slider, setSlider] = useState(1.0);
+  // Controlled / uncontrolled pattern: use internal state when parent doesn't provide slider
+  const [internalSlider, setInternalSlider] = useState(1.0);
+  const slider = sliderValue ?? internalSlider;
+  const _onSliderChange = onSliderChange ?? setInternalSlider;
+  // _onSliderChange kept for future parent wiring (Task 11)
+  void _onSliderChange;
 
   // Recompute optimal curve based on slider
   const adjustedTrajectory = useMemo(() => {
@@ -40,28 +56,29 @@ export function TrajectorySection({
     });
   }, [baseTrajectory, slider, currentVdot]);
 
+  // Build shadow data array for the chart when shadowTrajectory is provided
+  const shadowData = useMemo(() => {
+    if (!shadowTrajectory || shadowTrajectory.length === 0) return null;
+    return shadowTrajectory.map((entry) => ({
+      date: entry.date,
+      shadow: Number(entry.optimal.toFixed(1)),
+    }));
+  }, [shadowTrajectory]);
+
   return (
-    <div className="space-y-4">
-      <ExpandableChartCard
-        title="Training Trajectory"
-        subtitle="Optimal vs Actual"
-        icon={<Target className="h-4 w-4" style={{ color: "oklch(60% 0.2 300)" }} />}
-      >
-        <TrajectoryChart
-          data={adjustedTrajectory}
-          raceDate={raceDate}
-          today={today}
-          goalVdot={goalVdot}
-        />
-      </ExpandableChartCard>
-      <DeltaSimulator
-        basePace={basePace}
-        optimalPace={optimalPace}
-        currentVdot={currentVdot}
+    <ExpandableChartCard
+      title="Training Trajectory"
+      subtitle="Optimal vs Actual"
+      icon={<Target className="h-4 w-4" style={{ color: "oklch(60% 0.2 300)" }} />}
+    >
+      <TrajectoryChart
+        data={adjustedTrajectory}
+        raceDate={raceDate}
+        today={today}
         goalVdot={goalVdot}
-        slider={slider}
-        onSliderChange={setSlider}
+        shadowData={shadowData}
+        onHoverDate={onHoverDate}
       />
-    </div>
+    </ExpandableChartCard>
   );
 }
