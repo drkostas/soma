@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils";
 import { WorkoutCompletionButton } from "@/components/workout-completion-button";
 import { GarminPushButton } from "@/components/garmin-push-button";
 import { RaceDayProtocol } from "@/components/race-day-protocol";
+import { WorkoutStepEditor } from "@/components/workout-step-editor";
+import { ActivitySidePanel } from "@/components/activity-side-panel";
+import type { DeltaWorkout } from "@/lib/training-engine";
 
 interface TrainingDay {
   id: number;
@@ -30,6 +33,22 @@ interface TrainingDay {
   goal_time_seconds: number;
 }
 
+export interface ActivityMatch {
+  dayId: number;
+  dayDate: string;
+  matched: boolean;
+  completionScore: number | null;
+  activity: {
+    distance_km: string;
+    duration_min: string;
+    avg_pace_sec_km: number | null;
+    avg_hr: number | null;
+    max_hr: number | null;
+    calories: number | null;
+    garmin_id: number | null;
+  } | null;
+}
+
 interface TrainingPlanViewProps {
   days: TrainingDay[];
   today: string;
@@ -38,6 +57,9 @@ interface TrainingPlanViewProps {
     adjustedType: string;
     adjustedKm: number;
   } | null;
+  activityMatches?: ActivityMatch[];
+  deltaWorkouts?: DeltaWorkout[];
+  onDayClick?: (dayId: number) => void;
 }
 
 const weekTitles: Record<number, string> = {
@@ -73,7 +95,38 @@ function formatDate(dateStr: string): string {
 }
 
 
-export function TrainingPlanView({ days, today, todayAdaptation }: TrainingPlanViewProps) {
+export function TrainingPlanView({
+  days,
+  today,
+  todayAdaptation,
+  activityMatches,
+  deltaWorkouts,
+  onDayClick,
+}: TrainingPlanViewProps) {
+  const [sidePanelMatch, setSidePanelMatch] = useState<ActivityMatch | null>(null);
+  const [sidePanelDay, setSidePanelDay] = useState<TrainingDay | null>(null);
+
+  // Build lookup maps
+  const matchByDayId = new Map<number, ActivityMatch>();
+  if (activityMatches) {
+    for (const m of activityMatches) matchByDayId.set(m.dayId, m);
+  }
+  const deltaByDayId = new Map<number, DeltaWorkout>();
+  if (deltaWorkouts) {
+    for (const d of deltaWorkouts) {
+      if (d.changed) deltaByDayId.set(d.dayId, d);
+    }
+  }
+
+  function handleDayClick(day: TrainingDay) {
+    const match = matchByDayId.get(day.id);
+    if (match?.matched) {
+      setSidePanelMatch(match);
+      setSidePanelDay(day);
+    }
+    onDayClick?.(day.id);
+  }
+
   // Group days by week
   const weeks = new Map<number, TrainingDay[]>();
   for (const day of days) {
@@ -115,6 +168,23 @@ export function TrainingPlanView({ days, today, todayAdaptation }: TrainingPlanV
 
   return (
     <div className="space-y-3">
+      <ActivitySidePanel
+        match={sidePanelMatch}
+        onClose={() => {
+          setSidePanelMatch(null);
+          setSidePanelDay(null);
+        }}
+        planDay={
+          sidePanelDay
+            ? {
+                run_type: sidePanelDay.run_type,
+                run_title: sidePanelDay.run_title,
+                target_distance_km: sidePanelDay.target_distance_km,
+                workout_steps: sidePanelDay.workout_steps || [],
+              }
+            : undefined
+        }
+      />
       {sortedWeeks.map(([weekNum, weekDays]) => {
         const isExpanded = expanded.has(weekNum);
         const isCurrentWeek = weekNum === todayWeek;
@@ -232,8 +302,14 @@ export function TrainingPlanView({ days, today, todayAdaptation }: TrainingPlanV
                   <div className="space-y-1">
                     {weekDays.map((day) => {
                       const isToday = day.day_date === today;
+                      const isPast = day.day_date < today;
+                      const isFuture = day.day_date > today;
                       const runColor =
                         runTypeColors[day.run_type] || runTypeColors.easy;
+                      const match = matchByDayId.get(day.id);
+                      const delta = deltaByDayId.get(day.id);
+                      const hasDeltaOverlay = isFuture && !!delta;
+                      const isClickable = isPast && match?.matched;
 
                       return (
                         <div
@@ -242,9 +318,14 @@ export function TrainingPlanView({ days, today, todayAdaptation }: TrainingPlanV
                             "flex items-start gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg transition-colors",
                             isToday
                               ? "bg-primary/10 ring-1 ring-primary/30"
-                              : "hover:bg-muted/50",
-                            day.completed && "opacity-70"
+                              : hasDeltaOverlay
+                                ? "bg-yellow-500/10 ring-1 ring-yellow-500/20 hover:bg-yellow-500/15"
+                                : "hover:bg-muted/50",
+                            day.completed && "opacity-70",
+                            isPast && !isToday && "opacity-60",
+                            isClickable && "cursor-pointer",
                           )}
+                          onClick={isClickable ? () => handleDayClick(day) : undefined}
                         >
                           {/* Date */}
                           <div className="w-[70px] sm:w-[90px] shrink-0 text-xs sm:text-sm text-muted-foreground tabular-nums">
@@ -288,6 +369,22 @@ export function TrainingPlanView({ days, today, todayAdaptation }: TrainingPlanV
                               >
                                 {day.run_title || "Rest"}
                               </span>
+                              {/* Completion score badge for past matched days */}
+                              {isPast && match?.matched && match.completionScore !== null && (
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold tabular-nums shrink-0",
+                                    match.completionScore >= 80
+                                      ? "bg-green-500/20 text-green-400"
+                                      : match.completionScore >= 60
+                                        ? "bg-yellow-500/20 text-yellow-400"
+                                        : "bg-red-500/20 text-red-400",
+                                  )}
+                                  title={`Completion score: ${match.completionScore}%`}
+                                >
+                                  {match.completionScore}
+                                </span>
+                              )}
                             </div>
                             {isToday && todayAdaptation && todayAdaptation.action !== "as_planned" && (
                               <span
@@ -303,26 +400,10 @@ export function TrainingPlanView({ days, today, todayAdaptation }: TrainingPlanV
                               </p>
                             )}
                             {day.workout_steps && Array.isArray(day.workout_steps) && day.workout_steps.length > 0 && (
-                              <div className="mt-1.5 space-y-0.5">
-                                {day.workout_steps.map((step: any, i: number) => (
-                                  <div key={i} className="flex items-center gap-2 text-[10px] text-muted-foreground/70">
-                                    <span className="w-1 h-1 rounded-full bg-muted-foreground/40 shrink-0" />
-                                    <span>{step.name || step.type}</span>
-                                    {step.target_pace && (
-                                      <span className="font-mono">@ {formatPace(step.target_pace)}/km</span>
-                                    )}
-                                    {step.distance_meters && (
-                                      <span>{(step.distance_meters / 1000).toFixed(1)}km</span>
-                                    )}
-                                    {step.duration_minutes && (
-                                      <span>{step.duration_minutes}min</span>
-                                    )}
-                                    {step.repeats && step.repeats > 1 && (
-                                      <span>&times;{step.repeats}</span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
+                              <WorkoutStepEditor
+                                steps={day.workout_steps}
+                                isDelta={hasDeltaOverlay}
+                              />
                             )}
                           </div>
 
