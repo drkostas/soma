@@ -1,21 +1,11 @@
 import type { Metadata } from "next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatCard } from "@/components/stat-card";
+import { Card, CardContent } from "@/components/ui/card";
 import { RaceCountdown } from "@/components/race-countdown";
 import { RaceSplitsCard } from "@/components/race-splits-card";
-import { TrainingPlanView } from "@/components/training-plan-view";
-import { ReadinessCard } from "@/components/readiness-card";
-import { PMCChart } from "@/components/pmc-chart";
-import { FitnessTrajectoryChart } from "@/components/fitness-trajectory-chart";
-import { DataProvenanceCard } from "@/components/data-provenance-card";
-import { PaceAdjustmentCard } from "@/components/pace-adjustment-card";
-import { TrainingPacesCard } from "@/components/training-paces-card";
-import { TrajectorySection } from "@/components/trajectory-section";
-import { ExpandableChartCard } from "@/components/expandable-chart-card";
+import { TrainingDashboard } from "@/components/training-dashboard";
 import { getDb } from "@/lib/db";
-import { Target, Footprints, Dumbbell, CalendarCheck, TrendingUp } from "lucide-react";
+import { Target } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
-import { TodaysRecommendation } from "@/components/todays-recommendation";
 
 export const metadata: Metadata = { title: "Training" };
 export const revalidate = 300;
@@ -46,8 +36,7 @@ async function getRaceInfo() {
 async function getReadiness() {
   const sql = getDb();
   const rows = await sql`
-    SELECT r.hrv_z_score, r.sleep_z_score, r.rhr_z_score,
-           r.body_battery_z_score, r.composite_score, r.traffic_light, r.flags,
+    SELECT r.composite_score, r.traffic_light,
            h.training_readiness_score AS garmin_readiness_score,
            h.training_readiness_level AS garmin_readiness_level
     FROM daily_readiness r
@@ -58,74 +47,22 @@ async function getReadiness() {
   return rows[0] || null;
 }
 
-async function getPMC() {
+async function getPMCLatest() {
   const sql = getDb();
-  return sql`
-    SELECT date::text as date, ctl, atl, tsb
-    FROM pmc_daily
-    WHERE date >= NOW() - INTERVAL '90 days'
-    ORDER BY date
-  `;
-}
-
-async function getFitnessTrajectory() {
-  const sql = getDb();
-  return sql`
-    SELECT date::text as date, vo2max, efficiency_factor, decoupling_pct, vdot_adjusted
-    FROM fitness_trajectory
-    WHERE date >= NOW() - INTERVAL '90 days'
-    ORDER BY date
-  `;
-}
-
-async function getPaceAdjustment() {
-  const sql = getDb();
-  const readiness = await sql`
-    SELECT composite_score, traffic_light FROM daily_readiness ORDER BY date DESC LIMIT 1
-  `;
-  const pmc = await sql`
+  const rows = await sql`
     SELECT tsb FROM pmc_daily ORDER BY date DESC LIMIT 1
   `;
-  const weight = await sql`
-    SELECT weight_kg, vdot_adjusted FROM fitness_trajectory
-    WHERE weight_kg IS NOT NULL ORDER BY date DESC LIMIT 1
+  return rows[0] || null;
+}
+
+async function getFitnessLatest() {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT vo2max FROM fitness_trajectory
+    WHERE vo2max IS NOT NULL
+    ORDER BY date DESC LIMIT 1
   `;
-  if (!readiness[0] || !pmc[0]) return null;
-
-  const compositeScore = Number(readiness[0].composite_score || 0);
-  const tsb = Number(pmc[0].tsb || 0);
-
-  // Readiness factor (mirrors merge.py)
-  let rf = 1.0;
-  if (compositeScore <= -2.0) return null;
-  if (compositeScore >= 1.0) rf = 0.97;
-  else if (compositeScore >= 0) rf = 1.00 - 0.03 * compositeScore;
-  else if (compositeScore >= -1.0) rf = 1.00 - 0.05 * compositeScore;
-  else rf = 1.05;
-
-  // Fatigue factor (mirrors merge.py)
-  let ff = 1.0;
-  if (tsb >= 10) ff = 0.98;
-  else if (tsb <= -20) ff = 1.03;
-  else if (tsb >= 0) ff = 1.00 - 0.002 * tsb;
-  else ff = 1.00 - 0.0015 * tsb;
-
-  // Weight factor
-  const calibrationWeight = 80.5;
-  let wf = 1.0;
-  if (weight[0]?.weight_kg) {
-    wf = Number(weight[0].weight_kg) / calibrationWeight;
-  }
-
-  const basePace = 284; // B-goal 4:44/km
-  return {
-    base_pace: basePace,
-    readiness_factor: rf,
-    fatigue_factor: ff,
-    weight_factor: wf,
-    adjusted_pace: basePace * rf * ff * wf,
-    traffic_light: readiness[0].traffic_light,
-  };
+  return rows[0] || null;
 }
 
 async function getTrajectoryData(raceDate: string) {
@@ -187,13 +124,12 @@ async function getTrajectoryData(raceDate: string) {
 }
 
 export default async function TrainingPage() {
-  const [planDays, raceInfo, readiness, pmcData, fitnessData, paceData] = await Promise.all([
+  const [planDays, raceInfo, readiness, pmcLatest, fitnessLatest] = await Promise.all([
     getTrainingPlan(),
     getRaceInfo(),
     getReadiness(),
-    getPMC(),
-    getFitnessTrajectory(),
-    getPaceAdjustment(),
+    getPMCLatest(),
+    getFitnessLatest(),
   ]);
 
   const today = new Date().toISOString().split("T")[0];
@@ -201,33 +137,27 @@ export default async function TrainingPage() {
   // Trajectory data (depends on raceInfo)
   const trajectoryData = raceInfo ? await getTrajectoryData(raceInfo.race_date) : [];
 
-  // Compute stats
+  // Compute stats for header + race countdown
   const totalWeeks = planDays.length > 0
     ? Math.max(...planDays.map((d: any) => d.week_number))
     : 0;
 
   const todayEntry = planDays.find((d: any) => d.day_date === today);
   const currentWeek = todayEntry?.week_number ?? 1;
+  const completedDays = planDays.filter((d: any) => d.completed).length;
+  const totalDays = planDays.length;
+  const totalPlanKm = planDays.reduce(
+    (sum: number, d: any) => sum + (d.target_distance_km || 0),
+    0,
+  );
 
-  // Check for leg day conflict (48h between heavy leg strength and quality running)
-  let legDayConflict = false;
-  if (todayEntry && ["tempo", "intervals", "threshold"].includes(todayEntry.run_type)) {
-    const sql = getDb();
-    const recentGym = await sql`
-      SELECT day_date::text as day_date, gym_workout
-      FROM training_plan_day
-      WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
-        AND day_date BETWEEN (${today}::date - INTERVAL '2 days') AND (${today}::date - INTERVAL '1 day')
-        AND gym_workout IN ('legs', 'lower')
-    `;
-    legDayConflict = recentGym.length > 0;
-  }
+  const currentVdot = fitnessLatest ? Number(fitnessLatest.vo2max || 50) : 50;
 
-  // Compute today's plan adaptation
+  // Compute today's plan adaptation (needs readiness + PMC data)
   let todayAdaptation: { action: string; adjustedType: string; adjustedKm: number; paceFactor: number; reason: string } | null = null;
-  if (todayEntry && readiness && pmcData.length > 0) {
+  if (todayEntry && readiness && pmcLatest) {
     const tl = readiness.traffic_light || "green";
-    const tsb = Number(pmcData[pmcData.length - 1]?.tsb || 0);
+    const tsb = Number(pmcLatest.tsb || 0);
     const isHard = ["tempo", "intervals", "threshold"].includes(todayEntry.run_type);
     const isRest = todayEntry.run_type === "rest";
 
@@ -250,48 +180,7 @@ export default async function TrainingPage() {
     }
   }
 
-  const completedDays = planDays.filter((d: any) => d.completed).length;
-  const totalDays = planDays.length;
-
-  // This week's days
-  const thisWeekDays = planDays.filter(
-    (d: any) => d.week_number === currentWeek
-  );
-  const thisWeekKm = thisWeekDays.reduce(
-    (sum: number, d: any) => sum + (d.target_distance_km || 0),
-    0
-  );
-  const thisWeekRuns = thisWeekDays.filter(
-    (d: any) => d.run_type && d.run_type !== "rest"
-  ).length;
-  const thisWeekGym = thisWeekDays.filter(
-    (d: any) => d.gym_workout
-  ).length;
-  const thisWeekCompleted = thisWeekDays.filter(
-    (d: any) => d.completed
-  ).length;
-
-  // Total plan distance
-  const totalPlanKm = planDays.reduce(
-    (sum: number, d: any) => sum + (d.target_distance_km || 0),
-    0
-  );
-
   const hasNoPlan = planDays.length === 0;
-
-  // Build provenance data from readiness + pmc + fitness
-  const provenanceData = readiness && pmcData.length > 0 ? {
-    hrv_z: readiness.hrv_z_score != null ? Number(readiness.hrv_z_score) : null,
-    sleep_z: readiness.sleep_z_score != null ? Number(readiness.sleep_z_score) : null,
-    rhr_z: readiness.rhr_z_score != null ? Number(readiness.rhr_z_score) : null,
-    bb_z: readiness.body_battery_z_score != null ? Number(readiness.body_battery_z_score) : null,
-    ctl: Number(pmcData[pmcData.length - 1]?.ctl || 0),
-    atl: Number(pmcData[pmcData.length - 1]?.atl || 0),
-    tsb: Number(pmcData[pmcData.length - 1]?.tsb || 0),
-    vo2max: fitnessData.length > 0 ? fitnessData[fitnessData.length - 1]?.vo2max : null,
-    weight_kg: fitnessData.length > 0 ? fitnessData[fitnessData.length - 1]?.weight_kg : null,
-    decoupling_pct: fitnessData.length > 0 ? fitnessData[fitnessData.length - 1]?.decoupling_pct : null,
-  } : null;
 
   return (
     <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
@@ -325,7 +214,7 @@ export default async function TrainingPage() {
         </Card>
       ) : (
         <>
-          {/* Race Countdown + Splits */}
+          {/* Race Countdown + Splits (static, server-rendered) */}
           {raceInfo && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <RaceCountdown
@@ -341,193 +230,16 @@ export default async function TrainingPage() {
             </div>
           )}
 
-          {/* This Week Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard
-              title="This Week"
-              value={`${thisWeekKm.toFixed(1)} km`}
-              subtitle={`Week ${currentWeek} target`}
-              icon={
-                <Footprints className="h-4 w-4" style={{ color: "oklch(65% 0.15 250)" }} />
-              }
-            />
-            <StatCard
-              title="Run Sessions"
-              value={thisWeekRuns}
-              subtitle={`${thisWeekCompleted} completed`}
-              icon={
-                <CalendarCheck
-                  className="h-4 w-4"
-                  style={{ color: "oklch(62% 0.17 142)" }}
-                />
-              }
-            />
-            <StatCard
-              title="Gym Sessions"
-              value={thisWeekGym}
-              subtitle="this week"
-              icon={
-                <Dumbbell
-                  className="h-4 w-4"
-                  style={{ color: "oklch(60% 0.2 300)" }}
-                />
-              }
-            />
-            <StatCard
-              title="Plan Progress"
-              value={`${completedDays}/${totalDays}`}
-              subtitle={`${Math.round((completedDays / totalDays) * 100)}% done`}
-              icon={
-                <Target
-                  className="h-4 w-4"
-                  style={{ color: "oklch(65% 0.2 55)" }}
-                />
-              }
-            />
-          </div>
-
-          {/* Today's Recommendation */}
-          {todayEntry && (
-            <div className="mb-6">
-              <TodaysRecommendation
-                trafficLight={readiness?.traffic_light || "green"}
-                runType={todayEntry.run_type}
-                runTitle={todayEntry.run_title}
-                targetKm={todayEntry.target_distance_km}
-                adjustedPace={paceData?.adjusted_pace ?? null}
-                compositeScore={Number(readiness?.composite_score || 0)}
-                legDayConflict={legDayConflict}
-                adaptation={todayAdaptation}
-              />
-            </div>
-          )}
-
-          {/* Readiness + Provenance + PMC Row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <ReadinessCard
-              data={readiness as any}
-              garminScore={readiness?.garmin_readiness_score ?? null}
-              garminLevel={readiness?.garmin_readiness_level ?? null}
-            />
-            <DataProvenanceCard data={provenanceData as any} />
-            <div className="md:col-span-2">
-              <ExpandableChartCard
-                title="Performance Management"
-                subtitle="CTL / ATL / TSB"
-                icon={<TrendingUp className="h-4 w-4" style={{ color: "oklch(65% 0.15 250)" }} />}
-              >
-                <PMCChart data={pmcData as any} raceDate={raceInfo?.race_date} />
-              </ExpandableChartCard>
-            </div>
-          </div>
-
-          {/* Pace + Paces + Fitness Trajectory Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="space-y-4">
-              <PaceAdjustmentCard data={paceData as any} />
-              <TrainingPacesCard />
-            </div>
-            <div className="md:col-span-2">
-              <ExpandableChartCard
-                title="Fitness Trajectory"
-                subtitle="VO2max + Decoupling"
-                icon={<TrendingUp className="h-4 w-4" style={{ color: "oklch(60% 0.2 300)" }} />}
-              >
-                <FitnessTrajectoryChart data={fitnessData as any} />
-              </ExpandableChartCard>
-            </div>
-          </div>
-
-          {/* Trajectory Chart + Delta Simulator (linked) */}
-          {raceInfo && trajectoryData.length > 0 && (
-            <div className="mb-6">
-              <TrajectorySection
-                baseTrajectory={trajectoryData as any}
-                raceDate={raceInfo.race_date}
-                today={today}
-                goalVdot={52}
-                currentVdot={fitnessData.length > 0 ? Number(fitnessData[fitnessData.length - 1]?.vo2max || 50) : 50}
-              />
-            </div>
-          )}
-
-          {/* This Week's Schedule - quick 7-day row */}
-          <Card className="mb-6">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Week {currentWeek} Schedule
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-7 gap-1 sm:gap-2">
-                {thisWeekDays.map((day: any) => {
-                  const isToday = day.day_date === today;
-                  const dayName = new Date(
-                    day.day_date + "T00:00:00"
-                  ).toLocaleDateString("en-US", { weekday: "short" });
-                  const typeColors: Record<string, string> = {
-                    rest: "border-zinc-500/30",
-                    easy: "border-green-500/50",
-                    recovery: "border-green-500/50",
-                    tempo: "border-orange-500/50",
-                    intervals: "border-orange-500/50",
-                    threshold: "border-orange-500/50",
-                    long: "border-blue-500/50",
-                    race: "border-purple-500/50",
-                  };
-                  const borderClass =
-                    typeColors[day.run_type] || "border-muted";
-
-                  return (
-                    <div
-                      key={day.day_date}
-                      className={`flex flex-col items-center p-1.5 sm:p-2 rounded-lg border text-center transition-all ${borderClass} ${
-                        isToday
-                          ? "bg-primary/10 ring-1 ring-primary/40"
-                          : "bg-muted/30"
-                      } ${day.completed ? "opacity-60" : ""}`}
-                    >
-                      <div className="text-[10px] text-muted-foreground">
-                        {dayName}
-                      </div>
-                      <div
-                        className={`text-xs sm:text-sm font-medium mt-0.5 truncate w-full ${
-                          day.run_type === "rest"
-                            ? "text-muted-foreground"
-                            : ""
-                        }`}
-                      >
-                        {day.run_type === "rest"
-                          ? "Rest"
-                          : day.run_title || day.run_type || "--"}
-                      </div>
-                      {day.target_distance_km > 0 && (
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          {day.target_distance_km.toFixed(1)}km
-                        </div>
-                      )}
-                      {day.completed && (
-                        <div
-                          className="text-[10px] mt-0.5 font-medium"
-                          style={{ color: "oklch(62% 0.17 142)" }}
-                        >
-                          Done
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Full 5-Week Plan */}
-          <div className="mb-6">
-            <h2 className="text-sm font-medium text-muted-foreground mb-3">
-              Full Plan
-            </h2>
-            <TrainingPlanView days={planDays as any} today={today} todayAdaptation={todayAdaptation} />
-          </div>
+          {/* Training Dashboard — client component managing graph, trajectory, and plan */}
+          <TrainingDashboard
+            planDays={planDays as any}
+            today={today}
+            raceInfo={raceInfo}
+            trajectoryData={trajectoryData}
+            currentVdot={currentVdot}
+            goalVdot={52}
+            todayAdaptation={todayAdaptation}
+          />
         </>
       )}
     </div>

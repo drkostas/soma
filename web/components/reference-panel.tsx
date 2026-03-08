@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Sparkline } from "./sparkline";
 
-interface ReferenceMetric {
+export interface ReferenceMetric {
   id: string;
   label: string;
   value: string;
