@@ -7,6 +7,7 @@ import { ChevronDown, Dumbbell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkoutCompletionButton } from "@/components/workout-completion-button";
 import { GarminPushButton } from "@/components/garmin-push-button";
+import { RaceDayProtocol } from "@/components/race-day-protocol";
 
 interface TrainingDay {
   id: number;
@@ -318,6 +319,11 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
                       );
                     })}
                   </div>
+                  {weekNum === 5 && (
+                    <div className="mt-4">
+                      <RaceDayProtocol />
+                    </div>
+                  )}
                 </CardContent>
               </div>
             </div>
