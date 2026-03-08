@@ -22,6 +22,7 @@ interface TrainingDay {
   gym_workout: string | null;
   gym_notes: string | null;
   load_level: string;
+  actual_distance_km: number | null;
   completed: boolean;
   garmin_push_status: string;
   plan_name: string;
@@ -120,6 +121,11 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
           (d) => d.run_type && d.run_type !== "rest"
         ).length;
         const completedCount = weekDays.filter((d) => d.completed).length;
+        const actualKm = weekDays.reduce(
+          (sum, d) => sum + (d.actual_distance_km || 0),
+          0
+        );
+        const completionPct = weekKm > 0 ? Math.min(100, (actualKm / weekKm) * 100) : 0;
 
         return (
           <Card
@@ -152,6 +158,12 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
                     <span>{weekKm.toFixed(1)} km</span>
                     <span>&middot;</span>
                     <span>{runDays} runs</span>
+                    {actualKm > 0 && (
+                      <>
+                        <span>&middot;</span>
+                        <span>{actualKm.toFixed(1)} km done</span>
+                      </>
+                    )}
                     {completedCount > 0 && (
                       <>
                         <span>&middot;</span>
@@ -169,6 +181,16 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
                   />
                 </div>
               </button>
+              {/* Volume progress bar */}
+              <div className="w-full h-1 bg-muted/50 rounded-full mt-1">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${completionPct}%`,
+                    backgroundColor: completionPct >= 100 ? "oklch(62% 0.17 142)" : "oklch(65% 0.15 250)",
+                  }}
+                />
+              </div>
             </CardHeader>
 
             <div
@@ -186,6 +208,12 @@ export function TrainingPlanView({ days, today }: TrainingPlanViewProps) {
                     <span>{weekKm.toFixed(1)} km</span>
                     <span>&middot;</span>
                     <span>{runDays} runs</span>
+                    {actualKm > 0 && (
+                      <>
+                        <span>&middot;</span>
+                        <span>{actualKm.toFixed(1)} km done</span>
+                      </>
+                    )}
                     {completedCount > 0 && (
                       <>
                         <span>&middot;</span>
