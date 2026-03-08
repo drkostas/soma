@@ -85,16 +85,16 @@ def test_rest_day_stays_rest():
 
 
 def test_distance_adjustment_moderate_fatigue():
-    """TSB moderately negative -> reduce distance 10-15%."""
+    """TSB moderately negative -> reduce distance 10%."""
     result = adapt_workout(
         run_type="easy",
         target_distance_km=7.0,
         traffic_light="green",
         composite_z=0.0,
-        tsb=-15.0,
+        tsb=-16.0,
     )
-    assert result["distance_km"] <= 7.0
-    assert result["distance_km"] >= 6.0
+    assert result["distance_km"] == 6.3  # 7.0 * 0.90
+    assert result["pace_factor"] == 1.02
 
 
 def test_pace_factor_returned():
@@ -104,7 +104,7 @@ def test_pace_factor_returned():
         target_distance_km=10.0,
         traffic_light="green",
         composite_z=-0.3,
-        tsb=-10.0,
+        tsb=-21.0,
     )
     assert "pace_factor" in result
-    assert result["pace_factor"] >= 1.0
+    assert result["pace_factor"] == 1.03

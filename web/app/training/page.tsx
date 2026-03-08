@@ -239,6 +239,8 @@ export default async function TrainingPage() {
       todayAdaptation = { action: "reduce", adjustedType: todayEntry.run_type, adjustedKm: Math.min(todayEntry.target_distance_km, 4.0), paceFactor: 1.10, reason: "RED readiness" };
     } else if (tl === "yellow" && isHard) {
       todayAdaptation = { action: "swap_to_easy", adjustedType: "easy", adjustedKm: Math.round(todayEntry.target_distance_km * 0.85 * 10) / 10, paceFactor: 1.05, reason: "YELLOW readiness" };
+    } else if (tl === "yellow") {
+      todayAdaptation = { action: "as_planned", adjustedType: todayEntry.run_type, adjustedKm: todayEntry.target_distance_km, paceFactor: 1.0, reason: "YELLOW readiness — easy run OK" };
     } else if (tsb < -20) {
       todayAdaptation = { action: "reduce", adjustedType: todayEntry.run_type, adjustedKm: Math.round(todayEntry.target_distance_km * 0.85 * 10) / 10, paceFactor: 1.03, reason: `Accumulated fatigue (TSB ${tsb.toFixed(0)})` };
     } else if (tsb < -15) {
