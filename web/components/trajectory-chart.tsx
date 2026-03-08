@@ -24,6 +24,55 @@ interface TrajectoryChartProps {
   goalVdot: number;
 }
 
+function CustomTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+
+  const data = payload[0]?.payload;
+  if (!data) return null;
+
+  const optimal = data.optimal;
+  const actual = data.actual;
+  const gap = actual !== null ? (optimal - actual).toFixed(1) : null;
+  const dateStr = new Date(data.date + "T00:00:00").toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+  });
+
+  return (
+    <div
+      style={{
+        backgroundColor: "var(--card)",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        fontSize: "12px",
+        color: "var(--card-foreground)",
+        padding: "8px 12px",
+      }}
+    >
+      <div className="font-medium mb-1">{dateStr}</div>
+      <div className="space-y-0.5 text-[11px]">
+        <div className="flex justify-between gap-4">
+          <span className="text-muted-foreground">Target VDOT</span>
+          <span className="font-mono tabular-nums">{optimal?.toFixed(1)}</span>
+        </div>
+        {actual !== null && (
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">Actual VDOT</span>
+            <span className="font-mono tabular-nums">{actual?.toFixed(1)}</span>
+          </div>
+        )}
+        {gap !== null && (
+          <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
+            <span className="text-muted-foreground">Gap</span>
+            <span className="font-mono tabular-nums" style={{ color: Number(gap) > 0 ? "oklch(60% 0.22 25)" : "oklch(62% 0.17 142)" }}>
+              {Number(gap) > 0 ? "+" : ""}{gap}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function TrajectoryChart({ data, raceDate, today, goalVdot }: TrajectoryChartProps) {
   if (!data || data.length === 0) {
     return (
@@ -59,22 +108,7 @@ export function TrajectoryChart({ data, raceDate, today, goalVdot }: TrajectoryC
           domain={[46, 53]}
           label={{ value: "VDOT", angle: -90, position: "insideLeft", fontSize: 10, fill: "var(--muted-foreground)" }}
         />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: "var(--card)",
-            border: "1px solid var(--border)",
-            borderRadius: "8px",
-            fontSize: "12px",
-            color: "var(--card-foreground)",
-          }}
-          formatter={(value: any, name: any) => {
-            const labels: Record<string, string> = {
-              optimal: "Target",
-              actual: "Actual",
-            };
-            return [value, labels[name] || name];
-          }}
-        />
+        <Tooltip content={<CustomTooltip />} />
         <ReferenceLine
           x={today}
           stroke="var(--primary)"
