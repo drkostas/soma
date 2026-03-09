@@ -296,6 +296,44 @@ export function TrainingDashboard({
     return computeShadowGraph(graphData.graph, sliderValue);
   }, [graphData, sliderValue]);
 
+  // Trajectory from forward simulation — replaces decorative S-curve for projected points
+  const trajectoryFromSim = useMemo(() => {
+    if (!forwardSim) return null;
+    return forwardSim
+      .filter(d => !d.isRest)
+      .map(d => ({
+        date: d.dayDate,
+        projectedVdot: d.projectedVdot,
+        ctl: d.ctl,
+        tsb: d.tsb,
+        adaptationMagnitude: Math.abs(d.paceChangePct),
+        adaptationColor: d.paceChangePct < -0.5 ? "oklch(0.7 0.15 142)"  // green = faster
+          : d.paceChangePct > 0.5 ? "oklch(0.7 0.15 25)"   // red = slower
+          : "oklch(0.7 0.05 250)",  // neutral
+      }));
+  }, [forwardSim]);
+
+  // Merge forward sim projections into trajectory data
+  const mergedTrajectory = useMemo(() => {
+    if (!trajectoryFromSim || !trajectoryData.length) return trajectoryData;
+
+    const simMap = new Map(trajectoryFromSim.map(d => [d.date, d]));
+
+    return trajectoryData.map(point => {
+      const sim = simMap.get(point.date);
+      if (sim) {
+        return {
+          ...point,
+          projectedVdot: sim.projectedVdot,
+          // Add forward sim metadata for hover tooltip
+          simCtl: sim.ctl,
+          simTsb: sim.tsb,
+        };
+      }
+      return point;
+    });
+  }, [trajectoryData, trajectoryFromSim]);
+
   // Shadow trajectory for delta simulation
   const shadowTrajectory = useMemo(() => {
     if (sliderValue === 1.0 || !trajectoryData.length) return null;
@@ -555,7 +593,7 @@ export function TrainingDashboard({
           <div className="border-t border-border/50 p-4 pt-2">
             <h3 className="text-sm font-medium text-muted-foreground mb-1">Output: Fitness Trajectory</h3>
             <TrajectorySection
-              baseTrajectory={trajectoryData}
+              baseTrajectory={mergedTrajectory}
               raceDate={raceInfo.race_date}
               today={today}
               goalVdot={goalVdot}
