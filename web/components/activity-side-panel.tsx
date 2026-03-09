@@ -257,22 +257,23 @@ export function ActivitySidePanel({
                             {match.activity.distance_km} km
                           </td>
                         </tr>
-                        {planDay.workout_steps?.[0]?.target_pace &&
-                          match.activity.avg_pace_sec_km && (
+                        {(() => {
+                          const s = planDay.workout_steps?.[0];
+                          const targetPace = s?.target_pace ?? s?.target_pace_min ?? s?.target_pace_low;
+                          return targetPace && match.activity.avg_pace_sec_km ? (
                             <tr className="border-b border-border/30">
                               <td className="px-3 py-1.5 text-muted-foreground">
                                 Pace
                               </td>
                               <td className="px-3 py-1.5 text-right tabular-nums">
-                                {formatPace(
-                                  planDay.workout_steps[0].target_pace,
-                                )}
+                                {formatPace(targetPace)}
                               </td>
                               <td className="px-3 py-1.5 text-right tabular-nums">
                                 {formatPace(match.activity.avg_pace_sec_km)}
                               </td>
                             </tr>
-                          )}
+                          ) : null;
+                        })()}
                       </tbody>
                     </table>
                   </div>
