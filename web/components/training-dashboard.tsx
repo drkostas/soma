@@ -21,6 +21,7 @@ import {
 } from "@/lib/training-engine";
 import { normalizeSteps } from "@/lib/normalize-steps";
 import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type ComparisonData } from "@/lib/forward-simulation";
+import { estimateHMSeconds } from "@/lib/vdot-utils";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -66,23 +67,6 @@ function formatRaceTime(totalSeconds: number): string {
   const s = Math.round(totalSeconds % 60);
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-/** Estimate half-marathon time from VDOT using Daniels/Gilbert equations (client-side fallback). */
-function estimateHMSeconds(vdot: number): number {
-  const HM_M = 21097.5;
-  // Binary search: vdot_from_race(HM_M, t) == vdot
-  let lo = 60, hi = 86400;
-  for (let i = 0; i < 80; i++) {
-    const mid = (lo + hi) / 2;
-    const tMin = mid / 60;
-    const vel = HM_M / tMin;
-    const vo2 = -4.60 + 0.182258 * vel + 0.000104 * vel * vel;
-    const frac = 0.8 + 0.1894393 * Math.exp(-0.012778 * tMin) + 0.2989558 * Math.exp(-0.1932605 * tMin);
-    const computed = vo2 / frac;
-    if (computed > vdot) lo = mid; else hi = mid;
-  }
-  return Math.round((lo + hi) / 2);
 }
 
 /** Build reference metrics from separately-queried external data — signals NOT in the formula graph. */

@@ -5,7 +5,16 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    const { forceEqual } = await request.json();
+    const body = await request.json();
+    const { forceEqual } = body;
+
+    if (typeof forceEqual !== "boolean") {
+      return NextResponse.json(
+        { ok: false, error: "forceEqual must be a boolean" },
+        { status: 400 },
+      );
+    }
+
     const sql = getDb();
 
     await sql`

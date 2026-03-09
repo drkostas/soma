@@ -452,3 +452,33 @@ ALTER TABLE daily_health_summary
     ADD COLUMN IF NOT EXISTS training_readiness_score INT,
     ADD COLUMN IF NOT EXISTS training_readiness_level VARCHAR(20);
 
+-- ===================
+-- BANISTER MODEL PARAMS
+-- ===================
+
+CREATE TABLE IF NOT EXISTS banister_params (
+    id          SERIAL PRIMARY KEY,
+    p0          FLOAT NOT NULL,
+    k1          FLOAT NOT NULL,
+    k2          FLOAT NOT NULL,
+    tau1        FLOAT NOT NULL,
+    tau2        FLOAT NOT NULL,
+    n_anchors   INT NOT NULL DEFAULT 0,
+    fitted_at   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ===================
+-- CALIBRATION STATE (singleton)
+-- ===================
+
+CREATE TABLE IF NOT EXISTS calibration_state (
+    id          INTEGER PRIMARY KEY DEFAULT 1,
+    phase       INTEGER NOT NULL DEFAULT 1,
+    data_days   INTEGER NOT NULL DEFAULT 0,
+    weights     JSONB NOT NULL DEFAULT '{}',
+    correlations JSONB,
+    force_equal BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (id = 1)
+);
+

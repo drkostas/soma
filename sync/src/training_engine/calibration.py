@@ -226,21 +226,8 @@ def get_active_weights(
 
 
 def _ensure_table(conn) -> None:
-    """Create calibration_state table if it does not exist."""
-    with conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS calibration_state (
-                id          INTEGER PRIMARY KEY DEFAULT 1,
-                phase       INTEGER NOT NULL DEFAULT 1,
-                data_days   INTEGER NOT NULL DEFAULT 0,
-                weights     JSONB NOT NULL DEFAULT '{}',
-                correlations JSONB,
-                force_equal BOOLEAN NOT NULL DEFAULT FALSE,
-                updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                CHECK (id = 1)
-            )
-        """)
-    conn.commit()
+    """No-op — table 'calibration_state' is defined in sync/schema.sql."""
+    pass
 
 
 def advance_calibration(conn, state: CalibrationState) -> CalibrationState:
