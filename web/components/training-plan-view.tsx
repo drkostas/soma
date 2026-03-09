@@ -457,6 +457,31 @@ export function TrainingPlanView({
                                 Legs yesterday — 48h rule
                               </span>
                             )}
+                            {/* Gym section */}
+                            {day.gym_workout && (
+                              <div className="mt-2 border-t border-border/30 pt-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded">
+                                    {day.gym_workout}
+                                  </span>
+                                  {day.completed ? (
+                                    <span className="text-xs text-green-400">&#10003; Done</span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Planned</span>
+                                  )}
+                                </div>
+                                {day.gym_notes && (
+                                  <p className="text-xs text-muted-foreground mt-1">{day.gym_notes}</p>
+                                )}
+                                {/* Sequencing warning from forward sim */}
+                                {projected?.hasSequencingConflict && (
+                                  <div className="mt-1 flex items-center gap-1 text-xs text-yellow-400">
+                                    <span>&#9888;</span>
+                                    <span>Legs + hard run within 48h — readiness penalty applied</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           {/* Distance */}
