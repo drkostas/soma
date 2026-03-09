@@ -180,16 +180,18 @@ function computeShadowGraph(
   const adjusted = 1.0 + delta * sliderValue;
   const newPace = DEFAULT_BASE_PACE * adjusted;
 
-  // Clone graph and update slider + output nodes
+  // Clone graph and update slider + output nodes (including normalizedValue)
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
   const nodes = baseGraph.nodes.map((n) => {
     if (n.id === "slider_factor") {
-      return { ...n, value: sliderValue };
+      return { ...n, value: sliderValue, normalizedValue: clamp01(Math.abs(sliderValue - 1.0) / 0.05) };
     }
     if (n.id === "adjusted_pace") {
       return {
         ...n,
         value: Math.round(newPace * 10) / 10,
         color: newPace > 0 ? "oklch(0.7 0.15 142)" : "oklch(0.6 0.2 25)",
+        normalizedValue: clamp01(Math.abs(newPace - DEFAULT_BASE_PACE) / 30),
       };
     }
     return n;

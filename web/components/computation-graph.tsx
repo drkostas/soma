@@ -228,14 +228,20 @@ export function ComputationGraphView({
           const y2 = to.y + NODE_H / 2;
           const dx = (x2 - x1) * BEZIER_OFFSET;
 
+          // Color edges by contribution direction: green = helping, red = hurting
+          const w = edge.weight ?? 0;
+          const absW = Math.abs(w);
+          const edgeColor = w >= 0
+            ? `oklch(62% 0.17 142 / ${0.3 + absW * 0.5})`   // green = positive contribution
+            : `oklch(60% 0.22 25 / ${0.3 + absW * 0.5})`;   // red = negative contribution
+
           return (
             <path
               key={`${edge.from}-${edge.to}`}
               d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
               fill="none"
-              stroke="oklch(60% 0 0)"
-              strokeWidth={Math.max(0.5, edge.weight * 2)}
-              strokeOpacity={0.3 + edge.weight * 0.4}
+              stroke={edgeColor}
+              strokeWidth={Math.max(0.5, absW * 2)}
             />
           );
         })}
