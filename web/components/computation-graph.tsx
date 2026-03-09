@@ -412,6 +412,17 @@ export function ComputationGraphView({
         })}
       </svg>
 
+      {/* Empty state overlay when ALL nodes have null values */}
+      {displayNodes.every(n => n.value === null) && (
+        <div className="absolute inset-0 flex items-center justify-center bg-card/80 rounded-lg">
+          <div className="text-center text-muted-foreground">
+            <AlertTriangle className="h-6 w-6 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No data available yet</p>
+            <p className="text-xs mt-1">Run the training engine pipeline to populate signals</p>
+          </div>
+        </div>
+      )}
+
       {/* Tooltip overlay (HTML on top of SVG) */}
       {tooltip && nodeMap.has(tooltip.nodeId) && (
         <GraphTooltip

@@ -85,6 +85,8 @@ export function GraphNodeComponent({
   // Scale fill opacity by how far the node is from its neutral point
   const activationIntensity = Math.min(0.85, 0.3 + Math.abs(node.normalizedValue ?? 0) * 0.5);
 
+  const hasValue = node.value != null;
+
   return (
     <g
       onMouseEnter={handleMouseEnter}
@@ -93,8 +95,9 @@ export function GraphNodeComponent({
       className="graph-node-group"
       style={{
         cursor: isDraggable ? "ew-resize" : "pointer",
-        transition: "transform 200ms ease",
+        transition: "transform 200ms ease, opacity 300ms ease",
         transformOrigin: `${x + NODE_W / 2}px ${y + NODE_H / 2}px`,
+        opacity: hasValue ? 1 : 0.4,
       }}
     >
       {/* Background fill — opacity scales with activation intensity */}
@@ -155,7 +158,7 @@ export function GraphNodeComponent({
           transitionDelay: cascadeDelay ? `${cascadeDelay}ms` : undefined,
         }}
       >
-        {formatValue(node.value, node.unit)}
+        {hasValue ? formatValue(node.value, node.unit) : "no data"}
       </text>
 
       {/* Shadow value (delta indicator) */}
