@@ -8,6 +8,7 @@ import { TrajectorySection } from "@/components/trajectory-section";
 import { ReferencePanel, type ReferenceMetric } from "@/components/reference-panel";
 import { TrainingPlanView, type ActivityMatch } from "@/components/training-plan-view";
 import { ModelParamsPanel } from "@/components/model-params-panel";
+import { TrainingPacesCard } from "@/components/training-paces-card";
 import {
   type GraphApiResponse,
   type ComputationGraph,
@@ -342,6 +343,15 @@ export function TrainingDashboard({
     return buildReferenceMetrics(referenceData);
   }, [referenceData]);
 
+  // Dynamic VDOT: prefer graph node value, fall back to server-provided currentVdot prop
+  const dynamicVdot = useMemo(() => {
+    if (graphData) {
+      const vdotNode = findNode(graphData.graph, "vdot");
+      if (vdotNode?.value != null && vdotNode.value > 0) return vdotNode.value;
+    }
+    return currentVdot;
+  }, [graphData, currentVdot]);
+
   const handleSliderChange = useCallback((value: number) => {
     setSliderValue(value);
   }, []);
@@ -541,9 +551,14 @@ export function TrainingDashboard({
         )}
       </Card>
 
-      {/* Reference Panel — external metrics cards */}
-      {referenceMetrics.length > 0 && (
-        <ReferencePanel metrics={referenceMetrics} />
+      {/* Reference Panel + Training Paces — side by side on wide screens */}
+      {referenceMetrics.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
+          <ReferencePanel metrics={referenceMetrics} />
+          <TrainingPacesCard vdot={dynamicVdot} />
+        </div>
+      ) : (
+        <TrainingPacesCard vdot={dynamicVdot} />
       )}
 
       {/* Training Plan — full 5-week plan */}
