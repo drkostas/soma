@@ -9,9 +9,9 @@ import {
   fatigueFactorCalc,
   colorForNode,
   getTooltip,
-  DEFAULT_BASE_PACE,
   computeAdjustedPace,
 } from "@/lib/training-engine";
+import { getBasePace } from "@/lib/vdot-pace-zones";
 
 export const runtime = "edge";
 
@@ -122,13 +122,30 @@ export async function GET(request: Request) {
   const calibDataDays = calib ? Number(calib.data_days) || 0 : 0;
   const calibForceEqual = calib?.force_equal ?? false;
 
+  // Fetch today's run type from the active training plan
+  const todayStr = new Date().toISOString().split("T")[0];
+  let todayPlan: Record<string, unknown>[] = [];
+  try {
+    todayPlan = await sql`
+      SELECT d.run_type FROM training_plan_day d
+      JOIN training_plan p ON d.plan_id = p.id
+      WHERE p.status = 'active' AND d.day_date = ${todayStr}
+      LIMIT 1
+    `;
+  } catch {
+    // training_plan tables may not exist yet — gracefully skip
+  }
+  const runType = (todayPlan[0]?.run_type as string) || "easy";
+  const currentVdot = vdotAdj ?? vo2max ?? 47;
+  const basePace = getBasePace(currentVdot, runType);
+
   // Compute factors
   const rf = readinessFactorCalc(compositeScore);
   const ff = fatigueFactorCalc(tsb);
   const wf = weightKg != null ? weightKg / 80.5 : 1.0; // calibration weight = 80.5 kg
   const sliderFactor = 1.0; // default
   const adjustedPace = computeAdjustedPace(
-    DEFAULT_BASE_PACE,
+    basePace,
     compositeScore,
     tsb,
     wf,
@@ -177,7 +194,7 @@ export async function GET(request: Request) {
     { id: "slider_factor", column: "merge", label: "Slider", value: sliderFactor, unit: "x", color: "oklch(0.7 0.12 250)", normalizedValue: factorNorm(sliderFactor), tooltip: { ...tooltip("slider_factor"), inputs: [] } },
 
     // Output layer — output nodes use readiness composite as their activation proxy
-    { id: "adjusted_pace", column: "output", label: "Adjusted Pace", value: adjustedPace != null ? round(adjustedPace, 1) : null, unit: "s/km", color: adjustedPace != null ? "oklch(0.7 0.15 142)" : "oklch(0.6 0.2 25)", normalizedValue: adjustedPace != null ? clamp01(Math.abs(adjustedPace - DEFAULT_BASE_PACE) / 30) : 1.0, tooltip: { ...tooltip("adjusted_pace"), inputs: ["readiness_factor", "fatigue_factor", "weight_factor", "slider_factor"] } },
+    { id: "adjusted_pace", column: "output", label: "Adjusted Pace", value: adjustedPace != null ? round(adjustedPace, 1) : null, unit: "s/km", color: adjustedPace != null ? "oklch(0.7 0.15 142)" : "oklch(0.6 0.2 25)", normalizedValue: adjustedPace != null ? clamp01(Math.abs(adjustedPace - basePace) / 30) : 1.0, tooltip: { ...tooltip("adjusted_pace"), inputs: ["readiness_factor", "fatigue_factor", "weight_factor", "slider_factor"] } },
     { id: "vdot", column: "output", label: "VDOT", value: vdotAdj != null ? round(vdotAdj, 1) : vo2max != null ? round(vo2max, 1) : null, unit: "", color: colorForNode("vdot", vdotAdj ?? vo2max), normalizedValue: clamp01(((vdotAdj ?? vo2max) ?? 0) / 60), tooltip: { ...tooltip("vdot"), inputs: ["weight_ema"] } },
   ];
 
