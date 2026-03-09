@@ -254,12 +254,15 @@ export function TrainingDashboard({
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<"idle" | "success" | "error">("idle");
 
+  // Edited workout steps (dayId -> modified steps) from inline editing
+  const [editedSteps, setEditedSteps] = useState<Map<number, any[]>>(new Map());
+
   // Cache of fetched graph data per date (avoids re-fetching on re-hover)
   const graphCacheRef = useRef<Map<string, ComputationGraph>>(new Map());
   const hoverFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeFetchRef = useRef<AbortController | null>(null);
 
-  const isDirty = sliderValue !== 1.0;
+  const isDirty = sliderValue !== 1.0 || editedSteps.size > 0;
 
   // Refetchable data loader — used on mount and after save
   const refetchData = useCallback(async () => {
@@ -417,29 +420,44 @@ export function TrainingDashboard({
   }, [today]);
 
   const handleSave = useCallback(async () => {
-    if (deltaWorkouts.length === 0) return;
+    if (deltaWorkouts.length === 0 && editedSteps.size === 0) return;
     setSaving(true);
     setSaveResult("idle");
 
     try {
+      // Merge delta workouts + edited steps into a single payload
+      const workoutMap = new Map<number, { dayId: number; newDistance?: number; newType?: string; workoutSteps?: any }>();
+
+      // Add slider-derived delta workouts
+      for (const w of deltaWorkouts) {
+        workoutMap.set(w.dayId, {
+          dayId: w.dayId,
+          newDistance: w.newDistance,
+          newType: w.newType,
+        });
+      }
+
+      // Overlay edited steps
+      for (const [dayId, steps] of editedSteps) {
+        const existing = workoutMap.get(dayId) || { dayId };
+        workoutMap.set(dayId, { ...existing, workoutSteps: steps });
+      }
+
       const res = await fetch("/api/training/delta/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sliderFactor: sliderValue,
-          updatedWorkouts: deltaWorkouts.map((w) => ({
-            dayId: w.dayId,
-            newDistance: w.newDistance,
-            newType: w.newType,
-          })),
+          updatedWorkouts: Array.from(workoutMap.values()),
         }),
       });
 
       if (res.ok) {
         setSaveResult("success");
-        // Reset slider after brief success display
+        // Reset slider and edited steps after brief success display
         setTimeout(() => {
           setSliderValue(1.0);
+          setEditedSteps(new Map());
           setSaveResult("idle");
           refetchData();
         }, 1500);
@@ -453,7 +471,7 @@ export function TrainingDashboard({
     } finally {
       setSaving(false);
     }
-  }, [deltaWorkouts, sliderValue, refetchData]);
+  }, [deltaWorkouts, sliderValue, editedSteps, refetchData]);
 
   // Loading state
   if (loading) {
@@ -555,6 +573,7 @@ export function TrainingDashboard({
         todayAdaptation={todayAdaptation}
         activityMatches={activityMatches}
         deltaWorkouts={deltaWorkouts}
+        onStepsEdited={setEditedSteps}
       />
 
       {/* Delta save button */}
@@ -572,7 +591,7 @@ export function TrainingDashboard({
             ) : saveResult === "error" ? (
               <><X className="h-4 w-4" /> Error — try again</>
             ) : (
-              <><Save className="h-4 w-4" /> Apply Changes ({deltaWorkouts.length} workouts)</>
+              <><Save className="h-4 w-4" /> Apply Changes ({deltaWorkouts.length + editedSteps.size} workouts)</>
             )}
           </button>
         </div>

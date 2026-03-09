@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, Dumbbell } from "lucide-react";
@@ -11,6 +11,7 @@ import { RaceDayProtocol } from "@/components/race-day-protocol";
 import { WorkoutStepEditor } from "@/components/workout-step-editor";
 import { ActivitySidePanel } from "@/components/activity-side-panel";
 import { normalizeSteps } from "@/lib/normalize-steps";
+import type { NormalizedStep } from "@/lib/normalize-steps";
 import type { DeltaWorkout } from "@/lib/training-engine";
 
 interface TrainingDay {
@@ -61,6 +62,8 @@ interface TrainingPlanViewProps {
   activityMatches?: ActivityMatch[];
   deltaWorkouts?: DeltaWorkout[];
   onDayClick?: (dayId: number) => void;
+  /** Called when workout steps are edited inline. Map of dayId -> modified steps. */
+  onStepsEdited?: (modifiedSteps: Map<number, NormalizedStep[]>) => void;
 }
 
 const weekTitles: Record<number, string> = {
@@ -103,9 +106,25 @@ export function TrainingPlanView({
   activityMatches,
   deltaWorkouts,
   onDayClick,
+  onStepsEdited,
 }: TrainingPlanViewProps) {
   const [sidePanelMatch, setSidePanelMatch] = useState<ActivityMatch | null>(null);
   const [sidePanelDay, setSidePanelDay] = useState<TrainingDay | null>(null);
+
+  // Local state for edited workout steps (dayId -> modified steps)
+  const [modifiedSteps, setModifiedSteps] = useState<Map<number, NormalizedStep[]>>(new Map());
+
+  const handleStepChange = useCallback(
+    (dayId: number, newSteps: NormalizedStep[]) => {
+      setModifiedSteps((prev) => {
+        const next = new Map(prev);
+        next.set(dayId, newSteps);
+        onStepsEdited?.(next);
+        return next;
+      });
+    },
+    [onStepsEdited],
+  );
 
   // Build lookup maps
   const matchByDayId = new Map<number, ActivityMatch>();
@@ -402,8 +421,10 @@ export function TrainingPlanView({
                             )}
                             {day.workout_steps && Array.isArray(day.workout_steps) && day.workout_steps.length > 0 && (
                               <WorkoutStepEditor
-                                steps={normalizeSteps(day.workout_steps)}
+                                steps={modifiedSteps.get(day.id) || normalizeSteps(day.workout_steps)}
                                 isDelta={hasDeltaOverlay}
+                                editable={!isPast}
+                                onStepsChange={(newSteps) => handleStepChange(day.id, newSteps)}
                               />
                             )}
                           </div>
