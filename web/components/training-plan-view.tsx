@@ -421,7 +421,11 @@ export function TrainingPlanView({
                             )}
                             {day.workout_steps && Array.isArray(day.workout_steps) && day.workout_steps.length > 0 && (
                               <WorkoutStepEditor
-                                steps={modifiedSteps.get(day.id) || normalizeSteps(day.workout_steps)}
+                                steps={
+                                  modifiedSteps.get(day.id)
+                                  || (hasDeltaOverlay && delta?.adjustedSteps)
+                                  || normalizeSteps(day.workout_steps)
+                                }
                                 isDelta={hasDeltaOverlay}
                                 editable={!isPast}
                                 onStepsChange={(newSteps) => handleStepChange(day.id, newSteps)}
