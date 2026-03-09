@@ -48,7 +48,7 @@ export interface GraphNodeProps {
 }
 
 const NODE_W = 140;
-const NODE_H = 64;
+const NODE_H = 52;
 const NODE_RX = 8;
 
 export { NODE_W, NODE_H };
@@ -135,7 +135,7 @@ export function GraphNodeComponent({
       {/* Label */}
       <text
         x={x + NODE_W / 2}
-        y={y + 20}
+        y={y + 16}
         textAnchor="middle"
         className="fill-muted-foreground"
         style={{ fontSize: 10, pointerEvents: "none" }}
@@ -146,7 +146,7 @@ export function GraphNodeComponent({
       {/* Value */}
       <text
         x={x + NODE_W / 2}
-        y={y + 38}
+        y={y + 32}
         textAnchor="middle"
         className="fill-foreground"
         style={{
@@ -165,7 +165,7 @@ export function GraphNodeComponent({
       {hasShadow && (
         <text
           x={x + NODE_W / 2}
-          y={y + 54}
+          y={y + 46}
           textAnchor="middle"
           fill="oklch(75% 0.15 85)"
           style={{
@@ -182,7 +182,7 @@ export function GraphNodeComponent({
       {isDraggable && (
         <text
           x={x + NODE_W - 10}
-          y={y + 18}
+          y={y + 14}
           textAnchor="middle"
           fill={node.color}
           style={{ fontSize: 10, pointerEvents: "none" }}

@@ -23,7 +23,7 @@ const COL_LABELS: Record<NodeColumn, string> = {
 };
 
 const PADDING_TOP = 28;
-const NODE_SPACING = 76;
+const NODE_SPACING = 62;
 const SVG_WIDTH = 660;
 const BEZIER_OFFSET = 0.4;
 
