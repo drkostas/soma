@@ -413,13 +413,20 @@ export function TrajectoryChart({
           />
         )}
 
-        {/* Today line — subtle vertical indicator */}
+        {/* Today line — prominent vertical indicator */}
         <ReferenceLine
           yAxisId="vdot"
           x={today}
           stroke="oklch(80% 0.2 85)"
-          strokeDasharray="3 3"
-          strokeOpacity={0.5}
+          strokeWidth={2}
+          strokeOpacity={0.7}
+          label={{
+            value: "Today",
+            position: "top",
+            fontSize: 10,
+            fill: "oklch(80% 0.2 85)",
+            fontWeight: 600,
+          }}
         />
         <ReferenceLine
           yAxisId="vdot"

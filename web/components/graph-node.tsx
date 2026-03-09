@@ -90,7 +90,12 @@ export function GraphNodeComponent({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
-      style={{ cursor: isDraggable ? "ew-resize" : "pointer" }}
+      className="graph-node-group"
+      style={{
+        cursor: isDraggable ? "ew-resize" : "pointer",
+        transition: "transform 200ms ease",
+        transformOrigin: `${x + NODE_W / 2}px ${y + NODE_H / 2}px`,
+      }}
     >
       {/* Background fill — opacity scales with activation intensity */}
       <rect
@@ -104,7 +109,7 @@ export function GraphNodeComponent({
         stroke={node.color}
         strokeWidth={hasShadow ? 2 : 1}
         style={{
-          transition: "fill 200ms ease, fill-opacity 200ms ease, stroke 200ms ease",
+          transition: "fill 300ms ease, fill-opacity 300ms ease, stroke 300ms ease, stroke-width 200ms ease",
           transitionDelay: cascadeDelay ? `${cascadeDelay}ms` : undefined,
         }}
       />
@@ -146,7 +151,7 @@ export function GraphNodeComponent({
           fontFamily: "var(--font-mono, ui-monospace, monospace)",
           fontWeight: 500,
           pointerEvents: "none",
-          transition: "fill 200ms ease, opacity 150ms ease",
+          transition: "fill 300ms ease, opacity 300ms ease",
           transitionDelay: cascadeDelay ? `${cascadeDelay}ms` : undefined,
         }}
       >
