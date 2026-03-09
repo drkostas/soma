@@ -88,10 +88,10 @@ export async function GET() {
         ORDER BY date`
       .catch(() => []),
     // Garmin race predictions for comparison
-    sql`SELECT date::text as date, race_prediction_seconds, vdot_adjusted
+    sql`SELECT date::text as date, race_prediction_seconds, vdot_adjusted, vo2max
         FROM fitness_trajectory
         WHERE date >= CURRENT_DATE - interval '90 days'
-          AND (race_prediction_seconds IS NOT NULL OR vdot_adjusted IS NOT NULL)
+          AND vo2max IS NOT NULL
         ORDER BY date`
       .catch(() => []),
   ]);
@@ -171,7 +171,7 @@ export async function GET() {
       racePrediction: garminRaceRows.map((r: any) => ({
         date: r.date,
         garminSeconds: r.race_prediction_seconds ? Number(r.race_prediction_seconds) : null,
-        ourVdot: r.vdot_adjusted ? Number(r.vdot_adjusted) : null,
+        ourVdot: r.vdot_adjusted ? Number(r.vdot_adjusted) : (r.vo2max ? Number(r.vo2max) : null),
       })),
     },
   });

@@ -18,6 +18,12 @@ interface ComparisonChartsProps {
 }
 
 export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonChartsProps) {
+  // Normalize z-score (-2..+2) to 0-100 scale to match Garmin readiness
+  const readinessNormalized = data.readiness.map(r => ({
+    ...r,
+    ourScoreNorm: Math.round(50 + r.ourScore * 25), // z=0 → 50, z=2 → 100, z=-2 → 0
+  }));
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <ChartCard
@@ -34,11 +40,11 @@ export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonC
       />
       <ChartCard
         title="Readiness"
-        subtitle="Composite z-score vs Garmin"
-        data={data.readiness}
-        ourKey="ourScore"
+        subtitle="Normalized (0-100) vs Garmin"
+        data={readinessNormalized}
+        ourKey="ourScoreNorm"
         garminKey="garminScore"
-        ourLabel="Our z-score"
+        ourLabel="Our readiness"
         garminLabel="Garmin readiness"
         ourColor="oklch(0.65 0.15 142)"
         hoveredDate={hoveredDate}
