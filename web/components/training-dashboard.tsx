@@ -592,6 +592,7 @@ export function TrainingDashboard({
             onSliderChange={handleSliderChange}
             shadowTrajectory={shadowTrajectory}
             onHoverDate={handleHoverDate}
+            projectedDays={forwardSim}
           />
         </Card>
       )}
