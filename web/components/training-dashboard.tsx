@@ -69,6 +69,23 @@ function formatRaceTime(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** Estimate half-marathon time from VDOT using Daniels/Gilbert equations (client-side fallback). */
+function estimateHMSeconds(vdot: number): number {
+  const HM_M = 21097.5;
+  // Binary search: vdot_from_race(HM_M, t) == vdot
+  let lo = 60, hi = 86400;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    const tMin = mid / 60;
+    const vel = HM_M / tMin;
+    const vo2 = -4.60 + 0.182258 * vel + 0.000104 * vel * vel;
+    const frac = 0.8 + 0.1894393 * Math.exp(-0.012778 * tMin) + 0.2989558 * Math.exp(-0.1932605 * tMin);
+    const computed = vo2 / frac;
+    if (computed > vdot) lo = mid; else hi = mid;
+  }
+  return Math.round((lo + hi) / 2);
+}
+
 /** Build reference metrics from separately-queried external data — signals NOT in the formula graph. */
 function buildReferenceMetrics(
   referenceData: ReferenceData,
@@ -78,6 +95,25 @@ function buildReferenceMetrics(
   const latestReadiness = readinessHistory.at(-1);
   const latestFitness = fitnessHistory.at(-1);
   const latestWeight = weightHistory.at(-1);
+
+  // Build race prediction sparkline: use DB values when available, fall back to
+  // VDOT-derived estimates so sparklines are never empty when VDOT data exists.
+  const racePredSparkline: number[] = [];
+  for (const d of fitnessHistory) {
+    if (d.race_prediction_seconds != null) {
+      racePredSparkline.push(Number(d.race_prediction_seconds));
+    } else if (d.vdot_adjusted != null && Number(d.vdot_adjusted) > 0) {
+      racePredSparkline.push(estimateHMSeconds(Number(d.vdot_adjusted)));
+    }
+  }
+
+  // Determine latest race prediction value
+  let latestRacePrediction: string = "\u2014";
+  if (latestFitness?.race_prediction_seconds != null) {
+    latestRacePrediction = formatRaceTime(Number(latestFitness.race_prediction_seconds));
+  } else if (latestFitness?.vdot_adjusted != null && Number(latestFitness.vdot_adjusted) > 0) {
+    latestRacePrediction = formatRaceTime(estimateHMSeconds(Number(latestFitness.vdot_adjusted)));
+  }
 
   return [
     {
@@ -104,12 +140,8 @@ function buildReferenceMetrics(
     {
       id: "race-prediction",
       label: "Race Prediction",
-      value: latestFitness?.race_prediction_seconds != null
-        ? formatRaceTime(Number(latestFitness.race_prediction_seconds))
-        : "\u2014",
-      sparkline: fitnessHistory
-        .filter((d) => d.race_prediction_seconds != null)
-        .map((d) => Number(d.race_prediction_seconds)),
+      value: latestRacePrediction,
+      sparkline: racePredSparkline,
       color: "oklch(65% 0.15 160)",
       tooltip:
         "Predicted half-marathon time from current VDOT. Based on Daniels/Gilbert VO2 model.",
