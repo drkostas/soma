@@ -27,6 +27,14 @@ const NODE_SPACING = 62;
 const SVG_WIDTH = 640;
 const BEZIER_OFFSET = 0.4;
 
+/** Stagger delays (ms) per column for cascade wave effect on slider changes */
+const COLUMN_DELAYS: Record<NodeColumn, number> = {
+  raw: 0,
+  stream: 60,
+  merge: 120,
+  output: 180,
+};
+
 // ── Tooltip state ─────────────────────────────────────────────
 
 interface TooltipState {
@@ -224,6 +232,13 @@ export function ComputationGraphView({
         className="w-full"
         style={{ maxHeight: height * 1.2 }}
       >
+        {/* Hide particle animations for users who prefer reduced motion */}
+        <style>{`
+          @media (prefers-reduced-motion: reduce) {
+            .edge-particle { display: none; }
+          }
+        `}</style>
+
         {/* Column headers */}
         {(["raw", "stream", "merge", "output"] as NodeColumn[]).map((col) => (
           <text
@@ -238,7 +253,7 @@ export function ComputationGraphView({
           </text>
         ))}
 
-        {/* Edges (bezier curves) */}
+        {/* Edges (bezier curves) with animated particles */}
         {graph.edges.map((edge) => {
           const fromInfo = layout.get(edge.from);
           const toInfo = layout.get(edge.to);
@@ -259,19 +274,42 @@ export function ComputationGraphView({
             ? `oklch(62% 0.17 142 / ${0.3 + absW * 0.5})`   // green = positive contribution
             : `oklch(60% 0.22 25 / ${0.3 + absW * 0.5})`;   // red = negative contribution
 
+          // Particle dot color (slightly more opaque than the edge)
+          const dotColor = w >= 0
+            ? `oklch(62% 0.17 142 / ${0.5 + absW * 0.4})`
+            : `oklch(60% 0.22 25 / ${0.5 + absW * 0.4})`;
+
+          // Speed inversely proportional to weight — stronger signals flow faster
+          const dur = `${1.5 / Math.max(0.1, absW)}s`;
+
+          const edgeId = `edge-${edge.from}-${edge.to}`;
+          const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+
           return (
-            <path
-              key={`${edge.from}-${edge.to}`}
-              d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
-              fill="none"
-              stroke={edgeColor}
-              strokeWidth={Math.max(0.5, absW * 2)}
-              style={{ transition: "stroke 200ms ease, stroke-width 200ms ease" }}
-            />
+            <g key={`${edge.from}-${edge.to}`}>
+              <path
+                id={edgeId}
+                d={pathD}
+                fill="none"
+                stroke={edgeColor}
+                strokeWidth={Math.max(0.5, absW * 2)}
+                style={{ transition: "stroke 200ms ease, stroke-width 200ms ease" }}
+              />
+              {/* Animated particle flowing along the edge */}
+              <circle
+                r={2}
+                fill={dotColor}
+                className="edge-particle"
+              >
+                <animateMotion dur={dur} repeatCount="indefinite">
+                  <mpath href={`#${edgeId}`} />
+                </animateMotion>
+              </circle>
+            </g>
           );
         })}
 
-        {/* Nodes */}
+        {/* Nodes — cascade timing staggers updates column-by-column */}
         {graph.nodes.map((node) => {
           const info = layout.get(node.id);
           if (!info) return null;
@@ -290,6 +328,7 @@ export function ComputationGraphView({
               y={pos.y}
               isDraggable={node.id === "slider_factor"}
               shadowValue={sv}
+              cascadeDelay={COLUMN_DELAYS[info.col]}
               onMouseEnter={handleNodeEnter}
               onMouseLeave={handleNodeLeave}
               onClick={handleNodeClick}
