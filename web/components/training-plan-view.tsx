@@ -403,6 +403,13 @@ export function TrainingPlanView({
                                   {match.completionScore}
                                 </span>
                               )}
+                              {/* Garmin sync status indicators */}
+                              {day.garmin_push_status === "pending" && (
+                                <span className="text-xs text-yellow-400 shrink-0">&#x27F3; Syncing to Garmin</span>
+                              )}
+                              {(day.garmin_push_status === "pushed" || day.garmin_push_status === "success") && (
+                                <span className="text-xs shrink-0" style={{ color: "oklch(62% 0.17 142)" }}>&#10003; On Garmin</span>
+                              )}
                             </div>
                             {day.run_description && (
                               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
