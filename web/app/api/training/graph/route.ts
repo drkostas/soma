@@ -69,6 +69,17 @@ export async function GET(request: Request) {
       `,
     ]);
 
+  // Query Banister params (table may not exist yet)
+  let banisterRows: Record<string, unknown>[] = [];
+  try {
+    banisterRows = await sql`
+      SELECT p0, k1, k2, tau1, tau2, n_anchors
+      FROM banister_params ORDER BY fitted_at DESC LIMIT 1
+    `;
+  } catch {
+    // banister_params table doesn't exist yet — gracefully skip
+  }
+
   const readiness = readinessRows[0] ?? null;
   const pmc = pmcRows[0] ?? null;
   const fitness = fitnessRows[0] ?? null;
@@ -170,6 +181,32 @@ export async function GET(request: Request) {
     { id: "vdot", column: "output", label: "VDOT", value: vdotAdj != null ? round(vdotAdj, 1) : vo2max != null ? round(vo2max, 1) : null, unit: "", color: colorForNode("vdot", vdotAdj ?? vo2max), normalizedValue: clamp01(((vdotAdj ?? vo2max) ?? 0) / 60), tooltip: { ...tooltip("vdot"), inputs: ["weight_ema"] } },
   ];
 
+  // ─── Banister parameter nodes ─────────────────────────────
+
+  const bp = banisterRows[0];
+  if (bp) {
+    nodes.push(
+      {
+        id: "banister_tau1", column: "stream", label: `τ1=${Number(bp.tau1).toFixed(0)}d`,
+        value: Number(bp.tau1), unit: "days",
+        color: "oklch(0.7 0.12 200)", normalizedValue: 0,
+        tooltip: { short: "Personal fitness decay: " + Number(bp.tau1).toFixed(0) + " days (population default: 42). Fitted from " + Number(bp.n_anchors) + " anchor runs.", formula: "", source: "Banister 1991", inputs: [] },
+      },
+      {
+        id: "banister_tau2", column: "stream", label: `τ2=${Number(bp.tau2).toFixed(0)}d`,
+        value: Number(bp.tau2), unit: "days",
+        color: "oklch(0.7 0.12 200)", normalizedValue: 0,
+        tooltip: { short: "Personal fatigue decay: " + Number(bp.tau2).toFixed(0) + " days (population default: 7). Fitted from " + Number(bp.n_anchors) + " anchor runs.", formula: "", source: "Banister 1991", inputs: [] },
+      },
+      {
+        id: "banister_p0", column: "stream", label: `p₀=${Number(bp.p0).toFixed(1)}`,
+        value: Number(bp.p0), unit: "VDOT",
+        color: "oklch(0.7 0.12 200)", normalizedValue: 0,
+        tooltip: { short: "Baseline VDOT: " + Number(bp.p0).toFixed(1) + " before any training effect.", formula: "", source: "Banister 1991", inputs: [] },
+      },
+    );
+  }
+
   // ─── Build edges ───────────────────────────────────────────
 
   const edges: GraphEdge[] = [
@@ -211,6 +248,15 @@ export async function GET(request: Request) {
     // Weight -> VDOT
     { from: "weight_ema", to: "vdot", weight: 1.0 },
   ];
+
+  // ─── Banister parameter edges ─────────────────────────────
+
+  if (bp) {
+    edges.push(
+      { from: "banister_tau1", to: "ctl", weight: 1.0 },
+      { from: "banister_tau2", to: "atl", weight: 1.0 },
+    );
+  }
 
   // ─── Build overrides ──────────────────────────────────────
 

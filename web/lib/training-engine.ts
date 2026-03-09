@@ -401,6 +401,30 @@ export const TOOLTIP_DB: Record<string, TooltipEntry> = {
     source: "Daniels/Gilbert oxygen cost model (2014)",
   },
 
+  // --- BANISTER PARAMETERS ---
+  banister_tau1: {
+    short: "Personal fitness decay time constant. Fitted from your anchor runs. Population default: 42 days.",
+    formula: "Fitted via differential evolution on maximal-effort runs",
+    source: "Banister impulse-response model (1991)",
+  },
+  banister_tau2: {
+    short: "Personal fatigue decay time constant. Fitted from your anchor runs. Population default: 7 days.",
+    formula: "Fitted via differential evolution on maximal-effort runs",
+    source: "Banister impulse-response model (1991)",
+  },
+  banister_p0: {
+    short: "Baseline VDOT before any training effect. Starting point of the Banister model.",
+    source: "Banister impulse-response model (1991)",
+  },
+  banister_k1: {
+    short: "Fitness gain coefficient. How much each unit of training load improves fitness.",
+    source: "Banister impulse-response model (1991)",
+  },
+  banister_k2: {
+    short: "Fatigue gain coefficient. How much each unit of training load adds fatigue.",
+    source: "Banister impulse-response model (1991)",
+  },
+
   // --- FITNESS INDICATORS ---
   decoupling: {
     short:
