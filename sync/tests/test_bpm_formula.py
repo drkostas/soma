@@ -53,7 +53,9 @@ def test_latest_hr_returns_recent_reading():
             [now_ms - 180_000, 130],  # 3 minutes ago — outside window
         ]
     }
-    assert latest_hr_from_garmin_data(data, window_seconds=120) == 145
+    result = latest_hr_from_garmin_data(data, window_seconds=120)
+    assert result is not None
+    assert result[0] == 145
 
 
 def test_latest_hr_returns_none_when_stale():
@@ -76,4 +78,6 @@ def test_latest_hr_skips_null_values():
             [now_ms - 60_000, 138],   # valid
         ]
     }
-    assert latest_hr_from_garmin_data(data, window_seconds=120) == 138
+    result = latest_hr_from_garmin_data(data, window_seconds=120)
+    assert result is not None
+    assert result[0] == 138
