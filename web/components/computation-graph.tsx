@@ -310,7 +310,7 @@ export function ComputationGraphView({
 
           // Color edges by contribution direction: green = helping, red = hurting
           const w = edge.weight ?? 0;
-          const absW = Math.abs(w);
+          const absW = Math.max(0.15, Math.abs(w));
           const edgeColor = w >= 0
             ? `oklch(62% 0.17 142 / ${0.3 + absW * 0.5})`   // green = positive contribution
             : `oklch(60% 0.22 25 / ${0.3 + absW * 0.5})`;   // red = negative contribution
@@ -333,7 +333,7 @@ export function ComputationGraphView({
                 d={pathD}
                 fill="none"
                 stroke={edgeColor}
-                strokeWidth={Math.max(1.5, absW * 8)}
+                strokeWidth={Math.max(1.5, absW * 6)}
                 style={{ transition: "stroke 200ms ease, stroke-width 200ms ease" }}
               />
               {/* Animated particle flowing along the edge */}
