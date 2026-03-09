@@ -79,6 +79,9 @@ export function GraphNodeComponent({
     onClick?.(node.id);
   }, [node.id, onClick]);
 
+  // Scale fill opacity by how far the node is from its neutral point
+  const activationIntensity = Math.min(0.6, 0.15 + Math.abs(node.normalizedValue ?? 0) * 0.3);
+
   return (
     <g
       onMouseEnter={handleMouseEnter}
@@ -86,7 +89,7 @@ export function GraphNodeComponent({
       onClick={handleClick}
       style={{ cursor: isDraggable ? "ew-resize" : "pointer" }}
     >
-      {/* Background fill */}
+      {/* Background fill — opacity scales with activation intensity */}
       <rect
         x={x}
         y={y}
@@ -94,7 +97,7 @@ export function GraphNodeComponent({
         height={NODE_H}
         rx={NODE_RX}
         fill={node.color}
-        fillOpacity={0.15}
+        fillOpacity={activationIntensity}
         stroke={node.color}
         strokeWidth={hasShadow ? 2 : 1}
       />
