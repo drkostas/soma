@@ -43,6 +43,50 @@ export interface NormalizedStep {
   repeats?: number
 }
 
+/**
+ * Infer the run type (easy, tempo, intervals, etc.) from a normalized step
+ * by checking pace, description, and step_type — in that priority order.
+ *
+ * The plan generator uses step_type="interval" for ALL non-recovery steps,
+ * so step_type alone is unreliable. Pace is the best signal.
+ */
+function inferRunType(step: NormalizedStep): string {
+  const desc = (step.name || "").toLowerCase();
+
+  // Step type overrides for unambiguous types
+  if (step.type === "recovery" || step.type === "rest") return "recovery";
+  if (step.type === "warmup" || step.type === "cooldown") return "easy";
+
+  // Description-based hints
+  if (desc.includes("stride")) return "strides";
+  if (desc.includes("easy") || desc.includes("jog")) return "easy";
+  if (desc.includes("tempo")) return "tempo";
+  if (desc.includes("threshold") || desc.includes("cruise")) return "threshold";
+  if (desc.includes("cooldown") || desc.includes("warm")) return "easy";
+
+  // Pace-based inference (sec/km): use midpoint of pace range
+  const paceAvg = (step.target_pace_low != null && step.target_pace_high != null)
+    ? (step.target_pace_low + step.target_pace_high) / 2
+    : step.target_pace_low ?? step.target_pace_high ?? null;
+
+  if (paceAvg != null) {
+    // Pace thresholds (sec/km) roughly aligned with VDOT 45-55:
+    // >310 = easy/recovery, 260-310 = marathon/tempo, 230-260 = threshold, <230 = interval/rep
+    if (paceAvg > 310) return "easy";
+    if (paceAvg > 260) return "tempo";
+    if (paceAvg > 230) return "threshold";
+    return "intervals";
+  }
+
+  // Fallback: use step type mapping
+  const stepTypeToRunType: Record<string, string> = {
+    interval: "intervals",
+    active: "tempo",
+    work: "tempo",
+  };
+  return stepTypeToRunType[step.type] ?? "easy";
+}
+
 export function normalizeStep(raw: RawBackendStep): NormalizedStep {
   const step: NormalizedStep = {
     type: raw.step_type || raw.type || "work",
@@ -69,19 +113,9 @@ export function normalizeStep(raw: RawBackendStep): NormalizedStep {
   if (raw.duration_minutes != null) step.duration_minutes = raw.duration_minutes
   if (raw.repeats != null) step.repeats = raw.repeats
 
-  // If no HR targets from DB, derive from step type
+  // If no HR targets from DB, derive from step type + pace
   if (step.target_hr_low == null && step.target_hr_high == null) {
-    const stepTypeToRunType: Record<string, string> = {
-      warmup: "easy",
-      cooldown: "easy",
-      interval: "intervals",
-      recovery: "recovery",
-      stride: "strides",
-      active: "tempo",
-      work: "tempo",
-      rest: "recovery",
-    };
-    const runType = stepTypeToRunType[step.type] ?? "easy";
+    const runType = inferRunType(step);
     const zone = HR_ZONES[runType];
     if (zone) {
       step.target_hr_low = zone.low;
