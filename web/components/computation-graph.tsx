@@ -44,6 +44,8 @@ interface ComputationGraphProps {
   sliderValue: number;
   onSliderChange: (value: number) => void;
   onHoverDate?: (date: string | null) => void;
+  /** When set, shows a date indicator and the graph displays that date's values. */
+  hoveredDate?: string | null;
   /** When true, override alert banners are suppressed (rendered externally). */
   hideOverrides?: boolean;
 }
@@ -81,6 +83,7 @@ export function ComputationGraphView({
   shadowGraph,
   sliderValue,
   onSliderChange,
+  hoveredDate,
   hideOverrides,
 }: ComputationGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -193,6 +196,27 @@ export function ComputationGraphView({
         </div>
       ))}
 
+      {/* Date indicator when hovering a historical date */}
+      {hoveredDate && (
+        <div
+          className="flex items-center justify-center gap-1.5 text-xs font-medium mb-1"
+          style={{
+            color: "oklch(80% 0.15 250)",
+          }}
+        >
+          <span
+            className="inline-block w-2 h-2 rounded-full animate-pulse"
+            style={{ backgroundColor: "oklch(70% 0.18 250)" }}
+          />
+          Viewing:{" "}
+          {new Date(hoveredDate + "T00:00:00").toLocaleDateString("en-US", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          })}
+        </div>
+      )}
+
       {/* SVG graph */}
       <svg
         ref={svgRef}
@@ -242,6 +266,7 @@ export function ComputationGraphView({
               fill="none"
               stroke={edgeColor}
               strokeWidth={Math.max(0.5, absW * 2)}
+              style={{ transition: "stroke 200ms ease, stroke-width 200ms ease" }}
             />
           );
         })}
