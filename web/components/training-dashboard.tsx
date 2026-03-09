@@ -15,7 +15,9 @@ import {
   type Override,
   DEFAULT_BASE_PACE,
   recomputeGraphForSlider,
+  adjustStepTargets,
 } from "@/lib/training-engine";
+import { normalizeSteps } from "@/lib/normalize-steps";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -305,12 +307,21 @@ export function TrainingDashboard({
     const todayIdx = planDays.findIndex((d: any) => d.day_date >= today);
     const futureDays = todayIdx >= 0 ? planDays.slice(todayIdx) : [];
 
+    const origPace = DEFAULT_BASE_PACE * combined;
+    const newPace = DEFAULT_BASE_PACE * (1.0 + delta * sliderValue);
+
     return futureDays
       .filter((d: any) => d.run_type !== "rest")
       .map((d: any) => {
-        const origPace = DEFAULT_BASE_PACE * combined;
-        const newPace = DEFAULT_BASE_PACE * (1.0 + delta * sliderValue);
         const distFactor = sliderValue > 1.0 ? 1.0 + (sliderValue - 1.0) * 0.3 : 1.0 - (1.0 - sliderValue) * 0.3;
+
+        // Adjust per-step targets (pace/HR) using the day-level pace ratio
+        let adjustedSteps: import("@/lib/normalize-steps").NormalizedStep[] | undefined;
+        if (d.workout_steps && Array.isArray(d.workout_steps) && d.workout_steps.length > 0) {
+          const baseSteps = normalizeSteps(d.workout_steps);
+          adjustedSteps = adjustStepTargets(baseSteps, sliderValue, newPace, origPace);
+        }
+
         return {
           dayId: d.id,
           dayDate: d.day_date,
@@ -321,6 +332,7 @@ export function TrainingDashboard({
           originalType: d.run_type,
           newType: d.run_type,
           changed: sliderValue !== 1.0,
+          adjustedSteps,
         };
       });
   }, [sliderValue, graphData, planDays, today]);
