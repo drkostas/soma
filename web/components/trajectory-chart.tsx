@@ -12,6 +12,7 @@ import {
   ReferenceLine,
   ReferenceArea,
   ReferenceDot,
+  Customized,
 } from "recharts";
 
 interface TrajectoryEntry {
@@ -33,6 +34,18 @@ interface TrajectoryChartProps {
   shadowData?: { date: string; shadow: number }[] | null;
   /** Emitted on chart hover — date string or null when leaving */
   onHoverDate?: (date: string | null) => void;
+}
+
+// ── VDOT → pace conversion (Daniels approximation) ──────────
+// Returns HM pace as "M:SS /km" string
+function vdotToHmPace(vdot: number): string {
+  // Approximate HM time in minutes from VDOT (Daniels tables curve fit)
+  // HM_min ≈ 210000 / vdot / 60 — simplified from Daniels regression
+  const hmSeconds = 210000 / vdot;
+  const paceSecPerKm = hmSeconds / 21.0975;
+  const min = Math.floor(paceSecPerKm / 60);
+  const sec = Math.round(paceSecPerKm % 60);
+  return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
 // ── Colors for secondary dimension lines ─────────────────────
@@ -220,6 +233,12 @@ function CustomTooltip({ active, payload }: any) {
             )}
           </div>
         )}
+        {/* VDOT → pace explainer */}
+        {(actual != null || optimal != null) && (
+          <p className="text-[10px] text-muted-foreground mt-1 border-t border-border/50 pt-1">
+            VDOT {(actual ?? optimal).toFixed(1)} ≈ {vdotToHmPace(actual ?? optimal)}/km HM pace
+          </p>
+        )}
       </div>
     </div>
   );
@@ -285,6 +304,24 @@ export function TrajectoryChart({
   const chartDates = chartData.map((d) => d.date);
   const showTaper = chartDates.includes(raceDate) || chartDates[chartDates.length - 1] >= taperStartDate;
 
+  // S-curve inflection point at 40% of plan duration: S(t) = 1/(1+e^{-8(t-0.4)})
+  const planStartMs = new Date(chartData[0].date + "T00:00:00").getTime();
+  const planDurationMs = raceMs - planStartMs;
+  const inflectionMs = planStartMs + planDurationMs * 0.4;
+  const inflectionDate = new Date(inflectionMs).toISOString().split("T")[0];
+  // Find the optimal VDOT at the inflection point (nearest date)
+  const inflectionEntry = chartData.reduce((best, d) => {
+    const dMs = new Date(d.date + "T00:00:00").getTime();
+    const bestMs = new Date(best.date + "T00:00:00").getTime();
+    return Math.abs(dMs - inflectionMs) < Math.abs(bestMs - inflectionMs) ? d : best;
+  });
+  const inflectionVdot = inflectionEntry?.optimal ?? null;
+
+  // Goal VDOT tiers (hardcoded to match existing reference lines)
+  const goalA = 52;
+  const goalB = 49;
+  const goalC = 47.5;
+
   // Hover handlers for date emission
   const handleMouseMove = useCallback(
     (state: any) => {
@@ -303,7 +340,7 @@ export function TrajectoryChart({
     <ResponsiveContainer width="100%" height={280}>
       <ComposedChart
         data={chartData}
-        margin={{ top: 5, right: hasSecondary ? 40 : 20, left: 0, bottom: 5 }}
+        margin={{ top: 18, right: hasSecondary ? 40 : 20, left: 0, bottom: 5 }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
@@ -312,6 +349,14 @@ export function TrajectoryChart({
           stroke="var(--border)"
           opacity={0.3}
           vertical={false}
+        />
+        {/* VDOT explanation annotation */}
+        <Customized
+          component={() => (
+            <text x={50} y={14} className="text-[9px] fill-muted-foreground" opacity={0.6}>
+              Higher VDOT = faster race pace
+            </text>
+          )}
         />
         <XAxis
           dataKey="date"
@@ -329,11 +374,12 @@ export function TrajectoryChart({
           tickLine={false}
           domain={[46, 53]}
           label={{
-            value: "VDOT",
+            value: "VDOT (Daniels index)",
             angle: -90,
             position: "insideLeft",
             fontSize: 10,
             fill: "var(--muted-foreground)",
+            offset: -5,
           }}
         />
         {/* Secondary Y-axis for normalized 0-1 dimensions */}
@@ -388,9 +434,37 @@ export function TrajectoryChart({
             fill: "oklch(60% 0.2 300)",
           }}
         />
+        {/* ── Goal zone bands (subtle horizontal areas) ── */}
+        <ReferenceArea
+          yAxisId="vdot"
+          y1={goalA}
+          y2={goalB}
+          fill="oklch(65% 0.08 142)"
+          fillOpacity={0.06}
+          label={{
+            value: "A goal zone",
+            position: "insideTopRight",
+            fontSize: 8,
+            fill: "oklch(62% 0.12 142)",
+          }}
+        />
+        <ReferenceArea
+          yAxisId="vdot"
+          y1={goalB}
+          y2={goalC}
+          fill="oklch(65% 0.08 87)"
+          fillOpacity={0.06}
+          label={{
+            value: "B goal zone",
+            position: "insideTopRight",
+            fontSize: 8,
+            fill: "oklch(65% 0.12 87)",
+          }}
+        />
+        {/* Goal tier lines at the boundaries */}
         <ReferenceLine
           yAxisId="vdot"
-          y={52}
+          y={goalA}
           stroke="oklch(62% 0.17 142)"
           strokeDasharray="2 4"
           strokeOpacity={0.4}
@@ -403,7 +477,7 @@ export function TrajectoryChart({
         />
         <ReferenceLine
           yAxisId="vdot"
-          y={49}
+          y={goalB}
           stroke="oklch(65% 0.15 250)"
           strokeDasharray="2 4"
           strokeOpacity={0.4}
@@ -416,7 +490,7 @@ export function TrajectoryChart({
         />
         <ReferenceLine
           yAxisId="vdot"
-          y={47.5}
+          y={goalC}
           stroke="oklch(80% 0.18 87)"
           strokeDasharray="2 4"
           strokeOpacity={0.4}
@@ -427,6 +501,22 @@ export function TrajectoryChart({
             fill: "oklch(80% 0.18 87)",
           }}
         />
+
+        {/* S-curve inflection marker at 40% of plan duration */}
+        {inflectionVdot != null && (
+          <ReferenceDot
+            yAxisId="vdot"
+            x={inflectionEntry.date}
+            y={inflectionVdot}
+            r={0}
+            label={{
+              value: "S-curve inflection",
+              position: "top",
+              fill: "oklch(60% 0.1 250)",
+              fontSize: 9,
+            }}
+          />
+        )}
 
         {/* Optimal VDOT — dashed line */}
         <Line
