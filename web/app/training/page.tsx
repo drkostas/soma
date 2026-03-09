@@ -4,6 +4,7 @@ import { TrainingDashboard } from "@/components/training-dashboard";
 import { getDb } from "@/lib/db";
 import { Target } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
+import { projectVdotSeries, DEFAULT_BANISTER, type DailyLoad } from "@/lib/banister-projection";
 
 export const metadata: Metadata = { title: "Training" };
 export const revalidate = 300;
@@ -86,7 +87,25 @@ async function getReferenceData() {
   return { readinessHistory, fitnessHistory, weightHistory };
 }
 
-async function getTrajectoryData(raceDate: string) {
+async function getBanisterParams() {
+  const sql = getDb();
+  try {
+    const rows = await sql`
+      SELECT p0, k1, k2, tau1, tau2
+      FROM banister_params ORDER BY fitted_at DESC LIMIT 1
+    `;
+    return rows[0] || null;
+  } catch {
+    // banister_params table doesn't exist yet — gracefully skip
+    return null;
+  }
+}
+
+async function getTrajectoryData(
+  raceDate: string,
+  banister: any | null,
+  planDays: any[],
+) {
   const sql = getDb();
 
   // Fetch actual VDOT, weight, plus CTL and readiness in parallel
@@ -120,16 +139,36 @@ async function getTrajectoryData(raceDate: string) {
   const restDatesSet = new Set(restDays.map((r: any) => r.day_date));
 
   const currentVo2 = Number(actuals[actuals.length - 1].vo2max);
-  const goalVo2 = 52; // VDOT needed for A-goal (1:35)
 
   const start = new Date(actuals[0].date + "T00:00:00");
   const end = new Date(raceDate + "T00:00:00");
-  const totalDays = Math.max(1, (end.getTime() - start.getTime()) / 86400000);
 
   const actualMap = new Map(actuals.map((a: any) => [a.date, Number(a.vo2max)]));
   const weightMap = new Map(actuals.filter((a: any) => a.weight_kg != null).map((a: any) => [a.date, Number(a.weight_kg)]));
   const ctlMap = new Map(pmcRows.map((r: any) => [r.date, Number(r.ctl)]));
   const readinessMap = new Map(readinessRows.map((r: any) => [r.date, Number(r.composite_score)]));
+
+  // ── Banister projection ──
+  const banisterParams = banister ? {
+    p0: Number(banister.p0) || DEFAULT_BANISTER.p0,
+    k1: Number(banister.k1) || DEFAULT_BANISTER.k1,
+    k2: Number(banister.k2) || DEFAULT_BANISTER.k2,
+    tau1: Number(banister.tau1) || DEFAULT_BANISTER.tau1,
+    tau2: Number(banister.tau2) || DEFAULT_BANISTER.tau2,
+  } : DEFAULT_BANISTER;
+
+  const INTENSITY: Record<string, number> = {
+    easy: 0.6, recovery: 0.5, tempo: 1.0, threshold: 1.0,
+    intervals: 1.2, long: 0.8, race: 1.3, rest: 0,
+  };
+  const loads: DailyLoad[] = planDays.map((d: any) => ({
+    date: d.day_date,
+    load: (d.target_distance_km || 0) * (INTENSITY[d.run_type] || 0.6),
+  }));
+
+  const projectedVdots = projectVdotSeries(loads, banisterParams);
+  const banisterVdotMap = new Map<string, number>();
+  loads.forEach((l, i) => banisterVdotMap.set(l.date, projectedVdots[i]));
 
   // Compute normalization ranges for secondary dimensions
   const ctlValues = pmcRows.map((r: any) => Number(r.ctl)).filter((v: number) => !isNaN(v));
@@ -168,14 +207,7 @@ async function getTrajectoryData(raceDate: string) {
       continue;
     }
 
-    const dayNum = (current.getTime() - start.getTime()) / 86400000;
-    // Logistic S-curve: fast early gains, plateau, slight taper supercompensation
-    const progress = dayNum / totalDays;
-    // S-curve: sigmoid with steeper early phase
-    const sCurve = 1 / (1 + Math.exp(-8 * (progress - 0.4)));
-    // Taper bump: small supercompensation in last 15% of plan
-    const taperBump = progress > 0.85 ? 0.3 * Math.sin((progress - 0.85) / 0.15 * Math.PI) : 0;
-    const optimal = currentVo2 + (goalVo2 - currentVo2) * (sCurve + taperBump * 0.1);
+    const optimal = banisterVdotMap.get(dateStr) ?? currentVo2;
 
     // Normalize secondary dimensions to 0-1
     const rawCtl = ctlMap.get(dateStr);
@@ -195,46 +227,19 @@ async function getTrajectoryData(raceDate: string) {
     current.setDate(current.getDate() + 1);
   }
 
-  // ── Future projection: linear regression on last 7 actual VDOT points ──
+  // ── Future projection: Banister-based ──
   const actualPoints = trajectory
     .filter((t) => t.actual !== null)
     .map((t) => ({ date: t.date, vdot: t.actual as number }));
 
-  if (actualPoints.length >= 2) {
-    // Take the last 7 (or fewer) actual data points for regression
-    const recentPoints = actualPoints.slice(-7);
-    const lastActualDate = recentPoints[recentPoints.length - 1].date;
-    const lastActualMs = new Date(lastActualDate + "T00:00:00").getTime();
+  const lastActualDate = actualPoints.length > 0
+    ? actualPoints[actualPoints.length - 1].date : null;
 
-    // Convert dates to day offsets from the first recent point
-    const baseMs = new Date(recentPoints[0].date + "T00:00:00").getTime();
-    const xs = recentPoints.map((p) => (new Date(p.date + "T00:00:00").getTime() - baseMs) / 86400000);
-    const ys = recentPoints.map((p) => p.vdot);
-
-    // Linear regression: slope = sum((xi - x_mean)(yi - y_mean)) / sum((xi - x_mean)^2)
-    const n = xs.length;
-    const xMean = xs.reduce((a, b) => a + b, 0) / n;
-    const yMean = ys.reduce((a, b) => a + b, 0) / n;
-    let num = 0;
-    let den = 0;
-    for (let i = 0; i < n; i++) {
-      num += (xs[i] - xMean) * (ys[i] - yMean);
-      den += (xs[i] - xMean) * (xs[i] - xMean);
-    }
-    const slope = den !== 0 ? num / den : 0;
-    const lastActualVdot = recentPoints[recentPoints.length - 1].vdot;
-
-    // Fill projectedVdot for dates AFTER the last actual data point
-    // Also set projectedVdot on the last actual point itself so the line connects
-    for (const point of trajectory) {
-      const pointMs = new Date(point.date + "T00:00:00").getTime();
-      if (pointMs === lastActualMs) {
-        // Anchor: start the projection line at the last actual value
-        point.projectedVdot = lastActualVdot;
-      } else if (pointMs > lastActualMs) {
-        const daysSinceLast = (pointMs - lastActualMs) / 86400000;
-        point.projectedVdot = Number((lastActualVdot + slope * daysSinceLast).toFixed(2));
-      }
+  for (const point of trajectory) {
+    if (lastActualDate && point.date === lastActualDate) {
+      point.projectedVdot = point.actual;
+    } else if (lastActualDate && point.date > lastActualDate) {
+      point.projectedVdot = banisterVdotMap.get(point.date) ?? null;
     }
   }
 
@@ -242,19 +247,20 @@ async function getTrajectoryData(raceDate: string) {
 }
 
 export default async function TrainingPage() {
-  const [planDays, raceInfo, readiness, pmcLatest, fitnessLatest, referenceData] = await Promise.all([
+  const [planDays, raceInfo, readiness, pmcLatest, fitnessLatest, referenceData, banisterParams] = await Promise.all([
     getTrainingPlan(),
     getRaceInfo(),
     getReadiness(),
     getPMCLatest(),
     getFitnessLatest(),
     getReferenceData(),
+    getBanisterParams(),
   ]);
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Trajectory data (depends on raceInfo)
-  const trajectoryData = raceInfo ? await getTrajectoryData(raceInfo.race_date) : [];
+  // Trajectory data (depends on raceInfo, banister params, and plan days)
+  const trajectoryData = raceInfo ? await getTrajectoryData(raceInfo.race_date, banisterParams, planDays as any[]) : [];
 
   // Compute stats for header + race countdown
   const totalWeeks = planDays.length > 0
