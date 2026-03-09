@@ -362,16 +362,21 @@ export function TrainingPlanView({
                           {/* Run type badge */}
                           <div className="w-[72px] shrink-0">
                             {day.run_type && (
-                              <Badge
-                                variant="secondary"
-                                className={cn(
-                                  "text-[10px] capitalize",
-                                  runColor.bg,
-                                  runColor.text
+                              <span className="inline-flex items-center">
+                                <Badge
+                                  variant="secondary"
+                                  className={cn(
+                                    "text-[10px] capitalize",
+                                    runColor.bg,
+                                    runColor.text
+                                  )}
+                                >
+                                  {day.run_type}
+                                </Badge>
+                                {projected?.trafficLight === "green" && (
+                                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 ml-1" />
                                 )}
-                              >
-                                {day.run_type}
-                              </Badge>
+                              </span>
                             )}
                           </div>
 
@@ -429,18 +434,41 @@ export function TrainingPlanView({
                               />
                             )}
                             {/* Adaptation visualizations from forward simulation */}
-                            {projected && projected.adjustedPace !== null && projected.paceChangePct !== 0 && (
+                            {projected && projected.adjustedPace !== null && (
                               <div className="text-xs flex items-center gap-1 mt-0.5">
-                                <span className="line-through opacity-40">
-                                  {formatPace(projected.originalPace)}/km
-                                </span>
-                                <span className="opacity-40">&rarr;</span>
-                                <span style={{ color: projected.paceChangePct < 0 ? "oklch(0.7 0.15 142)" : "oklch(0.7 0.15 25)" }}>
-                                  {formatPace(projected.adjustedPace)}/km
-                                </span>
                                 <span className="text-muted-foreground">
-                                  ({projected.paceChangePct > 0 ? "+" : ""}{projected.paceChangePct}%)
+                                  {projected.effectiveRunType !== projected.runType
+                                    ? projected.effectiveRunType : projected.runType}:
                                 </span>
+                                {projected.paceChangePct !== 0 ? (
+                                  <>
+                                    <span className="line-through opacity-40">
+                                      {formatPace(projected.basePaceForType)}/km
+                                    </span>
+                                    <span className="opacity-40">&rarr;</span>
+                                    <span style={{ color: projected.paceChangePct < 0 ? "oklch(0.7 0.15 142)" : "oklch(0.7 0.15 25)" }}>
+                                      {formatPace(projected.adjustedPace)}/km
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      ({projected.paceChangePct > 0 ? "+" : ""}{projected.paceChangePct}%)
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span>{formatPace(projected.basePaceForType)}/km</span>
+                                )}
+                              </div>
+                            )}
+                            {projected?.hrZone && (
+                              <div className="text-xs flex items-center gap-1 mt-0.5 text-muted-foreground">
+                                <span className="font-medium" style={{
+                                  color: projected.hrZone.zone === "Zone 2" ? "oklch(0.7 0.12 142)"
+                                    : projected.hrZone.zone === "Zone 3" ? "oklch(0.7 0.12 85)"
+                                    : projected.hrZone.zone === "Zone 4" ? "oklch(0.7 0.15 50)"
+                                    : "oklch(0.7 0.18 25)"
+                                }}>
+                                  {projected.hrZone.zone}
+                                </span>
+                                <span>{projected.hrZone.low}–{projected.hrZone.high} bpm</span>
                               </div>
                             )}
                             {projected && projected.distanceChangePct !== 0 && (
@@ -457,6 +485,23 @@ export function TrainingPlanView({
                             {projected && projected.isRest && !day.run_type?.includes("rest") && (
                               <div className="text-xs bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded mt-1 w-fit">
                                 REST — readiness critically low
+                              </div>
+                            )}
+                            {projected && projected.trafficLight !== "green" && !projected.isRest && (
+                              <div className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded mt-1 ${
+                                projected.trafficLight === "yellow"
+                                  ? "bg-yellow-500/20 text-yellow-300"
+                                  : "bg-red-500/20 text-red-300"
+                              }`}>
+                                <span className={`inline-block w-2 h-2 rounded-full ${
+                                  projected.trafficLight === "yellow" ? "bg-yellow-400" : "bg-red-400"
+                                }`} />
+                                {projected.trafficLight === "yellow" ? "Reduced" : "Rest recommended"}
+                                {projected.effectiveRunType !== projected.runType && (
+                                  <span className="opacity-60">
+                                    {" "}({projected.runType} → {projected.effectiveRunType})
+                                  </span>
+                                )}
                               </div>
                             )}
                             {projected?.hasSequencingConflict && (
