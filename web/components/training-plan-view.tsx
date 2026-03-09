@@ -13,6 +13,7 @@ import { ActivitySidePanel } from "@/components/activity-side-panel";
 import { normalizeSteps } from "@/lib/normalize-steps";
 import type { NormalizedStep } from "@/lib/normalize-steps";
 import type { DeltaWorkout } from "@/lib/training-engine";
+import type { ProjectedDay } from "@/lib/forward-simulation";
 
 interface TrainingDay {
   id: number;
@@ -54,16 +55,13 @@ export interface ActivityMatch {
 interface TrainingPlanViewProps {
   days: TrainingDay[];
   today: string;
-  todayAdaptation?: {
-    action: string;
-    adjustedType: string;
-    adjustedKm: number;
-  } | null;
   activityMatches?: ActivityMatch[];
   deltaWorkouts?: DeltaWorkout[];
   onDayClick?: (dayId: number) => void;
   /** Called when workout steps are edited inline. Map of dayId -> modified steps. */
   onStepsEdited?: (modifiedSteps: Map<number, NormalizedStep[]>) => void;
+  /** Forward simulation projected days for adaptation visualization. */
+  projectedDays?: ProjectedDay[] | null;
 }
 
 const weekTitles: Record<number, string> = {
@@ -102,11 +100,11 @@ function formatDate(dateStr: string): string {
 export function TrainingPlanView({
   days,
   today,
-  todayAdaptation,
   activityMatches,
   deltaWorkouts,
   onDayClick,
   onStepsEdited,
+  projectedDays,
 }: TrainingPlanViewProps) {
   const [sidePanelMatch, setSidePanelMatch] = useState<ActivityMatch | null>(null);
   const [sidePanelDay, setSidePanelDay] = useState<TrainingDay | null>(null);
@@ -384,7 +382,6 @@ export function TrainingPlanView({
                                 className={cn(
                                   "text-sm font-medium truncate",
                                   day.completed && "line-through",
-                                  isToday && todayAdaptation && todayAdaptation.action !== "as_planned" && "opacity-60"
                                 )}
                               >
                                 {day.run_title || "Rest"}
@@ -406,14 +403,6 @@ export function TrainingPlanView({
                                 </span>
                               )}
                             </div>
-                            {isToday && todayAdaptation && todayAdaptation.action !== "as_planned" && (
-                              <span
-                                className="text-[10px] font-medium ml-1.5"
-                                style={{ color: "oklch(65% 0.15 250)" }}
-                              >
-                                &rarr; {todayAdaptation.adjustedType} {todayAdaptation.adjustedKm.toFixed(1)} km
-                              </span>
-                            )}
                             {day.run_description && (
                               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                                 {day.run_description}

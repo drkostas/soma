@@ -19,6 +19,7 @@ import {
   adjustStepTargets,
 } from "@/lib/training-engine";
 import { normalizeSteps } from "@/lib/normalize-steps";
+import { runForwardSimulation, type ProjectedDay, type SimulationSeeds } from "@/lib/forward-simulation";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -48,13 +49,6 @@ interface TrainingDashboardProps {
   trajectoryData: { date: string; optimal: number; actual: number | null; projectedVdot?: number | null; ctl: number | null; readiness: number | null; weightEffect: number | null }[];
   currentVdot: number;
   goalVdot: number;
-  todayAdaptation: {
-    action: string;
-    adjustedType: string;
-    adjustedKm: number;
-    paceFactor: number;
-    reason: string;
-  } | null;
   referenceData: ReferenceData;
 }
 
@@ -213,7 +207,6 @@ export function TrainingDashboard({
   trajectoryData,
   currentVdot,
   goalVdot,
-  todayAdaptation,
   referenceData,
 }: TrainingDashboardProps) {
   // Client-side state
@@ -225,6 +218,10 @@ export function TrainingDashboard({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<"idle" | "success" | "error">("idle");
+
+  // Forward simulation state
+  const [forwardSim, setForwardSim] = useState<ProjectedDay[] | null>(null);
+  const [forwardSimSeeds, setForwardSimSeeds] = useState<SimulationSeeds | null>(null);
 
   // Edited workout steps (dayId -> modified steps) from inline editing
   const [editedSteps, setEditedSteps] = useState<Map<number, any[]>>(new Map());
@@ -238,13 +235,23 @@ export function TrainingDashboard({
 
   // Refetchable data loader — used on mount and after save
   const refetchData = useCallback(async () => {
-    const [graphRes, matchRes] = await Promise.all([
+    const [graphRes, matchRes, simRes] = await Promise.all([
       fetch(`/api/training/graph?date=${today}`),
       fetch("/api/training/activity-match"),
+      fetch("/api/training/forward-sim"),
     ]);
     if (graphRes.ok) setGraphData(await graphRes.json());
     if (matchRes.ok) setActivityMatches(await matchRes.json());
-  }, [today]);
+    if (simRes.ok) {
+      const simData: SimulationSeeds = await simRes.json();
+      setForwardSimSeeds(simData);
+      const projected = runForwardSimulation({
+        ...simData,
+        sliderMultiplier: sliderValue,
+      });
+      setForwardSim(projected);
+    }
+  }, [today, sliderValue]);
 
   // Fetch graph data and activity matches on mount
   useEffect(() => {
@@ -271,6 +278,16 @@ export function TrainingDashboard({
       if (activeFetchRef.current) activeFetchRef.current.abort();
     };
   }, []);
+
+  // Re-run forward simulation when slider changes (no API call needed)
+  useEffect(() => {
+    if (!forwardSimSeeds) return;
+    const projected = runForwardSimulation({
+      ...forwardSimSeeds,
+      sliderMultiplier: sliderValue,
+    });
+    setForwardSim(projected);
+  }, [sliderValue, forwardSimSeeds]);
 
   // Shadow graph recomputed when slider changes
   const shadowGraph = useMemo<ComputationGraph | null>(() => {
@@ -566,10 +583,10 @@ export function TrainingDashboard({
       <TrainingPlanView
         days={planDays}
         today={today}
-        todayAdaptation={todayAdaptation}
         activityMatches={activityMatches}
         deltaWorkouts={deltaWorkouts}
         onStepsEdited={setEditedSteps}
+        projectedDays={forwardSim}
       />
 
       {/* Delta save button */}
