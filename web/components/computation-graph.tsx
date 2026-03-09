@@ -56,6 +56,7 @@ interface ComputationGraphProps {
   hoveredDate?: string | null;
   /** When true, override alert banners are suppressed (rendered externally). */
   hideOverrides?: boolean;
+  calibration?: { phase: number; dataDays: number; weights: Record<string, number>; forceEqual: boolean } | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export function ComputationGraphView({
   onSliderChange,
   hoveredDate,
   hideOverrides,
+  calibration,
 }: ComputationGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -101,14 +103,36 @@ export function ComputationGraphView({
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Banister params to fold into annotations rather than separate nodes
+  const BANISTER_PARAM_IDS = new Set(["banister_tau1", "banister_tau2", "banister_p0", "banister_k1", "banister_k2"]);
+  const banisterAnnotations = new Map<string, string>();
+
+  for (const node of graph.nodes) {
+    if (node.id === "banister_tau1" && node.value != null) {
+      banisterAnnotations.set("ctl", `τ₁=${Math.round(node.value)}d`);
+    }
+    if (node.id === "banister_tau2" && node.value != null) {
+      banisterAnnotations.set("atl", `τ₂=${Math.round(node.value)}d`);
+    }
+    if (node.id === "banister_p0" && node.value != null) {
+      banisterAnnotations.set("vdot", `p₀=${node.value.toFixed(1)}`);
+    }
+  }
+
+  // Filter out banister param nodes and edges from display
+  const displayNodes = graph.nodes.filter(n => !BANISTER_PARAM_IDS.has(n.id));
+  const displayEdges = graph.edges.filter(
+    e => !BANISTER_PARAM_IDS.has(e.from) && !BANISTER_PARAM_IDS.has(e.to)
+  );
+
   // Node position lookup
-  const layout = columnIndices(graph.nodes);
+  const layout = columnIndices(displayNodes);
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
   const shadowNodeMap = shadowGraph
     ? new Map(shadowGraph.nodes.map((n) => [n.id, n]))
     : null;
 
-  const height = svgHeight(graph.nodes);
+  const height = svgHeight(displayNodes);
 
   // ── Tooltip handlers ──────────────────────────────────
 
@@ -175,6 +199,19 @@ export function ComputationGraphView({
 
   return (
     <div ref={containerRef} className="relative w-full space-y-3">
+      {/* Model header — replaces model-params-panel */}
+      <div className="flex items-center justify-between px-1 pb-2 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">
+          Banister IR + Composite Readiness
+        </span>
+        {calibration && (
+          <span>
+            Phase {calibration.phase}/4 · {calibration.dataDays}d data ·{" "}
+            {calibration.forceEqual ? "Equal weights" : "Personal weights"}
+          </span>
+        )}
+      </div>
+
       {/* Override alert banners (suppressed when rendered externally) */}
       {!hideOverrides && activeOverrides.map((ov) => (
         <div
@@ -258,7 +295,7 @@ export function ComputationGraphView({
         ))}
 
         {/* Edges (bezier curves) with animated particles */}
-        {graph.edges.map((edge) => {
+        {displayEdges.map((edge) => {
           const fromInfo = layout.get(edge.from);
           const toInfo = layout.get(edge.to);
           if (!fromInfo || !toInfo) return null;
@@ -296,7 +333,7 @@ export function ComputationGraphView({
                 d={pathD}
                 fill="none"
                 stroke={edgeColor}
-                strokeWidth={Math.max(0.5, absW * 2)}
+                strokeWidth={Math.max(1, absW * 6)}
                 style={{ transition: "stroke 200ms ease, stroke-width 200ms ease" }}
               />
               {/* Animated particle flowing along the edge */}
@@ -314,7 +351,7 @@ export function ComputationGraphView({
         })}
 
         {/* Nodes — cascade timing staggers updates column-by-column */}
-        {graph.nodes.map((node) => {
+        {displayNodes.map((node) => {
           const info = layout.get(node.id);
           if (!info) return null;
           const pos = nodePos(info.col, info.idx);
@@ -325,18 +362,30 @@ export function ComputationGraphView({
               : undefined;
 
           return (
-            <GraphNodeComponent
-              key={node.id}
-              node={node}
-              x={pos.x}
-              y={pos.y}
-              isDraggable={node.id === "slider_factor"}
-              shadowValue={sv}
-              cascadeDelay={COLUMN_DELAYS[info.col]}
-              onMouseEnter={handleNodeEnter}
-              onMouseLeave={handleNodeLeave}
-              onClick={handleNodeClick}
-            />
+            <g key={node.id}>
+              <GraphNodeComponent
+                node={node}
+                x={pos.x}
+                y={pos.y}
+                isDraggable={node.id === "slider_factor"}
+                shadowValue={sv}
+                cascadeDelay={COLUMN_DELAYS[info.col]}
+                onMouseEnter={handleNodeEnter}
+                onMouseLeave={handleNodeLeave}
+                onClick={handleNodeClick}
+              />
+              {banisterAnnotations.has(node.id) && (
+                <text
+                  x={pos.x + NODE_W / 2}
+                  y={pos.y + NODE_H + 12}
+                  textAnchor="middle"
+                  className="fill-muted-foreground"
+                  style={{ fontSize: 9, fontFamily: "var(--font-mono, ui-monospace, monospace)" }}
+                >
+                  {banisterAnnotations.get(node.id)}
+                </text>
+              )}
+            </g>
           );
         })}
       </svg>
