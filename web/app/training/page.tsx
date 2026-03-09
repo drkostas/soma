@@ -4,7 +4,7 @@ import { RaceCountdown } from "@/components/race-countdown";
 import { RaceSplitsCard } from "@/components/race-splits-card";
 import { TrainingDashboard } from "@/components/training-dashboard";
 import { getDb } from "@/lib/db";
-import { Target } from "lucide-react";
+import { Target, AlertTriangle } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
 
 export const metadata: Metadata = { title: "Training" };
@@ -170,10 +170,6 @@ export default async function TrainingPage() {
   const currentWeek = todayEntry?.week_number ?? 1;
   const completedDays = planDays.filter((d: any) => d.completed).length;
   const totalDays = planDays.length;
-  const totalPlanKm = planDays.reduce(
-    (sum: number, d: any) => sum + (d.target_distance_km || 0),
-    0,
-  );
 
   const currentVdot = fitnessLatest ? Number(fitnessLatest.vo2max || 50) : 50;
 
@@ -206,18 +202,21 @@ export default async function TrainingPage() {
 
   const hasNoPlan = planDays.length === 0;
 
+  // Days until race for the thin header bar
+  const daysUntilRace = raceInfo
+    ? Math.max(0, Math.ceil((new Date(raceInfo.race_date + "T00:00:00").getTime() - Date.now()) / 86400000))
+    : 0;
+
   return (
     <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
+      {/* Page header — thin bar with race context */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Training
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold">Training</h1>
+          <p className="text-sm text-muted-foreground">
             {hasNoPlan
               ? "No active training plan."
-              : `${raceInfo?.plan_name || "Training Plan"} — ${totalDays} days, ${totalPlanKm.toFixed(0)} km total`}
+              : `${raceInfo?.plan_name || "Training Plan"} · ${daysUntilRace}d to race · Week ${currentWeek}/${totalWeeks}`}
           </p>
         </div>
         {!hasNoPlan && <TrainingControls />}
@@ -237,20 +236,15 @@ export default async function TrainingPage() {
           </CardContent>
         </Card>
       ) : (
-        <>
-          {/* Race Countdown + Splits (static, server-rendered) */}
-          {raceInfo && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <RaceCountdown
-                raceName={raceInfo.plan_name}
-                raceDate={raceInfo.race_date}
-                goalTimeSeconds={Number(raceInfo.goal_time_seconds)}
-                totalWeeks={totalWeeks}
-                currentWeek={currentWeek}
-                completedDays={completedDays}
-                totalDays={totalDays}
-              />
-              <RaceSplitsCard />
+        <div className="space-y-6">
+          {/* Hoisted adaptation alert — visible above the graph */}
+          {todayAdaptation && todayAdaptation.action !== "as_planned" && (
+            <div className="flex items-center gap-2 rounded-md border border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>
+                Today&apos;s plan adjusted: {todayAdaptation.reason} &mdash;{" "}
+                {todayAdaptation.adjustedType} {todayAdaptation.adjustedKm.toFixed(1)} km
+              </span>
             </div>
           )}
 
@@ -265,7 +259,23 @@ export default async function TrainingPage() {
             todayAdaptation={todayAdaptation}
             referenceData={referenceData as any}
           />
-        </>
+
+          {/* Race Countdown + Splits (moved below main dashboard) */}
+          {raceInfo && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <RaceCountdown
+                raceName={raceInfo.plan_name}
+                raceDate={raceInfo.race_date}
+                goalTimeSeconds={Number(raceInfo.goal_time_seconds)}
+                totalWeeks={totalWeeks}
+                currentWeek={currentWeek}
+                completedDays={completedDays}
+                totalDays={totalDays}
+              />
+              <RaceSplitsCard />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
