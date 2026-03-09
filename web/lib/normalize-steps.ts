@@ -1,3 +1,5 @@
+import { HR_ZONES } from "./vdot-pace-zones";
+
 /**
  * Adapts Python backend workout step field names to TypeScript frontend names.
  *
@@ -66,6 +68,26 @@ export function normalizeStep(raw: RawBackendStep): NormalizedStep {
   if (raw.distance_meters != null) step.distance_meters = raw.distance_meters
   if (raw.duration_minutes != null) step.duration_minutes = raw.duration_minutes
   if (raw.repeats != null) step.repeats = raw.repeats
+
+  // If no HR targets from DB, derive from step type
+  if (step.target_hr_low == null && step.target_hr_high == null) {
+    const stepTypeToRunType: Record<string, string> = {
+      warmup: "easy",
+      cooldown: "easy",
+      interval: "intervals",
+      recovery: "recovery",
+      stride: "strides",
+      active: "tempo",
+      work: "tempo",
+      rest: "recovery",
+    };
+    const runType = stepTypeToRunType[step.type] ?? "easy";
+    const zone = HR_ZONES[runType];
+    if (zone) {
+      step.target_hr_low = zone.low;
+      step.target_hr_high = zone.high;
+    }
+  }
 
   return step
 }
