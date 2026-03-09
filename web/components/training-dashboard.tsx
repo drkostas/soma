@@ -7,6 +7,7 @@ import { ComputationGraphView } from "@/components/computation-graph";
 import { TrajectorySection } from "@/components/trajectory-section";
 import { ReferencePanel, type ReferenceMetric } from "@/components/reference-panel";
 import { TrainingPlanView, type ActivityMatch } from "@/components/training-plan-view";
+import { ModelParamsPanel } from "@/components/model-params-panel";
 import {
   type GraphApiResponse,
   type ComputationGraph,
@@ -418,6 +419,11 @@ export function TrainingDashboard({
             />
           </div>
         )}
+
+        {/* Model Parameters — identity, Banister params, calibration state */}
+        <div className="border-t border-border/50 px-4 py-3">
+          <ModelParamsPanel />
+        </div>
 
         {raceInfo && trajectoryData.length > 0 && (
           <div className="border-t border-border/50 p-4 pt-2">
