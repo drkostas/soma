@@ -90,12 +90,26 @@ async function getReferenceData() {
 
 async function getTrajectoryData(raceDate: string) {
   const sql = getDb();
-  const actuals = await sql`
-    SELECT date::text as date, vo2max
-    FROM fitness_trajectory
-    WHERE vo2max IS NOT NULL
-    ORDER BY date
-  `;
+
+  // Fetch actual VDOT, weight, plus CTL and readiness in parallel
+  const [actuals, pmcRows, readinessRows] = await Promise.all([
+    sql`
+      SELECT date::text as date, vo2max, weight_kg
+      FROM fitness_trajectory
+      WHERE vo2max IS NOT NULL
+      ORDER BY date
+    `,
+    sql`
+      SELECT date::text as date, ctl
+      FROM pmc_daily
+      ORDER BY date
+    `,
+    sql`
+      SELECT date::text as date, composite_score
+      FROM daily_readiness
+      ORDER BY date
+    `,
+  ]);
 
   if (actuals.length === 0) return [];
 
@@ -115,8 +129,36 @@ async function getTrajectoryData(raceDate: string) {
   const totalDays = Math.max(1, (end.getTime() - start.getTime()) / 86400000);
 
   const actualMap = new Map(actuals.map((a: any) => [a.date, Number(a.vo2max)]));
+  const weightMap = new Map(actuals.filter((a: any) => a.weight_kg != null).map((a: any) => [a.date, Number(a.weight_kg)]));
+  const ctlMap = new Map(pmcRows.map((r: any) => [r.date, Number(r.ctl)]));
+  const readinessMap = new Map(readinessRows.map((r: any) => [r.date, Number(r.composite_score)]));
 
-  const trajectory: { date: string; optimal: number; actual: number | null }[] = [];
+  // Compute normalization ranges for secondary dimensions
+  const ctlValues = pmcRows.map((r: any) => Number(r.ctl)).filter((v: number) => !isNaN(v));
+  const ctlMin = ctlValues.length > 0 ? Math.min(...ctlValues) : 0;
+  const ctlMax = ctlValues.length > 0 ? Math.max(...ctlValues) : 1;
+  const ctlRange = Math.max(ctlMax - ctlMin, 1);
+
+  const readinessValues = readinessRows.map((r: any) => Number(r.composite_score)).filter((v: number) => !isNaN(v));
+  const readinessMin = readinessValues.length > 0 ? Math.min(...readinessValues) : 0;
+  const readinessMax = readinessValues.length > 0 ? Math.max(...readinessValues) : 1;
+  const readinessRange = Math.max(readinessMax - readinessMin, 1);
+
+  const weightValues = [...weightMap.values()].filter((v) => !isNaN(v));
+  const weightMin = weightValues.length > 0 ? Math.min(...weightValues) : 70;
+  const weightMax = weightValues.length > 0 ? Math.max(...weightValues) : 80;
+  const weightRange = Math.max(weightMax - weightMin, 1);
+
+  type TrajectoryPoint = {
+    date: string;
+    optimal: number;
+    actual: number | null;
+    ctl: number | null;
+    readiness: number | null;
+    weightEffect: number | null;
+  };
+
+  const trajectory: TrajectoryPoint[] = [];
   const current = new Date(start);
   while (current <= end) {
     const dateStr = current.toISOString().split("T")[0];
@@ -135,10 +177,20 @@ async function getTrajectoryData(raceDate: string) {
     // Taper bump: small supercompensation in last 15% of plan
     const taperBump = progress > 0.85 ? 0.3 * Math.sin((progress - 0.85) / 0.15 * Math.PI) : 0;
     const optimal = currentVo2 + (goalVo2 - currentVo2) * (sCurve + taperBump * 0.1);
+
+    // Normalize secondary dimensions to 0-1
+    const rawCtl = ctlMap.get(dateStr);
+    const rawReadiness = readinessMap.get(dateStr);
+    const rawWeight = weightMap.get(dateStr);
+
     trajectory.push({
       date: dateStr,
       optimal,
       actual: actualMap.get(dateStr) ?? null,
+      ctl: rawCtl != null ? (rawCtl - ctlMin) / ctlRange : null,
+      readiness: rawReadiness != null ? (rawReadiness - readinessMin) / readinessRange : null,
+      // Weight effect: inverted — lighter is better (higher value)
+      weightEffect: rawWeight != null ? 1 - (rawWeight - weightMin) / weightRange : null,
     });
     current.setDate(current.getDate() + 1);
   }
