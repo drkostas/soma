@@ -58,11 +58,13 @@ export async function GET(request: Request) {
         LIMIT 1
       `.catch(() => []),
       sql`
-        SELECT sleep_time_seconds, resting_heart_rate, body_battery_at_wake,
-               avg_overnight_hrv, body_battery_max, date::text as data_date
-        FROM daily_health_summary
-        WHERE date <= ${date}
-        ORDER BY date DESC LIMIT 1
+        SELECT
+          (SELECT avg_overnight_hrv FROM daily_health_summary WHERE date <= ${date} AND avg_overnight_hrv IS NOT NULL ORDER BY date DESC LIMIT 1) as avg_overnight_hrv,
+          (SELECT body_battery_at_wake FROM daily_health_summary WHERE date <= ${date} AND body_battery_at_wake IS NOT NULL ORDER BY date DESC LIMIT 1) as body_battery_at_wake,
+          (SELECT body_battery_max FROM daily_health_summary WHERE date <= ${date} AND body_battery_max IS NOT NULL ORDER BY date DESC LIMIT 1) as body_battery_max,
+          (SELECT sleep_time_seconds FROM daily_health_summary WHERE date <= ${date} AND sleep_time_seconds IS NOT NULL ORDER BY date DESC LIMIT 1) as sleep_time_seconds,
+          (SELECT resting_heart_rate FROM daily_health_summary WHERE date <= ${date} AND resting_heart_rate IS NOT NULL ORDER BY date DESC LIMIT 1) as resting_heart_rate,
+          (SELECT date::text FROM daily_health_summary WHERE date <= ${date} ORDER BY date DESC LIMIT 1) as data_date
       `.catch(() => []),
       sql`
         SELECT phase, data_days, weights, force_equal
