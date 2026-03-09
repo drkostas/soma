@@ -40,7 +40,9 @@ export async function GET() {
       .catch(() => []),
     // Today's readiness
     sql`SELECT composite_score, traffic_light, flags
-        FROM daily_readiness WHERE date = ${today}`
+        FROM daily_readiness
+        WHERE date <= ${today}
+        ORDER BY date DESC LIMIT 1`
       .catch(() => []),
     // Calibration state
     sql`SELECT phase, data_days, weights, force_equal
