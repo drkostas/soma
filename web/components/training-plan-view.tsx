@@ -326,6 +326,7 @@ export function TrainingPlanView({
                         runTypeColors[day.run_type] || runTypeColors.easy;
                       const match = matchByDayId.get(day.id);
                       const delta = deltaByDayId.get(day.id);
+                      const projected = projectedDays?.find(p => p.dayId === day.id);
                       const hasDeltaOverlay = isFuture && !!delta;
                       const isClickable = isPast && match?.matched;
 
@@ -419,6 +420,42 @@ export function TrainingPlanView({
                                 editable={!isPast}
                                 onStepsChange={(newSteps) => handleStepChange(day.id, newSteps)}
                               />
+                            )}
+                            {/* Adaptation visualizations from forward simulation */}
+                            {projected && projected.adjustedPace !== null && projected.paceChangePct !== 0 && (
+                              <div className="text-xs flex items-center gap-1 mt-0.5">
+                                <span className="line-through opacity-40">
+                                  {formatPace(projected.originalPace)}/km
+                                </span>
+                                <span className="opacity-40">&rarr;</span>
+                                <span style={{ color: projected.paceChangePct < 0 ? "oklch(0.7 0.15 142)" : "oklch(0.7 0.15 25)" }}>
+                                  {formatPace(projected.adjustedPace)}/km
+                                </span>
+                                <span className="text-muted-foreground">
+                                  ({projected.paceChangePct > 0 ? "+" : ""}{projected.paceChangePct}%)
+                                </span>
+                              </div>
+                            )}
+                            {projected && projected.distanceChangePct !== 0 && (
+                              <div className="text-xs flex items-center gap-1 mt-0.5">
+                                <span className="line-through opacity-40">
+                                  {projected.originalDistanceKm.toFixed(1)} km
+                                </span>
+                                <span className="opacity-40">&rarr;</span>
+                                <span style={{ color: projected.distanceChangePct > 0 ? "oklch(0.7 0.15 142)" : "oklch(0.7 0.15 25)" }}>
+                                  {projected.adjustedDistanceKm.toFixed(1)} km
+                                </span>
+                              </div>
+                            )}
+                            {projected && projected.isRest && !day.run_type?.includes("rest") && (
+                              <div className="text-xs bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded mt-1 w-fit">
+                                REST — readiness critically low
+                              </div>
+                            )}
+                            {projected?.hasSequencingConflict && (
+                              <span className="inline-block text-xs bg-yellow-500/20 text-yellow-300 px-1.5 py-0.5 rounded mt-1">
+                                Legs yesterday — 48h rule
+                              </span>
                             )}
                           </div>
 
