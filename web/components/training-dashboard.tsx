@@ -629,6 +629,7 @@ export function TrainingDashboard({
         deltaWorkouts={deltaWorkouts}
         onStepsEdited={setEditedSteps}
         projectedDays={forwardSim}
+        sliderActive={Math.abs(sliderValue - 1.0) > 0.001}
       />
 
       {/* Delta save button */}

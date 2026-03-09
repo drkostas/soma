@@ -63,6 +63,8 @@ interface TrainingPlanViewProps {
   onStepsEdited?: (modifiedSteps: Map<number, NormalizedStep[]>) => void;
   /** Forward simulation projected days for adaptation visualization. */
   projectedDays?: ProjectedDay[] | null;
+  /** Whether the intensity slider is actively shifted from 1.0. */
+  sliderActive?: boolean;
 }
 
 const weekTitles: Record<number, string> = {
@@ -106,6 +108,7 @@ export function TrainingPlanView({
   onDayClick,
   onStepsEdited,
   projectedDays,
+  sliderActive,
 }: TrainingPlanViewProps) {
   const [sidePanelMatch, setSidePanelMatch] = useState<ActivityMatch | null>(null);
   const [sidePanelDay, setSidePanelDay] = useState<TrainingDay | null>(null);
@@ -344,6 +347,8 @@ export function TrainingPlanView({
                             day.completed && "opacity-70",
                             isPast && !isToday && "opacity-60",
                             isClickable && "cursor-pointer",
+                            sliderActive && projected && projected.paceChangePct !== 0
+                              && "border-l-2 border-l-yellow-400/60",
                           )}
                           onClick={isClickable ? () => handleDayClick(day) : undefined}
                         >
@@ -536,30 +541,9 @@ export function TrainingPlanView({
                                 />
                               </div>
                             )}
-                            {/* Gym section */}
-                            {day.gym_workout && (
-                              <div className="mt-2 border-t border-border/30 pt-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-medium bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded">
-                                    {day.gym_workout}
-                                  </span>
-                                  {day.completed ? (
-                                    <span className="text-xs text-green-400">&#10003; Done</span>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">Planned</span>
-                                  )}
-                                </div>
-                                {day.gym_notes && (
-                                  <p className="text-xs text-muted-foreground mt-1">{day.gym_notes}</p>
-                                )}
-                                {/* Sequencing warning from forward sim */}
-                                {projected?.hasSequencingConflict && (
-                                  <div className="mt-1 flex items-center gap-1 text-xs text-yellow-400">
-                                    <span>&#9888;</span>
-                                    <span>Legs + hard run within 48h — readiness penalty applied</span>
-                                  </div>
-                                )}
-                              </div>
+                            {/* Gym notes (badge is in the header row) */}
+                            {day.gym_workout && day.gym_notes && (
+                              <p className="text-xs text-muted-foreground mt-2 border-t border-border/30 pt-2">{day.gym_notes}</p>
                             )}
                           </div>
 
