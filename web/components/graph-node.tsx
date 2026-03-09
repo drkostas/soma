@@ -100,6 +100,7 @@ export function GraphNodeComponent({
         fillOpacity={activationIntensity}
         stroke={node.color}
         strokeWidth={hasShadow ? 2 : 1}
+        style={{ transition: "fill 200ms ease, fill-opacity 200ms ease, stroke 200ms ease" }}
       />
 
       {/* Shadow highlight overlay */}
@@ -139,6 +140,7 @@ export function GraphNodeComponent({
           fontFamily: "var(--font-mono, ui-monospace, monospace)",
           fontWeight: 500,
           pointerEvents: "none",
+          transition: "fill 200ms ease",
         }}
       >
         {formatValue(node.value, node.unit)}

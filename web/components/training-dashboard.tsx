@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { Loader2, Save, Check, X, AlertTriangle, ShieldAlert } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ComputationGraphView } from "@/components/computation-graph";
@@ -217,9 +217,15 @@ export function TrainingDashboard({
   const [graphData, setGraphData] = useState<GraphApiResponse | null>(null);
   const [activityMatches, setActivityMatches] = useState<ActivityMatch[]>([]);
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  const [hoveredGraph, setHoveredGraph] = useState<ComputationGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<"idle" | "success" | "error">("idle");
+
+  // Cache of fetched graph data per date (avoids re-fetching on re-hover)
+  const graphCacheRef = useRef<Map<string, ComputationGraph>>(new Map());
+  const hoverFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeFetchRef = useRef<AbortController | null>(null);
 
   const isDirty = sliderValue !== 1.0;
 
@@ -250,6 +256,14 @@ export function TrainingDashboard({
     fetchData();
     return () => { cancelled = true; };
   }, [refetchData]);
+
+  // Cleanup hover fetch timer and abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverFetchTimerRef.current) clearTimeout(hoverFetchTimerRef.current);
+      if (activeFetchRef.current) activeFetchRef.current.abort();
+    };
+  }, []);
 
   // Shadow graph recomputed when slider changes
   const shadowGraph = useMemo<ComputationGraph | null>(() => {
@@ -318,7 +332,57 @@ export function TrainingDashboard({
 
   const handleHoverDate = useCallback((date: string | null) => {
     setHoveredDate(date);
-  }, []);
+
+    // Clear any pending debounced fetch
+    if (hoverFetchTimerRef.current) {
+      clearTimeout(hoverFetchTimerRef.current);
+      hoverFetchTimerRef.current = null;
+    }
+
+    // If hover leaves or date is today, clear hovered graph
+    if (!date || date === today) {
+      if (activeFetchRef.current) {
+        activeFetchRef.current.abort();
+        activeFetchRef.current = null;
+      }
+      setHoveredGraph(null);
+      return;
+    }
+
+    // Check cache first
+    const cached = graphCacheRef.current.get(date);
+    if (cached) {
+      setHoveredGraph(cached);
+      return;
+    }
+
+    // Debounced fetch (150ms) to avoid flooding the API on quick sweeps
+    hoverFetchTimerRef.current = setTimeout(async () => {
+      // Abort any in-flight fetch
+      if (activeFetchRef.current) {
+        activeFetchRef.current.abort();
+      }
+      const controller = new AbortController();
+      activeFetchRef.current = controller;
+
+      try {
+        const res = await fetch(`/api/training/graph?date=${date}`, {
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const data: GraphApiResponse = await res.json();
+          graphCacheRef.current.set(date, data.graph);
+          setHoveredGraph(data.graph);
+        }
+      } catch {
+        // Aborted or network error — silently ignore
+      } finally {
+        if (activeFetchRef.current === controller) {
+          activeFetchRef.current = null;
+        }
+      }
+    }, 150);
+  }, [today]);
 
   const handleSave = useCallback(async () => {
     if (deltaWorkouts.length === 0) return;
@@ -413,10 +477,11 @@ export function TrainingDashboard({
           <div className="p-4 pb-2">
             <h3 className="text-sm font-medium text-muted-foreground mb-1">Model Computation</h3>
             <ComputationGraphView
-              graph={graphData.graph}
+              graph={hoveredDate && hoveredGraph ? hoveredGraph : graphData.graph}
               shadowGraph={shadowGraph}
               sliderValue={sliderValue}
               onSliderChange={handleSliderChange}
+              hoveredDate={hoveredDate}
               hideOverrides
             />
           </div>
