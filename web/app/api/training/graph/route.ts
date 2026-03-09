@@ -227,22 +227,22 @@ export async function GET(request: Request) {
   // ─── Build edges ───────────────────────────────────────────
 
   const edges: GraphEdge[] = [
-    // Raw -> Stream (z-scores)
-    { from: "hrv_raw", to: "hrv_z", weight: 1.0 },
-    { from: "sleep_raw", to: "sleep_z", weight: 1.0 },
-    { from: "rhr_raw", to: "rhr_z", weight: 1.0 },
-    { from: "bb_raw", to: "bb_z", weight: 1.0 },
+    // Raw -> Stream (z-scores): weight = z-score magnitude (0–1)
+    { from: "hrv_raw", to: "hrv_z", weight: Math.min(1, Math.abs(hrvZ ?? 0) / 2) || 0.15 },
+    { from: "sleep_raw", to: "sleep_z", weight: Math.min(1, Math.abs(sleepZ ?? 0) / 2) || 0.15 },
+    { from: "rhr_raw", to: "rhr_z", weight: Math.min(1, Math.abs(rhrZ ?? 0) / 2) || 0.15 },
+    { from: "bb_raw", to: "bb_z", weight: Math.min(1, Math.abs(bbZ ?? 0) / 2) || 0.15 },
 
-    // Raw -> Stream (PMC)
-    { from: "epoc_raw", to: "ctl", weight: 1.0 },
-    { from: "epoc_raw", to: "atl", weight: 1.0 },
+    // Raw -> Stream (PMC) — faint default
+    { from: "epoc_raw", to: "ctl", weight: 0.15 },
+    { from: "epoc_raw", to: "atl", weight: 0.15 },
 
-    // Stream -> Stream (TSB = CTL - ATL)
-    { from: "ctl", to: "tsb", weight: 1.0 },
-    { from: "atl", to: "tsb", weight: -1.0 },
+    // Stream -> Stream (TSB = CTL - ATL) — faint default
+    { from: "ctl", to: "tsb", weight: 0.15 },
+    { from: "atl", to: "tsb", weight: -0.15 },
 
-    // Raw -> Stream (weight EMA)
-    { from: "weight_raw", to: "weight_ema", weight: 1.0 },
+    // Raw -> Stream (weight EMA) — faint default
+    { from: "weight_raw", to: "weight_ema", weight: 0.15 },
 
     // Stream -> Merge (z-scores -> readiness factor, with calibration weights)
     { from: "hrv_z", to: "readiness_factor", weight: calibWeights.hrv ?? 0.25 },
@@ -250,20 +250,20 @@ export async function GET(request: Request) {
     { from: "rhr_z", to: "readiness_factor", weight: calibWeights.rhr ?? 0.25 },
     { from: "bb_z", to: "readiness_factor", weight: calibWeights.bb ?? 0.25 },
 
-    // Stream -> Merge (TSB -> fatigue factor)
-    { from: "tsb", to: "fatigue_factor", weight: 1.0 },
+    // Stream -> Merge (TSB -> fatigue factor): weight by TSB magnitude
+    { from: "tsb", to: "fatigue_factor", weight: Math.min(1, Math.abs(tsb) / 20) || 0.15 },
 
-    // Stream -> Merge (weight EMA -> weight factor)
-    { from: "weight_ema", to: "weight_factor", weight: 1.0 },
+    // Stream -> Merge (weight EMA -> weight factor) — faint default
+    { from: "weight_ema", to: "weight_factor", weight: 0.15 },
 
-    // Merge -> Output (all factors -> adjusted pace)
-    { from: "readiness_factor", to: "adjusted_pace", weight: 1.0 },
-    { from: "fatigue_factor", to: "adjusted_pace", weight: 1.0 },
-    { from: "weight_factor", to: "adjusted_pace", weight: 1.0 },
-    { from: "slider_factor", to: "adjusted_pace", weight: 1.0 },
+    // Merge -> Output (factors -> adjusted pace): weight by factor deviation from 1.0
+    { from: "readiness_factor", to: "adjusted_pace", weight: Math.min(1, Math.abs(rf - 1.0) / 0.05) || 0.15 },
+    { from: "fatigue_factor", to: "adjusted_pace", weight: Math.min(1, Math.abs(ff - 1.0) / 0.03) || 0.15 },
+    { from: "weight_factor", to: "adjusted_pace", weight: Math.min(1, Math.abs(wf - 1.0) / 0.05) || 0.15 },
+    { from: "slider_factor", to: "adjusted_pace", weight: 0.15 },
 
-    // Weight -> VDOT
-    { from: "weight_ema", to: "vdot", weight: 1.0 },
+    // Weight -> VDOT — faint default
+    { from: "weight_ema", to: "vdot", weight: 0.15 },
   ];
 
   // ─── Banister parameter edges ─────────────────────────────
