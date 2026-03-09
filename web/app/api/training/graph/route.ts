@@ -39,14 +39,16 @@ export async function GET(request: Request) {
     await Promise.all([
       sql`
         SELECT hrv_z_score, sleep_z_score, rhr_z_score, body_battery_z_score,
-               composite_score, traffic_light, flags
+               composite_score, traffic_light, flags, date::text as data_date
         FROM daily_readiness
-        WHERE date = ${date}
+        WHERE date <= ${date}
+        ORDER BY date DESC LIMIT 1
       `.catch(() => []),
       sql`
-        SELECT ctl, atl, tsb, daily_load
+        SELECT ctl, atl, tsb, daily_load, date::text as data_date
         FROM pmc_daily
-        WHERE date = ${date}
+        WHERE date <= ${date}
+        ORDER BY date DESC LIMIT 1
       `.catch(() => []),
       sql`
         SELECT vo2max, weight_kg, vdot_adjusted, decoupling_pct, efficiency_factor
@@ -57,9 +59,10 @@ export async function GET(request: Request) {
       `.catch(() => []),
       sql`
         SELECT sleep_time_seconds, resting_heart_rate, body_battery_at_wake,
-               avg_overnight_hrv, body_battery_max
+               avg_overnight_hrv, body_battery_max, date::text as data_date
         FROM daily_health_summary
-        WHERE date = ${date}
+        WHERE date <= ${date}
+        ORDER BY date DESC LIMIT 1
       `.catch(() => []),
       sql`
         SELECT phase, data_days, weights, force_equal
@@ -85,6 +88,10 @@ export async function GET(request: Request) {
   const fitness = fitnessRows[0] ?? null;
   const health = healthRows[0] ?? null;
   const calib = calibRows[0] ?? null;
+  const dataDate = (readiness as any)?.data_date
+    ?? (pmc as any)?.data_date
+    ?? (health as any)?.data_date
+    ?? date;
 
   // Extract raw values
   const hrvRaw = health ? Number(health.avg_overnight_hrv) || null : null;
@@ -317,6 +324,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     date,
+    dataDate,
     graph,
     calibration: {
       phase: calibPhase,
