@@ -10,6 +10,7 @@ import { GarminPushButton } from "@/components/garmin-push-button";
 import { RaceDayProtocol } from "@/components/race-day-protocol";
 import { WorkoutStepEditor } from "@/components/workout-step-editor";
 import { ActivitySidePanel } from "@/components/activity-side-panel";
+import { normalizeSteps } from "@/lib/normalize-steps";
 import type { DeltaWorkout } from "@/lib/training-engine";
 
 interface TrainingDay {
@@ -401,7 +402,7 @@ export function TrainingPlanView({
                             )}
                             {day.workout_steps && Array.isArray(day.workout_steps) && day.workout_steps.length > 0 && (
                               <WorkoutStepEditor
-                                steps={day.workout_steps}
+                                steps={normalizeSteps(day.workout_steps)}
                                 isDelta={hasDeltaOverlay}
                               />
                             )}

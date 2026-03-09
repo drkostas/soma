@@ -52,11 +52,12 @@ export async function GET() {
       let paceScore = 100;
       if (day.workout_steps && Array.isArray(day.workout_steps)) {
         const paceSteps = day.workout_steps.filter(
-          (s: any) => s.target_pace,
+          (s: any) => s.target_pace || s.target_pace_min || s.target_pace_low,
         );
         if (paceSteps.length > 0 && data.averageSpeed) {
           const actualPace = 1000 / data.averageSpeed; // sec/km
-          const targetPace = paceSteps[0].target_pace;
+          const s = paceSteps[0];
+          const targetPace = s.target_pace || s.target_pace_min || s.target_pace_low;
           const dev = Math.abs(actualPace - targetPace) / targetPace;
           paceScore = Math.max(0, 100 * (1 - dev * 5));
         }
