@@ -426,7 +426,7 @@ function StepBlock({
               onSave={(v) => onUpdate?.({ duration_minutes: Number(v) })}
             />
           )}
-          {estimatedMinutes != null && (
+          {estimatedMinutes != null && estimatedMinutes > 0 && (
             <span className="text-[10px] font-mono text-muted-foreground/60 whitespace-nowrap">
               {isEstimated ? "~" : ""}{estimatedMinutes}min
             </span>
