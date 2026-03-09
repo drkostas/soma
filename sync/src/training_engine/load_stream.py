@@ -207,7 +207,7 @@ def _cross_modal_scale(source: str) -> float:
     return 0.3
 
 
-def compute_and_store_pmc(conn) -> list[dict]:
+def compute_and_store_pmc(conn, tau_ctl: float = 42, tau_atl: float = 7) -> list[dict]:
     """
     1. Query training_load table, group by date, sum loads per day
        with cross-modal scaling for non-running activities
@@ -244,7 +244,7 @@ def compute_and_store_pmc(conn) -> list[dict]:
         current += timedelta(days=1)
 
     # Compute PMC
-    pmc_results = compute_pmc(daily_loads)
+    pmc_results = compute_pmc(daily_loads, tau_ctl=tau_ctl, tau_atl=tau_atl)
 
     # Upsert into pmc_daily
     with conn.cursor() as cur:
