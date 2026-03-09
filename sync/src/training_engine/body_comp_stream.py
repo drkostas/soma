@@ -8,7 +8,10 @@ Research:
 """
 
 from datetime import date, timedelta
-from training_engine.vdot import adjust_vdot_for_weight
+from training_engine.vdot import adjust_vdot_for_weight, time_from_vdot
+
+# Standard half-marathon distance in meters
+HM_DISTANCE_M = 21097.5
 
 
 def compute_weight_ema(weights: list[tuple[date, float]], span: int = 7) -> list[dict]:
@@ -114,12 +117,19 @@ def update_body_comp(conn, target_date: date = None,
         )
         vdot_adjusted = round(vdot_adjusted, 2)
 
+    # 4b. Compute race prediction from weight-adjusted VDOT
+    race_prediction_seconds = None
+    effective_vdot = vdot_adjusted or vdot_base
+    if effective_vdot is not None and effective_vdot > 0:
+        race_prediction_seconds = round(time_from_vdot(effective_vdot, HM_DISTANCE_M))
+
     result = {
         "date": target_date,
         "weight_kg": round(current_ema, 2),
         "weight_raw": ema_results[-1]["weight_raw"],
         "vdot_base": vdot_base,
         "vdot_adjusted": vdot_adjusted,
+        "race_prediction_seconds": race_prediction_seconds,
         "calibration_weight_kg": calibration_weight,
         "ema_points": len(ema_results),
     }
@@ -129,15 +139,16 @@ def update_body_comp(conn, target_date: date = None,
         cur.execute(
             """
             INSERT INTO fitness_trajectory
-                (date, weight_kg, vdot_adjusted, computed_at)
-            VALUES (%s, %s, %s, NOW())
+                (date, weight_kg, vdot_adjusted, race_prediction_seconds, computed_at)
+            VALUES (%s, %s, %s, %s, NOW())
             ON CONFLICT (date)
             DO UPDATE SET
                 weight_kg = EXCLUDED.weight_kg,
                 vdot_adjusted = COALESCE(EXCLUDED.vdot_adjusted, fitness_trajectory.vdot_adjusted),
+                race_prediction_seconds = COALESCE(EXCLUDED.race_prediction_seconds, fitness_trajectory.race_prediction_seconds),
                 computed_at = NOW()
         """,
-            (target_date, result["weight_kg"], result["vdot_adjusted"]),
+            (target_date, result["weight_kg"], result["vdot_adjusted"], result["race_prediction_seconds"]),
         )
 
     conn.commit()
