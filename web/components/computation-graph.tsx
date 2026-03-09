@@ -277,10 +277,16 @@ export function ComputationGraphView({
         />
       )}
 
-      {/* Slider control */}
-      <div className="flex items-center gap-3 px-1">
-        <span className="text-[10px] text-muted-foreground whitespace-nowrap">Conservative</span>
-        <div className="relative flex-1">
+      {/* Delta Simulator — the primary interactive control */}
+      <div className="mt-4 px-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-medium text-muted-foreground">Training Intensity</span>
+          <span className="text-sm font-mono font-bold tabular-nums">
+            {sliderValue === 1.0 ? "Optimal" : sliderValue < 1.0 ? `${((1 - sliderValue) * 100).toFixed(0)}% easier` : `${((sliderValue - 1) * 100).toFixed(0)}% harder`}
+          </span>
+        </div>
+        <div className="relative">
+          <div className="absolute inset-0 h-3 rounded-full bg-gradient-to-r from-emerald-500/30 via-amber-500/30 to-red-500/30 pointer-events-none" />
           <input
             type="range"
             min={0}
@@ -288,19 +294,17 @@ export function ComputationGraphView({
             step={0.05}
             value={sliderValue}
             onChange={(e) => onSliderChange(parseFloat(e.target.value))}
-            className="w-full h-1.5 accent-primary cursor-pointer"
+            className="relative w-full h-3 appearance-none bg-transparent cursor-pointer
+              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+              [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2
+              [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab"
           />
-          <span className="absolute left-2/3 -translate-x-1/2 -top-4 text-[9px] text-muted-foreground/60">Optimal</span>
         </div>
-        <span className="text-[10px] text-muted-foreground whitespace-nowrap">Push</span>
-        <span className="text-[10px] font-mono text-muted-foreground tabular-nums w-8 text-right">
-          {sliderValue.toFixed(2)}
-        </span>
-      </div>
-      <div className="text-center">
-        <span className="text-[9px] text-muted-foreground/60">
-          ← drag slider or scroll on ⇔ node to adjust intensity →
-        </span>
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
+          <span>Conservative</span>
+          <span className="font-medium">Optimal</span>
+          <span>Push</span>
+        </div>
       </div>
     </div>
   );
