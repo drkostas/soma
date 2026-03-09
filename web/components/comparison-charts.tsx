@@ -77,12 +77,18 @@ export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonC
         hoveredDate={hoveredDate}
         onHoverDate={onHoverDate}
         invertY
+        formatValue={(s) => {
+          const h = Math.floor(s / 3600);
+          const m = Math.floor((s % 3600) / 60);
+          const sec = Math.round(s % 60);
+          return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+        }}
       />
     </div>
   );
 }
 
-function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminLabel, ourColor, hoveredDate, onHoverDate, invertY }: {
+function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminLabel, ourColor, hoveredDate, onHoverDate, invertY, formatValue }: {
   title: string;
   subtitle: string;
   data: any[];
@@ -94,6 +100,7 @@ function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminL
   hoveredDate: string | null;
   onHoverDate: (date: string | null) => void;
   invertY?: boolean;
+  formatValue?: (v: number) => string;
 }) {
   if (data.length === 0) {
     return (
@@ -121,10 +128,11 @@ function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminL
             if (e?.activeLabel) onHoverDate(e.activeLabel);
           }} onMouseLeave={() => onHoverDate(null)}>
             <XAxis dataKey="date" hide />
-            <YAxis hide reversed={invertY} />
+            <YAxis hide={!formatValue} reversed={invertY} width={formatValue ? 52 : 0} tickFormatter={formatValue} tick={{ fontSize: 10, fill: "oklch(0.55 0 0)" }} />
             <Tooltip
               contentStyle={{ backgroundColor: "oklch(0.15 0.01 250)", border: "1px solid oklch(0.3 0.01 250)", borderRadius: "6px", fontSize: "11px" }}
               labelStyle={{ color: "oklch(0.7 0 0)" }}
+              formatter={formatValue ? (v: any) => formatValue(Number(v)) : undefined}
             />
             <Line type="monotone" dataKey={ourKey} stroke={ourColor} dot={false} strokeWidth={2} name={ourLabel} connectNulls />
             <Line type="monotone" dataKey={garminKey} stroke="oklch(0.5 0.02 250)" dot={false} strokeWidth={1.5} strokeDasharray="4 3" name={garminLabel} connectNulls />
