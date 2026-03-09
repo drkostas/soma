@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import { Card, CardContent } from "@/components/ui/card";
-import { RaceCountdown } from "@/components/race-countdown";
-import { RaceSplitsCard } from "@/components/race-splits-card";
 import { TrainingDashboard } from "@/components/training-dashboard";
 import { getDb } from "@/lib/db";
 import { Target } from "lucide-react";
@@ -265,8 +263,6 @@ export default async function TrainingPage() {
 
   const todayEntry = planDays.find((d: any) => d.day_date === today);
   const currentWeek = todayEntry?.week_number ?? 1;
-  const completedDays = planDays.filter((d: any) => d.completed).length;
-  const totalDays = planDays.length;
 
   const currentVdot = fitnessLatest ? Number(fitnessLatest.vo2max || 50) : 50;
 
@@ -317,22 +313,6 @@ export default async function TrainingPage() {
             goalVdot={52}
             referenceData={referenceData as any}
           />
-
-          {/* Race Countdown + Splits (moved below main dashboard) */}
-          {raceInfo && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <RaceCountdown
-                raceName={raceInfo.plan_name}
-                raceDate={raceInfo.race_date}
-                goalTimeSeconds={Number(raceInfo.goal_time_seconds)}
-                totalWeeks={totalWeeks}
-                currentWeek={currentWeek}
-                completedDays={completedDays}
-                totalDays={totalDays}
-              />
-              <RaceSplitsCard />
-            </div>
-          )}
         </div>
       )}
     </div>
