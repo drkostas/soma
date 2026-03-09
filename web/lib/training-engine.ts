@@ -21,6 +21,8 @@ export interface GraphNode {
   value: number | null;
   unit: string;
   color: string;
+  /** 0 = neutral, 1 = extreme. Used for fill-opacity intensity scaling. */
+  normalizedValue?: number;
   tooltip: {
     short: string;
     formula?: string;
