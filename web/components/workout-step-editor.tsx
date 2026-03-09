@@ -445,6 +445,8 @@ export function WorkoutStepEditor({
   onStepsChange,
   isDelta = false,
 }: WorkoutStepEditorProps) {
+  const [selectedStep, setSelectedStep] = useState<WorkoutStep | null>(null);
+
   if (!steps || steps.length === 0) return null;
 
   // Flatten step index mapping for updates through repeat groups
@@ -517,6 +519,7 @@ export function WorkoutStepEditor({
               step={item.step}
               editable={editable}
               onUpdate={(patch) => updateStep(flatIdx, patch)}
+              onClick={() => setSelectedStep(item.step)}
             />
           );
         }
@@ -552,12 +555,14 @@ export function WorkoutStepEditor({
                       patch,
                     )
                   }
+                  onClick={() => setSelectedStep(step)}
                 />
               ))}
             </div>
           </div>
         );
       })}
+      <StepDetailDrawer step={selectedStep} onClose={() => setSelectedStep(null)} />
     </div>
   );
 }
