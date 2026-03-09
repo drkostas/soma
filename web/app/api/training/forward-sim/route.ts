@@ -32,20 +32,25 @@ export async function GET() {
     garminRaceRows,
   ] = await Promise.all([
     // Current PMC
-    sql`SELECT ctl, atl, tsb FROM pmc_daily ORDER BY date DESC LIMIT 1`,
+    sql`SELECT ctl, atl, tsb FROM pmc_daily ORDER BY date DESC LIMIT 1`
+      .catch(() => []),
     // Banister params (latest fitted)
     sql`SELECT p0, k1, k2, tau1, tau2, n_anchors, fitted_at::text
-        FROM banister_params ORDER BY fitted_at DESC LIMIT 1`,
+        FROM banister_params ORDER BY fitted_at DESC LIMIT 1`
+      .catch(() => []),
     // Today's readiness
     sql`SELECT composite_score, traffic_light, flags
-        FROM daily_readiness WHERE date = ${today}`,
+        FROM daily_readiness WHERE date = ${today}`
+      .catch(() => []),
     // Calibration state
     sql`SELECT phase, data_days, weights, force_equal
-        FROM calibration_state ORDER BY updated_at DESC LIMIT 1`,
+        FROM calibration_state ORDER BY updated_at DESC LIMIT 1`
+      .catch(() => []),
     // Latest fitness/VDOT
     sql`SELECT vo2max, vdot_adjusted, weight_kg
         FROM fitness_trajectory WHERE vo2max IS NOT NULL
-        ORDER BY date DESC LIMIT 1`,
+        ORDER BY date DESC LIMIT 1`
+      .catch(() => []),
     // All plan days (past + future for complete trajectory)
     sql`SELECT d.id, d.day_date::text as day_date, d.week_number, d.run_type,
                d.run_title, d.target_distance_km, d.workout_steps,
@@ -55,12 +60,14 @@ export async function GET() {
         FROM training_plan_day d
         JOIN training_plan p ON d.plan_id = p.id
         WHERE p.status = 'active'
-        ORDER BY d.day_date`,
+        ORDER BY d.day_date`
+      .catch(() => []),
     // Garmin 7-day/28-day load for comparison (last 90 days)
     sql`SELECT date::text as date, daily_load, ctl, atl
         FROM pmc_daily
         WHERE date >= CURRENT_DATE - interval '90 days'
-        ORDER BY date`,
+        ORDER BY date`
+      .catch(() => []),
     // Garmin training readiness for comparison
     sql`SELECT h.date::text as date,
                h.training_readiness_score AS garmin_score,
@@ -69,19 +76,22 @@ export async function GET() {
         LEFT JOIN daily_readiness r ON h.date = r.date
         WHERE h.date >= CURRENT_DATE - interval '90 days'
           AND h.training_readiness_score IS NOT NULL
-        ORDER BY h.date`,
+        ORDER BY h.date`
+      .catch(() => []),
     // Garmin VO2max for comparison
     sql`SELECT date::text as date, vo2max, vdot_adjusted
         FROM fitness_trajectory
         WHERE date >= CURRENT_DATE - interval '90 days'
           AND vo2max IS NOT NULL
-        ORDER BY date`,
+        ORDER BY date`
+      .catch(() => []),
     // Garmin race predictions for comparison
     sql`SELECT date::text as date, race_prediction_seconds, vdot_adjusted
         FROM fitness_trajectory
         WHERE date >= CURRENT_DATE - interval '90 days'
           AND (race_prediction_seconds IS NOT NULL OR vdot_adjusted IS NOT NULL)
-        ORDER BY date`,
+        ORDER BY date`
+      .catch(() => []),
   ]);
 
   const pmc = pmcRows[0] ?? { ctl: 0, atl: 0, tsb: 0 };

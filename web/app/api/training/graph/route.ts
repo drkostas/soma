@@ -42,31 +42,31 @@ export async function GET(request: Request) {
                composite_score, traffic_light, flags
         FROM daily_readiness
         WHERE date = ${date}
-      `,
+      `.catch(() => []),
       sql`
         SELECT ctl, atl, tsb, daily_load
         FROM pmc_daily
         WHERE date = ${date}
-      `,
+      `.catch(() => []),
       sql`
         SELECT vo2max, weight_kg, vdot_adjusted, decoupling_pct, efficiency_factor
         FROM fitness_trajectory
         WHERE date <= ${date}
         ORDER BY date DESC
         LIMIT 1
-      `,
+      `.catch(() => []),
       sql`
         SELECT sleep_time_seconds, resting_heart_rate, body_battery_at_wake,
                avg_overnight_hrv, body_battery_max
         FROM daily_health_summary
         WHERE date = ${date}
-      `,
+      `.catch(() => []),
       sql`
         SELECT phase, data_days, weights, force_equal
         FROM calibration_state
         ORDER BY updated_at DESC
         LIMIT 1
-      `,
+      `.catch(() => []),
     ]);
 
   // Query Banister params (table may not exist yet)
