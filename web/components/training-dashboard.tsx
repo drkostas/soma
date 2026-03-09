@@ -11,10 +11,28 @@ import {
   type ComputationGraph,
   type DeltaWorkout,
   DEFAULT_BASE_PACE,
-  getTooltip,
 } from "@/lib/training-engine";
 
-// ── Props ─────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────
+
+export interface ReferenceData {
+  readinessHistory: {
+    date: string;
+    composite_score: number | null;
+    garmin_readiness_score: number | null;
+  }[];
+  fitnessHistory: {
+    date: string;
+    efficiency_factor: number | null;
+    decoupling_pct: number | null;
+    race_prediction_seconds: number | null;
+    vdot_adjusted: number | null;
+  }[];
+  weightHistory: {
+    date: string;
+    weight_kg: number | null;
+  }[];
+}
 
 interface TrainingDashboardProps {
   planDays: any[];
@@ -30,6 +48,7 @@ interface TrainingDashboardProps {
     paceFactor: number;
     reason: string;
   } | null;
+  referenceData: ReferenceData;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -38,87 +57,104 @@ function findNode(graph: ComputationGraph, id: string) {
   return graph.nodes.find((n) => n.id === id);
 }
 
-/** Build reference metrics from graph data — the external signals not in the formula graph. */
-function buildReferenceMetrics(graph: ComputationGraph): ReferenceMetric[] {
-  const metrics: ReferenceMetric[] = [];
+/** Format race prediction seconds into H:MM:SS or M:SS display. */
+function formatRaceTime(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.round(totalSeconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
-  const ctlNode = findNode(graph, "ctl");
-  const atlNode = findNode(graph, "atl");
-  const tsbNode = findNode(graph, "tsb");
-  const vdotNode = findNode(graph, "vdot");
+/** Build reference metrics from separately-queried external data — signals NOT in the formula graph. */
+function buildReferenceMetrics(
+  referenceData: ReferenceData,
+): ReferenceMetric[] {
+  const { readinessHistory, fitnessHistory, weightHistory } = referenceData;
 
-  if (ctlNode?.value != null) {
-    metrics.push({
-      id: "ctl",
-      label: "Fitness (CTL)",
-      value: ctlNode.value.toFixed(1),
-      sparkline: [],
-      color: ctlNode.color,
-      tooltip: getTooltip("ctl").short,
-    });
-  }
+  const latestReadiness = readinessHistory.at(-1);
+  const latestFitness = fitnessHistory.at(-1);
+  const latestWeight = weightHistory.at(-1);
 
-  if (atlNode?.value != null) {
-    metrics.push({
-      id: "atl",
-      label: "Fatigue (ATL)",
-      value: atlNode.value.toFixed(1),
-      sparkline: [],
-      color: atlNode.color,
-      tooltip: getTooltip("atl").short,
-    });
-  }
-
-  if (tsbNode?.value != null) {
-    metrics.push({
-      id: "tsb",
-      label: "Form (TSB)",
-      value: tsbNode.value.toFixed(1),
-      sparkline: [],
-      color: tsbNode.color,
-      tooltip: getTooltip("tsb").short,
-    });
-  }
-
-  if (vdotNode?.value != null) {
-    metrics.push({
-      id: "vdot",
-      label: "VDOT",
-      value: vdotNode.value.toFixed(1),
-      sparkline: [],
-      color: vdotNode.color,
-      tooltip: getTooltip("vdot").short,
-    });
-  }
-
-  // Training Readiness (composite score from the readiness factor's inputs)
-  const rfNode = findNode(graph, "readiness_factor");
-  if (rfNode?.value != null) {
-    const pctAdj = ((rfNode.value - 1.0) * 100).toFixed(1);
-    metrics.push({
-      id: "readiness_factor",
-      label: "Readiness Factor",
-      value: `${Number(pctAdj) >= 0 ? "+" : ""}${pctAdj}%`,
-      sparkline: [],
-      color: rfNode.color,
-      tooltip: getTooltip("readiness_factor").short,
-    });
-  }
-
-  const ffNode = findNode(graph, "fatigue_factor");
-  if (ffNode?.value != null) {
-    const pctAdj = ((ffNode.value - 1.0) * 100).toFixed(1);
-    metrics.push({
-      id: "fatigue_factor",
-      label: "Fatigue Factor",
-      value: `${Number(pctAdj) >= 0 ? "+" : ""}${pctAdj}%`,
-      sparkline: [],
-      color: ffNode.color,
-      tooltip: getTooltip("fatigue_factor").short,
-    });
-  }
-
-  return metrics;
+  return [
+    {
+      id: "garmin-readiness",
+      label: "Garmin Training Readiness",
+      value: latestReadiness?.garmin_readiness_score != null
+        ? String(Math.round(Number(latestReadiness.garmin_readiness_score)))
+        : "\u2014",
+      sparkline: readinessHistory
+        .filter((r) => r.garmin_readiness_score != null)
+        .map((r) => Number(r.garmin_readiness_score)),
+      color: "oklch(65% 0.15 250)",
+      tooltip:
+        "Garmin\u2019s composite readiness score. Compare with our model\u2019s composite to see if they agree.",
+      comparison: {
+        ours: latestReadiness?.composite_score != null
+          ? Number(latestReadiness.composite_score).toFixed(1)
+          : "\u2014",
+        garmin: latestReadiness?.garmin_readiness_score != null
+          ? String(Math.round(Number(latestReadiness.garmin_readiness_score)))
+          : "\u2014",
+      },
+    },
+    {
+      id: "race-prediction",
+      label: "Race Prediction",
+      value: latestFitness?.race_prediction_seconds != null
+        ? formatRaceTime(Number(latestFitness.race_prediction_seconds))
+        : "\u2014",
+      sparkline: fitnessHistory
+        .filter((d) => d.race_prediction_seconds != null)
+        .map((d) => Number(d.race_prediction_seconds)),
+      color: "oklch(65% 0.15 160)",
+      tooltip:
+        "Predicted half-marathon time from current VDOT. Based on Daniels/Gilbert VO2 model.",
+    },
+    {
+      id: "decoupling",
+      label: "Pace:HR Decoupling",
+      value: latestFitness?.decoupling_pct != null
+        ? `${Number(latestFitness.decoupling_pct).toFixed(1)}%`
+        : "\u2014",
+      sparkline: fitnessHistory
+        .filter((d) => d.decoupling_pct != null)
+        .map((d) => Number(d.decoupling_pct)),
+      color: "oklch(65% 0.15 142)",
+      tooltip:
+        "How much heart rate drifts up during steady runs. <3% = aerobically ready. >5% = not ready for that pace over race distance.",
+      thresholds: [
+        { label: "<3% good", color: "oklch(65% 0.15 142)" },
+        { label: ">5% caution", color: "oklch(65% 0.15 50)" },
+      ],
+    },
+    {
+      id: "ef-trend",
+      label: "Efficiency Factor",
+      value: latestFitness?.efficiency_factor != null
+        ? Number(latestFitness.efficiency_factor).toFixed(2)
+        : "\u2014",
+      sparkline: fitnessHistory
+        .filter((d) => d.efficiency_factor != null)
+        .map((d) => Number(d.efficiency_factor)),
+      color: "oklch(65% 0.15 200)",
+      tooltip:
+        "Speed / heart rate. Rising = improving running economy. Measures how fast you go per heartbeat.",
+    },
+    {
+      id: "weight-trend",
+      label: "Weight Trend",
+      value: latestWeight?.weight_kg != null
+        ? `${Number(latestWeight.weight_kg).toFixed(1)} kg`
+        : "\u2014",
+      sparkline: weightHistory
+        .filter((w) => w.weight_kg != null)
+        .map((w) => Number(w.weight_kg)),
+      color: "oklch(65% 0.12 50)",
+      tooltip:
+        "Recent weight from fitness trajectory. Every 1 kg of fat loss \u2248 1:00\u20131:15 faster HM at your fitness level.",
+    },
+  ];
 }
 
 /** Recompute shadow graph with a different slider value. */
@@ -169,6 +205,7 @@ export function TrainingDashboard({
   currentVdot,
   goalVdot,
   todayAdaptation,
+  referenceData,
 }: TrainingDashboardProps) {
   // Client-side state
   const [sliderValue, setSliderValue] = useState(1.0);
@@ -265,11 +302,10 @@ export function TrainingDashboard({
       });
   }, [sliderValue, graphData, planDays, today]);
 
-  // Reference metrics from graph data
+  // Reference metrics from server-queried external data
   const referenceMetrics = useMemo<ReferenceMetric[]>(() => {
-    if (!graphData) return [];
-    return buildReferenceMetrics(graphData.graph);
-  }, [graphData]);
+    return buildReferenceMetrics(referenceData);
+  }, [referenceData]);
 
   const handleSliderChange = useCallback((value: number) => {
     setSliderValue(value);

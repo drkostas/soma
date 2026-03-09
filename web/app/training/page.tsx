@@ -65,6 +65,29 @@ async function getFitnessLatest() {
   return rows[0] || null;
 }
 
+async function getReferenceData() {
+  const sql = getDb();
+  const [readinessHistory, fitnessHistory, weightHistory] = await Promise.all([
+    sql`SELECT r.date::text as date, r.composite_score,
+           h.training_readiness_score AS garmin_readiness_score
+       FROM daily_readiness r
+       LEFT JOIN daily_health_summary h ON r.date = h.date
+       WHERE r.date >= CURRENT_DATE - interval '14 days'
+       ORDER BY r.date`,
+    sql`SELECT date::text as date, efficiency_factor, decoupling_pct,
+           race_prediction_seconds, vdot_adjusted
+       FROM fitness_trajectory
+       WHERE date >= CURRENT_DATE - interval '30 days'
+       ORDER BY date`,
+    sql`SELECT date::text as date, weight_kg
+       FROM fitness_trajectory
+       WHERE weight_kg IS NOT NULL
+       AND date >= CURRENT_DATE - interval '14 days'
+       ORDER BY date`,
+  ]);
+  return { readinessHistory, fitnessHistory, weightHistory };
+}
+
 async function getTrajectoryData(raceDate: string) {
   const sql = getDb();
   const actuals = await sql`
@@ -124,12 +147,13 @@ async function getTrajectoryData(raceDate: string) {
 }
 
 export default async function TrainingPage() {
-  const [planDays, raceInfo, readiness, pmcLatest, fitnessLatest] = await Promise.all([
+  const [planDays, raceInfo, readiness, pmcLatest, fitnessLatest, referenceData] = await Promise.all([
     getTrainingPlan(),
     getRaceInfo(),
     getReadiness(),
     getPMCLatest(),
     getFitnessLatest(),
+    getReferenceData(),
   ]);
 
   const today = new Date().toISOString().split("T")[0];
@@ -234,11 +258,12 @@ export default async function TrainingPage() {
           <TrainingDashboard
             planDays={planDays as any}
             today={today}
-            raceInfo={raceInfo}
+            raceInfo={raceInfo as any}
             trajectoryData={trajectoryData}
             currentVdot={currentVdot}
             goalVdot={52}
             todayAdaptation={todayAdaptation}
+            referenceData={referenceData as any}
           />
         </>
       )}
