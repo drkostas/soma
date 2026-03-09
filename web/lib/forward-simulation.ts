@@ -12,6 +12,8 @@ import {
   fatigueFactorCalc,
   DEFAULT_BASE_PACE,
 } from "./training-engine";
+import { getBasePace, getHRZone } from "./vdot-pace-zones";
+import { projectVdotSeries, DEFAULT_BANISTER, type BanisterParams, type DailyLoad } from "./banister-projection";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -79,6 +81,12 @@ export interface ProjectedDay {
   // Estimated load for this day
   estimatedLoad: number;
 
+  // VDOT-zone fields
+  basePaceForType: number;       // base pace from VDOT zone for this run type
+  hrZone: { low: number; high: number; zone: string } | null;
+  trafficLight: "green" | "yellow" | "red";
+  effectiveRunType: string;      // may be downgraded by yellow/red
+
   // Flags
   isRest: boolean;
   hasSequencingConflict: boolean;
@@ -102,6 +110,21 @@ const INTENSITY_MULTIPLIER: Record<string, number> = {
 
 const HARD_RUN_TYPES = new Set(["tempo", "intervals", "threshold", "race"]);
 const LEG_WORKOUTS = new Set(["legs", "lower"]);
+
+// ── Traffic light rest decisions ─────────────────────────────
+
+function getTrafficLight(z: number): "green" | "yellow" | "red" {
+  if (z > -0.5) return "green";
+  if (z > -1.5) return "yellow";
+  return "red";
+}
+
+function downgradeRunType(runType: string, light: "yellow" | "red"): string {
+  if (light === "red") return "rest";
+  // yellow: downgrade hard sessions to easy
+  if (["tempo", "threshold", "intervals", "race"].includes(runType)) return "easy";
+  return runType;
+}
 
 // ── Forward simulation ──────────────────────────────────────
 
@@ -127,7 +150,26 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
   // Track recent gym days for sequencing
   const recentGymDates: string[] = [];
 
-  for (const day of planDays) {
+  // Build daily loads array for Banister projection
+  const banisterParams: BanisterParams = {
+    p0: seeds.banister?.p0 ?? DEFAULT_BANISTER.p0,
+    k1: seeds.banister?.k1 ?? DEFAULT_BANISTER.k1,
+    k2: seeds.banister?.k2 ?? DEFAULT_BANISTER.k2,
+    tau1: seeds.banister?.tau1 ?? DEFAULT_BANISTER.tau1,
+    tau2: seeds.banister?.tau2 ?? DEFAULT_BANISTER.tau2,
+  };
+
+  // First pass: estimate loads for all days to feed Banister
+  const dailyLoads: DailyLoad[] = planDays.map(day => ({
+    date: day.dayDate,
+    load: estimateDayLoad(day, sliderMultiplier),
+  }));
+
+  // Project VDOT for every day
+  const vdotSeries = projectVdotSeries(dailyLoads, banisterParams);
+
+  for (let dayIndex = 0; dayIndex < planDays.length; dayIndex++) {
+    const day = planDays[dayIndex];
     const isRest = day.runType === "rest";
     const isCompleted = day.completed;
     const isFuture = day.dayDate >= today;
@@ -149,6 +191,8 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
       ctl = estimatedLoad * alphaCtl + ctl * (1 - alphaCtl);
       atl = estimatedLoad * alphaAtl + atl * (1 - alphaAtl);
 
+      const pastBasePace = getBasePace(fitness.vdotAdjusted, day.runType);
+
       results.push({
         dayDate: day.dayDate,
         dayId: day.id,
@@ -159,14 +203,18 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
         fatigueFactor: 1.0,
         weightFactor,
         combinedFactor: 1.0,
-        originalPace: DEFAULT_BASE_PACE,
-        adjustedPace: DEFAULT_BASE_PACE,
+        originalPace: pastBasePace,
+        adjustedPace: pastBasePace,
         originalDistanceKm: day.targetDistanceKm,
         adjustedDistanceKm: day.targetDistanceKm,
         projectedVdot: fitness.vdotAdjusted,
         paceChangePct: 0,
         distanceChangePct: 0,
         estimatedLoad,
+        basePaceForType: pastBasePace,
+        hrZone: day.runType === "rest" ? null : getHRZone(day.runType),
+        trafficLight: "green",
+        effectiveRunType: day.runType,
         isRest,
         hasSequencingConflict: false,
       });
@@ -206,6 +254,16 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
     const rf = readinessFactorCalc(projectedZ);
     const ff = fatigueFactorCalc(tsb);
 
+    // Traffic light decision
+    const light = getTrafficLight(projectedZ);
+    const effectiveRunType = light === "green" ? day.runType :
+      downgradeRunType(day.runType, light);
+
+    // Get VDOT-based pace for this specific workout type
+    const dayVdot = vdotSeries[dayIndex] ?? fitness.vdotAdjusted;
+    const basePaceForType = getBasePace(dayVdot, effectiveRunType);
+    const hrZone = effectiveRunType === "rest" ? null : getHRZone(effectiveRunType);
+
     let combinedFactor: number;
     let adjustedPace: number | null;
     let adjustedDistanceKm: number;
@@ -219,7 +277,9 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
       combinedFactor = rf * ff * weightFactor;
       const delta = combinedFactor - 1.0;
       const sliderAdjusted = 1.0 + delta * sliderMultiplier;
-      adjustedPace = DEFAULT_BASE_PACE * sliderAdjusted;
+
+      // Apply merge formula to the type-specific base pace
+      adjustedPace = Math.round(basePaceForType * sliderAdjusted);
 
       // Distance: preserve training load (load ≈ distance × intensity)
       adjustedDistanceKm = Math.round(
@@ -227,12 +287,12 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
       ) / 10;
     }
 
-    // 5. Predict VDOT (simplified — full Banister prediction needs cumulative loads)
-    const projectedVdot = fitness.vdotAdjusted;
+    // 5. Project VDOT via Banister model
+    const projectedVdot = vdotSeries[dayIndex] ?? fitness.vdotAdjusted;
 
     // Compute deltas
     const paceChangePct = adjustedPace != null
-      ? Math.round(((adjustedPace - DEFAULT_BASE_PACE) / DEFAULT_BASE_PACE) * 1000) / 10
+      ? Math.round(((adjustedPace - basePaceForType) / basePaceForType) * 1000) / 10
       : 0;
     const distanceChangePct = day.targetDistanceKm > 0
       ? Math.round(((adjustedDistanceKm - day.targetDistanceKm) / day.targetDistanceKm) * 1000) / 10
@@ -248,7 +308,7 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
       fatigueFactor: Math.round(ff * 10000) / 10000,
       weightFactor: Math.round(weightFactor * 10000) / 10000,
       combinedFactor: Math.round(combinedFactor * 10000) / 10000,
-      originalPace: DEFAULT_BASE_PACE,
+      originalPace: basePaceForType,
       adjustedPace: adjustedPace != null ? Math.round(adjustedPace * 10) / 10 : null,
       originalDistanceKm: day.targetDistanceKm,
       adjustedDistanceKm,
@@ -256,6 +316,10 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
       paceChangePct,
       distanceChangePct,
       estimatedLoad,
+      basePaceForType,
+      hrZone,
+      trafficLight: light,
+      effectiveRunType,
       isRest: isRest || rf < 0,
       hasSequencingConflict,
     });
