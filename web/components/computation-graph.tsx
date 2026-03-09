@@ -26,7 +26,7 @@ const COL_LABELS: Record<NodeColumn, string> = {
 
 const PADDING_TOP = 28;
 const NODE_SPACING = 62;
-const SVG_WIDTH = 820;
+const SVG_WIDTH = 860;
 const BEZIER_OFFSET = 0.4;
 
 /** Stagger delays (ms) per column for cascade wave effect on slider changes */
