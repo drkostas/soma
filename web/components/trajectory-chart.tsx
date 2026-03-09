@@ -14,6 +14,7 @@ import {
   ReferenceDot,
   Customized,
 } from "recharts";
+import type { ProjectedDay } from "@/lib/forward-simulation";
 
 interface TrajectoryEntry {
   date: string;
@@ -34,6 +35,8 @@ interface TrajectoryChartProps {
   shadowData?: { date: string; shadow: number }[] | null;
   /** Emitted on chart hover — date string or null when leaving */
   onHoverDate?: (date: string | null) => void;
+  /** Projected days from forward simulation — used for formula breakdown in tooltip */
+  projectedDays?: ProjectedDay[] | null;
 }
 
 // ── VDOT → pace conversion (Daniels approximation) ──────────
@@ -129,119 +132,150 @@ function GradientActiveLine(props: any) {
 
 // ── Custom tooltip ───────────────────────────────────────────
 
-function CustomTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
+function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
+  return function CustomTooltip({ active, payload }: any) {
+    if (!active || !payload?.length) return null;
 
-  const data = payload[0]?.payload;
-  if (!data) return null;
+    const data = payload[0]?.payload;
+    if (!data) return null;
 
-  const optimal = data.optimal;
-  const actual = data.actual;
-  const projected = data.projectedVdot;
-  const shadow = data.shadow;
-  const gap = actual !== null && actual !== undefined ? (optimal - actual).toFixed(1) : null;
-  const dateStr = new Date(data.date + "T00:00:00").toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+    const optimal = data.optimal;
+    const actual = data.actual;
+    const projected = data.projectedVdot;
+    const shadow = data.shadow;
+    const gap = actual !== null && actual !== undefined ? (optimal - actual).toFixed(1) : null;
+    const dateStr = new Date(data.date + "T00:00:00").toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
 
-  return (
-    <div
-      style={{
-        backgroundColor: "var(--card)",
-        border: "1px solid var(--border)",
-        borderRadius: "8px",
-        fontSize: "12px",
-        color: "var(--card-foreground)",
-        padding: "8px 12px",
-      }}
-    >
-      <div className="font-medium mb-1">{dateStr}</div>
-      <div className="space-y-0.5 text-[11px]">
-        <div className="flex justify-between gap-4">
-          <span className="text-muted-foreground">Target VDOT</span>
-          <span className="font-mono tabular-nums">{optimal?.toFixed(1)}</span>
-        </div>
-        {actual !== null && actual !== undefined && (
+    // Look up forward-simulation projected day for formula breakdown
+    const projectedDay = projectedDays?.find(p => p.dayDate === data.date);
+
+    return (
+      <div
+        style={{
+          backgroundColor: "var(--card)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          fontSize: "12px",
+          color: "var(--card-foreground)",
+          padding: "8px 12px",
+        }}
+      >
+        <div className="font-medium mb-1">{dateStr}</div>
+        <div className="space-y-0.5 text-[11px]">
           <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Actual VDOT</span>
-            <span className="font-mono tabular-nums">{actual?.toFixed(1)}</span>
+            <span className="text-muted-foreground">Target VDOT</span>
+            <span className="font-mono tabular-nums">{optimal?.toFixed(1)}</span>
           </div>
-        )}
-        {gap !== null && (
-          <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
-            <span className="text-muted-foreground">Gap</span>
-            <span
-              className="font-mono tabular-nums"
-              style={{
-                color:
-                  Number(gap) > 0
-                    ? "oklch(60% 0.22 25)"
-                    : "oklch(62% 0.17 142)",
-              }}
-            >
-              {Number(gap) > 0 ? "+" : ""}
-              {gap}
-            </span>
-          </div>
-        )}
-        {projected != null && actual == null && (
-          <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
-            <span style={{ color: "oklch(62% 0.12 142)" }}>Projected</span>
-            <span className="font-mono tabular-nums" style={{ color: "oklch(62% 0.12 142)" }}>
-              {projected.toFixed(1)}
-            </span>
-          </div>
-        )}
-        {shadow != null && (
-          <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
-            <span className="text-muted-foreground" style={{ color: "oklch(80% 0.15 85)" }}>
-              What-if
-            </span>
-            <span className="font-mono tabular-nums" style={{ color: "oklch(80% 0.15 85)" }}>
-              {shadow.toFixed(1)}
-            </span>
-          </div>
-        )}
-        {/* Secondary dimension values */}
-        {(data.ctl != null || data.readiness != null || data.weightEffect != null) && (
-          <div className="border-t border-border/50 pt-0.5 mt-0.5 space-y-0.5">
-            {data.ctl != null && (
-              <div className="flex justify-between gap-4">
-                <span style={{ color: DIM_COLORS.ctl }}>Fitness (CTL)</span>
-                <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.ctl }}>
-                  {(data.ctl * 100).toFixed(0)}%
+          {actual !== null && actual !== undefined && (
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Actual VDOT</span>
+              <span className="font-mono tabular-nums">{actual?.toFixed(1)}</span>
+            </div>
+          )}
+          {gap !== null && (
+            <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
+              <span className="text-muted-foreground">Gap</span>
+              <span
+                className="font-mono tabular-nums"
+                style={{
+                  color:
+                    Number(gap) > 0
+                      ? "oklch(60% 0.22 25)"
+                      : "oklch(62% 0.17 142)",
+                }}
+              >
+                {Number(gap) > 0 ? "+" : ""}
+                {gap}
+              </span>
+            </div>
+          )}
+          {projected != null && actual == null && (
+            <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
+              <span style={{ color: "oklch(62% 0.12 142)" }}>Projected</span>
+              <span className="font-mono tabular-nums" style={{ color: "oklch(62% 0.12 142)" }}>
+                {projected.toFixed(1)}
+              </span>
+            </div>
+          )}
+          {shadow != null && (
+            <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
+              <span className="text-muted-foreground" style={{ color: "oklch(80% 0.15 85)" }}>
+                What-if
+              </span>
+              <span className="font-mono tabular-nums" style={{ color: "oklch(80% 0.15 85)" }}>
+                {shadow.toFixed(1)}
+              </span>
+            </div>
+          )}
+          {/* Secondary dimension values */}
+          {(data.ctl != null || data.readiness != null || data.weightEffect != null) && (
+            <div className="border-t border-border/50 pt-0.5 mt-0.5 space-y-0.5">
+              {data.ctl != null && (
+                <div className="flex justify-between gap-4">
+                  <span style={{ color: DIM_COLORS.ctl }}>Fitness (CTL)</span>
+                  <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.ctl }}>
+                    {(data.ctl * 100).toFixed(0)}%
+                  </span>
+                </div>
+              )}
+              {data.readiness != null && (
+                <div className="flex justify-between gap-4">
+                  <span style={{ color: DIM_COLORS.readiness }}>Readiness</span>
+                  <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.readiness }}>
+                    {(data.readiness * 100).toFixed(0)}%
+                  </span>
+                </div>
+              )}
+              {data.weightEffect != null && (
+                <div className="flex justify-between gap-4">
+                  <span style={{ color: DIM_COLORS.weightEffect }}>Weight Effect</span>
+                  <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.weightEffect }}>
+                    {(data.weightEffect * 100).toFixed(0)}%
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          {/* Formula breakdown from forward simulation */}
+          {projectedDay && (
+            <div className="mt-2 pt-2 border-t border-border/30 space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Formula Breakdown</div>
+              <div className="text-xs grid grid-cols-2 gap-x-3 gap-y-0.5">
+                <span className="text-muted-foreground">Readiness</span>
+                <span className="font-mono">{projectedDay.readinessFactor.toFixed(4)}x</span>
+                <span className="text-muted-foreground">Fatigue</span>
+                <span className="font-mono">{projectedDay.fatigueFactor.toFixed(4)}x</span>
+                <span className="text-muted-foreground">Weight</span>
+                <span className="font-mono">{projectedDay.weightFactor.toFixed(4)}x</span>
+                <span className="text-muted-foreground">Combined</span>
+                <span className="font-mono font-bold">{projectedDay.combinedFactor.toFixed(4)}x</span>
+              </div>
+              <div className="text-xs">
+                <span className="text-muted-foreground">Traffic light: </span>
+                <span className={
+                  projectedDay.trafficLight === "green" ? "text-green-400"
+                  : projectedDay.trafficLight === "yellow" ? "text-yellow-400"
+                  : "text-red-400"
+                }>
+                  {projectedDay.trafficLight.toUpperCase()}
                 </span>
               </div>
-            )}
-            {data.readiness != null && (
-              <div className="flex justify-between gap-4">
-                <span style={{ color: DIM_COLORS.readiness }}>Readiness</span>
-                <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.readiness }}>
-                  {(data.readiness * 100).toFixed(0)}%
-                </span>
-              </div>
-            )}
-            {data.weightEffect != null && (
-              <div className="flex justify-between gap-4">
-                <span style={{ color: DIM_COLORS.weightEffect }}>Weight Effect</span>
-                <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.weightEffect }}>
-                  {(data.weightEffect * 100).toFixed(0)}%
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-        {/* VDOT → pace explainer */}
-        {(actual != null || optimal != null) && (
-          <p className="text-[10px] text-muted-foreground mt-1 border-t border-border/50 pt-1">
-            VDOT {(actual ?? optimal).toFixed(1)} ≈ {vdotToHmPace(actual ?? optimal)}/km HM pace
-          </p>
-        )}
+            </div>
+          )}
+          {/* VDOT → pace explainer */}
+          {(actual != null || optimal != null) && (
+            <p className="text-[10px] text-muted-foreground mt-1 border-t border-border/50 pt-1">
+              VDOT {(actual ?? optimal).toFixed(1)} ≈ {vdotToHmPace(actual ?? optimal)}/km HM pace
+            </p>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 }
 
 // ── Main chart component ─────────────────────────────────────
@@ -253,6 +287,7 @@ export function TrajectoryChart({
   goalVdot,
   shadowData,
   onHoverDate,
+  projectedDays,
 }: TrajectoryChartProps) {
   if (!data || data.length === 0) {
     return (
@@ -394,7 +429,7 @@ export function TrajectoryChart({
             width={35}
           />
         )}
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={makeCustomTooltip(projectedDays)} />
 
         {/* Taper region annotation */}
         {showTaper && (
