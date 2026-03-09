@@ -69,8 +69,8 @@ def compute_trimp(
 
 def compute_pmc(
     daily_loads: list[tuple[date, float]],
-    tau_ctl: int = 42,
-    tau_atl: int = 7,
+    tau_ctl: float = 42,
+    tau_atl: float = 7,
 ) -> list[dict]:
     """
     Compute PMC from chronological daily loads.

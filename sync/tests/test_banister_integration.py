@@ -1,7 +1,5 @@
 # sync/tests/test_banister_integration.py
 """Tests that runner calls Banister fitting and PMC uses personal tau."""
-import math
-from unittest.mock import patch, MagicMock
 from training_engine.load_stream import compute_pmc
 from datetime import date, timedelta
 

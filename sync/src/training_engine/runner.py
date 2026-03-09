@@ -144,7 +144,7 @@ def run_training_engine(conn):
     try:
         from training_engine.banister import fit_from_db, _DEFAULT_PARAMS
         banister_params = fit_from_db(conn)
-        if banister_params and banister_params.tau1 != _DEFAULT_PARAMS.tau1:
+        if banister_params and abs(banister_params.tau1 - _DEFAULT_PARAMS.tau1) > 0.5:
             logger.info("Training engine: Banister fitted — τ1=%.1f, τ2=%.1f",
                         banister_params.tau1, banister_params.tau2)
             # Re-run PMC with personal tau
