@@ -178,6 +178,35 @@ def run_training_engine(conn):
     except Exception as e:
         logger.error("Training engine: calibration failed: %s", e)
 
+    # 3c. Sequencing enforcement — apply z-penalty for leg day conflicts
+    try:
+        from training_engine.sequencing import check_leg_day_conflict
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT day_date, gym_workout FROM training_plan_day
+                WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
+                  AND gym_workout IS NOT NULL
+                  AND day_date BETWEEN %s - interval '3 days' AND %s
+            """, (today, today))
+            recent_gym = [{"date": r[0], "gym_workout": r[1]} for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT run_type FROM training_plan_day
+                WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
+                  AND day_date = %s
+            """, (today,))
+            today_run = cur.fetchone()
+
+        if today_run and recent_gym:
+            has_conflict = check_leg_day_conflict(today, today_run[0], recent_gym)
+            if has_conflict and readiness:
+                original_z = readiness.get("composite_score", 0)
+                readiness["composite_score"] = original_z - 0.3
+                logger.info("Training engine: sequencing conflict — z penalty applied (%.2f → %.2f)",
+                            original_z, readiness["composite_score"])
+    except Exception as e:
+        logger.error("Training engine: sequencing check failed: %s", e)
+
     # 4. Fitness trajectory
     fitness = None
     try:
