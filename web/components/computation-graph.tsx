@@ -44,6 +44,8 @@ interface ComputationGraphProps {
   sliderValue: number;
   onSliderChange: (value: number) => void;
   onHoverDate?: (date: string | null) => void;
+  /** When true, override alert banners are suppressed (rendered externally). */
+  hideOverrides?: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -79,6 +81,7 @@ export function ComputationGraphView({
   shadowGraph,
   sliderValue,
   onSliderChange,
+  hideOverrides,
 }: ComputationGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -161,8 +164,8 @@ export function ComputationGraphView({
 
   return (
     <div ref={containerRef} className="relative w-full space-y-3">
-      {/* Override alert banners */}
-      {activeOverrides.map((ov) => (
+      {/* Override alert banners (suppressed when rendered externally) */}
+      {!hideOverrides && activeOverrides.map((ov) => (
         <div
           key={ov.rule}
           className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs"
