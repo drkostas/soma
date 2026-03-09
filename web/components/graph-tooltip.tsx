@@ -34,11 +34,13 @@ export function GraphTooltip({ node, depth, x, y, allNodes }: GraphTooltipProps)
 
   let waterfallEl: React.ReactNode = null;
   if (showWaterfall) {
-    const basePace = DEFAULT_BASE_PACE;
+    const ap = allNodes.get("adjusted_pace")?.value;
     const rf = allNodes.get("readiness_factor")?.value ?? 1.0;
     const ff = allNodes.get("fatigue_factor")?.value ?? 1.0;
     const wf = allNodes.get("weight_factor")?.value ?? 1.0;
     const sf = allNodes.get("slider_factor")?.value ?? 1.0;
+    const combinedFactor = rf * ff * wf * sf;
+    const basePace = (ap != null && combinedFactor !== 0) ? ap / combinedFactor : DEFAULT_BASE_PACE;
 
     // Decompose contributions: each factor's individual effect on pace (in seconds)
     // The formula is: adjusted = basePace * (1 + (rf * ff * wf - 1) * slider)
