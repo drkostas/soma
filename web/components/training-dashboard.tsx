@@ -41,7 +41,7 @@ interface TrainingDashboardProps {
   planDays: any[];
   today: string;
   raceInfo: { race_date: string; goal_time_seconds: number; plan_name: string } | null;
-  trajectoryData: { date: string; optimal: number; actual: number | null }[];
+  trajectoryData: { date: string; optimal: number; actual: number | null; ctl: number | null; readiness: number | null; weightEffect: number | null }[];
   currentVdot: number;
   goalVdot: number;
   todayAdaptation: {

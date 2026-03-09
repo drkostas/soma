@@ -10,12 +10,16 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
 } from "recharts";
 
 interface TrajectoryEntry {
   date: string;
   optimal: number;
   actual: number | null;
+  ctl?: number | null;
+  readiness?: number | null;
+  weightEffect?: number | null;
 }
 
 interface TrajectoryChartProps {
@@ -29,23 +33,83 @@ interface TrajectoryChartProps {
   onHoverDate?: (date: string | null) => void;
 }
 
+// ── Colors for secondary dimension lines ─────────────────────
+
+const DIM_COLORS = {
+  ctl: "oklch(65% 0.15 200)",        // blue-ish — fitness / CTL
+  readiness: "oklch(65% 0.15 142)",   // green-ish — readiness composite
+  weightEffect: "oklch(65% 0.12 50)", // warm — weight effect
+} as const;
+
+// ── Gap color utility ────────────────────────────────────────
+
+function gapColor(actual: number, optimal: number): string {
+  const gap = actual - optimal;
+  if (gap >= -0.5) return "oklch(62% 0.17 142)";     // green — on track
+  if (gap >= -1.5) return "oklch(80% 0.18 87)";      // yellow — drifting
+  return "oklch(60% 0.22 25)";                         // red — behind
+}
+
 // ── Gap-colored dot for the actual line ──────────────────────
 
 function GapDot(props: any) {
   const { cx, cy, payload } = props;
   if (cx == null || cy == null || payload?.actual == null) return null;
 
-  const gap = Math.abs(payload.optimal - payload.actual);
-  let fill: string;
-  if (gap < 0.5) {
-    fill = "oklch(62% 0.17 142)"; // green — on track
-  } else if (gap <= 1.5) {
-    fill = "oklch(80% 0.18 87)"; // yellow — drifting
-  } else {
-    fill = "oklch(60% 0.22 25)"; // red — behind
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={3}
+      fill={gapColor(payload.actual, payload.optimal)}
+      stroke="none"
+    />
+  );
+}
+
+// ── Custom active line — renders per-segment gradient ────────
+
+function GradientActiveLine(props: any) {
+  const { points, data } = props;
+  if (!points || points.length < 2) return null;
+
+  const segments: React.ReactElement[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    // Skip segments where either point has null actual
+    if (p1.y == null || p2.y == null) continue;
+
+    const d1 = data?.[i];
+    const d2 = data?.[i + 1];
+    if (!d1 || !d2 || d1.actual == null || d2.actual == null) continue;
+
+    // Use the worse (more behind) gap of the two points for the segment color
+    const gap1 = d1.actual - d1.optimal;
+    const gap2 = d2.actual - d2.optimal;
+    const worstGap = Math.min(gap1, gap2);
+    const color =
+      worstGap >= -0.5
+        ? "oklch(62% 0.17 142)"
+        : worstGap >= -1.5
+          ? "oklch(80% 0.18 87)"
+          : "oklch(60% 0.22 25)";
+
+    segments.push(
+      <line
+        key={i}
+        x1={p1.x}
+        y1={p1.y}
+        x2={p2.x}
+        y2={p2.y}
+        stroke={color}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+      />,
+    );
   }
 
-  return <circle cx={cx} cy={cy} r={3} fill={fill} stroke="none" />;
+  return <g>{segments}</g>;
 }
 
 // ── Custom tooltip ───────────────────────────────────────────
@@ -59,7 +123,7 @@ function CustomTooltip({ active, payload }: any) {
   const optimal = data.optimal;
   const actual = data.actual;
   const shadow = data.shadow;
-  const gap = actual !== null ? (optimal - actual).toFixed(1) : null;
+  const gap = actual !== null && actual !== undefined ? (optimal - actual).toFixed(1) : null;
   const dateStr = new Date(data.date + "T00:00:00").toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
@@ -83,7 +147,7 @@ function CustomTooltip({ active, payload }: any) {
           <span className="text-muted-foreground">Target VDOT</span>
           <span className="font-mono tabular-nums">{optimal?.toFixed(1)}</span>
         </div>
-        {actual !== null && (
+        {actual !== null && actual !== undefined && (
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">Actual VDOT</span>
             <span className="font-mono tabular-nums">{actual?.toFixed(1)}</span>
@@ -114,6 +178,35 @@ function CustomTooltip({ active, payload }: any) {
             <span className="font-mono tabular-nums" style={{ color: "oklch(80% 0.15 85)" }}>
               {shadow.toFixed(1)}
             </span>
+          </div>
+        )}
+        {/* Secondary dimension values */}
+        {(data.ctl != null || data.readiness != null || data.weightEffect != null) && (
+          <div className="border-t border-border/50 pt-0.5 mt-0.5 space-y-0.5">
+            {data.ctl != null && (
+              <div className="flex justify-between gap-4">
+                <span style={{ color: DIM_COLORS.ctl }}>Fitness (CTL)</span>
+                <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.ctl }}>
+                  {(data.ctl * 100).toFixed(0)}%
+                </span>
+              </div>
+            )}
+            {data.readiness != null && (
+              <div className="flex justify-between gap-4">
+                <span style={{ color: DIM_COLORS.readiness }}>Readiness</span>
+                <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.readiness }}>
+                  {(data.readiness * 100).toFixed(0)}%
+                </span>
+              </div>
+            )}
+            {data.weightEffect != null && (
+              <div className="flex justify-between gap-4">
+                <span style={{ color: DIM_COLORS.weightEffect }}>Weight Effect</span>
+                <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.weightEffect }}>
+                  {(data.weightEffect * 100).toFixed(0)}%
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -152,7 +245,24 @@ export function TrajectoryChart({
     optimal: Number(d.optimal.toFixed(1)),
     actual: d.actual !== null ? Number(Number(d.actual).toFixed(1)) : null,
     shadow: shadowMap.get(d.date) ?? null,
+    ctl: d.ctl ?? null,
+    readiness: d.readiness ?? null,
+    weightEffect: d.weightEffect ?? null,
   }));
+
+  // Check if we have any secondary dimension data
+  const hasCTL = chartData.some((d) => d.ctl !== null);
+  const hasReadiness = chartData.some((d) => d.readiness !== null);
+  const hasWeightEffect = chartData.some((d) => d.weightEffect !== null);
+  const hasSecondary = hasCTL || hasReadiness || hasWeightEffect;
+
+  // Compute taper start date: 12 days before race date
+  const raceMs = new Date(raceDate + "T00:00:00").getTime();
+  const taperStartMs = raceMs - 12 * 86400000;
+  const taperStartDate = new Date(taperStartMs).toISOString().split("T")[0];
+  // Only show taper region if it falls within chart range
+  const chartDates = chartData.map((d) => d.date);
+  const showTaper = chartDates.includes(raceDate) || chartDates[chartDates.length - 1] >= taperStartDate;
 
   // Hover handlers for date emission
   const handleMouseMove = useCallback(
@@ -172,7 +282,7 @@ export function TrajectoryChart({
     <ResponsiveContainer width="100%" height={280}>
       <ComposedChart
         data={chartData}
-        margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+        margin={{ top: 5, right: hasSecondary ? 40 : 20, left: 0, bottom: 5 }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
@@ -193,6 +303,7 @@ export function TrajectoryChart({
           interval={Math.max(Math.floor(chartData.length / 6), 1)}
         />
         <YAxis
+          yAxisId="vdot"
           className="text-[10px]"
           tickLine={false}
           domain={[46, 53]}
@@ -204,8 +315,39 @@ export function TrajectoryChart({
             fill: "var(--muted-foreground)",
           }}
         />
+        {/* Secondary Y-axis for normalized 0-1 dimensions */}
+        {hasSecondary && (
+          <YAxis
+            yAxisId="norm"
+            orientation="right"
+            domain={[0, 1]}
+            tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
+            tickLine={false}
+            tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
+            width={35}
+          />
+        )}
         <Tooltip content={<CustomTooltip />} />
+
+        {/* Taper region annotation */}
+        {showTaper && (
+          <ReferenceArea
+            yAxisId="vdot"
+            x1={taperStartDate}
+            x2={raceDate}
+            fill="oklch(65% 0.08 250)"
+            fillOpacity={0.1}
+            label={{
+              value: "Taper",
+              position: "insideTop",
+              fontSize: 9,
+              fill: "oklch(65% 0.12 250)",
+            }}
+          />
+        )}
+
         <ReferenceLine
+          yAxisId="vdot"
           x={today}
           stroke="var(--primary)"
           strokeDasharray="3 3"
@@ -218,6 +360,7 @@ export function TrajectoryChart({
           }}
         />
         <ReferenceLine
+          yAxisId="vdot"
           x={raceDate}
           stroke="oklch(60% 0.2 300)"
           strokeDasharray="3 3"
@@ -230,6 +373,7 @@ export function TrajectoryChart({
           }}
         />
         <ReferenceLine
+          yAxisId="vdot"
           y={52}
           stroke="oklch(62% 0.17 142)"
           strokeDasharray="2 4"
@@ -242,6 +386,7 @@ export function TrajectoryChart({
           }}
         />
         <ReferenceLine
+          yAxisId="vdot"
           y={49}
           stroke="oklch(65% 0.15 250)"
           strokeDasharray="2 4"
@@ -254,6 +399,7 @@ export function TrajectoryChart({
           }}
         />
         <ReferenceLine
+          yAxisId="vdot"
           y={47.5}
           stroke="oklch(80% 0.18 87)"
           strokeDasharray="2 4"
@@ -265,7 +411,10 @@ export function TrajectoryChart({
             fill: "oklch(80% 0.18 87)",
           }}
         />
+
+        {/* Optimal VDOT — dashed line */}
         <Line
+          yAxisId="vdot"
           type="monotone"
           dataKey="optimal"
           stroke="oklch(65% 0.15 250)"
@@ -274,7 +423,10 @@ export function TrajectoryChart({
           dot={false}
           name="optimal"
         />
+
+        {/* Actual VDOT — per-segment gradient coloring via custom shape */}
         <Line
+          yAxisId="vdot"
           type="monotone"
           dataKey="actual"
           stroke="oklch(62% 0.17 142)"
@@ -282,10 +434,15 @@ export function TrajectoryChart({
           dot={<GapDot />}
           connectNulls
           name="actual"
+          shape={(lineProps: any) => (
+            <GradientActiveLine {...lineProps} data={chartData} />
+          )}
         />
+
         {/* Shadow / what-if curve (only rendered when shadow data exists) */}
         {shadowData && shadowData.length > 0 && (
           <Line
+            yAxisId="vdot"
             type="monotone"
             dataKey="shadow"
             stroke="oklch(80% 0.15 85)"
@@ -295,6 +452,47 @@ export function TrajectoryChart({
             dot={false}
             connectNulls
             name="shadow"
+          />
+        )}
+
+        {/* ── Secondary dimension lines (thin, semi-transparent) ── */}
+        {hasCTL && (
+          <Line
+            yAxisId="norm"
+            type="monotone"
+            dataKey="ctl"
+            stroke={DIM_COLORS.ctl}
+            strokeWidth={1}
+            strokeOpacity={0.5}
+            dot={false}
+            connectNulls
+            name="CTL"
+          />
+        )}
+        {hasReadiness && (
+          <Line
+            yAxisId="norm"
+            type="monotone"
+            dataKey="readiness"
+            stroke={DIM_COLORS.readiness}
+            strokeWidth={1}
+            strokeOpacity={0.5}
+            dot={false}
+            connectNulls
+            name="Readiness"
+          />
+        )}
+        {hasWeightEffect && (
+          <Line
+            yAxisId="norm"
+            type="monotone"
+            dataKey="weightEffect"
+            stroke={DIM_COLORS.weightEffect}
+            strokeWidth={1}
+            strokeOpacity={0.5}
+            dot={false}
+            connectNulls
+            name="Weight"
           />
         )}
       </ComposedChart>
