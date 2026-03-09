@@ -153,6 +153,7 @@ async function getTrajectoryData(raceDate: string) {
     date: string;
     optimal: number;
     actual: number | null;
+    projectedVdot: number | null;
     ctl: number | null;
     readiness: number | null;
     weightEffect: number | null;
@@ -187,12 +188,56 @@ async function getTrajectoryData(raceDate: string) {
       date: dateStr,
       optimal,
       actual: actualMap.get(dateStr) ?? null,
+      projectedVdot: null, // filled in below
       ctl: rawCtl != null ? (rawCtl - ctlMin) / ctlRange : null,
       readiness: rawReadiness != null ? (rawReadiness - readinessMin) / readinessRange : null,
       // Weight effect: inverted — lighter is better (higher value)
       weightEffect: rawWeight != null ? 1 - (rawWeight - weightMin) / weightRange : null,
     });
     current.setDate(current.getDate() + 1);
+  }
+
+  // ── Future projection: linear regression on last 7 actual VDOT points ──
+  const actualPoints = trajectory
+    .filter((t) => t.actual !== null)
+    .map((t) => ({ date: t.date, vdot: t.actual as number }));
+
+  if (actualPoints.length >= 2) {
+    // Take the last 7 (or fewer) actual data points for regression
+    const recentPoints = actualPoints.slice(-7);
+    const lastActualDate = recentPoints[recentPoints.length - 1].date;
+    const lastActualMs = new Date(lastActualDate + "T00:00:00").getTime();
+
+    // Convert dates to day offsets from the first recent point
+    const baseMs = new Date(recentPoints[0].date + "T00:00:00").getTime();
+    const xs = recentPoints.map((p) => (new Date(p.date + "T00:00:00").getTime() - baseMs) / 86400000);
+    const ys = recentPoints.map((p) => p.vdot);
+
+    // Linear regression: slope = sum((xi - x_mean)(yi - y_mean)) / sum((xi - x_mean)^2)
+    const n = xs.length;
+    const xMean = xs.reduce((a, b) => a + b, 0) / n;
+    const yMean = ys.reduce((a, b) => a + b, 0) / n;
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < n; i++) {
+      num += (xs[i] - xMean) * (ys[i] - yMean);
+      den += (xs[i] - xMean) * (xs[i] - xMean);
+    }
+    const slope = den !== 0 ? num / den : 0;
+    const lastActualVdot = recentPoints[recentPoints.length - 1].vdot;
+
+    // Fill projectedVdot for dates AFTER the last actual data point
+    // Also set projectedVdot on the last actual point itself so the line connects
+    for (const point of trajectory) {
+      const pointMs = new Date(point.date + "T00:00:00").getTime();
+      if (pointMs === lastActualMs) {
+        // Anchor: start the projection line at the last actual value
+        point.projectedVdot = lastActualVdot;
+      } else if (pointMs > lastActualMs) {
+        const daysSinceLast = (pointMs - lastActualMs) / 86400000;
+        point.projectedVdot = Number((lastActualVdot + slope * daysSinceLast).toFixed(2));
+      }
+    }
   }
 
   return trajectory;

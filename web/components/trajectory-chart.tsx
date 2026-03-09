@@ -11,12 +11,14 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   ReferenceArea,
+  ReferenceDot,
 } from "recharts";
 
 interface TrajectoryEntry {
   date: string;
   optimal: number;
   actual: number | null;
+  projectedVdot?: number | null;
   ctl?: number | null;
   readiness?: number | null;
   weightEffect?: number | null;
@@ -122,6 +124,7 @@ function CustomTooltip({ active, payload }: any) {
 
   const optimal = data.optimal;
   const actual = data.actual;
+  const projected = data.projectedVdot;
   const shadow = data.shadow;
   const gap = actual !== null && actual !== undefined ? (optimal - actual).toFixed(1) : null;
   const dateStr = new Date(data.date + "T00:00:00").toLocaleDateString("en-US", {
@@ -167,6 +170,14 @@ function CustomTooltip({ active, payload }: any) {
             >
               {Number(gap) > 0 ? "+" : ""}
               {gap}
+            </span>
+          </div>
+        )}
+        {projected != null && actual == null && (
+          <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
+            <span style={{ color: "oklch(62% 0.12 142)" }}>Projected</span>
+            <span className="font-mono tabular-nums" style={{ color: "oklch(62% 0.12 142)" }}>
+              {projected.toFixed(1)}
             </span>
           </div>
         )}
@@ -244,6 +255,7 @@ export function TrajectoryChart({
     date: d.date,
     optimal: Number(d.optimal.toFixed(1)),
     actual: d.actual !== null ? Number(Number(d.actual).toFixed(1)) : null,
+    projectedVdot: d.projectedVdot != null ? Number(Number(d.projectedVdot).toFixed(1)) : null,
     shadow: shadowMap.get(d.date) ?? null,
     ctl: d.ctl ?? null,
     readiness: d.readiness ?? null,
@@ -255,6 +267,15 @@ export function TrajectoryChart({
   const hasReadiness = chartData.some((d) => d.readiness !== null);
   const hasWeightEffect = chartData.some((d) => d.weightEffect !== null);
   const hasSecondary = hasCTL || hasReadiness || hasWeightEffect;
+
+  // "You Are Here" — find the current VDOT at or nearest to today
+  const todayEntry = chartData.find((d) => d.date === today);
+  // Find the most recent actual VDOT on or before today
+  const pastActuals = chartData.filter((d) => d.date <= today && d.actual !== null);
+  const currentActual = pastActuals.length > 0 ? pastActuals[pastActuals.length - 1] : null;
+  const youAreHereVdot = todayEntry?.actual ?? currentActual?.actual ?? null;
+  const youAreHereDate = todayEntry?.actual != null ? today : currentActual?.date ?? null;
+  const gapToGoal = youAreHereVdot != null ? (goalVdot - youAreHereVdot) : null;
 
   // Compute taper start date: 12 days before race date
   const raceMs = new Date(raceDate + "T00:00:00").getTime();
@@ -346,18 +367,13 @@ export function TrajectoryChart({
           />
         )}
 
+        {/* Today line — subtle vertical indicator */}
         <ReferenceLine
           yAxisId="vdot"
           x={today}
-          stroke="var(--primary)"
+          stroke="oklch(80% 0.2 85)"
           strokeDasharray="3 3"
-          strokeOpacity={0.6}
-          label={{
-            value: "Today",
-            position: "top",
-            fontSize: 9,
-            fill: "var(--primary)",
-          }}
+          strokeOpacity={0.5}
         />
         <ReferenceLine
           yAxisId="vdot"
@@ -439,6 +455,19 @@ export function TrajectoryChart({
           )}
         />
 
+        {/* Future projection — dotted line from last actual to race day */}
+        <Line
+          yAxisId="vdot"
+          type="monotone"
+          dataKey="projectedVdot"
+          stroke="oklch(62% 0.12 142)"
+          strokeWidth={1.5}
+          strokeDasharray="4 4"
+          dot={false}
+          connectNulls={false}
+          name="projected"
+        />
+
         {/* Shadow / what-if curve (only rendered when shadow data exists) */}
         {shadowData && shadowData.length > 0 && (
           <Line
@@ -452,6 +481,26 @@ export function TrajectoryChart({
             dot={false}
             connectNulls
             name="shadow"
+          />
+        )}
+
+        {/* You Are Here — prominent marker at current position */}
+        {youAreHereDate && youAreHereVdot != null && (
+          <ReferenceDot
+            yAxisId="vdot"
+            x={youAreHereDate}
+            y={youAreHereVdot}
+            r={6}
+            fill="oklch(80% 0.2 85)"
+            stroke="white"
+            strokeWidth={2}
+            label={{
+              value: `VDOT ${youAreHereVdot.toFixed(1)}${gapToGoal != null && gapToGoal > 0 ? ` (gap: ${gapToGoal.toFixed(1)})` : gapToGoal != null ? " ✓ on target" : ""}`,
+              position: "top",
+              fontSize: 9,
+              fill: "oklch(80% 0.2 85)",
+              offset: 12,
+            }}
           />
         )}
 
