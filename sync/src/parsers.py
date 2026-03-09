@@ -213,15 +213,61 @@ def process_day(sync_date: date):
 
             upsert_daily_health(conn, parsed)
 
-        # Parse weigh_ins -> weight_log
-        if "weigh_ins" in raw_by_endpoint:
-            entries = parse_weight_entries(raw_by_endpoint["weigh_ins"])
-            for entry in entries:
-                if entry["weight_grams"]:
-                    upsert_weight(conn, entry)
+        # Parse weigh_ins / daily_weigh_ins -> weight_log
+        for ep in ("daily_weigh_ins", "weigh_ins"):
+            if ep in raw_by_endpoint:
+                entries = parse_weight_entries(raw_by_endpoint[ep])
+                for entry in entries:
+                    if entry["weight_grams"]:
+                        upsert_weight(conn, entry)
 
         # Parse sleep_data -> sleep_detail
         if "sleep_data" in raw_by_endpoint:
             sleep = parse_sleep(raw_by_endpoint["sleep_data"])
             if sleep:
                 upsert_sleep(conn, sync_date, sleep)
+
+
+def reparse_all():
+    """Re-parse ALL dates from raw data to backfill structured tables.
+
+    Iterates over every distinct date in garmin_raw_data and runs
+    process_day() for each. This is useful after adding new parsed
+    columns — it populates them from existing raw JSONB without
+    needing to re-fetch from the Garmin API.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT date FROM garmin_raw_data ORDER BY date"
+            )
+            all_dates = [row[0] for row in cur.fetchall()]
+
+    total = len(all_dates)
+    if total == 0:
+        print("No raw data found.")
+        return
+
+    print(f"Re-parsing {total} dates...")
+    success = 0
+    errors = 0
+    for i, sync_date in enumerate(all_dates):
+        try:
+            process_day(sync_date)
+            success += 1
+        except Exception as e:
+            errors += 1
+            print(f"  Error on {sync_date}: {e}")
+        if (i + 1) % 100 == 0 or (i + 1) == total:
+            print(f"  [{i+1}/{total}] {success} ok, {errors} errors")
+
+    print(f"\nReparse complete: {success}/{total} days updated, {errors} errors.")
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "reparse":
+        reparse_all()
+    else:
+        print("Usage: python -m parsers reparse")
+        print("  Re-parse all dates from raw data to backfill structured columns.")
