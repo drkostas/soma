@@ -8,6 +8,65 @@ from datetime import date
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_PACE = 330  # ~5:30/km fallback
+
+
+def _extract_planned_pace(workout_steps_raw) -> float:
+    """Extract a distance-weighted average pace from workout_steps JSONB.
+
+    Looks at all steps with target_type == 'pace' and computes a weighted
+    average using each step's distance (duration_value when duration_type
+    is 'distance').  Falls back to the midpoint of target_pace_min/max.
+
+    Returns _DEFAULT_PACE (~5:30/km) if no pace data is available.
+    """
+    if not workout_steps_raw:
+        return _DEFAULT_PACE
+
+    steps = workout_steps_raw
+    if isinstance(steps, str):
+        try:
+            steps = json.loads(steps)
+        except (json.JSONDecodeError, TypeError):
+            return _DEFAULT_PACE
+
+    if not isinstance(steps, list):
+        return _DEFAULT_PACE
+
+    total_distance = 0.0
+    weighted_pace = 0.0
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if step.get("target_type") != "pace":
+            continue
+
+        pace_min = step.get("target_pace_min")
+        pace_max = step.get("target_pace_max")
+        if pace_min is None and pace_max is None:
+            continue
+
+        # Midpoint of pace range (or whichever is available)
+        if pace_min is not None and pace_max is not None:
+            pace = (pace_min + pace_max) / 2
+        else:
+            pace = pace_min if pace_min is not None else pace_max
+
+        # Weight by distance if available, else treat as 1 unit
+        if step.get("duration_type") == "distance" and step.get("duration_value"):
+            dist = step["duration_value"]
+        else:
+            dist = 1000  # default 1 km weight for time-based steps
+
+        weighted_pace += pace * dist
+        total_distance += dist
+
+    if total_distance > 0:
+        return weighted_pace / total_distance
+
+    return _DEFAULT_PACE
+
 
 def _compute_hevy_loads(conn):
     """Extract Hevy workout data and insert into training_load table."""
@@ -26,6 +85,7 @@ def _compute_hevy_loads(conn):
         """)
         rows = cur.fetchall()
 
+    insert_params = []
     for hevy_id, raw_json in rows:
         if isinstance(raw_json, str):
             raw_json = json.loads(raw_json)
@@ -69,24 +129,27 @@ def _compute_hevy_loads(conn):
         except ValueError:
             continue
 
+        insert_params.append((
+            workout_date,
+            str(hevy_id),
+            load["cross_modal_load"],
+            int(duration_min * 60),
+            json.dumps({
+                "session_rpe": load["session_rpe"],
+                "running_relevance": load["running_relevance"],
+                "raw_load": load["load_value"],
+            }),
+        ))
+
+    if insert_params:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.executemany("""
                 INSERT INTO training_load
                     (activity_date, hevy_id, source, load_metric, load_value,
                      duration_seconds, details)
                 VALUES (%s, %s, 'hevy', 'srpe', %s, %s, %s)
                 ON CONFLICT DO NOTHING
-            """, (
-                workout_date,
-                str(hevy_id),
-                load["cross_modal_load"],
-                int(duration_min * 60),
-                json.dumps({
-                    "session_rpe": load["session_rpe"],
-                    "running_relevance": load["running_relevance"],
-                    "raw_load": load["load_value"],
-                }),
-            ))
+            """, insert_params)
 
     conn.commit()
 
@@ -168,10 +231,43 @@ def run_training_engine(conn):
     # 3b. Advance calibration
     try:
         from training_engine.calibration import advance_calibration, CalibrationState
-        calib_state = CalibrationState(
-            phase=1, data_days=0, weights={"hrv": 0.25, "sleep": 0.25, "rhr": 0.25, "bb": 0.25},
-            force_equal=False,
-        )
+
+        # Load persisted calibration state from DB, fall back to defaults
+        calib_state = None
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT phase, data_days, weights, correlations, force_equal
+                    FROM calibration_state
+                    WHERE id = 1
+                """)
+                row = cur.fetchone()
+            if row:
+                db_phase, db_data_days, db_weights, db_correlations, db_force_equal = row
+                if isinstance(db_weights, str):
+                    db_weights = json.loads(db_weights)
+                if isinstance(db_correlations, str):
+                    db_correlations = json.loads(db_correlations)
+                calib_state = CalibrationState(
+                    phase=db_phase,
+                    data_days=db_data_days,
+                    weights=db_weights,
+                    correlations=db_correlations,
+                    force_equal=db_force_equal,
+                )
+                logger.info("Training engine: loaded calibration state from DB (phase=%d, data_days=%d)",
+                            db_phase, db_data_days)
+        except Exception:
+            # Table may not exist yet; advance_calibration will create it
+            pass
+
+        if calib_state is None:
+            calib_state = CalibrationState(
+                phase=1, data_days=0,
+                weights={"hrv": 0.25, "sleep": 0.25, "rhr": 0.25, "bb": 0.25},
+                force_equal=False,
+            )
+
         updated_calib = advance_calibration(conn, calib_state)
         logger.info("Training engine: calibration phase=%d, data_days=%d, weights=%s",
                      updated_calib.phase, updated_calib.data_days, updated_calib.weights)
@@ -262,7 +358,7 @@ def run_training_engine(conn):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT d.id, d.run_type,
-                       g.raw_json
+                       g.raw_json, d.workout_steps
                 FROM training_plan_day d
                 JOIN training_plan p ON d.plan_id = p.id
                 JOIN garmin_activity_raw g ON g.activity_id::text = d.garmin_workout_id
@@ -274,7 +370,7 @@ def run_training_engine(conn):
             matched = cur.fetchall()
 
         count = 0
-        for day_id, run_type, raw_json in matched:
+        for day_id, run_type, raw_json, workout_steps_raw in matched:
             if run_type == 'rest':
                 continue
             data = raw_json if isinstance(raw_json, dict) else json.loads(raw_json)
@@ -284,8 +380,8 @@ def run_training_engine(conn):
 
             if actual_distance > 0 and actual_duration > 0:
                 actual_pace = actual_duration / (actual_distance / 1000)
-                planned_pace = 330  # ~5:30/km default, refined by forward sim later
-                planned_hr = 150  # default, refined later
+                planned_pace = _extract_planned_pace(workout_steps_raw)
+                planned_hr = 150  # no HR targets in plan yet; keep default
 
                 quality = compute_session_quality(planned_pace, actual_pace, planned_hr, actual_hr)
                 if quality is not None:
