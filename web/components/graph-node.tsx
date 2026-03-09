@@ -40,6 +40,8 @@ export interface GraphNodeProps {
   isDraggable?: boolean;
   onDrag?: (value: number) => void;
   shadowValue?: number | null;
+  /** Cascade delay (ms) applied to transitions for column-staggered wave effect */
+  cascadeDelay?: number;
   onMouseEnter?: (nodeId: string, rect: { x: number; y: number; w: number; h: number }) => void;
   onMouseLeave?: (nodeId: string) => void;
   onClick?: (nodeId: string) => void;
@@ -57,6 +59,7 @@ export function GraphNodeComponent({
   y,
   isDraggable,
   shadowValue,
+  cascadeDelay = 0,
   onMouseEnter,
   onMouseLeave,
   onClick,
@@ -100,7 +103,10 @@ export function GraphNodeComponent({
         fillOpacity={activationIntensity}
         stroke={node.color}
         strokeWidth={hasShadow ? 2 : 1}
-        style={{ transition: "fill 200ms ease, fill-opacity 200ms ease, stroke 200ms ease" }}
+        style={{
+          transition: "fill 200ms ease, fill-opacity 200ms ease, stroke 200ms ease",
+          transitionDelay: cascadeDelay ? `${cascadeDelay}ms` : undefined,
+        }}
       />
 
       {/* Shadow highlight overlay */}
@@ -140,7 +146,8 @@ export function GraphNodeComponent({
           fontFamily: "var(--font-mono, ui-monospace, monospace)",
           fontWeight: 500,
           pointerEvents: "none",
-          transition: "fill 200ms ease",
+          transition: "fill 200ms ease, opacity 150ms ease",
+          transitionDelay: cascadeDelay ? `${cascadeDelay}ms` : undefined,
         }}
       >
         {formatValue(node.value, node.unit)}
