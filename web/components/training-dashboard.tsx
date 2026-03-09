@@ -522,7 +522,7 @@ export function TrainingDashboard({
     : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Hoisted override alerts — always visible at top */}
       {activeOverrides.map((ov) => (
         <div
