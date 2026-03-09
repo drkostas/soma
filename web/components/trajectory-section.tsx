@@ -9,6 +9,7 @@ interface TrajectoryEntry {
   date: string;
   optimal: number;
   actual: number | null;
+  projectedVdot?: number | null;
   ctl?: number | null;
   readiness?: number | null;
   weightEffect?: number | null;
