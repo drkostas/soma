@@ -23,7 +23,12 @@ export function ReferencePanel({ metrics }: ReferencePanelProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div>
+      <h3 className="text-sm font-medium text-muted-foreground mb-3">
+        External Comparison Signals
+        <span className="ml-2 text-xs opacity-60">&mdash; not part of the model, shown for reference</span>
+      </h3>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
       {metrics.map((metric) => (
         <Card
           key={metric.id}
@@ -76,6 +81,7 @@ export function ReferencePanel({ metrics }: ReferencePanelProps) {
           )}
         </Card>
       ))}
+      </div>
     </div>
   );
 }
