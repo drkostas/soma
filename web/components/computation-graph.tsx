@@ -366,39 +366,16 @@ export function ComputationGraphView({
 
           return (
             <g key={node.id}>
-              {node.id === "slider_factor" ? (
-                <foreignObject x={pos.x - 20} y={pos.y} width={180} height={64}>
-                  <div className="flex flex-col items-center justify-center h-full rounded-lg border border-border/50" style={{ backgroundColor: "oklch(25% 0.02 250 / 0.8)" }}>
-                    <span className="text-[10px] text-muted-foreground mb-0.5">Training Intensity</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1.5}
-                      step={0.05}
-                      value={sliderValue}
-                      onChange={(e) => onSliderChange(parseFloat(e.target.value))}
-                      className="w-[140px] h-2 appearance-none bg-gradient-to-r from-emerald-500/40 via-amber-500/40 to-red-500/40 rounded-full cursor-pointer
-                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
-                        [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2
-                        [&::-webkit-slider-thumb]:border-zinc-400 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab"
-                    />
-                    <span className="text-[9px] font-mono text-foreground mt-0.5">
-                      {sliderValue === 1.0 ? "Optimal" : sliderValue < 1.0 ? `${((1 - sliderValue) * 100).toFixed(0)}% easier` : `${((sliderValue - 1) * 100).toFixed(0)}% harder`}
-                    </span>
-                  </div>
-                </foreignObject>
-              ) : (
-                <GraphNodeComponent
-                  node={node}
-                  x={pos.x}
-                  y={pos.y}
-                  shadowValue={sv}
-                  cascadeDelay={COLUMN_DELAYS[info.col]}
-                  onMouseEnter={handleNodeEnter}
-                  onMouseLeave={handleNodeLeave}
-                  onClick={handleNodeClick}
-                />
-              )}
+              <GraphNodeComponent
+                node={node}
+                x={pos.x}
+                y={pos.y}
+                shadowValue={sv}
+                cascadeDelay={COLUMN_DELAYS[info.col]}
+                onMouseEnter={handleNodeEnter}
+                onMouseLeave={handleNodeLeave}
+                onClick={handleNodeClick}
+              />
               {banisterAnnotations.has(node.id) && (
                 <text
                   x={pos.x + NODE_W / 2}
