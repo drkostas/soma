@@ -47,8 +47,8 @@ export interface GraphNodeProps {
   onClick?: (nodeId: string) => void;
 }
 
-const NODE_W = 120;
-const NODE_H = 52;
+const NODE_W = 140;
+const NODE_H = 64;
 const NODE_RX = 8;
 
 export { NODE_W, NODE_H };
@@ -83,7 +83,7 @@ export function GraphNodeComponent({
   }, [node.id, onClick]);
 
   // Scale fill opacity by how far the node is from its neutral point
-  const activationIntensity = Math.min(0.6, 0.15 + Math.abs(node.normalizedValue ?? 0) * 0.3);
+  const activationIntensity = Math.min(0.85, 0.3 + Math.abs(node.normalizedValue ?? 0) * 0.5);
 
   return (
     <g
@@ -132,7 +132,7 @@ export function GraphNodeComponent({
       {/* Label */}
       <text
         x={x + NODE_W / 2}
-        y={y + 16}
+        y={y + 20}
         textAnchor="middle"
         className="fill-muted-foreground"
         style={{ fontSize: 10, pointerEvents: "none" }}
@@ -143,7 +143,7 @@ export function GraphNodeComponent({
       {/* Value */}
       <text
         x={x + NODE_W / 2}
-        y={y + 32}
+        y={y + 38}
         textAnchor="middle"
         className="fill-foreground"
         style={{
@@ -162,7 +162,7 @@ export function GraphNodeComponent({
       {hasShadow && (
         <text
           x={x + NODE_W / 2}
-          y={y + 46}
+          y={y + 54}
           textAnchor="middle"
           fill="oklch(75% 0.15 85)"
           style={{
@@ -179,7 +179,7 @@ export function GraphNodeComponent({
       {isDraggable && (
         <text
           x={x + NODE_W - 10}
-          y={y + 14}
+          y={y + 18}
           textAnchor="middle"
           fill={node.color}
           style={{ fontSize: 10, pointerEvents: "none" }}
