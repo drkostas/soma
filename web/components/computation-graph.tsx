@@ -305,6 +305,7 @@ export function ComputationGraphView({
           depth={tooltip.depth}
           x={tooltip.x}
           y={tooltip.y}
+          allNodes={nodeMap}
         />
       )}
 
