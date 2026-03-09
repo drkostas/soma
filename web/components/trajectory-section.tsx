@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { TrajectoryChart } from "@/components/trajectory-chart";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { Target } from "lucide-react";
+import type { ProjectedDay } from "@/lib/forward-simulation";
 
 interface TrajectoryEntry {
   date: string;
@@ -28,6 +29,8 @@ interface TrajectorySectionProps {
   shadowTrajectory?: TrajectoryEntry[] | null;
   /** Hover sync with computation graph */
   onHoverDate?: (date: string | null) => void;
+  /** Projected days from forward simulation — used for formula breakdown in tooltip */
+  projectedDays?: ProjectedDay[] | null;
 }
 
 export function TrajectorySection({
@@ -40,6 +43,7 @@ export function TrajectorySection({
   onSliderChange,
   shadowTrajectory,
   onHoverDate,
+  projectedDays,
 }: TrajectorySectionProps) {
   // Controlled / uncontrolled pattern: use internal state when parent doesn't provide slider
   const [internalSlider, setInternalSlider] = useState(1.0);
@@ -82,6 +86,7 @@ export function TrajectorySection({
         goalVdot={goalVdot}
         shadowData={shadowData}
         onHoverDate={onHoverDate}
+        projectedDays={projectedDays}
       />
     </ExpandableChartCard>
   );
