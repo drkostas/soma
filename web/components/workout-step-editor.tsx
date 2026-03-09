@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import type { NormalizedStep } from "@/lib/normalize-steps";
+import { StepDetailDrawer } from "@/components/step-detail-drawer";
 
 // Re-export NormalizedStep as WorkoutStep for backward compat
 type WorkoutStep = NormalizedStep;
@@ -267,10 +268,12 @@ function StepBlock({
   step,
   editable,
   onUpdate,
+  onClick,
 }: {
   step: WorkoutStep;
   editable: boolean;
   onUpdate?: (patch: Partial<WorkoutStep>) => void;
+  onClick?: () => void;
 }) {
   const type = step.type?.toLowerCase() || "work";
   const bgColor = stepBgColors[type] || "bg-muted/30";
@@ -281,6 +284,26 @@ function StepBlock({
   const hasHr = !!(step.target_hr_low && step.target_hr_high);
   const hasDistance = !!step.distance_meters;
   const hasDuration = !!step.duration_minutes;
+
+  // Estimate duration from distance and pace
+  const estimatedMinutes = (() => {
+    if (step.duration_minutes) return step.duration_minutes;
+    if (step.distance_meters && step.target_pace_low) {
+      const km = step.distance_meters / 1000;
+      const paceSecPerKm = (step.target_pace_low + (step.target_pace_high || step.target_pace_low)) / 2;
+      return Math.round(km * paceSecPerKm / 60);
+    }
+    return null;
+  })();
+  const isEstimated = !step.duration_minutes && estimatedMinutes !== null;
+
+  // HR zone color coding
+  const hrZoneColor = step.target_hr_low
+    ? step.target_hr_low < 145 ? "oklch(0.65 0.12 142)"  // green - Z2
+      : step.target_hr_low < 160 ? "oklch(0.65 0.12 85)"  // yellow - Z3
+      : step.target_hr_low < 172 ? "oklch(0.65 0.15 50)"  // orange - Z4
+      : "oklch(0.65 0.18 25)"                               // red - Z5
+    : undefined;
 
   // Compute a proportional min-height based on distance or duration
   // Base: 28px, scaled up for longer steps
@@ -293,8 +316,9 @@ function StepBlock({
 
   return (
     <div
-      className={cn("flex items-center rounded-md overflow-hidden", bgColor)}
+      className={cn("flex items-center rounded-md overflow-hidden cursor-pointer hover:ring-1 hover:ring-border/50 transition-all", bgColor)}
       style={{ minHeight: `${blockHeight}px` }}
+      onClick={onClick}
     >
       {/* Colored accent bar */}
       <div className={cn("w-1 self-stretch shrink-0 rounded-l-md", accentColor)} />
@@ -357,7 +381,7 @@ function StepBlock({
 
           {/* HR zone */}
           {hasHr && (
-            <span className="text-[10px] font-mono text-red-400/60 whitespace-nowrap">
+            <span className="text-[10px] font-mono whitespace-nowrap" style={{ color: hrZoneColor || "oklch(0.65 0.12 25 / 0.6)" }}>
               <InlineEdit
                 value={String(step.target_hr_low)}
                 editable={editable}
@@ -369,7 +393,7 @@ function StepBlock({
                 editable={editable}
                 onSave={(v) => onUpdate?.({ target_hr_high: Number(v) })}
               />
-              <span className="text-red-400/40"> bpm</span>
+              <span style={{ opacity: 0.6 }}> bpm</span>
             </span>
           )}
         </div>
@@ -401,6 +425,11 @@ function StepBlock({
               className="font-mono"
               onSave={(v) => onUpdate?.({ duration_minutes: Number(v) })}
             />
+          )}
+          {estimatedMinutes != null && (
+            <span className="text-[10px] font-mono text-muted-foreground/60 whitespace-nowrap">
+              {isEstimated ? "~" : ""}{estimatedMinutes}min
+            </span>
           )}
         </div>
       </div>
