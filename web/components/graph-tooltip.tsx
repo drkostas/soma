@@ -3,6 +3,7 @@
 import type { GraphNode } from "@/lib/training-engine";
 import { DEFAULT_BASE_PACE } from "@/lib/training-engine";
 import { PaceWaterfall } from "@/components/pace-waterfall";
+import { ResponseCurve } from "@/components/response-curve";
 
 export interface GraphTooltipProps {
   node: GraphNode;
@@ -71,6 +72,87 @@ export function GraphTooltip({ node, depth, x, y, allNodes }: GraphTooltipProps)
     );
   }
 
+  // Build response curve for merge factor nodes (deep tooltip only)
+  const MERGE_FACTOR_IDS = ["readiness_factor", "fatigue_factor", "weight_factor"] as const;
+  const showResponseCurve =
+    depth === "deep" &&
+    MERGE_FACTOR_IDS.includes(node.id as (typeof MERGE_FACTOR_IDS)[number]) &&
+    node.value != null &&
+    allNodes;
+
+  let responseCurveEl: React.ReactNode = null;
+  if (showResponseCurve) {
+    if (node.id === "readiness_factor") {
+      // Derive composite z-score from individual z-scores (equal-weight average)
+      const hrvZ = allNodes.get("hrv_z")?.value ?? 0;
+      const sleepZ = allNodes.get("sleep_z")?.value ?? 0;
+      const rhrZ = allNodes.get("rhr_z")?.value ?? 0;
+      const bbZ = allNodes.get("bb_z")?.value ?? 0;
+      const count = [allNodes.get("hrv_z"), allNodes.get("sleep_z"), allNodes.get("rhr_z"), allNodes.get("bb_z")]
+        .filter((n) => n?.value != null).length;
+      const compositeZ = count > 0 ? (hrvZ + sleepZ + rhrZ + bbZ) / count : 0;
+      const rf = node.value!;
+
+      // Curve matches readinessFactorCalc: z=-2 -> 1.05(clamp), z=-1 -> 1.05, z=0 -> 1.00, z=1 -> 0.97
+      responseCurveEl = (
+        <ResponseCurve
+          points={[
+            { x: -2, y: 1.05 },
+            { x: -1, y: 1.05 },
+            { x: 0, y: 1.0 },
+            { x: 1, y: 0.97 },
+          ]}
+          currentX={compositeZ}
+          currentY={rf}
+          xLabel="Composite z-score"
+          yLabel="Pace factor"
+        />
+      );
+    } else if (node.id === "fatigue_factor") {
+      const tsb = allNodes.get("tsb")?.value ?? 0;
+      const ff = node.value!;
+
+      // Curve matches fatigueFactorCalc: tsb=-20 -> 1.03, tsb=0 -> 1.00, tsb=10 -> 0.98
+      responseCurveEl = (
+        <ResponseCurve
+          points={[
+            { x: -20, y: 1.03 },
+            { x: -10, y: 1.015 },
+            { x: 0, y: 1.0 },
+            { x: 5, y: 0.99 },
+            { x: 10, y: 0.98 },
+          ]}
+          currentX={tsb}
+          currentY={ff}
+          xLabel="TSB (form)"
+          yLabel="Pace factor"
+        />
+      );
+    } else if (node.id === "weight_factor") {
+      const CALIBRATION_WEIGHT = 80.5;
+      const weightEma = allNodes.get("weight_ema")?.value ?? CALIBRATION_WEIGHT;
+      const weightDelta = weightEma - CALIBRATION_WEIGHT;
+      const wf = node.value!;
+
+      // Weight factor = weight / calibration_weight, expressed as delta from calibration
+      responseCurveEl = (
+        <ResponseCurve
+          points={[
+            { x: -5, y: (CALIBRATION_WEIGHT - 5) / CALIBRATION_WEIGHT },
+            { x: -2, y: (CALIBRATION_WEIGHT - 2) / CALIBRATION_WEIGHT },
+            { x: 0, y: 1.0 },
+            { x: 2, y: (CALIBRATION_WEIGHT + 2) / CALIBRATION_WEIGHT },
+            { x: 5, y: (CALIBRATION_WEIGHT + 5) / CALIBRATION_WEIGHT },
+          ]}
+          currentX={weightDelta}
+          currentY={wf}
+          xLabel="Weight delta (kg)"
+          yLabel="Pace factor"
+        />
+      );
+    }
+  }
+
   return (
     <div
       className="absolute z-50 pointer-events-none bg-popover text-popover-foreground border border-border rounded-lg shadow-lg p-3 max-w-xs"
@@ -94,6 +176,10 @@ export function GraphTooltip({ node, depth, x, y, allNodes }: GraphTooltipProps)
 
           {waterfallEl && (
             <div className="mt-2">{waterfallEl}</div>
+          )}
+
+          {responseCurveEl && (
+            <div className="mt-2">{responseCurveEl}</div>
           )}
 
           {node.tooltip.inputs && node.tooltip.inputs.length > 0 && (
