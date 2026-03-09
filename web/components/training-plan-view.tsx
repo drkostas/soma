@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { WorkoutCompletionButton } from "@/components/workout-completion-button";
 import { GarminPushButton } from "@/components/garmin-push-button";
 import { RaceDayProtocol } from "@/components/race-day-protocol";
+import { PaceWaterfall } from "@/components/pace-waterfall";
 import { WorkoutStepEditor } from "@/components/workout-step-editor";
 import { ActivitySidePanel } from "@/components/activity-side-panel";
 import { normalizeSteps } from "@/lib/normalize-steps";
@@ -508,6 +509,32 @@ export function TrainingPlanView({
                               <span className="inline-block text-xs bg-yellow-500/20 text-yellow-300 px-1.5 py-0.5 rounded mt-1">
                                 Legs yesterday — 48h rule
                               </span>
+                            )}
+                            {/* Pace waterfall breakdown */}
+                            {projected && projected.adjustedPace !== null && projected.paceChangePct !== 0 && (
+                              <div className="mt-2 pt-2 border-t border-border/20">
+                                <PaceWaterfall
+                                  basePace={projected.basePaceForType}
+                                  items={[
+                                    {
+                                      label: "Readiness",
+                                      seconds: projected.basePaceForType * (projected.readinessFactor - 1),
+                                      color: projected.readinessFactor <= 1 ? "oklch(70% 0.15 142)" : "oklch(70% 0.15 25)",
+                                    },
+                                    {
+                                      label: "Fatigue",
+                                      seconds: projected.basePaceForType * (projected.fatigueFactor - 1),
+                                      color: projected.fatigueFactor <= 1 ? "oklch(70% 0.15 142)" : "oklch(70% 0.15 25)",
+                                    },
+                                    {
+                                      label: "Weight",
+                                      seconds: projected.basePaceForType * (projected.weightFactor - 1),
+                                      color: projected.weightFactor <= 1 ? "oklch(70% 0.15 142)" : "oklch(70% 0.15 25)",
+                                    },
+                                  ]}
+                                  adjustedPace={projected.adjustedPace}
+                                />
+                              </div>
                             )}
                             {/* Gym section */}
                             {day.gym_workout && (
