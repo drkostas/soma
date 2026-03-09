@@ -10,29 +10,32 @@ import { GraphTooltip } from "@/components/graph-tooltip";
 
 const COL_X: Record<NodeColumn, number> = {
   raw: 10,
-  stream: 170,
-  merge: 340,
-  output: 510,
+  zscore: 175,
+  pmc: 340,
+  merge: 505,
+  output: 670,
 };
 
 const COL_LABELS: Record<NodeColumn, string> = {
-  raw: "Input Signals",
-  stream: "Processing",
+  raw: "Signals",
+  zscore: "Standardized",
+  pmc: "Load Model",
   merge: "Adjustment",
   output: "Output",
 };
 
 const PADDING_TOP = 28;
 const NODE_SPACING = 62;
-const SVG_WIDTH = 660;
+const SVG_WIDTH = 820;
 const BEZIER_OFFSET = 0.4;
 
 /** Stagger delays (ms) per column for cascade wave effect on slider changes */
 const COLUMN_DELAYS: Record<NodeColumn, number> = {
   raw: 0,
-  stream: 60,
-  merge: 120,
-  output: 180,
+  zscore: 50,
+  pmc: 100,
+  merge: 150,
+  output: 200,
 };
 
 // ── Tooltip state ─────────────────────────────────────────────
@@ -63,11 +66,11 @@ interface ComputationGraphProps {
 
 /** Build a map of column -> ordered node indices for Y positioning. */
 function columnIndices(nodes: GraphNode[]): Map<string, { col: NodeColumn; idx: number }> {
-  const buckets: Record<NodeColumn, GraphNode[]> = { raw: [], stream: [], merge: [], output: [] };
+  const buckets: Record<NodeColumn, GraphNode[]> = { raw: [], zscore: [], pmc: [], merge: [], output: [] };
   for (const n of nodes) buckets[n.column].push(n);
 
   const result = new Map<string, { col: NodeColumn; idx: number }>();
-  for (const col of ["raw", "stream", "merge", "output"] as NodeColumn[]) {
+  for (const col of ["raw", "zscore", "pmc", "merge", "output"] as NodeColumn[]) {
     buckets[col].forEach((n, i) => result.set(n.id, { col, idx: i }));
   }
   return result;
@@ -79,7 +82,7 @@ function nodePos(col: NodeColumn, idx: number): { x: number; y: number } {
 
 /** Compute SVG height to fit all nodes. */
 function svgHeight(nodes: GraphNode[]): number {
-  const buckets: Record<NodeColumn, number> = { raw: 0, stream: 0, merge: 0, output: 0 };
+  const buckets: Record<NodeColumn, number> = { raw: 0, zscore: 0, pmc: 0, merge: 0, output: 0 };
   for (const n of nodes) buckets[n.column]++;
   const maxRows = Math.max(...Object.values(buckets), 1);
   return PADDING_TOP + maxRows * NODE_SPACING + 12;
@@ -281,7 +284,7 @@ export function ComputationGraphView({
         `}</style>
 
         {/* Column headers */}
-        {(["raw", "stream", "merge", "output"] as NodeColumn[]).map((col) => (
+        {(["raw", "zscore", "pmc", "merge", "output"] as NodeColumn[]).map((col) => (
           <text
             key={col}
             x={COL_X[col] + NODE_W / 2}

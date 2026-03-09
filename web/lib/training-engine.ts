@@ -10,7 +10,7 @@
 // TYPES
 // ============================================================
 
-export type NodeColumn = "raw" | "stream" | "merge" | "output";
+export type NodeColumn = "raw" | "zscore" | "pmc" | "merge" | "output";
 export type TrafficLight = "green" | "yellow" | "red";
 export type OverrideSeverity = "red" | "yellow";
 
