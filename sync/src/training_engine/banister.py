@@ -233,32 +233,46 @@ def load_anchors_from_db(conn, estimated_hrmax: float = 190) -> list[dict]:
 
 
 def _load_daily_loads_from_db(conn) -> tuple[list[tuple[int, float]], str]:
-    """Load daily running loads from DB. Returns (daily_loads, min_date_str)."""
+    """Load daily training loads from the training_load table (same source as PMC).
+
+    Applies the same cross-modal scaling as compute_and_store_pmc() in
+    load_stream.py so that the Banister model is fitted on the identical
+    load signal used for CTL/ATL/TSB.
+
+    Returns (daily_loads, min_date_str).
+    """
+    from datetime import timedelta
+    from training_engine.load_stream import _cross_modal_scale
+
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT
-                (raw_json->>'startTimeLocal')::date AS run_date,
-                SUM((raw_json->>'duration')::float / 60.0
-                    * COALESCE((raw_json->>'averageHR')::float, 140)) AS daily_load
-            FROM garmin_activity_raw
-            WHERE endpoint_name = 'summary'
-              AND raw_json->'activityType'->>'typeKey' = 'running'
-              AND raw_json->>'duration' IS NOT NULL
-            GROUP BY run_date
-            ORDER BY run_date ASC
+            SELECT activity_date, source, load_value
+            FROM training_load
+            ORDER BY activity_date
         """)
         rows = cur.fetchall()
 
     if not rows:
         return [], ""
 
-    min_date = rows[0][0]
-    daily_loads = []
-    for run_date, load in rows:
-        day_index = (run_date - min_date).days
-        daily_loads.append((day_index, float(load)))
+    # Aggregate daily load with cross-modal scaling (mirrors compute_and_store_pmc)
+    load_by_date: dict = {}
+    for activity_date, source, load_value in rows:
+        scale = _cross_modal_scale(source)
+        load_by_date[activity_date] = load_by_date.get(activity_date, 0.0) + float(load_value) * scale
 
-    return daily_loads, str(min_date)
+    # Fill gaps between first and last date with 0 (rest days)
+    start_date = min(load_by_date.keys())
+    end_date = max(load_by_date.keys())
+
+    daily_loads = []
+    current = start_date
+    while current <= end_date:
+        day_index = (current - start_date).days
+        daily_loads.append((day_index, load_by_date.get(current, 0.0)))
+        current += timedelta(days=1)
+
+    return daily_loads, str(start_date)
 
 
 def fit_from_db(conn, estimated_hrmax: float = 190) -> BanisterParams:
@@ -276,21 +290,7 @@ def fit_from_db(conn, estimated_hrmax: float = 190) -> BanisterParams:
     Returns:
         Fitted BanisterParams.
     """
-    # Ensure the storage table exists
-    with conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS banister_params (
-                id SERIAL PRIMARY KEY,
-                p0 FLOAT NOT NULL,
-                k1 FLOAT NOT NULL,
-                k2 FLOAT NOT NULL,
-                tau1 FLOAT NOT NULL,
-                tau2 FLOAT NOT NULL,
-                n_anchors INT NOT NULL DEFAULT 0,
-                fitted_at TIMESTAMP NOT NULL DEFAULT NOW()
-            )
-        """)
-    conn.commit()
+    # Table 'banister_params' is defined in sync/schema.sql
 
     # Load data
     anchors = load_anchors_from_db(conn, estimated_hrmax=estimated_hrmax)
