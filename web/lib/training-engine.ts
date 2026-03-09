@@ -403,3 +403,155 @@ export function colorForNode(nodeId: string, value: number | null): string {
   if (!thresholds) return "oklch(0.7 0.05 250)";
   return nodeColor(value, thresholds);
 }
+
+// ============================================================
+// FULL FORWARD-PASS RECOMPUTE FOR SLIDER
+// ============================================================
+
+/** Clamp a number to [0, 1]. */
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
+/** Normalized value for z-scores: |z|/2 clamped to [0,1]. */
+function zNorm(z: number | null): number {
+  return z != null ? clamp01(Math.abs(z) / 2) : 0;
+}
+
+/** Normalized value for factor nodes: |f - 1.0| / 0.05 clamped to [0,1]. */
+function factorNorm(f: number | null): number {
+  return f != null ? clamp01(Math.abs(f - 1.0) / 0.05) : 0;
+}
+
+/** Compute normalizedValue for a node based on its ID and value. */
+function computeNormalizedValue(nodeId: string, value: number | null): number {
+  if (value == null) return 0;
+  switch (nodeId) {
+    // Z-score nodes
+    case "hrv_z":
+    case "sleep_z":
+    case "rhr_z":
+    case "bb_z":
+      return zNorm(value);
+    // Raw nodes mirror their z-score (unchanged in shadow)
+    case "hrv_raw":
+    case "sleep_raw":
+    case "rhr_raw":
+    case "bb_raw":
+      return 0; // raw nodes don't change
+    // PMC nodes
+    case "ctl":
+    case "atl":
+      return clamp01(value / 100);
+    case "tsb":
+      return clamp01(Math.abs(value) / 30);
+    // Factor nodes
+    case "readiness_factor":
+    case "fatigue_factor":
+    case "weight_factor":
+    case "slider_factor":
+      return factorNorm(value);
+    // Output nodes
+    case "adjusted_pace":
+      return clamp01(Math.abs(value - DEFAULT_BASE_PACE) / 30);
+    case "vdot":
+      return clamp01(value / 60);
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Full client-side forward-pass recompute of the computation graph
+ * given a slider multiplier value.
+ *
+ * The slider conceptually scales future training load. This propagates
+ * through the PMC (CTL/ATL/TSB), into fatigue_factor, and finally
+ * into adjusted_pace. Readiness and weight factors are biometric —
+ * they don't change with training load.
+ *
+ * Nodes that don't change with training load (raw, z-scores, weight,
+ * readiness) are left untouched.
+ */
+export function recomputeGraphForSlider(
+  baseGraph: ComputationGraph,
+  sliderValue: number,
+): ComputationGraph {
+  // Deep-clone nodes so we don't mutate the original
+  const nodes: GraphNode[] = structuredClone(baseGraph.nodes);
+
+  const find = (id: string) => nodes.find((n) => n.id === id);
+
+  // ── Scale training-load-dependent PMC nodes ───────────
+  // The slider scales daily training load. CTL (42d EMA) responds slowly,
+  // ATL (7d EMA) responds faster.
+  const loadMultiplier = sliderValue;
+
+  const ctlNode = find("ctl");
+  if (ctlNode && ctlNode.value != null) {
+    const baseCTL = ctlNode.value;
+    const ctlShift = (loadMultiplier - 1.0) * baseCTL * 0.15;
+    ctlNode.value = Math.round((baseCTL + ctlShift) * 10) / 10;
+  }
+
+  const atlNode = find("atl");
+  if (atlNode && atlNode.value != null) {
+    const baseATL = atlNode.value;
+    const atlShift = (loadMultiplier - 1.0) * baseATL * 0.4;
+    atlNode.value = Math.round((baseATL + atlShift) * 10) / 10;
+  }
+
+  // TSB = CTL - ATL
+  const tsbNode = find("tsb");
+  if (tsbNode && ctlNode?.value != null && atlNode?.value != null) {
+    tsbNode.value = Math.round((ctlNode.value - atlNode.value) * 10) / 10;
+  }
+
+  // ── Recompute fatigue factor from new TSB ─────────────
+  const fatigueNode = find("fatigue_factor");
+  if (fatigueNode && tsbNode?.value != null) {
+    fatigueNode.value = Math.round(fatigueFactorCalc(tsbNode.value) * 10000) / 10000;
+  }
+
+  // ── Slider factor node ────────────────────────────────
+  const sliderNode = find("slider_factor");
+  if (sliderNode) {
+    sliderNode.value = sliderValue;
+  }
+
+  // ── Recompute adjusted pace with all factors ──────────
+  const readinessNode = find("readiness_factor");
+  const weightNode = find("weight_factor");
+  const adjustedPaceNode = find("adjusted_pace");
+
+  if (adjustedPaceNode) {
+    const rf = readinessNode?.value ?? 1.0;
+    const ff = fatigueNode?.value ?? 1.0;
+    const wf = weightNode?.value ?? 1.0;
+
+    if (rf < 0) {
+      // REST signal
+      adjustedPaceNode.value = null;
+    } else {
+      const combined = rf * ff * wf;
+      const delta = combined - 1.0;
+      const adjusted = 1.0 + delta * sliderValue;
+      adjustedPaceNode.value = Math.round(DEFAULT_BASE_PACE * adjusted * 10) / 10;
+    }
+  }
+
+  // ── Recalculate colors and normalizedValue for all changed nodes ──
+  for (const node of nodes) {
+    // Special-case nodes that have bespoke color logic (not in NODE_THRESHOLDS)
+    if (node.id === "slider_factor") {
+      node.color = "oklch(0.7 0.12 250)";
+    } else if (node.id === "adjusted_pace") {
+      node.color = node.value != null ? "oklch(0.7 0.15 142)" : "oklch(0.6 0.2 25)";
+    } else {
+      node.color = colorForNode(node.id, node.value);
+    }
+    node.normalizedValue = computeNormalizedValue(node.id, node.value);
+  }
+
+  return { ...baseGraph, nodes };
+}
