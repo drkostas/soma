@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Brain, FlaskConical, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ function ParamChip({
 export function ModelParamsPanel() {
   const [data, setData] = useState<ModelParamsResponse | null>(null);
   const [error, setError] = useState(false);
+  const [forceEqual, setForceEqual] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,8 +87,11 @@ export function ModelParamsPanel() {
       try {
         const res = await fetch("/api/training/model-params");
         if (!res.ok) throw new Error("fetch failed");
-        const json = await res.json();
-        if (!cancelled) setData(json);
+        const json: ModelParamsResponse = await res.json();
+        if (!cancelled) {
+          setData(json);
+          setForceEqual(json.calibration.forceEqual);
+        }
       } catch {
         if (!cancelled) setError(true);
       }
@@ -180,27 +185,58 @@ export function ModelParamsPanel() {
             </span>
           </div>
 
+          {/* Equal / Personal weights toggle */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] text-muted-foreground">
+              {forceEqual ? "Equal Weights (Dawes 1979)" : "Personal Weights"}
+            </span>
+            <Switch
+              checked={!forceEqual}
+              onCheckedChange={(checked) => {
+                const newForceEqual = !checked;
+                setForceEqual(newForceEqual);
+                fetch("/api/training/calibration/toggle", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ forceEqual: newForceEqual }),
+                });
+              }}
+            />
+          </div>
+
           {/* Weight bars */}
           <div className="flex gap-2 flex-wrap">
-            {Object.entries(weights).map(([key, weight]) => (
-              <div
-                key={key}
-                className="flex items-center gap-1"
-                title={`${WEIGHT_LABELS[key] ?? key} weight: ${(weight * 100).toFixed(0)}%. Controls how much this biometric signal influences the composite readiness score.`}
-              >
+            {Object.entries(weights).map(([key, weight]) => {
+              const displayWeight = forceEqual ? 0.25 : weight;
+              const displayMax = forceEqual ? 0.25 : maxWeight;
+              return (
                 <div
-                  className="h-2 rounded-sm"
-                  style={{
-                    width: `${Math.max(16, (weight / maxWeight) * 48)}px`,
-                    backgroundColor: WEIGHT_COLORS[key] ?? "oklch(0.6 0.05 250)",
-                    opacity: 0.4 + 0.6 * (weight / maxWeight),
-                  }}
-                />
-                <span className="text-muted-foreground text-[10px]">
-                  {WEIGHT_LABELS[key] ?? key} {(weight * 100).toFixed(0)}%
-                </span>
-              </div>
-            ))}
+                  key={key}
+                  className="flex items-center gap-1"
+                  title={`${WEIGHT_LABELS[key] ?? key} weight: ${(displayWeight * 100).toFixed(0)}%. Controls how much this biometric signal influences the composite readiness score.`}
+                >
+                  <div
+                    className="h-2 rounded-sm"
+                    style={{
+                      width: `${Math.max(16, (displayWeight / displayMax) * 48)}px`,
+                      backgroundColor: WEIGHT_COLORS[key] ?? "oklch(0.6 0.05 250)",
+                      opacity: forceEqual ? 0.7 : 0.4 + 0.6 * (weight / maxWeight),
+                    }}
+                  />
+                  <span className="text-muted-foreground text-[10px]">
+                    {WEIGHT_LABELS[key] ?? key}{" "}
+                    {forceEqual
+                      ? "25%"
+                      : `${(weight * 100).toFixed(0)}%`}
+                    {!forceEqual && (
+                      <span className="opacity-50 ml-0.5">
+                        |r|
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
