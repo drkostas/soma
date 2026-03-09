@@ -232,10 +232,14 @@ export function ComputationGraphView({
         className="w-full"
         style={{ maxHeight: height * 1.2 }}
       >
-        {/* Hide particle animations for users who prefer reduced motion */}
+        {/* Hover scale for graph nodes; hide particles for reduced-motion users */}
         <style>{`
+          .graph-node-group:hover {
+            transform: scale(1.05);
+          }
           @media (prefers-reduced-motion: reduce) {
             .edge-particle { display: none; }
+            .graph-node-group { transition: none !important; }
           }
         `}</style>
 
