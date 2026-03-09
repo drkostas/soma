@@ -15,6 +15,13 @@ import {
 
 // ── Types ────────────────────────────────────────────────────
 
+export interface ComparisonData {
+  load: { date: string; dailyLoad: number; ctl: number; atl: number }[];
+  readiness: { date: string; garminScore: number; ourScore: number }[];
+  fitness: { date: string; garminVo2max: number; ourVdot: number | null }[];
+  racePrediction: { date: string; garminSeconds: number | null; ourVdot: number | null }[];
+}
+
 export interface SimulationSeeds {
   pmc: { ctl: number; atl: number; tsb: number };
   banister: { p0: number; k1: number; k2: number; tau1: number; tau2: number; nAnchors: number };
@@ -22,6 +29,7 @@ export interface SimulationSeeds {
   fitness: { vdotAdjusted: number; weightKg: number; calibrationWeightKg: number };
   planDays: PlanDay[];
   sliderMultiplier: number;
+  comparison?: ComparisonData;
 }
 
 export interface PlanDay {

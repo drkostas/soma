@@ -9,6 +9,7 @@ import { ReferencePanel, type ReferenceMetric } from "@/components/reference-pan
 import { TrainingPlanView, type ActivityMatch } from "@/components/training-plan-view";
 import { ModelParamsPanel } from "@/components/model-params-panel";
 import { TrainingPacesCard } from "@/components/training-paces-card";
+import { ComparisonCharts } from "@/components/comparison-charts";
 import {
   type GraphApiResponse,
   type ComputationGraph,
@@ -19,7 +20,7 @@ import {
   adjustStepTargets,
 } from "@/lib/training-engine";
 import { normalizeSteps } from "@/lib/normalize-steps";
-import { runForwardSimulation, type ProjectedDay, type SimulationSeeds } from "@/lib/forward-simulation";
+import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type ComparisonData } from "@/lib/forward-simulation";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -576,6 +577,18 @@ export function TrainingDashboard({
         </div>
       ) : (
         <TrainingPacesCard vdot={dynamicVdot} />
+      )}
+
+      {/* Comparison Charts — our metrics vs Garmin */}
+      {forwardSimSeeds?.comparison && (
+        <>
+          <h3 className="text-sm font-medium text-muted-foreground">Model vs Garmin</h3>
+          <ComparisonCharts
+            data={forwardSimSeeds.comparison}
+            hoveredDate={hoveredDate}
+            onHoverDate={handleHoverDate}
+          />
+        </>
       )}
 
       {/* Training Plan — full 5-week plan */}
