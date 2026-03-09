@@ -166,7 +166,7 @@ export async function GET() {
       fitness: garminVo2Rows.map((r: any) => ({
         date: r.date,
         garminVo2max: Number(r.vo2max ?? 0),
-        ourVdot: r.vdot_adjusted ? Number(r.vdot_adjusted) : null,
+        ourVdot: r.vdot_adjusted ? Number(r.vdot_adjusted) : (r.vo2max ? Number(r.vo2max) : null),
       })),
       racePrediction: garminRaceRows.map((r: any) => ({
         date: r.date,
