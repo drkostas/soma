@@ -165,6 +165,19 @@ def run_training_engine(conn):
     except Exception as e:
         logger.error("Training engine: readiness computation failed: %s", e)
 
+    # 3b. Advance calibration
+    try:
+        from training_engine.calibration import advance_calibration, CalibrationState
+        calib_state = CalibrationState(
+            phase=1, data_days=0, weights={"hrv": 0.25, "sleep": 0.25, "rhr": 0.25, "bb": 0.25},
+            force_equal=False,
+        )
+        updated_calib = advance_calibration(conn, calib_state)
+        logger.info("Training engine: calibration phase=%d, data_days=%d, weights=%s",
+                     updated_calib.phase, updated_calib.data_days, updated_calib.weights)
+    except Exception as e:
+        logger.error("Training engine: calibration failed: %s", e)
+
     # 4. Fitness trajectory
     fitness = None
     try:
