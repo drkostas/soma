@@ -10,6 +10,7 @@ import { TrainingPlanView, type ActivityMatch } from "@/components/training-plan
 
 import { TrainingPacesCard } from "@/components/training-paces-card";
 import { ComparisonCharts } from "@/components/comparison-charts";
+import { FloatingSlider } from "@/components/floating-slider";
 import {
   type GraphApiResponse,
   type ComputationGraph,
@@ -650,6 +651,15 @@ export function TrainingDashboard({
           </button>
         </div>
       )}
+
+      {/* Floating training intensity slider */}
+      <FloatingSlider
+        value={sliderValue}
+        onChange={setSliderValue}
+        savedValue={1.0}
+        onSave={handleSave}
+        onReset={() => setSliderValue(1.0)}
+      />
     </div>
   );
 }
