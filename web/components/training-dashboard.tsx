@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Save, Check, X } from "lucide-react";
+import { Loader2, Save, Check, X, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { ComputationGraphView } from "@/components/computation-graph";
 import { TrajectorySection } from "@/components/trajectory-section";
 import { ReferencePanel, type ReferenceMetric } from "@/components/reference-panel";
@@ -10,6 +11,7 @@ import {
   type GraphApiResponse,
   type ComputationGraph,
   type DeltaWorkout,
+  type Override,
   DEFAULT_BASE_PACE,
 } from "@/lib/training-engine";
 
@@ -366,32 +368,74 @@ export function TrainingDashboard({
     );
   }
 
+  // Extract active overrides for hoisted alerts
+  const activeOverrides: Override[] = graphData
+    ? graphData.graph.overrides.filter((o) => o.triggered)
+    : [];
+
   return (
     <div className="space-y-6">
-      {/* Computation Graph — centerpiece */}
-      {graphData && (
-        <ComputationGraphView
-          graph={graphData.graph}
-          shadowGraph={shadowGraph}
-          sliderValue={sliderValue}
-          onSliderChange={handleSliderChange}
-        />
-      )}
+      {/* Hoisted override alerts — always visible at top */}
+      {activeOverrides.map((ov) => (
+        <div
+          key={ov.rule}
+          className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs"
+          style={{
+            backgroundColor:
+              ov.severity === "red"
+                ? "oklch(30% 0.08 25 / 0.3)"
+                : "oklch(40% 0.1 85 / 0.25)",
+            borderColor:
+              ov.severity === "red"
+                ? "oklch(55% 0.2 25 / 0.5)"
+                : "oklch(70% 0.15 85 / 0.5)",
+            color:
+              ov.severity === "red"
+                ? "oklch(80% 0.12 25)"
+                : "oklch(85% 0.12 85)",
+          }}
+        >
+          {ov.severity === "red" ? (
+            <ShieldAlert className="h-4 w-4 shrink-0" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+          )}
+          <span>{ov.message}</span>
+        </div>
+      ))}
 
-      {/* Trajectory Chart — directly below, visually connected */}
-      {raceInfo && trajectoryData.length > 0 && (
-        <TrajectorySection
-          baseTrajectory={trajectoryData}
-          raceDate={raceInfo.race_date}
-          today={today}
-          goalVdot={goalVdot}
-          currentVdot={currentVdot}
-          sliderValue={sliderValue}
-          onSliderChange={handleSliderChange}
-          shadowTrajectory={shadowTrajectory}
-          onHoverDate={handleHoverDate}
-        />
-      )}
+      {/* Computation & Output — single visual unit */}
+      <Card className="p-0 overflow-hidden">
+        {graphData && (
+          <div className="p-4 pb-2">
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">Model Computation</h3>
+            <ComputationGraphView
+              graph={graphData.graph}
+              shadowGraph={shadowGraph}
+              sliderValue={sliderValue}
+              onSliderChange={handleSliderChange}
+              hideOverrides
+            />
+          </div>
+        )}
+
+        {raceInfo && trajectoryData.length > 0 && (
+          <div className="border-t border-border/50 p-4 pt-2">
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">Output: Fitness Trajectory</h3>
+            <TrajectorySection
+              baseTrajectory={trajectoryData}
+              raceDate={raceInfo.race_date}
+              today={today}
+              goalVdot={goalVdot}
+              currentVdot={currentVdot}
+              sliderValue={sliderValue}
+              onSliderChange={handleSliderChange}
+              shadowTrajectory={shadowTrajectory}
+              onHoverDate={handleHoverDate}
+            />
+          </div>
+        )}
+      </Card>
 
       {/* Reference Panel — external metrics cards */}
       {referenceMetrics.length > 0 && (
@@ -399,6 +443,7 @@ export function TrainingDashboard({
       )}
 
       {/* Training Plan — full 5-week plan */}
+      <h3 className="text-sm font-medium text-muted-foreground">Training Plan</h3>
       <TrainingPlanView
         days={planDays}
         today={today}
