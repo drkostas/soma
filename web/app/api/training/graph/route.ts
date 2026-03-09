@@ -185,14 +185,14 @@ export async function GET(request: Request) {
     { id: "weight_raw", column: "raw", label: "Weight", value: weightKg != null ? round(weightKg, 1) : null, unit: "kg", color: "oklch(0.7 0.05 250)", normalizedValue: 0, tooltip: { ...tooltip("weight_raw"), inputs: [] } },
 
     // Stream layer
-    { id: "hrv_z", column: "stream", label: "HRV z", value: hrvZ != null ? round(hrvZ, 2) : null, unit: "z", color: colorForNode("hrv_z", hrvZ), normalizedValue: zNorm(hrvZ), tooltip: { ...tooltip("hrv_z"), inputs: ["hrv_raw"] } },
-    { id: "sleep_z", column: "stream", label: "Sleep z", value: sleepZ != null ? round(sleepZ, 2) : null, unit: "z", color: colorForNode("sleep_z", sleepZ), normalizedValue: zNorm(sleepZ), tooltip: { ...tooltip("sleep_z"), inputs: ["sleep_raw"] } },
-    { id: "rhr_z", column: "stream", label: "RHR z", value: rhrZ != null ? round(rhrZ, 2) : null, unit: "z", color: colorForNode("rhr_z", rhrZ), normalizedValue: zNorm(rhrZ), tooltip: { ...tooltip("rhr_z"), inputs: ["rhr_raw"] } },
-    { id: "bb_z", column: "stream", label: "BB z", value: bbZ != null ? round(bbZ, 2) : null, unit: "z", color: colorForNode("bb_z", bbZ), normalizedValue: zNorm(bbZ), tooltip: { ...tooltip("bb_z"), inputs: ["bb_raw"] } },
-    { id: "ctl", column: "stream", label: "CTL", value: round(ctl, 1), unit: "", color: colorForNode("ctl", ctl), normalizedValue: clamp01(ctl / 100), tooltip: { ...tooltip("ctl"), inputs: ["epoc_raw"] } },
-    { id: "atl", column: "stream", label: "ATL", value: round(atl, 1), unit: "", color: colorForNode("atl", atl), normalizedValue: clamp01(atl / 100), tooltip: { ...tooltip("atl"), inputs: ["epoc_raw"] } },
-    { id: "tsb", column: "stream", label: "TSB", value: round(tsb, 1), unit: "", color: colorForNode("tsb", tsb), normalizedValue: clamp01(Math.abs(tsb) / 30), tooltip: { ...tooltip("tsb"), inputs: ["ctl", "atl"] } },
-    { id: "weight_ema", column: "stream", label: "Weight EMA", value: weightKg != null ? round(weightKg, 1) : null, unit: "kg", color: "oklch(0.7 0.05 250)", normalizedValue: 0, tooltip: { ...tooltip("weight_ema"), inputs: ["weight_raw"] } },
+    { id: "hrv_z", column: "zscore", label: "HRV z", value: hrvZ != null ? round(hrvZ, 2) : null, unit: "z", color: colorForNode("hrv_z", hrvZ), normalizedValue: zNorm(hrvZ), tooltip: { ...tooltip("hrv_z"), inputs: ["hrv_raw"] } },
+    { id: "sleep_z", column: "zscore", label: "Sleep z", value: sleepZ != null ? round(sleepZ, 2) : null, unit: "z", color: colorForNode("sleep_z", sleepZ), normalizedValue: zNorm(sleepZ), tooltip: { ...tooltip("sleep_z"), inputs: ["sleep_raw"] } },
+    { id: "rhr_z", column: "zscore", label: "RHR z", value: rhrZ != null ? round(rhrZ, 2) : null, unit: "z", color: colorForNode("rhr_z", rhrZ), normalizedValue: zNorm(rhrZ), tooltip: { ...tooltip("rhr_z"), inputs: ["rhr_raw"] } },
+    { id: "bb_z", column: "zscore", label: "BB z", value: bbZ != null ? round(bbZ, 2) : null, unit: "z", color: colorForNode("bb_z", bbZ), normalizedValue: zNorm(bbZ), tooltip: { ...tooltip("bb_z"), inputs: ["bb_raw"] } },
+    { id: "ctl", column: "pmc", label: "CTL", value: round(ctl, 1), unit: "", color: colorForNode("ctl", ctl), normalizedValue: clamp01(ctl / 100), tooltip: { ...tooltip("ctl"), inputs: ["epoc_raw"] } },
+    { id: "atl", column: "pmc", label: "ATL", value: round(atl, 1), unit: "", color: colorForNode("atl", atl), normalizedValue: clamp01(atl / 100), tooltip: { ...tooltip("atl"), inputs: ["epoc_raw"] } },
+    { id: "tsb", column: "pmc", label: "TSB", value: round(tsb, 1), unit: "", color: colorForNode("tsb", tsb), normalizedValue: clamp01(Math.abs(tsb) / 30), tooltip: { ...tooltip("tsb"), inputs: ["ctl", "atl"] } },
+    { id: "weight_ema", column: "pmc", label: "Weight EMA", value: weightKg != null ? round(weightKg, 1) : null, unit: "kg", color: "oklch(0.7 0.05 250)", normalizedValue: 0, tooltip: { ...tooltip("weight_ema"), inputs: ["weight_raw"] } },
 
     // Merge layer
     { id: "readiness_factor", column: "merge", label: "Readiness Factor", value: rf < 0 ? null : round(rf, 4), unit: "x", color: colorForNode("readiness_factor", rf < 0 ? null : rf), normalizedValue: rf < 0 ? 1.0 : factorNorm(rf), tooltip: { ...tooltip("readiness_factor"), inputs: ["hrv_z", "sleep_z", "rhr_z", "bb_z"] } },
@@ -211,19 +211,19 @@ export async function GET(request: Request) {
   if (bp) {
     nodes.push(
       {
-        id: "banister_tau1", column: "stream", label: `τ1=${Number(bp.tau1).toFixed(0)}d`,
+        id: "banister_tau1", column: "pmc", label: `τ1=${Number(bp.tau1).toFixed(0)}d`,
         value: Number(bp.tau1), unit: "days",
         color: "oklch(0.7 0.12 200)", normalizedValue: 0,
         tooltip: { short: "Personal fitness decay: " + Number(bp.tau1).toFixed(0) + " days (population default: 42). Fitted from " + Number(bp.n_anchors) + " anchor runs.", formula: "", source: "Banister 1991", inputs: [] },
       },
       {
-        id: "banister_tau2", column: "stream", label: `τ2=${Number(bp.tau2).toFixed(0)}d`,
+        id: "banister_tau2", column: "pmc", label: `τ2=${Number(bp.tau2).toFixed(0)}d`,
         value: Number(bp.tau2), unit: "days",
         color: "oklch(0.7 0.12 200)", normalizedValue: 0,
         tooltip: { short: "Personal fatigue decay: " + Number(bp.tau2).toFixed(0) + " days (population default: 7). Fitted from " + Number(bp.n_anchors) + " anchor runs.", formula: "", source: "Banister 1991", inputs: [] },
       },
       {
-        id: "banister_p0", column: "stream", label: `p₀=${Number(bp.p0).toFixed(1)}`,
+        id: "banister_p0", column: "pmc", label: `p₀=${Number(bp.p0).toFixed(1)}`,
         value: Number(bp.p0), unit: "VDOT",
         color: "oklch(0.7 0.12 200)", normalizedValue: 0,
         tooltip: { short: "Baseline VDOT: " + Number(bp.p0).toFixed(1) + " before any training effect.", formula: "", source: "Banister 1991", inputs: [] },
