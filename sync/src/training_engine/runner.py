@@ -226,3 +226,46 @@ def run_training_engine(conn):
                      merged.get("tsb", 0))
     except Exception as e:
         logger.error("Training engine: merge failed: %s", e)
+
+    # 7. Compute session quality for matched plan days
+    try:
+        from training_engine.session_quality import compute_session_quality
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT d.id, d.run_type,
+                       g.raw_json
+                FROM training_plan_day d
+                JOIN training_plan p ON d.plan_id = p.id
+                JOIN garmin_activity_raw g ON g.activity_id::text = d.garmin_workout_id
+                WHERE p.status = 'active'
+                  AND d.garmin_workout_id IS NOT NULL
+                  AND d.session_quality_score IS NULL
+                  AND g.endpoint_name = 'summary'
+            """)
+            matched = cur.fetchall()
+
+        count = 0
+        for day_id, run_type, raw_json in matched:
+            if run_type == 'rest':
+                continue
+            data = raw_json if isinstance(raw_json, dict) else json.loads(raw_json)
+            actual_duration = data.get('duration', 0)
+            actual_distance = data.get('distance', 0)
+            actual_hr = data.get('averageHR')
+
+            if actual_distance > 0 and actual_duration > 0:
+                actual_pace = actual_duration / (actual_distance / 1000)
+                planned_pace = 330  # ~5:30/km default, refined by forward sim later
+                planned_hr = 150  # default, refined later
+
+                quality = compute_session_quality(planned_pace, actual_pace, planned_hr, actual_hr)
+                if quality is not None:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE training_plan_day SET session_quality_score = %s WHERE id = %s
+                        """, (quality, day_id))
+                    count += 1
+        conn.commit()
+        logger.info("Training engine: session quality computed for %d matched days", count)
+    except Exception as e:
+        logger.error("Training engine: session quality failed: %s", e)
