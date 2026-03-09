@@ -552,40 +552,49 @@ export function TrainingDashboard({
         </div>
       ))}
 
-      {/* Computation & Output — single visual unit */}
-      <Card className="p-0 overflow-hidden">
-        {graphData && (
-          <div className="p-4 pb-2">
-            <h3 className="text-sm font-medium text-muted-foreground mb-1">Model Computation</h3>
-            <ComputationGraphView
-              graph={hoveredDate && hoveredGraph ? hoveredGraph : graphData.graph}
-              shadowGraph={shadowGraph}
-              sliderValue={sliderValue}
-              onSliderChange={handleSliderChange}
-              hoveredDate={hoveredDate}
-              hideOverrides
-              calibration={graphData.calibration}
-            />
-          </div>
-        )}
+      {/* Computation Graph */}
+      {graphData && (
+        <Card className="p-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-1">Model Computation</h3>
+          <ComputationGraphView
+            graph={hoveredDate && hoveredGraph ? hoveredGraph : graphData.graph}
+            shadowGraph={shadowGraph}
+            sliderValue={sliderValue}
+            onSliderChange={handleSliderChange}
+            hoveredDate={hoveredDate}
+            hideOverrides
+            calibration={graphData.calibration}
+          />
+        </Card>
+      )}
 
-        {raceInfo && trajectoryData.length > 0 && (
-          <div className="border-t border-border/50 p-4 pt-2">
-            <h3 className="text-sm font-medium text-muted-foreground mb-1">Output: Fitness Trajectory</h3>
-            <TrajectorySection
-              baseTrajectory={mergedTrajectory}
-              raceDate={raceInfo.race_date}
-              today={today}
-              goalVdot={goalVdot}
-              currentVdot={currentVdot}
-              sliderValue={sliderValue}
-              onSliderChange={handleSliderChange}
-              shadowTrajectory={shadowTrajectory}
-              onHoverDate={handleHoverDate}
-            />
-          </div>
-        )}
-      </Card>
+      {/* Visual connector: graph output flows into trajectory */}
+      {graphData && raceInfo && trajectoryData.length > 0 && (
+        <div className="flex justify-center -my-2 relative z-10">
+          <svg width="20" height="24" viewBox="0 0 20 24">
+            <path d="M10 0 L10 20 M6 16 L10 22 L14 16" stroke="currentColor"
+                  strokeWidth="1.5" fill="none" className="text-muted-foreground/50" />
+          </svg>
+        </div>
+      )}
+
+      {/* Trajectory Chart — output of the computation graph */}
+      {raceInfo && trajectoryData.length > 0 && (
+        <Card className="p-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-1">Output: Fitness Trajectory</h3>
+          <TrajectorySection
+            baseTrajectory={mergedTrajectory}
+            raceDate={raceInfo.race_date}
+            today={today}
+            goalVdot={goalVdot}
+            currentVdot={currentVdot}
+            sliderValue={sliderValue}
+            onSliderChange={handleSliderChange}
+            shadowTrajectory={shadowTrajectory}
+            onHoverDate={handleHoverDate}
+          />
+        </Card>
+      )}
 
       {/* Reference Panel + Training Paces — side by side on wide screens */}
       {referenceMetrics.length > 0 ? (
