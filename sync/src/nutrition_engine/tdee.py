@@ -354,9 +354,17 @@ def compute_macro_targets(
     # 5. Fat
     fat = round(weight_kg * fat_g_per_kg)
 
-    # 6. Carbs = remainder
-    carbs_kcal = target_calories - (protein * 4) - (fat * 9)
-    carbs = max(0, round(carbs_kcal / 4))
+    # 6. Carb periodization (design doc §6.1)
+    carb_floor = CARB_TARGETS_G_PER_KG.get(training_day_type, 3.0) * weight_kg
+    carb_remainder = max((target_calories - (protein * 4) - (fat * 9)) / 4, 0)
+    carbs = round(max(carb_remainder, carb_floor))
+
+    # If carb floor pushes total over target, reduce fat (never protein)
+    protein_cal = protein * 4
+    total_with_floor = protein_cal + (carbs * 4) + (fat * 9)
+    if total_with_floor > target_calories and carbs > carb_remainder:
+        fat_reduction = (total_with_floor - target_calories) / 9
+        fat = round(max(fat - fat_reduction, weight_kg * 0.5))  # absolute floor 0.5 g/kg
 
     # 7. Fiber (fixed)
     fiber = 35
