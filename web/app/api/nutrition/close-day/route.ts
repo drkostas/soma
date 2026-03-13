@@ -61,6 +61,24 @@ export async function POST(req: NextRequest) {
     SELECT weight_grams FROM weight_log WHERE date = ${date} LIMIT 1
   `;
   if (weightRow.length > 0) {
+    const newWeightKg = Number(weightRow[0].weight_grams) / 1000;
+
+    // Update analytics_weight_trend with 7-day average
+    const trend = await sql`
+      SELECT AVG(weight_grams) as avg_7d
+      FROM weight_log
+      WHERE date >= ${date}::date - interval '7 days' AND date <= ${date}::date
+    `;
+    const avg7d = trend[0]?.avg_7d ? Number(trend[0].avg_7d) / 1000.0 : newWeightKg;
+    await sql`
+      INSERT INTO analytics_weight_trend (date, weight_kg, avg_7d)
+      VALUES (${date}, ${newWeightKg}, ${avg7d})
+      ON CONFLICT (date) DO UPDATE SET
+        weight_kg = EXCLUDED.weight_kg,
+        avg_7d = EXCLUDED.avg_7d
+    `;
+
+    // Recompute deficit from BF% goal
     const profile = await sql`
       SELECT estimated_bf_pct, target_bf_pct, target_date
       FROM nutrition_profile WHERE id = 1
@@ -70,7 +88,6 @@ export async function POST(req: NextRequest) {
       profile[0].target_bf_pct != null &&
       profile[0].target_date != null
     ) {
-      const newWeightKg = Number(weightRow[0].weight_grams) / 1000;
       const currentBf = Number(profile[0].estimated_bf_pct) || 17;
       const targetBf = Number(profile[0].target_bf_pct);
 
