@@ -37,16 +37,19 @@ const MULTIPLIER_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5] as const;
 
 interface Meal {
   id: number;
-  meal_label: string;
-  preset_id: string | null;
+  meal_slot: string;
+  source: string | null;
+  preset_meal_id: string | null;
   preset_name: string | null;
+  portion_multiplier: number;
   items: any;
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
   fiber: number;
-  multiplier: number;
+  notes: string | null;
+  weigh_method: string | null;
   logged_at: string;
 }
 
@@ -232,9 +235,9 @@ export function MealCard({
               <div className="min-w-0">
                 <div className="font-medium truncate">
                   {meal.preset_name || "Custom meal"}
-                  {meal.multiplier !== 1 && (
+                  {meal.portion_multiplier !== 1 && (
                     <span className="text-muted-foreground ml-1">
-                      ({meal.multiplier}x)
+                      ({meal.portion_multiplier}x)
                     </span>
                   )}
                 </div>

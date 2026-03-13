@@ -72,19 +72,22 @@ export async function POST(req: NextRequest) {
     ON CONFLICT (date) DO NOTHING
   `;
 
+  const source = preset_meal_id ? "preset" : null;
+
   const result = await sql`
-    INSERT INTO meal_log (date, meal_label, preset_id, items, calories, protein, carbs, fat, fiber, multiplier)
+    INSERT INTO meal_log (date, meal_slot, source, preset_meal_id, portion_multiplier, items, calories, protein, carbs, fat, fiber)
     VALUES (
       ${date},
       ${meal_slot},
+      ${source},
       ${preset_meal_id ?? null},
+      ${portion_multiplier},
       ${JSON.stringify(items)},
       ${Math.round(calories)},
       ${Math.round(protein)},
       ${Math.round(carbs)},
       ${Math.round(fat)},
-      ${Math.round(fiber)},
-      ${portion_multiplier}
+      ${Math.round(fiber)}
     )
     RETURNING id
   `;

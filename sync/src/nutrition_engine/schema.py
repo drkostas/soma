@@ -123,32 +123,51 @@ ALTER TABLE nutrition_day DROP COLUMN IF EXISTS closed;
 
 -- Individual meal log entries
 CREATE TABLE IF NOT EXISTS meal_log (
-    id          SERIAL PRIMARY KEY,
-    date        DATE NOT NULL REFERENCES nutrition_day(date),
-    meal_label  VARCHAR(40) NOT NULL,
-    preset_id   VARCHAR(60),
-    items       JSONB NOT NULL,
-    calories    REAL NOT NULL,
-    protein     REAL NOT NULL,
-    carbs       REAL NOT NULL,
-    fat         REAL NOT NULL,
-    fiber       REAL NOT NULL DEFAULT 0,
-    multiplier  REAL NOT NULL DEFAULT 1.0,
-    logged_at   TIMESTAMPTZ DEFAULT NOW()
+    id                  SERIAL PRIMARY KEY,
+    date                DATE NOT NULL REFERENCES nutrition_day(date),
+    meal_slot           VARCHAR(20) NOT NULL,
+    source              VARCHAR(20),
+    preset_meal_id      VARCHAR(60),
+    portion_multiplier  REAL NOT NULL DEFAULT 1.0,
+    items               JSONB NOT NULL,
+    calories            REAL NOT NULL,
+    protein             REAL NOT NULL,
+    carbs               REAL NOT NULL,
+    fat                 REAL NOT NULL,
+    fiber               REAL NOT NULL DEFAULT 0,
+    notes               TEXT,
+    weigh_method        VARCHAR(20),
+    logged_at           TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Backfill meal_log column renames for existing installs
+ALTER TABLE meal_log RENAME COLUMN meal_label TO meal_slot;
+ALTER TABLE meal_log RENAME COLUMN preset_id TO preset_meal_id;
+ALTER TABLE meal_log RENAME COLUMN multiplier TO portion_multiplier;
+ALTER TABLE meal_log ADD COLUMN IF NOT EXISTS source VARCHAR(20);
+ALTER TABLE meal_log ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE meal_log ADD COLUMN IF NOT EXISTS weigh_method VARCHAR(20);
 
 -- Drink / alcohol log entries
 CREATE TABLE IF NOT EXISTS drink_log (
-    id          SERIAL PRIMARY KEY,
-    date        DATE NOT NULL REFERENCES nutrition_day(date),
-    drink_id    VARCHAR(60) NOT NULL,
-    name        VARCHAR(120) NOT NULL,
-    quantity_ml REAL NOT NULL,
-    calories    REAL NOT NULL,
-    carbs       REAL NOT NULL DEFAULT 0,
-    alcohol_g   REAL NOT NULL DEFAULT 0,
-    logged_at   TIMESTAMPTZ DEFAULT NOW()
+    id                          SERIAL PRIMARY KEY,
+    date                        DATE NOT NULL REFERENCES nutrition_day(date),
+    drink_type                  VARCHAR(50) NOT NULL,
+    name                        VARCHAR(120) NOT NULL,
+    quantity                    REAL NOT NULL DEFAULT 1.0,
+    quantity_ml                 REAL NOT NULL,
+    calories                    REAL NOT NULL,
+    carbs                       REAL NOT NULL DEFAULT 0,
+    alcohol_grams               REAL NOT NULL DEFAULT 0,
+    fat_oxidation_pause_hours   REAL NOT NULL DEFAULT 0,
+    logged_at                   TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Backfill drink_log column renames for existing installs
+ALTER TABLE drink_log RENAME COLUMN drink_id TO drink_type;
+ALTER TABLE drink_log RENAME COLUMN alcohol_g TO alcohol_grams;
+ALTER TABLE drink_log ADD COLUMN IF NOT EXISTS quantity REAL DEFAULT 1.0;
+ALTER TABLE drink_log ADD COLUMN IF NOT EXISTS fat_oxidation_pause_hours REAL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_meal_log_date ON meal_log(date);
 CREATE INDEX IF NOT EXISTS idx_drink_log_date ON drink_log(date);
