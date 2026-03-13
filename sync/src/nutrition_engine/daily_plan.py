@@ -175,3 +175,78 @@ def generate_daily_plan(
         "protein_boost_g": protein_boost,
         "fiber_boost_g": fiber_boost,
     }
+
+
+# ---------------------------------------------------------------------------
+# Per-slot budget distribution
+# ---------------------------------------------------------------------------
+
+# Default per-slot distribution fractions
+SLOT_DISTRIBUTION = {
+    "breakfast":  {"kcal": 0.25, "protein": 0.25, "carbs": 0.25, "fat": 0.25, "fiber": 0.20},
+    "lunch":      {"kcal": 0.30, "protein": 0.25, "carbs": 0.30, "fat": 0.30, "fiber": 0.30},
+    "dinner":     {"kcal": 0.35, "protein": 0.32, "carbs": 0.35, "fat": 0.35, "fiber": 0.35},
+    "pre_sleep":  {"kcal": 0.10, "protein": 0.18, "carbs": 0.10, "fat": 0.10, "fiber": 0.15},
+}
+
+ALL_SLOTS = ["breakfast", "lunch", "dinner", "pre_sleep"]
+
+
+def compute_slot_targets(calories: int, protein: float, carbs: float, fat: float, fiber: float) -> dict:
+    """Compute per-slot macro targets from daily totals using default distribution."""
+    targets = {}
+    for slot in ALL_SLOTS:
+        d = SLOT_DISTRIBUTION[slot]
+        targets[slot] = {
+            "calories": round(calories * d["kcal"]),
+            "protein": round(protein * d["protein"]),
+            "carbs": round(carbs * d["carbs"]),
+            "fat": round(fat * d["fat"]),
+            "fiber": round(fiber * d["fiber"]),
+        }
+    return targets
+
+
+def redistribute_remaining(daily_targets: dict, eaten_by_slot: dict) -> dict:
+    """Redistribute remaining budget across unfilled slots.
+
+    After each meal is logged, the remaining macro budget is split proportionally
+    among the remaining slots. This ensures later meals adapt to earlier eating.
+    """
+    # Sum up what's been eaten
+    total_eaten = {m: 0.0 for m in ["calories", "protein", "carbs", "fat", "fiber"]}
+    filled_slots = set()
+    for slot, macros in eaten_by_slot.items():
+        filled_slots.add(slot)
+        for m in total_eaten:
+            total_eaten[m] += macros.get(m, 0)
+
+    # What's left?
+    remaining = {m: max(0, daily_targets[m] - total_eaten[m]) for m in total_eaten}
+
+    # Which slots are unfilled?
+    unfilled = [s for s in ALL_SLOTS if s not in filled_slots]
+
+    if not unfilled:
+        return {s: {m: 0 for m in total_eaten} for s in ALL_SLOTS}
+
+    # Distribute remaining proportionally to default ratios of unfilled slots
+    slot_weights = {}
+    for slot in unfilled:
+        slot_weights[slot] = SLOT_DISTRIBUTION[slot]["kcal"]
+    total_weight = sum(slot_weights.values()) or 1.0
+
+    result = {}
+    for slot in ALL_SLOTS:
+        if slot in filled_slots:
+            result[slot] = eaten_by_slot[slot]  # already eaten
+        else:
+            frac = slot_weights[slot] / total_weight
+            result[slot] = {
+                "calories": round(remaining["calories"] * frac),
+                "protein": round(remaining["protein"] * frac),
+                "carbs": round(remaining["carbs"] * frac),
+                "fat": round(remaining["fat"] * frac),
+                "fiber": round(remaining["fiber"] * frac),
+            }
+    return result
