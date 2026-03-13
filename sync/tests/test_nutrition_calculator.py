@@ -103,8 +103,8 @@ class TestComputePresetTotals:
                 )
 
     def test_chicken_rice_bowl_sanity(self):
-        """Chicken rice bowl should be roughly 700-900 kcal."""
+        """Chicken rice bowl should be roughly 500-700 kcal (150g chicken, 80g rice)."""
         totals = compute_preset_totals(PRESET_MEALS, INGREDIENTS)
         bowl = totals["chicken_rice_bowl"]
-        assert 600 <= bowl["calories"] <= 1000
-        assert bowl["protein"] > 40  # 200g chicken = ~45g protein
+        assert 450 <= bowl["calories"] <= 700
+        assert bowl["protein"] > 30  # 150g chicken = ~34g protein
