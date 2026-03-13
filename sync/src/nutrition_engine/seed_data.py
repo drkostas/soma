@@ -288,17 +288,18 @@ INGREDIENTS = {
 
 
 # ---------------------------------------------------------------------------
-# Preset meals (10 items)
+# Preset meals (12 items)
 # ---------------------------------------------------------------------------
 
 PRESET_MEALS = {
     "eggs_avocado_toast": {
         "name": "Eggs & Avocado Toast",
         "items": [
-            {"ingredient_id": "eggs_whole", "grams": 150},        # ~3 eggs
-            {"ingredient_id": "avocado", "grams": 50},            # half small
+            {"ingredient_id": "eggs_whole", "grams": 150},       # 3 eggs
             {"ingredient_id": "bread_whole_wheat", "grams": 60},  # 2 slices
-            {"ingredient_id": "olive_oil", "grams": 5},           # cooking
+            {"ingredient_id": "avocado", "grams": 68},            # 1/2 avocado
+            {"ingredient_id": "cottage_cheese_2pct", "grams": 50},# cottage cheese
+            {"ingredient_id": "olive_oil", "grams": 5},
         ],
         "tags": ["breakfast"],
         "meal_slot": "breakfast",
@@ -306,10 +307,10 @@ PRESET_MEALS = {
     "protein_oats": {
         "name": "Protein Oats",
         "items": [
-            {"ingredient_id": "oats_dry", "grams": 80},
+            {"ingredient_id": "oats_dry", "grams": 60},
             {"ingredient_id": "protein_powder_whey", "grams": 30},
-            {"ingredient_id": "milk_2pct", "grams": 200},
-            {"ingredient_id": "banana", "grams": 120},           # 1 medium
+            {"ingredient_id": "milk_2pct", "grams": 250},
+            {"ingredient_id": "banana", "grams": 120},
         ],
         "tags": ["breakfast"],
         "meal_slot": "breakfast",
@@ -317,10 +318,10 @@ PRESET_MEALS = {
     "chicken_veggie_plate": {
         "name": "Chicken Veggie Plate",
         "items": [
-            {"ingredient_id": "chicken_breast_raw", "grams": 200},
-            {"ingredient_id": "broccoli_raw", "grams": 150},
+            {"ingredient_id": "chicken_breast_raw", "grams": 150},
+            {"ingredient_id": "broccoli_raw", "grams": 200},
+            {"ingredient_id": "cucumber", "grams": 100},
             {"ingredient_id": "cherry_tomatoes", "grams": 100},
-            {"ingredient_id": "olive_oil", "grams": 10},
         ],
         "tags": ["lunch", "dinner"],
         "meal_slot": "lunch",
@@ -328,10 +329,10 @@ PRESET_MEALS = {
     "chicken_rice_bowl": {
         "name": "Chicken Rice Bowl",
         "items": [
-            {"ingredient_id": "chicken_breast_raw", "grams": 200},
-            {"ingredient_id": "white_rice_raw", "grams": 100},
+            {"ingredient_id": "chicken_breast_raw", "grams": 150},
+            {"ingredient_id": "white_rice_raw", "grams": 80},
             {"ingredient_id": "broccoli_raw", "grams": 100},
-            {"ingredient_id": "olive_oil", "grams": 10},
+            {"ingredient_id": "raos_arrabiata", "grams": 50},
         ],
         "tags": ["lunch", "dinner"],
         "meal_slot": "lunch",
@@ -339,10 +340,10 @@ PRESET_MEALS = {
     "salmon_rice_bowl": {
         "name": "Salmon Rice Bowl",
         "items": [
-            {"ingredient_id": "salmon_raw", "grams": 180},
-            {"ingredient_id": "white_rice_raw", "grams": 100},
-            {"ingredient_id": "avocado", "grams": 50},
-            {"ingredient_id": "cucumber", "grams": 80},
+            {"ingredient_id": "salmon_raw", "grams": 150},
+            {"ingredient_id": "white_rice_raw", "grams": 80},
+            {"ingredient_id": "broccoli_raw", "grams": 100},
+            {"ingredient_id": "raos_arrabiata", "grams": 50},
         ],
         "tags": ["lunch", "dinner"],
         "meal_slot": "dinner",
@@ -351,46 +352,60 @@ PRESET_MEALS = {
         "name": "Yogurt Snack Bowl",
         "items": [
             {"ingredient_id": "greek_yogurt_2pct", "grams": 200},
-            {"ingredient_id": "banana", "grams": 120},
-            {"ingredient_id": "purely_elizabeth_granola", "grams": 30},
+            {"ingredient_id": "carrots_raw", "grams": 80},
+            {"ingredient_id": "eggs_whole", "grams": 50},
         ],
-        "tags": ["snack"],
+        "tags": ["snack", "evening"],
         "meal_slot": "snack",
     },
     "granola_bowl": {
         "name": "Granola Bowl",
         "items": [
-            {"ingredient_id": "purely_elizabeth_granola", "grams": 60},
-            {"ingredient_id": "milk_2pct", "grams": 200},
-            {"ingredient_id": "banana", "grams": 120},
+            {"ingredient_id": "purely_elizabeth_granola", "grams": 40},
+            {"ingredient_id": "milk_2pct", "grams": 250},
         ],
-        "tags": ["breakfast", "snack"],
+        "tags": ["snack", "breakfast"],
         "meal_slot": "snack",
     },
     "pre_sleep_cottage": {
         "name": "Pre-Sleep Cottage",
         "items": [
             {"ingredient_id": "cottage_cheese_2pct", "grams": 200},
-            {"ingredient_id": "cherry_tomatoes", "grams": 80},
-            {"ingredient_id": "cucumber", "grams": 80},
         ],
         "tags": ["snack", "evening"],
         "meal_slot": "pre_sleep",
     },
+    "emergency_munchies_box": {
+        "name": "Emergency Munchies Box",
+        "items": [
+            {"ingredient_id": "greek_yogurt_2pct", "grams": 200},
+            {"ingredient_id": "banana", "grams": 60},
+            {"ingredient_id": "cottage_cheese_2pct", "grams": 50},
+        ],
+        "tags": ["snack", "evening", "emergency"],
+        "meal_slot": "snack",
+    },
+    "chipotle_bowl": {
+        "name": "Chipotle Bowl",
+        "items": [
+            {"ingredient_id": "chicken_breast_raw", "grams": 225},
+            {"ingredient_id": "white_rice_raw", "grams": 100},
+            {"ingredient_id": "cherry_tomatoes", "grams": 60},
+            {"ingredient_id": "avocado", "grams": 34},
+        ],
+        "tags": ["lunch", "dinner"],
+        "meal_slot": "lunch",
+    },
     "energy_gel_single": {
         "name": "Energy Gel",
-        "items": [
-            {"ingredient_id": "energy_gel", "grams": 35},        # 1 gel packet
-        ],
+        "items": [{"ingredient_id": "energy_gel", "grams": 35}],
         "tags": ["pre-run", "during-run"],
         "meal_slot": "during_workout",
     },
     "sports_drink_bottle": {
-        "name": "Sports Drink",
-        "items": [
-            {"ingredient_id": "sports_drink", "grams": 500},     # 500ml bottle
-        ],
-        "tags": ["pre-run", "during-run", "post-run"],
+        "name": "Sports Drink (500ml)",
+        "items": [{"ingredient_id": "sports_drink", "grams": 500}],
+        "tags": ["during-run", "post-run"],
         "meal_slot": "during_workout",
     },
 }
