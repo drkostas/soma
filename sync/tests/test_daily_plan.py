@@ -1,9 +1,10 @@
-"""Tests for nutrition_engine.daily_plan — Task 5."""
+"""Tests for nutrition_engine.daily_plan — Task 5 + Task 11."""
 import pytest
 
 from nutrition_engine.daily_plan import (
     classify_sleep_quality,
     adjust_deficit_for_sleep,
+    adjust_for_sleep_history,
     generate_daily_plan,
 )
 
@@ -84,32 +85,142 @@ class TestClassifySleepQuality:
 
 
 class TestAdjustDeficitForSleep:
-    def test_normal_sleep_unchanged(self):
-        """Score >= 50 → deficit unchanged."""
-        assert adjust_deficit_for_sleep(400, 80) == 400
-        assert adjust_deficit_for_sleep(400, 50) == 400
+    """Tests updated for 4-tier dict return (Task 11)."""
+
+    def test_normal_above_70(self):
+        """Score >= 70 → deficit unchanged, reason 'normal'."""
+        result = adjust_deficit_for_sleep(400, 75)
+        assert result["deficit"] == 400
+        assert result["reason"] == "normal"
+        assert result["protein_boost_g"] == 0
+        assert result["fiber_boost_g"] == 0
+
+    def test_normal_at_boundary_70(self):
+        """Exactly 70 → normal."""
+        result = adjust_deficit_for_sleep(400, 70)
+        assert result["deficit"] == 400
+        assert result["reason"] == "normal"
+
+    def test_mild_sleep(self):
+        """Score 50-69 → deficit unchanged, reason 'sleep_mild', boosts applied."""
+        result = adjust_deficit_for_sleep(400, 60)
+        assert result["deficit"] == 400
+        assert result["reason"] == "sleep_mild"
+        assert result["protein_boost_g"] == 10
+        assert result["fiber_boost_g"] == 5
+
+    def test_mild_at_boundary_50(self):
+        """Exactly 50 → mild tier."""
+        result = adjust_deficit_for_sleep(400, 50)
+        assert result["deficit"] == 400
+        assert result["reason"] == "sleep_mild"
 
     def test_moderate_sleep_halved(self):
         """Score 30-49 → deficit halved."""
-        assert adjust_deficit_for_sleep(400, 40) == 200
-        assert adjust_deficit_for_sleep(400, 30) == 200
+        result = adjust_deficit_for_sleep(400, 40)
+        assert result["deficit"] == 200
+        assert result["reason"] == "sleep_moderate"
+        assert result["protein_boost_g"] == 10
+        assert result["fiber_boost_g"] == 5
+
+    def test_moderate_at_boundary_30(self):
+        """Exactly 30 → moderate (halved)."""
+        result = adjust_deficit_for_sleep(400, 30)
+        assert result["deficit"] == 200
+        assert result["reason"] == "sleep_moderate"
 
     def test_severe_sleep_zero(self):
         """Score < 30 → deficit = 0."""
-        assert adjust_deficit_for_sleep(400, 20) == 0
-        assert adjust_deficit_for_sleep(400, 0) == 0
+        result = adjust_deficit_for_sleep(400, 20)
+        assert result["deficit"] == 0
+        assert result["reason"] == "sleep_severe"
 
-    def test_boundary_at_50(self):
-        """Exactly 50 → unchanged."""
-        assert adjust_deficit_for_sleep(400, 50) == 400
+    def test_severe_at_zero(self):
+        """Score 0 → severe."""
+        result = adjust_deficit_for_sleep(400, 0)
+        assert result["deficit"] == 0
+        assert result["reason"] == "sleep_severe"
 
-    def test_boundary_at_30(self):
-        """Exactly 30 → halved (30 is in the 30-49 range)."""
-        assert adjust_deficit_for_sleep(400, 30) == 200
+    def test_severe_on_short_duration(self):
+        """High score (80) but only 4h sleep → severe override."""
+        result = adjust_deficit_for_sleep(400, 80, total_sleep_hours=4.0)
+        assert result["deficit"] == 0
+        assert result["reason"] == "sleep_severe"
 
-    def test_boundary_at_29(self):
-        """29 → zero."""
-        assert adjust_deficit_for_sleep(400, 29) == 0
+    def test_short_duration_at_boundary_5h(self):
+        """Exactly 5h → NOT triggered (only <5h triggers)."""
+        result = adjust_deficit_for_sleep(400, 80, total_sleep_hours=5.0)
+        assert result["reason"] == "normal"
+        assert result["deficit"] == 400
+
+    def test_no_sleep_hours_provided(self):
+        """When total_sleep_hours is None, only score matters."""
+        result = adjust_deficit_for_sleep(400, 80, total_sleep_hours=None)
+        assert result["reason"] == "normal"
+
+
+class TestAdjustForSleepHistory:
+    """Tests for multi-day sleep escalation (Task 11)."""
+
+    def test_0_nights_no_change(self):
+        base = {"deficit": 400, "reason": "sleep_mild", "protein_boost_g": 10, "fiber_boost_g": 5}
+        result = adjust_for_sleep_history(0, base)
+        assert result == base
+
+    def test_1_night_no_change(self):
+        base = {"deficit": 400, "reason": "sleep_mild", "protein_boost_g": 10, "fiber_boost_g": 5}
+        result = adjust_for_sleep_history(1, base)
+        assert result == base
+
+    def test_2_nights_mild_escalated_to_moderate(self):
+        """2 poor nights + mild → escalate to moderate."""
+        base = {"deficit": 400, "reason": "sleep_mild", "protein_boost_g": 10, "fiber_boost_g": 5}
+        result = adjust_for_sleep_history(2, base)
+        assert result["deficit"] == 200
+        assert result["reason"] == "sleep_moderate_escalated"
+        assert result["protein_boost_g"] == 10
+        assert result["fiber_boost_g"] == 5
+
+    def test_2_nights_moderate_escalated_to_severe(self):
+        """2 poor nights + moderate → escalate to severe."""
+        base = {"deficit": 200, "reason": "sleep_moderate", "protein_boost_g": 10, "fiber_boost_g": 5}
+        result = adjust_for_sleep_history(2, base)
+        assert result["deficit"] == 0
+        assert result["reason"] == "sleep_severe_escalated"
+
+    def test_2_nights_normal_no_escalation(self):
+        """2 poor nights + normal → no change (normal isn't a poor tier)."""
+        base = {"deficit": 400, "reason": "normal", "protein_boost_g": 0, "fiber_boost_g": 0}
+        result = adjust_for_sleep_history(2, base)
+        assert result == base
+
+    def test_3_nights_forced_maintenance(self):
+        """3 consecutive poor nights → forced maintenance."""
+        base = {"deficit": 400, "reason": "sleep_mild", "protein_boost_g": 10, "fiber_boost_g": 5}
+        result = adjust_for_sleep_history(3, base)
+        assert result["deficit"] == 0
+        assert result["reason"] == "sleep_forced_maintenance"
+
+    def test_4_nights_still_forced_maintenance(self):
+        """4 nights → still forced maintenance (not yet diet break)."""
+        base = {"deficit": 400, "reason": "sleep_mild", "protein_boost_g": 10, "fiber_boost_g": 5}
+        result = adjust_for_sleep_history(4, base)
+        assert result["deficit"] == 0
+        assert result["reason"] == "sleep_forced_maintenance"
+
+    def test_5_nights_diet_break(self):
+        """5+ consecutive poor nights → diet break recommended."""
+        base = {"deficit": 400, "reason": "sleep_mild", "protein_boost_g": 10, "fiber_boost_g": 5}
+        result = adjust_for_sleep_history(5, base)
+        assert result["deficit"] == 0
+        assert result["reason"] == "sleep_diet_break_recommended"
+
+    def test_7_nights_still_diet_break(self):
+        """7 nights → still diet break."""
+        base = {"deficit": 400, "reason": "sleep_mild", "protein_boost_g": 10, "fiber_boost_g": 5}
+        result = adjust_for_sleep_history(7, base)
+        assert result["deficit"] == 0
+        assert result["reason"] == "sleep_diet_break_recommended"
 
 
 class TestGenerateDailyPlan:
@@ -125,7 +236,7 @@ class TestGenerateDailyPlan:
             "target_calories", "target_protein", "target_carbs",
             "target_fat", "target_fiber", "tdee_used", "deficit_used",
             "adjustment_reason", "sleep_quality_score", "training_day_type",
-            "is_refeed",
+            "is_refeed", "protein_boost_g", "fiber_boost_g",
         ]
         for field in required_fields:
             assert field in plan, f"Missing field: {field}"
@@ -167,6 +278,37 @@ class TestGenerateDailyPlan:
         )
         assert plan["deficit_used"] == 0
         assert plan["adjustment_reason"] == "sleep_severe"
+
+    def test_mild_sleep_keeps_deficit_adds_boosts(self):
+        """Score 60 → mild: deficit unchanged, protein/fiber boosted."""
+        plan = generate_daily_plan(
+            tdee=2300, deficit=400, weight_kg=80,
+            training_day_type="rest", sleep_quality_score=60,
+        )
+        assert plan["deficit_used"] == 400
+        assert plan["adjustment_reason"] == "sleep_mild"
+        assert plan["protein_boost_g"] == 10
+        assert plan["fiber_boost_g"] == 5
+
+    def test_short_sleep_overrides_score(self):
+        """4h sleep with score 80 → severe."""
+        plan = generate_daily_plan(
+            tdee=2300, deficit=400, weight_kg=80,
+            training_day_type="rest", sleep_quality_score=80,
+            total_sleep_hours=4.0,
+        )
+        assert plan["deficit_used"] == 0
+        assert plan["adjustment_reason"] == "sleep_severe"
+
+    def test_multi_day_escalation_in_plan(self):
+        """3 consecutive poor nights → forced maintenance in full plan."""
+        plan = generate_daily_plan(
+            tdee=2300, deficit=400, weight_kg=80,
+            training_day_type="rest", sleep_quality_score=60,
+            consecutive_poor_nights=3,
+        )
+        assert plan["deficit_used"] == 0
+        assert plan["adjustment_reason"] == "sleep_forced_maintenance"
 
     def test_tdee_passed_through(self):
         plan = generate_daily_plan(

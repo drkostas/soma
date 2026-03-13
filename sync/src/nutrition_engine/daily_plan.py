@@ -62,19 +62,51 @@ def classify_sleep_quality(
 # Deficit adjustment
 # ---------------------------------------------------------------------------
 
-def adjust_deficit_for_sleep(deficit: float, sleep_score: float) -> float:
-    """Adjust caloric deficit based on sleep quality score.
+def adjust_deficit_for_sleep(
+    deficit: float,
+    sleep_score: float,
+    total_sleep_hours: float | None = None,
+) -> dict:
+    """Adjust caloric deficit based on sleep quality score (Design doc §9).
 
-    - score >= 50 → no change
-    - score 30-49 → halve the deficit
-    - score < 30 → zero (maintenance calories)
+    Four tiers:
+    - Normal (score >= 70): no change
+    - Mild (score 50-69): keep deficit, boost protein +10g / fiber +5g
+    - Moderate (score 30-49): halve deficit, boost protein +10g / fiber +5g
+    - Severe (score < 30 OR total sleep < 5h): zero deficit (maintenance)
     """
-    if sleep_score >= 50:
-        return deficit
+    # <5h sleep → always severe regardless of score
+    if total_sleep_hours is not None and total_sleep_hours < 5.0:
+        return {"deficit": 0, "reason": "sleep_severe", "protein_boost_g": 0, "fiber_boost_g": 0}
+
+    if sleep_score >= 70:
+        return {"deficit": deficit, "reason": "normal", "protein_boost_g": 0, "fiber_boost_g": 0}
+    elif sleep_score >= 50:
+        # Mild: keep deficit, shift macros toward satiety
+        return {"deficit": deficit, "reason": "sleep_mild", "protein_boost_g": 10, "fiber_boost_g": 5}
     elif sleep_score >= 30:
-        return deficit / 2
+        return {"deficit": deficit / 2, "reason": "sleep_moderate", "protein_boost_g": 10, "fiber_boost_g": 5}
     else:
-        return 0.0
+        return {"deficit": 0, "reason": "sleep_severe", "protein_boost_g": 0, "fiber_boost_g": 0}
+
+
+def adjust_for_sleep_history(consecutive_poor_nights: int, base_result: dict) -> dict:
+    """Multi-day sleep escalation (Design doc §9).
+
+    - 2 poor nights → tier up (mild→moderate, moderate→severe)
+    - 3 poor nights → force maintenance
+    - 5+ poor nights → recommend diet break
+    """
+    if consecutive_poor_nights >= 5:
+        return {"deficit": 0, "reason": "sleep_diet_break_recommended", "protein_boost_g": 0, "fiber_boost_g": 0}
+    elif consecutive_poor_nights >= 3:
+        return {"deficit": 0, "reason": "sleep_forced_maintenance", "protein_boost_g": 0, "fiber_boost_g": 0}
+    elif consecutive_poor_nights >= 2:
+        if base_result["reason"] == "sleep_mild":
+            return {"deficit": base_result["deficit"] / 2, "reason": "sleep_moderate_escalated", "protein_boost_g": 10, "fiber_boost_g": 5}
+        elif base_result["reason"] == "sleep_moderate":
+            return {"deficit": 0, "reason": "sleep_severe_escalated", "protein_boost_g": 0, "fiber_boost_g": 0}
+    return base_result
 
 
 # ---------------------------------------------------------------------------
@@ -92,26 +124,30 @@ def generate_daily_plan(
     estimated_bf_pct: float | None = None,
     ffm_kg: float | None = None,
     is_refeed: bool = False,
+    total_sleep_hours: float | None = None,
+    consecutive_poor_nights: int = 0,
 ) -> dict:
     """Generate a complete daily nutrition plan.
 
-    Adjusts the deficit based on sleep quality, then delegates to
-    ``compute_macro_targets`` for the actual macro computation.
+    Adjusts the deficit based on sleep quality (4-tier system) and multi-day
+    escalation, then delegates to ``compute_macro_targets`` for the actual
+    macro computation.
 
     Returns:
         Dict with target macros plus metadata (tdee_used, deficit_used,
-        adjustment_reason, sleep_quality_score, training_day_type, is_refeed).
+        adjustment_reason, sleep_quality_score, training_day_type, is_refeed,
+        protein_boost_g, fiber_boost_g).
     """
-    # Determine adjustment reason and adjusted deficit
-    if sleep_quality_score >= 50:
-        adjustment_reason = "normal"
-        adjusted_deficit = deficit
-    elif sleep_quality_score >= 30:
-        adjustment_reason = "sleep_moderate"
-        adjusted_deficit = adjust_deficit_for_sleep(deficit, sleep_quality_score)
-    else:
-        adjustment_reason = "sleep_severe"
-        adjusted_deficit = adjust_deficit_for_sleep(deficit, sleep_quality_score)
+    # Step 1: single-night sleep adjustment (returns dict)
+    sleep_result = adjust_deficit_for_sleep(deficit, sleep_quality_score, total_sleep_hours)
+
+    # Step 2: multi-day escalation
+    sleep_result = adjust_for_sleep_history(consecutive_poor_nights, sleep_result)
+
+    adjusted_deficit = sleep_result["deficit"]
+    adjustment_reason = sleep_result["reason"]
+    protein_boost = sleep_result["protein_boost_g"]
+    fiber_boost = sleep_result["fiber_boost_g"]
 
     macros = compute_macro_targets(
         tdee=tdee,
@@ -126,14 +162,16 @@ def generate_daily_plan(
 
     return {
         "target_calories": macros["calories"],
-        "target_protein": macros["protein"],
+        "target_protein": macros["protein"] + protein_boost,
         "target_carbs": macros["carbs"],
         "target_fat": macros["fat"],
-        "target_fiber": macros["fiber"],
+        "target_fiber": macros["fiber"] + fiber_boost,
         "tdee_used": tdee,
         "deficit_used": adjusted_deficit,
         "adjustment_reason": adjustment_reason,
         "sleep_quality_score": sleep_quality_score,
         "training_day_type": training_day_type,
         "is_refeed": is_refeed,
+        "protein_boost_g": protein_boost,
+        "fiber_boost_g": fiber_boost,
     }
