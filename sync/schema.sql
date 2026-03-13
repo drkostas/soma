@@ -457,14 +457,15 @@ ALTER TABLE daily_health_summary
 -- ===================
 
 CREATE TABLE IF NOT EXISTS banister_params (
-    id          SERIAL PRIMARY KEY,
-    p0          FLOAT NOT NULL,
-    k1          FLOAT NOT NULL,
-    k2          FLOAT NOT NULL,
-    tau1        FLOAT NOT NULL,
-    tau2        FLOAT NOT NULL,
-    n_anchors   INT NOT NULL DEFAULT 0,
-    fitted_at   TIMESTAMP NOT NULL DEFAULT NOW()
+    id            SERIAL PRIMARY KEY,
+    p0            FLOAT NOT NULL,
+    k1            FLOAT NOT NULL,
+    k2            FLOAT NOT NULL,
+    tau1          FLOAT NOT NULL,
+    tau2          FLOAT NOT NULL,
+    n_anchors     INT NOT NULL DEFAULT 0,
+    current_vdot  FLOAT,
+    fitted_at     TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- ===================
@@ -480,5 +481,143 @@ CREATE TABLE IF NOT EXISTS calibration_state (
     force_equal BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (id = 1)
+);
+
+-- ===================
+-- NUTRITION ENGINE
+-- ===================
+
+CREATE TABLE IF NOT EXISTS nutrition_profile (
+    id                    INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    weight_kg             REAL,
+    height_cm             REAL,
+    age                   INTEGER,
+    sex                   VARCHAR(10),
+    activity_level        VARCHAR(20),
+    goal                  VARCHAR(20),
+    target_calories       INTEGER,
+    target_protein        REAL,
+    target_carbs          REAL,
+    target_fat            REAL,
+    target_fiber          REAL,
+    estimated_bf_pct      REAL,
+    estimated_ffm_kg      REAL,
+    target_bf_pct         REAL,
+    target_date           DATE,
+    tdee_estimate         REAL,
+    tdee_confidence       VARCHAR(20),
+    daily_deficit         REAL,
+    protein_g_per_kg      REAL DEFAULT 2.2,
+    fat_g_per_kg          REAL DEFAULT 0.8,
+    step_goal             INTEGER DEFAULT 10000,
+    creatine_dose_g       REAL DEFAULT 5.0,
+    creatine_start_date   DATE,
+    creatine_dose_change_date DATE,
+    updated_at            TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ingredients (
+    id                  VARCHAR(60) PRIMARY KEY,
+    name                VARCHAR(120) NOT NULL,
+    calories_per_100g   REAL NOT NULL,
+    protein_per_100g    REAL NOT NULL,
+    carbs_per_100g      REAL NOT NULL,
+    fat_per_100g        REAL NOT NULL,
+    fiber_per_100g      REAL NOT NULL DEFAULT 0,
+    is_raw              BOOLEAN NOT NULL DEFAULT FALSE,
+    raw_to_cooked_ratio REAL,
+    category            VARCHAR(40),
+    usda_fdc_id         INTEGER,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS preset_meals (
+    id              VARCHAR(60) PRIMARY KEY,
+    name            VARCHAR(120) NOT NULL,
+    items           JSONB NOT NULL,
+    tags            TEXT[],
+    meal_slot       VARCHAR(20),
+    total_calories  REAL,
+    total_protein   REAL,
+    total_carbs     REAL,
+    total_fat       REAL,
+    total_fiber     REAL,
+    is_system       BOOLEAN DEFAULT TRUE,
+    use_count       INTEGER DEFAULT 0,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS nutrition_day (
+    date                DATE PRIMARY KEY,
+    plan                JSONB,
+    target_calories     INTEGER,
+    target_protein      REAL,
+    target_carbs        REAL,
+    target_fat          REAL,
+    target_fiber        REAL,
+    tdee_used           REAL,
+    exercise_calories   REAL,
+    step_calories       REAL,
+    deficit_used        REAL,
+    adjustment_reason   TEXT,
+    sleep_quality_score REAL,
+    training_day_type   VARCHAR(20),
+    planned_workouts    JSONB,
+    step_goal           INTEGER,
+    is_refeed           BOOLEAN DEFAULT FALSE,
+    is_diet_break       BOOLEAN DEFAULT FALSE,
+    status              VARCHAR(20) DEFAULT 'active',
+    actual_calories     REAL DEFAULT 0,
+    actual_protein      REAL DEFAULT 0,
+    actual_carbs        REAL DEFAULT 0,
+    actual_fat          REAL DEFAULT 0,
+    actual_fiber        REAL DEFAULT 0,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS meal_log (
+    id                  SERIAL PRIMARY KEY,
+    date                DATE NOT NULL REFERENCES nutrition_day(date),
+    meal_slot           VARCHAR(20) NOT NULL,
+    source              VARCHAR(20),
+    preset_meal_id      VARCHAR(60),
+    portion_multiplier  REAL NOT NULL DEFAULT 1.0,
+    items               JSONB NOT NULL,
+    calories            REAL NOT NULL,
+    protein             REAL NOT NULL,
+    carbs               REAL NOT NULL,
+    fat                 REAL NOT NULL,
+    fiber               REAL NOT NULL DEFAULT 0,
+    notes               TEXT,
+    weigh_method        VARCHAR(20),
+    logged_at           TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS drink_log (
+    id                          SERIAL PRIMARY KEY,
+    date                        DATE NOT NULL REFERENCES nutrition_day(date),
+    drink_type                  VARCHAR(50) NOT NULL,
+    name                        VARCHAR(120) NOT NULL,
+    quantity                    REAL NOT NULL DEFAULT 1.0,
+    quantity_ml                 REAL NOT NULL,
+    calories                    REAL NOT NULL,
+    carbs                       REAL NOT NULL DEFAULT 0,
+    alcohol_grams               REAL NOT NULL DEFAULT 0,
+    fat_oxidation_pause_hours   REAL NOT NULL DEFAULT 0,
+    logged_at                   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_meal_log_date ON meal_log(date);
+CREATE INDEX IF NOT EXISTS idx_drink_log_date ON drink_log(date);
+
+CREATE TABLE IF NOT EXISTS tdee_history (
+    date                DATE PRIMARY KEY,
+    bmr                 REAL,
+    active_calories     REAL,
+    total_calories      REAL,
+    garmin_total_kcal   REAL,
+    activity_minutes    REAL,
+    source              VARCHAR(20),
+    created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
