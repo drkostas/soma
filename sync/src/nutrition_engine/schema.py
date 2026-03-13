@@ -204,6 +204,14 @@ CREATE TABLE IF NOT EXISTS tdee_history (
     source              VARCHAR(20),
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Backfill tdee_history with design doc columns
+ALTER TABLE tdee_history ADD COLUMN IF NOT EXISTS raw_weight REAL;
+ALTER TABLE tdee_history ADD COLUMN IF NOT EXISTS smoothed_weight REAL;
+ALTER TABLE tdee_history ADD COLUMN IF NOT EXISTS creatine_adjusted_weight REAL;
+ALTER TABLE tdee_history ADD COLUMN IF NOT EXISTS intake_calories REAL;
+ALTER TABLE tdee_history ADD COLUMN IF NOT EXISTS tdee_estimate REAL;
+ALTER TABLE tdee_history ADD COLUMN IF NOT EXISTS confidence_interval REAL;
 """
 
 

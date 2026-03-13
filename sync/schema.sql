@@ -611,13 +611,19 @@ CREATE INDEX IF NOT EXISTS idx_meal_log_date ON meal_log(date);
 CREATE INDEX IF NOT EXISTS idx_drink_log_date ON drink_log(date);
 
 CREATE TABLE IF NOT EXISTS tdee_history (
-    date                DATE PRIMARY KEY,
-    bmr                 REAL,
-    active_calories     REAL,
-    total_calories      REAL,
-    garmin_total_kcal   REAL,
-    activity_minutes    REAL,
-    source              VARCHAR(20),
-    created_at          TIMESTAMPTZ DEFAULT NOW()
+    date                       DATE PRIMARY KEY,
+    bmr                        REAL,
+    active_calories            REAL,
+    total_calories             REAL,
+    garmin_total_kcal          REAL,
+    activity_minutes           REAL,
+    raw_weight                 REAL,
+    smoothed_weight            REAL,
+    creatine_adjusted_weight   REAL,
+    intake_calories            REAL,
+    tdee_estimate              REAL,
+    confidence_interval        REAL,
+    source                     VARCHAR(20),
+    created_at                 TIMESTAMPTZ DEFAULT NOW()
 );
 
