@@ -1,8 +1,11 @@
-"""TDEE bootstrap and macro target computation — Task 4.
+"""TDEE bootstrap and macro target computation — Tasks 4 & 7.
 
 Provides functions to estimate Total Daily Energy Expenditure from Garmin
 data and compute per-day macronutrient targets based on training day type,
 deficit goals, and RED-S safety floors.
+
+Task 7 adds HR-zone-based exercise calorie computation using the Keytel
+formula, replacing the static TRAINING_CALORIE_BOOST dict.
 """
 
 from __future__ import annotations
@@ -11,13 +14,23 @@ from __future__ import annotations
 # Constants
 # ---------------------------------------------------------------------------
 
-TRAINING_CALORIE_BOOST: dict[str, int] = {
-    "rest": 0,
-    "easy_run": 275,
-    "hard_run": 500,
-    "long_run": 650,
-    "gym": 275,
-    "gym_and_run": 600,
+# HR zone midpoints (bpm) — standard Garmin 5-zone model
+HR_ZONE_MIDPOINTS: dict[int, int] = {1: 115, 2: 140, 3: 158, 4: 172, 5: 183}
+
+# Gym calorie estimation
+GYM_KCAL_PER_MIN: float = 6
+GYM_EPOC_FRACTION: float = 0.10
+
+# EPOC multiplier by HR zone
+EPOC_BY_ZONE: dict[int, float] = {1: 0.02, 2: 0.05, 3: 0.08, 4: 0.12, 5: 0.15}
+
+# Default pace (sec/km) by HR zone when no pace targets are available
+_DEFAULT_PACE_BY_ZONE: dict[int, float] = {
+    1: 420,  # ~7:00 /km — easy jog / walk
+    2: 360,  # ~6:00 /km — easy run
+    3: 320,  # ~5:20 /km — tempo
+    4: 280,  # ~4:40 /km — threshold
+    5: 250,  # ~4:10 /km — VO2max
 }
 
 CARB_TARGETS_G_PER_KG: dict[str, float] = {
@@ -34,7 +47,136 @@ REDS_FLOOR: int = 25  # kcal per kg FFM
 
 
 # ---------------------------------------------------------------------------
-# Functions
+# HR-zone calorie helpers (Task 7)
+# ---------------------------------------------------------------------------
+
+def _keytel_kcal_per_min(
+    hr: float, weight_kg: float, age: int, sex: str,
+) -> float:
+    """Keytel et al. (2005) energy expenditure formula.
+
+    Returns estimated kcal burned per minute at a given heart rate.
+
+    Args:
+        hr: Heart rate in bpm.
+        weight_kg: Body weight in kg.
+        age: Age in years.
+        sex: ``"male"`` or ``"female"``; anything else defaults to male.
+    """
+    if sex == "female":
+        return (-20.4022 + 0.4472 * hr - 0.1263 * weight_kg + 0.074 * age) / 4.184
+    # Male (default)
+    return (-55.0969 + 0.6309 * hr + 0.1988 * weight_kg + 0.2017 * age) / 4.184
+
+
+def _estimate_step_duration_min(step: dict) -> float:
+    """Estimate the duration (minutes) of a single workout step.
+
+    Handles three duration types:
+    - ``time``: duration_value is seconds → convert to minutes.
+    - ``distance``: duration_value is meters → estimate from pace targets
+      (average of target_pace_min/max in sec/km) or from HR-zone default pace.
+    - ``lap_button`` or value == 0: returns 0.
+    """
+    dtype = step.get("duration_type", "")
+    value = step.get("duration_value", 0) or 0
+
+    if value == 0 or dtype == "lap_button":
+        return 0.0
+
+    if dtype == "time":
+        return value / 60.0
+
+    if dtype == "distance":
+        # distance in meters
+        dist_km = value / 1000.0
+
+        pace_min = step.get("target_pace_min")
+        pace_max = step.get("target_pace_max")
+
+        if pace_min and pace_max:
+            avg_pace_sec_per_km = (pace_min + pace_max) / 2.0
+        elif pace_min:
+            avg_pace_sec_per_km = pace_min
+        elif pace_max:
+            avg_pace_sec_per_km = pace_max
+        else:
+            # Fall back to HR-zone default pace
+            zone = step.get("hr_zone", 2)
+            avg_pace_sec_per_km = _DEFAULT_PACE_BY_ZONE.get(zone, 360)
+
+        return dist_km * avg_pace_sec_per_km / 60.0
+
+    # Unknown duration type
+    return 0.0
+
+
+def estimate_step_calories(
+    step: dict,
+    weight_kg: float,
+    age: int,
+    sex: str,
+) -> float:
+    """Compute calories for a single workout step using Keytel + EPOC.
+
+    Args:
+        step: Workout step dict with hr_zone, duration_type, duration_value, etc.
+        weight_kg: Body weight in kg.
+        age: Age in years.
+        sex: ``"male"`` or ``"female"``.
+
+    Returns:
+        Estimated calories (kcal) for this step.
+    """
+    duration_min = _estimate_step_duration_min(step)
+    if duration_min <= 0:
+        return 0.0
+
+    zone = step.get("hr_zone", 2)
+    hr = HR_ZONE_MIDPOINTS.get(zone, 140)
+
+    base_per_min = _keytel_kcal_per_min(hr, weight_kg, age, sex)
+    epoc_mult = 1.0 + EPOC_BY_ZONE.get(zone, 0.05)
+
+    return base_per_min * duration_min * epoc_mult
+
+
+def compute_exercise_calories(
+    workout_steps: list[dict] | None,
+    weight_kg: float,
+    age: int,
+    sex: str,
+    has_gym: bool = False,
+    gym_duration_min: float = 60,
+) -> float:
+    """Sum calories across all workout steps + optional gym session.
+
+    Args:
+        workout_steps: List of step dicts from training_plan_day.workout_steps.
+            ``None`` or empty list → 0 run calories.
+        weight_kg: Body weight in kg.
+        age: Age in years.
+        sex: ``"male"`` or ``"female"``.
+        has_gym: Whether the day includes a gym session.
+        gym_duration_min: Duration of gym session in minutes (default 60).
+
+    Returns:
+        Total estimated exercise calories (kcal).
+    """
+    total = 0.0
+
+    if workout_steps:
+        for step in workout_steps:
+            total += estimate_step_calories(step, weight_kg, age, sex)
+
+    if has_gym:
+        total += gym_duration_min * GYM_KCAL_PER_MIN * (1 + GYM_EPOC_FRACTION)
+
+    return total
+
+
+# ---------------------------------------------------------------------------
+# Core functions
 # ---------------------------------------------------------------------------
 
 def bootstrap_tdee(bmr: float, active_kcal: float) -> float:
@@ -52,7 +194,8 @@ def compute_macro_targets(
     tdee: float,
     deficit: float,
     weight_kg: float,
-    training_day_type: str,
+    exercise_calories: float = 0,
+    training_day_type: str = "rest",
     protein_g_per_kg: float = 2.2,
     fat_g_per_kg: float = 0.8,
     estimated_bf_pct: float | None = None,
@@ -64,7 +207,9 @@ def compute_macro_targets(
         tdee: Total daily energy expenditure in kcal.
         deficit: Desired caloric deficit in kcal (capped at MAX_DEFICIT).
         weight_kg: Current body weight in kg.
-        training_day_type: One of the keys in TRAINING_CALORIE_BOOST.
+        exercise_calories: Estimated exercise calories from
+            :func:`compute_exercise_calories` (replaces static boost).
+        training_day_type: Day type key for carb periodization (Task 10).
         protein_g_per_kg: Protein target per kg body weight (default 2.2).
         fat_g_per_kg: Fat target per kg body weight (default 0.8).
         estimated_bf_pct: Optional body fat percentage (unused currently).
@@ -76,29 +221,26 @@ def compute_macro_targets(
     # 1. Cap deficit at MAX_DEFICIT
     deficit = min(deficit, MAX_DEFICIT)
 
-    # 2. Training calorie boost
-    boost = TRAINING_CALORIE_BOOST.get(training_day_type, 0)
+    # 2. Target calories = TDEE + exercise calories - deficit
+    target_calories = int(tdee + exercise_calories - deficit)
 
-    # 3. Target calories
-    target_calories = int(tdee - deficit + boost)
-
-    # 4. RED-S floor check
+    # 3. RED-S floor check
     if ffm_kg is not None:
         reds_minimum = int(REDS_FLOOR * ffm_kg)
         if target_calories < reds_minimum:
             target_calories = reds_minimum
 
-    # 5. Protein
+    # 4. Protein
     protein = round(weight_kg * protein_g_per_kg)
 
-    # 6. Fat
+    # 5. Fat
     fat = round(weight_kg * fat_g_per_kg)
 
-    # 7. Carbs = remainder
+    # 6. Carbs = remainder
     carbs_kcal = target_calories - (protein * 4) - (fat * 9)
     carbs = max(0, round(carbs_kcal / 4))
 
-    # 8. Fiber (fixed)
+    # 7. Fiber (fixed)
     fiber = 35
 
     return {
