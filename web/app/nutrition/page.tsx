@@ -82,8 +82,9 @@ async function getSleepDetail(date: string) {
   return rows[0] ?? null;
 }
 
-export default async function NutritionPage() {
-  const today = new Date().toISOString().slice(0, 10);
+export default async function NutritionPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+  const params = await searchParams;
+  const today = params.date || new Date().toISOString().slice(0, 10);
 
   const [plan, meals, drinks, presets, training, health, sleep] =
     await Promise.all([

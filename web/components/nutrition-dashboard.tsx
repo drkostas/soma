@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { AlertTriangle, Lock, Moon, Footprints, Dumbbell } from "lucide-react";
+import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -224,21 +224,29 @@ export function NutritionDashboard({
 
   return (
     <div className="space-y-4">
-      {/* Date header */}
+      {/* Date header with navigation */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">
-          {new Date(date + "T12:00:00").toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "short",
-            day: "numeric",
-          })}
-        </h1>
-        {isClosed && (
-          <Badge variant="secondary" className="gap-1">
-            <Lock className="h-3 w-3" />
-            Closed
-          </Badge>
-        )}
+        <a href={`/nutrition?date=${(() => { const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })()}`}>
+          <Button variant="ghost" size="icon"><ChevronLeft className="h-4 w-4" /></Button>
+        </a>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold">
+            {new Date(date + "T12:00:00").toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+            })}
+          </h1>
+          {isClosed && (
+            <Badge variant="secondary" className="gap-1">
+              <Lock className="h-3 w-3" />
+              Closed
+            </Badge>
+          )}
+        </div>
+        <a href={`/nutrition?date=${(() => { const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })()}`}>
+          <Button variant="ghost" size="icon"><ChevronRight className="h-4 w-4" /></Button>
+        </a>
       </div>
 
       {/* Sleep adjustment banner */}
