@@ -111,20 +111,25 @@ def test_cruise_intervals_steps():
         reps=4, rep_distance_m=1600, t_pace=269, recovery_sec=90,
         wu_km=2.0, cd_km=2.0, e_pace_min=322, e_pace_max=345,
     )
-    # warmup + 4 intervals + 3 recoveries + cooldown = 9 steps
-    assert len(steps) == 9
+    # warmup + lap-button + 4 intervals + 3 recoveries + cooldown = 10 steps
+    assert len(steps) == 10
 
-    # Warmup
+    # Warmup (HR-targeted, zone 2)
     assert steps[0]["step_type"] == "warmup"
     assert steps[0]["duration_value"] == 2000
-    assert steps[0]["target_pace_min"] == 322
+    assert steps[0]["target_type"] == "hr"
+    assert steps[0]["hr_zone"] == 2
 
-    # Intervals at T-pace
+    # Lap button
+    assert steps[1]["step_type"] == "rest"
+    assert steps[1]["duration_type"] == "lap_button"
+
+    # Intervals at T-pace ± 7 sec/km
     interval_steps = [s for s in steps if s["step_type"] == "interval"]
     assert len(interval_steps) == 4
     for s in interval_steps:
-        assert s["target_pace_min"] == 269
-        assert s["target_pace_max"] == 269
+        assert s["target_pace_min"] == 262  # t_pace(269) - 7
+        assert s["target_pace_max"] == 276  # t_pace(269) + 7
         assert s["duration_value"] == 1600
 
     # Recoveries
@@ -144,20 +149,20 @@ def test_easy_with_strides_steps():
         distance_km=7.0, e_pace_min=322, e_pace_max=345,
         stride_count=6, r_pace_min=227, r_pace_max=233,
     )
-    # easy portion + 6 strides + 5 recovery jogs + 1 final cooldown = 13 steps
-    assert len(steps) == 13
+    # easy portion + lap-button + 6 strides + 5 recovery jogs + 1 final cooldown = 14 steps
+    assert len(steps) == 14
 
-    # First step is easy run
-    assert steps[0]["target_type"] == "pace"
-    assert steps[0]["target_pace_min"] == 322
+    # First step is easy run (HR-targeted, zone 2)
+    assert steps[0]["target_type"] == "hr"
+    assert steps[0]["hr_zone"] == 2
 
-    # Stride steps should be at R-pace
-    stride_steps = [s for s in steps if s["step_type"] == "interval" and "Stride" in s["description"]]
+    # Stride steps should be at R-pace (time-based, 20 sec each)
+    stride_steps = [s for s in steps if s["step_type"] == "interval" and "tride" in s["description"]]
     assert len(stride_steps) == 6
     for s in stride_steps:
         assert s["target_pace_min"] == 227
         assert s["target_pace_max"] == 233
-        assert s["duration_value"] == 100  # 100m strides
+        assert s["duration_value"] == 20  # 20-second strides
 
 
 def test_gym_schedule():
