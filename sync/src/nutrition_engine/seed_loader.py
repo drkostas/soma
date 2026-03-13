@@ -32,13 +32,15 @@ def build_ingredient_insert_sql(ingredients: dict[str, dict[str, Any]]) -> str:
             else "NULL"
         )
         category = f"'{ing['category']}'" if ing.get("category") else "NULL"
+        usda_fdc_id = ing.get("usda_fdc_id")
+        usda_fdc_id_sql = str(usda_fdc_id) if usda_fdc_id is not None else "NULL"
 
         rows.append(
             f"('{ing_id}', '{name}', "
             f"{ing['calories_per_100g']}, {ing['protein_per_100g']}, "
             f"{ing['carbs_per_100g']}, {ing['fat_per_100g']}, "
             f"{ing['fiber_per_100g']}, {ing['is_raw']}, "
-            f"{raw_to_cooked}, {category})"
+            f"{raw_to_cooked}, {category}, {usda_fdc_id_sql})"
         )
 
     values = ",\n  ".join(rows)
@@ -46,7 +48,8 @@ def build_ingredient_insert_sql(ingredients: dict[str, dict[str, Any]]) -> str:
     return (
         f"INSERT INTO ingredients "
         f"(id, name, calories_per_100g, protein_per_100g, carbs_per_100g, "
-        f"fat_per_100g, fiber_per_100g, is_raw, raw_to_cooked_ratio, category)\n"
+        f"fat_per_100g, fiber_per_100g, is_raw, raw_to_cooked_ratio, category, "
+        f"usda_fdc_id)\n"
         f"VALUES\n  {values}\n"
         f"ON CONFLICT (id) DO UPDATE SET\n"
         f"  calories_per_100g = EXCLUDED.calories_per_100g,\n"
@@ -56,7 +59,8 @@ def build_ingredient_insert_sql(ingredients: dict[str, dict[str, Any]]) -> str:
         f"  fiber_per_100g    = EXCLUDED.fiber_per_100g,\n"
         f"  is_raw            = EXCLUDED.is_raw,\n"
         f"  raw_to_cooked_ratio = EXCLUDED.raw_to_cooked_ratio,\n"
-        f"  category          = EXCLUDED.category;"
+        f"  category          = EXCLUDED.category,\n"
+        f"  usda_fdc_id       = EXCLUDED.usda_fdc_id;"
     )
 
 
@@ -67,7 +71,8 @@ def build_preset_insert_sql(
     """Build INSERT for all presets with pre-computed macro totals.
 
     Uses compute_meal_macros to compute calories/protein/carbs/fat/fiber
-    for each preset, embedding them as top-level fields in the items JSONB.
+    for each preset, embedding them as top-level fields in the items JSONB
+    and also as dedicated columns for fast querying.
 
     Args:
         presets: The preset meal database mapping id -> preset dict.
@@ -81,14 +86,20 @@ def build_preset_insert_sql(
         macros = compute_meal_macros(preset["items"], ingredients)
         name = preset["name"].replace("'", "''")
 
+        total_cal = round(macros["calories"], 1)
+        total_pro = round(macros["protein"], 1)
+        total_carb = round(macros["carbs"], 1)
+        total_fat = round(macros["fat"], 1)
+        total_fib = round(macros["fiber"], 1)
+
         # Build the JSONB payload: items + macro totals
         items_payload = {
             "items": preset["items"],
-            "calories": round(macros["calories"], 1),
-            "protein": round(macros["protein"], 1),
-            "carbs": round(macros["carbs"], 1),
-            "fat": round(macros["fat"], 1),
-            "fiber": round(macros["fiber"], 1),
+            "calories": total_cal,
+            "protein": total_pro,
+            "carbs": total_carb,
+            "fat": total_fat,
+            "fiber": total_fib,
         }
         items_json = json.dumps(items_payload).replace("'", "''")
 
@@ -96,17 +107,34 @@ def build_preset_insert_sql(
         tags = preset.get("tags", [])
         tags_literal = "ARRAY[" + ", ".join(f"'{t}'" for t in tags) + "]::text[]"
 
-        rows.append(f"('{preset_id}', '{name}', '{items_json}', {tags_literal})")
+        # meal_slot column
+        meal_slot = preset.get("meal_slot")
+        meal_slot_sql = f"'{meal_slot}'" if meal_slot else "NULL"
+
+        rows.append(
+            f"('{preset_id}', '{name}', '{items_json}', {tags_literal}, "
+            f"{meal_slot_sql}, {total_cal}, {total_pro}, {total_carb}, "
+            f"{total_fat}, {total_fib}, TRUE)"
+        )
 
     values = ",\n  ".join(rows)
 
     return (
-        f"INSERT INTO preset_meals (id, name, items, tags)\n"
+        f"INSERT INTO preset_meals "
+        f"(id, name, items, tags, meal_slot, total_calories, total_protein, "
+        f"total_carbs, total_fat, total_fiber, is_system)\n"
         f"VALUES\n  {values}\n"
         f"ON CONFLICT (id) DO UPDATE SET\n"
-        f"  name  = EXCLUDED.name,\n"
-        f"  items = EXCLUDED.items,\n"
-        f"  tags  = EXCLUDED.tags;"
+        f"  name           = EXCLUDED.name,\n"
+        f"  items          = EXCLUDED.items,\n"
+        f"  tags           = EXCLUDED.tags,\n"
+        f"  meal_slot      = EXCLUDED.meal_slot,\n"
+        f"  total_calories = EXCLUDED.total_calories,\n"
+        f"  total_protein  = EXCLUDED.total_protein,\n"
+        f"  total_carbs    = EXCLUDED.total_carbs,\n"
+        f"  total_fat      = EXCLUDED.total_fat,\n"
+        f"  total_fiber    = EXCLUDED.total_fiber,\n"
+        f"  is_system      = EXCLUDED.is_system;"
     )
 
 

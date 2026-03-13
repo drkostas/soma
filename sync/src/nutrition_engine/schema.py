@@ -64,14 +64,35 @@ CREATE TABLE IF NOT EXISTS ingredients (
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Backfill ingredients columns for existing installs
+ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS usda_fdc_id INTEGER;
+
 -- Preset meal templates
 CREATE TABLE IF NOT EXISTS preset_meals (
-    id          VARCHAR(60) PRIMARY KEY,
-    name        VARCHAR(120) NOT NULL,
-    items       JSONB NOT NULL,
-    tags        TEXT[],
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    id              VARCHAR(60) PRIMARY KEY,
+    name            VARCHAR(120) NOT NULL,
+    items           JSONB NOT NULL,
+    tags            TEXT[],
+    meal_slot       VARCHAR(20),
+    total_calories  REAL,
+    total_protein   REAL,
+    total_carbs     REAL,
+    total_fat       REAL,
+    total_fiber     REAL,
+    is_system       BOOLEAN DEFAULT TRUE,
+    use_count       INTEGER DEFAULT 0,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Backfill preset_meals columns for existing installs
+ALTER TABLE preset_meals ADD COLUMN IF NOT EXISTS meal_slot       VARCHAR(20);
+ALTER TABLE preset_meals ADD COLUMN IF NOT EXISTS total_calories  REAL;
+ALTER TABLE preset_meals ADD COLUMN IF NOT EXISTS total_protein   REAL;
+ALTER TABLE preset_meals ADD COLUMN IF NOT EXISTS total_carbs     REAL;
+ALTER TABLE preset_meals ADD COLUMN IF NOT EXISTS total_fat       REAL;
+ALTER TABLE preset_meals ADD COLUMN IF NOT EXISTS total_fiber     REAL;
+ALTER TABLE preset_meals ADD COLUMN IF NOT EXISTS is_system       BOOLEAN DEFAULT TRUE;
+ALTER TABLE preset_meals ADD COLUMN IF NOT EXISTS use_count       INTEGER DEFAULT 0;
 
 -- Daily nutrition plan / summary
 CREATE TABLE IF NOT EXISTS nutrition_day (
