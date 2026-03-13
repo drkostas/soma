@@ -27,7 +27,11 @@ class TestBootstrapTdee:
 
 class TestComputeMacroTargets:
     def test_rest_day_macros(self):
-        """Rest day: 2300 TDEE - 400 deficit + 0 exercise = 1900, 80kg."""
+        """Rest day: 2300 TDEE - 400 deficit + 0 exercise = 1900, 80kg.
+
+        Carb floor (rest = 3.0 g/kg × 80 = 240g) exceeds remainder (155g),
+        so fat is reduced to compensate (down to absolute floor 0.5 g/kg = 40g).
+        """
         result = compute_macro_targets(
             tdee=2300,
             deficit=400,
@@ -37,10 +41,8 @@ class TestComputeMacroTargets:
         )
         assert result["calories"] == 1900
         assert result["protein"] == 176   # 80 * 2.2 = 176
-        assert result["fat"] == 64        # 80 * 0.8 = 64
-        # Carbs = (1900 - 176*4 - 64*9) / 4
-        expected_carbs = (1900 - 176 * 4 - 64 * 9) / 4
-        assert result["carbs"] == round(expected_carbs)
+        assert result["carbs"] == 240     # carb floor: 3.0 * 80 = 240
+        assert result["fat"] == 40        # reduced from 64 (floor: 0.5 * 80 = 40)
         assert result["fiber"] == 35
 
     def test_exercise_calories_more_carbs_than_rest(self):
@@ -106,11 +108,14 @@ class TestComputeMacroTargets:
         assert result["protein"] == round(80 * 1.8)
 
     def test_custom_fat_per_kg(self):
+        """Custom fat 1.0 g/kg = 80g, but carb floor (240g) pushes total over
+        target, so fat is reduced to 71g to compensate."""
         result = compute_macro_targets(
             tdee=2300, deficit=0, weight_kg=80,
             fat_g_per_kg=1.0,
         )
-        assert result["fat"] == round(80 * 1.0)
+        # Fat starts at 80g but is reduced because carb floor (240g) exceeds remainder (219g)
+        assert result["fat"] == 71
 
     def test_zero_deficit(self):
         result = compute_macro_targets(
@@ -133,6 +138,31 @@ class TestComputeMacroTargets:
         )
         for field in ["calories", "protein", "carbs", "fat", "fiber"]:
             assert field in result, f"Missing field: {field}"
+
+
+class TestCarbPeriodization:
+    def test_carb_periodization_rest_vs_long_run(self):
+        rest = compute_macro_targets(2200, 300, 80, exercise_calories=0, training_day_type="rest")
+        long = compute_macro_targets(2850, 300, 80, exercise_calories=650, training_day_type="long_run")
+        assert long["carbs"] > rest["carbs"]
+        assert long["carbs"] >= 80 * 4.5  # at least 4.5 g/kg for long runs
+
+    def test_carb_floor_enforced(self):
+        # Even with low exercise calories, carb floor should be respected for the training type
+        result = compute_macro_targets(1800, 0, 80, exercise_calories=500, training_day_type="hard_run")
+        assert result["carbs"] >= 80 * 4.0  # hard_run floor is 4.25 g/kg
+
+    def test_fat_reduced_when_carb_floor_active(self):
+        # When carb floor is active, fat should be reduced to compensate (never protein)
+        normal = compute_macro_targets(2500, 300, 80, exercise_calories=200, training_day_type="rest")
+        hard = compute_macro_targets(2500, 300, 80, exercise_calories=200, training_day_type="hard_run")
+        # Hard run has carb floor, may reduce fat
+        if hard["carbs"] > normal["carbs"]:
+            assert hard["fat"] <= normal["fat"]  # fat reduced to compensate
+
+    def test_rest_day_carbs_at_least_floor(self):
+        result = compute_macro_targets(2200, 300, 80, exercise_calories=0, training_day_type="rest")
+        assert result["carbs"] >= 80 * 3.0  # rest floor is 3.0 g/kg
 
 
 class TestConstants:
