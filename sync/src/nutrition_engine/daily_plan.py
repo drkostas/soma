@@ -228,7 +228,7 @@ def redistribute_remaining(daily_targets: dict, eaten_by_slot: dict) -> dict:
     unfilled = [s for s in ALL_SLOTS if s not in filled_slots]
 
     if not unfilled:
-        return {s: {m: 0 for m in total_eaten} for s in ALL_SLOTS}
+        return {s: eaten_by_slot.get(s, {m: 0 for m in total_eaten}) for s in ALL_SLOTS}
 
     # Distribute remaining proportionally to default ratios of unfilled slots
     slot_weights = {}
