@@ -154,6 +154,7 @@ export function NutritionDashboard({
   const [meals, setMeals] = useState<Meal[]>(initialMeals);
   const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
   const [closing, setClosing] = useState(false);
+  const [workoutEnabled, setWorkoutEnabled] = useState(true);
 
   const isClosed = plan?.status === "closed";
 
@@ -184,7 +185,10 @@ export function NutritionDashboard({
   const consumedFat = meals.reduce((s, m) => s + Number(m.fat || 0), 0);
   const consumedFiber = meals.reduce((s, m) => s + Number(m.fiber || 0), 0);
 
-  const targetCal = Number(plan?.target_calories) || 0;
+  const exerciseCal = Number(plan?.exercise_calories) || 0;
+  const targetCal = workoutEnabled
+    ? (Number(plan?.target_calories) || 0)
+    : (Number(plan?.target_calories) || 0) - exerciseCal;
   const targetProtein = Number(plan?.target_protein) || 0;
   const targetCarbs = Number(plan?.target_carbs) || 0;
   const targetFat = Number(plan?.target_fat) || 0;
@@ -360,6 +364,16 @@ export function NutritionDashboard({
               <Badge variant="outline" className="text-[10px] px-1 py-0">
                 {training.load_level}
               </Badge>
+            )}
+            {exerciseCal > 0 && (
+              <Button
+                variant={workoutEnabled ? "default" : "outline"}
+                size="sm"
+                className="h-6 text-xs ml-1"
+                onClick={() => setWorkoutEnabled(!workoutEnabled)}
+              >
+                {workoutEnabled ? "ON" : "OFF"}
+              </Button>
             )}
           </div>
         )}
