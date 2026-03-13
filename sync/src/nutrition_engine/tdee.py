@@ -33,6 +33,9 @@ _DEFAULT_PACE_BY_ZONE: dict[int, float] = {
     5: 250,  # ~4:10 /km — VO2max
 }
 
+# Step calorie estimation
+STEP_KCAL_PER_STEP_PER_KG: float = 0.0005  # 10k steps × 80kg = 400 kcal
+
 CARB_TARGETS_G_PER_KG: dict[str, float] = {
     "rest": 3.0,
     "easy_run": 3.5,
@@ -44,6 +47,30 @@ CARB_TARGETS_G_PER_KG: dict[str, float] = {
 
 MAX_DEFICIT: int = 500
 REDS_FLOOR: int = 25  # kcal per kg FFM
+
+
+# ---------------------------------------------------------------------------
+# Step calorie helpers (Task 8)
+# ---------------------------------------------------------------------------
+
+def compute_step_calories(step_goal: int, weight_kg: float) -> float:
+    """Compute NEAT calories from expected daily steps.
+
+    Uses step_goal (not actual steps) since this is for planning.
+
+    Formula: step_goal × 0.0005 × weight_kg
+    e.g. 10 000 steps × 0.0005 × 80 kg = 400 kcal
+
+    Args:
+        step_goal: Daily step target (non-negative).
+        weight_kg: Body weight in kg.
+
+    Returns:
+        Estimated NEAT calories from walking/steps, rounded to 1 decimal.
+    """
+    if step_goal <= 0:
+        return 0.0
+    return round(step_goal * STEP_KCAL_PER_STEP_PER_KG * weight_kg, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -186,8 +213,21 @@ def bootstrap_tdee(bmr: float, active_kcal: float) -> float:
 
     The 0.75 multiplier accounts for Garmin's tendency to overestimate
     active calorie burn.
+
+    .. deprecated::
+        Use :func:`bootstrap_tdee_base` instead. Step and exercise
+        calories are now added separately at the daily plan level.
     """
     return bmr + active_kcal * 0.75
+
+
+def bootstrap_tdee_base(bmr: float) -> float:
+    """Return base TDEE = BMR.
+
+    Step calories and exercise calories are added separately at the
+    daily plan level (Tasks 8 & 7 respectively).
+    """
+    return bmr
 
 
 def compute_macro_targets(

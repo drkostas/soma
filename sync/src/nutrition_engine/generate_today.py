@@ -14,7 +14,7 @@ from datetime import date
 
 from db import get_connection
 from nutrition_engine.daily_plan import classify_sleep_quality, generate_daily_plan
-from nutrition_engine.tdee import bootstrap_tdee
+from nutrition_engine.tdee import bootstrap_tdee_base
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -131,9 +131,8 @@ def generate_today() -> None:
             health_row = cur.fetchone()
             if health_row and health_row[0]:
                 bmr = float(health_row[0])
-                active = float(health_row[1] or 0)
-                tdee = bootstrap_tdee(bmr, active)
-                logger.info("TDEE bootstrapped from Garmin: %.0f (BMR=%.0f, active=%.0f)", tdee, bmr, active)
+                tdee = bootstrap_tdee_base(bmr)
+                logger.info("TDEE base from Garmin BMR: %.0f (step & exercise cal added separately)", tdee)
             else:
                 tdee = DEFAULT_TDEE
                 logger.info("No Garmin data; using default TDEE=%d", DEFAULT_TDEE)
