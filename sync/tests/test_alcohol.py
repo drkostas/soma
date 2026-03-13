@@ -1,7 +1,11 @@
-"""Tests for nutrition_engine.alcohol — Task 6."""
+"""Tests for nutrition_engine.alcohol — Tasks 6 & 12."""
 import pytest
 
-from nutrition_engine.alcohol import compute_drink_entry, fat_oxidation_pause_hours
+from nutrition_engine.alcohol import (
+    compute_alcohol_displacement,
+    compute_drink_entry,
+    fat_oxidation_pause_hours,
+)
 
 
 class TestComputeDrinkEntry:
@@ -114,3 +118,60 @@ class TestFatOxidationPauseHours:
         assert entry["fat_oxidation_pause_hours"] > 0
         # 3 IPAs ~ 54g alcohol → should be 8-12h range
         assert 8 <= entry["fat_oxidation_pause_hours"] <= 14
+
+
+class TestAlcoholDisplacement:
+    def test_macro_displacement_basic(self):
+        result = compute_alcohol_displacement(
+            alcohol_calories=600, remaining_fat_g=64, remaining_carbs_g=200
+        )
+        assert result["fat_reduction_g"] > 0
+        assert result["carbs_reduction_g"] > 0
+        assert result["protein_reduction_g"] == 0
+        # 60-70% from fat
+        fat_kcal_reduced = result["fat_reduction_g"] * 9
+        assert 0.55 * 600 <= fat_kcal_reduced <= 0.75 * 600
+
+    def test_displacement_never_touches_protein(self):
+        result = compute_alcohol_displacement(600, 20, 50)  # low remaining macros
+        assert result["protein_reduction_g"] == 0
+
+    def test_zero_alcohol_returns_zero_displacement(self):
+        result = compute_alcohol_displacement(0, 64, 200)
+        assert result["fat_reduction_g"] == 0
+        assert result["carbs_reduction_g"] == 0
+        assert result["protein_reduction_g"] == 0
+
+    def test_fat_displacement_capped_at_remaining(self):
+        """Fat reduction can't exceed remaining fat budget."""
+        result = compute_alcohol_displacement(
+            alcohol_calories=600, remaining_fat_g=10, remaining_carbs_g=200
+        )
+        assert result["fat_reduction_g"] <= 10
+
+    def test_carbs_displacement_capped_at_remaining(self):
+        """Carbs reduction can't exceed remaining carbs budget."""
+        result = compute_alcohol_displacement(
+            alcohol_calories=600, remaining_fat_g=100, remaining_carbs_g=5
+        )
+        assert result["carbs_reduction_g"] <= 5
+
+    def test_low_fat_budget_shifts_to_carbs(self):
+        """When fat budget is low, excess displacement shifts to carbs."""
+        # With only 5g fat remaining (45 kcal from fat), most of 600 kcal
+        # displacement must come from carbs
+        result = compute_alcohol_displacement(
+            alcohol_calories=600, remaining_fat_g=5, remaining_carbs_g=200
+        )
+        assert result["fat_reduction_g"] <= 5
+        # The carbs reduction should pick up the slack
+        assert result["carbs_reduction_g"] > 0
+        total_displaced = result["fat_reduction_g"] * 9 + result["carbs_reduction_g"] * 4
+        # Should displace close to 600 kcal total (within rounding)
+        assert total_displaced == pytest.approx(600, abs=1)
+
+    def test_result_contains_all_expected_keys(self):
+        result = compute_alcohol_displacement(300, 50, 100)
+        assert "fat_reduction_g" in result
+        assert "carbs_reduction_g" in result
+        assert "protein_reduction_g" in result

@@ -43,6 +43,50 @@ def fat_oxidation_pause_hours(alcohol_grams: float) -> float:
         return min(24.0, hours)
 
 
+def compute_alcohol_displacement(
+    alcohol_calories: float,
+    remaining_fat_g: float,
+    remaining_carbs_g: float,
+    fat_fraction: float = 0.65,
+) -> dict:
+    """Compute macro displacement from alcohol calories.
+
+    Alcohol calories displace other macros:
+    - 60-70% from fat (default 65%)
+    - 30-40% from carbs (remainder)
+    - NEVER from protein
+
+    Displacement is capped at remaining budget for each macro.
+    If one macro's budget is insufficient, excess shifts to the other.
+    """
+    if alcohol_calories <= 0:
+        return {
+            "fat_reduction_g": 0.0,
+            "carbs_reduction_g": 0.0,
+            "protein_reduction_g": 0.0,
+        }
+
+    # Target displacement in grams
+    target_fat_g = alcohol_calories * fat_fraction / 9.0
+    target_carb_g = alcohol_calories * (1.0 - fat_fraction) / 4.0
+
+    # Cap fat at remaining budget
+    actual_fat_g = min(target_fat_g, remaining_fat_g)
+    uncovered_fat_kcal = (target_fat_g - actual_fat_g) * 9.0
+
+    # Shift uncovered fat calories to carbs
+    target_carb_g += uncovered_fat_kcal / 4.0
+
+    # Cap carbs at remaining budget
+    actual_carb_g = min(target_carb_g, remaining_carbs_g)
+
+    return {
+        "fat_reduction_g": round(actual_fat_g, 2),
+        "carbs_reduction_g": round(actual_carb_g, 2),
+        "protein_reduction_g": 0.0,
+    }
+
+
 def compute_drink_entry(
     drink_type: str,
     quantity: float = 1.0,
