@@ -98,16 +98,21 @@ def generate_today() -> None:
         cur = conn.cursor()
 
         # 1. Get nutrition_profile (singleton, id=1)
-        cur.execute("SELECT target_calories, weight_kg, goal, daily_deficit FROM nutrition_profile WHERE id = 1")
+        cur.execute(
+            "SELECT target_calories, weight_kg, goal, daily_deficit,"
+            " estimated_ffm_kg, protein_g_per_kg, fat_g_per_kg"
+            " FROM nutrition_profile WHERE id = 1"
+        )
         profile = cur.fetchone()
         if profile is None:
             logger.error("No nutrition_profile found (id=1). Run seed/setup first.")
             cur.close()
             return
 
-        profile_calories, profile_weight, profile_goal, profile_deficit = (
-            profile[0], profile[1], profile[2], profile[3]
-        )
+        (
+            profile_calories, profile_weight, profile_goal, profile_deficit,
+            profile_ffm_kg, profile_protein_g_per_kg, profile_fat_g_per_kg,
+        ) = profile
 
         # 2. TDEE — use profile target_calories as a base, else bootstrap from Garmin
         tdee = None
@@ -152,12 +157,18 @@ def generate_today() -> None:
 
         # 6. Generate daily plan
         deficit = float(profile_deficit) if profile_deficit else DEFAULT_DEFICIT
+        protein_g_per_kg = float(profile_protein_g_per_kg) if profile_protein_g_per_kg else 2.2
+        fat_g_per_kg = float(profile_fat_g_per_kg) if profile_fat_g_per_kg else 0.8
+        ffm_kg = float(profile_ffm_kg) if profile_ffm_kg else None
         plan = generate_daily_plan(
             tdee=tdee,
             deficit=deficit,
             weight_kg=weight_kg,
             training_day_type=training_day,
             sleep_quality_score=sleep_score,
+            protein_g_per_kg=protein_g_per_kg,
+            fat_g_per_kg=fat_g_per_kg,
+            ffm_kg=ffm_kg,
         )
 
         # 7. Upsert into nutrition_day

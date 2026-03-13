@@ -6,34 +6,48 @@ Defines the 7 nutrition tables and provides apply_schema() to execute the DDL.
 NUTRITION_SCHEMA_SQL = """
 -- Nutrition Profile (singleton: one row per user)
 CREATE TABLE IF NOT EXISTS nutrition_profile (
-    id              INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-    weight_kg       REAL,
-    height_cm       REAL,
-    age             INTEGER,
-    sex             VARCHAR(10),
-    activity_level  VARCHAR(20),
-    goal            VARCHAR(20),
-    target_calories INTEGER,
-    target_protein  REAL,
-    target_carbs    REAL,
-    target_fat      REAL,
-    target_fiber    REAL,
-    estimated_bf_pct REAL,
-    target_bf_pct   REAL,
-    target_date     DATE,
-    tdee_estimate   INTEGER,
-    daily_deficit   INTEGER,
-    ffm_kg          REAL,
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
+    id                    INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    weight_kg             REAL,
+    height_cm             REAL,
+    age                   INTEGER,
+    sex                   VARCHAR(10),
+    activity_level        VARCHAR(20),
+    goal                  VARCHAR(20),
+    target_calories       INTEGER,
+    target_protein        REAL,
+    target_carbs          REAL,
+    target_fat            REAL,
+    target_fiber          REAL,
+    estimated_bf_pct      REAL,
+    estimated_ffm_kg      REAL,
+    target_bf_pct         REAL,
+    target_date           DATE,
+    tdee_estimate         REAL,
+    tdee_confidence       VARCHAR(20),
+    daily_deficit         REAL,
+    protein_g_per_kg      REAL DEFAULT 2.2,
+    fat_g_per_kg          REAL DEFAULT 0.8,
+    step_goal             INTEGER DEFAULT 10000,
+    creatine_dose_g       REAL DEFAULT 5.0,
+    creatine_start_date   DATE,
+    creatine_dose_change_date DATE,
+    updated_at            TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Backfill columns for existing installs
 ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS estimated_bf_pct REAL;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS estimated_ffm_kg REAL;
 ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS target_bf_pct   REAL;
 ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS target_date     DATE;
-ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS tdee_estimate   INTEGER;
-ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS daily_deficit   INTEGER;
-ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS ffm_kg          REAL;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS tdee_estimate   REAL;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS tdee_confidence VARCHAR(20);
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS daily_deficit   REAL;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS protein_g_per_kg REAL DEFAULT 2.2;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS fat_g_per_kg    REAL DEFAULT 0.8;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS step_goal       INTEGER DEFAULT 10000;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS creatine_dose_g REAL DEFAULT 5.0;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS creatine_start_date DATE;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS creatine_dose_change_date DATE;
 
 -- Ingredient library
 CREATE TABLE IF NOT EXISTS ingredients (
