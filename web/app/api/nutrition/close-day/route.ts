@@ -56,5 +56,53 @@ export async function POST(req: NextRequest) {
     WHERE date = ${date}
   `;
 
+  // --- Task 9: Recompute deficit from BF% goal when a weigh-in exists ---
+  const weightRow = await sql`
+    SELECT weight_grams FROM weight_log WHERE date = ${date} LIMIT 1
+  `;
+  if (weightRow.length > 0) {
+    const profile = await sql`
+      SELECT estimated_bf_pct, target_bf_pct, target_date
+      FROM nutrition_profile WHERE id = 1
+    `;
+    if (
+      profile.length > 0 &&
+      profile[0].target_bf_pct != null &&
+      profile[0].target_date != null
+    ) {
+      const newWeightKg = Number(weightRow[0].weight_grams) / 1000;
+      const currentBf = Number(profile[0].estimated_bf_pct) || 17;
+      const targetBf = Number(profile[0].target_bf_pct);
+
+      // Constant-FFM model: fat-free mass stays the same
+      const ffm = newWeightKg * (1 - currentBf / 100);
+      const targetWeight = ffm / (1 - targetBf / 100);
+      const fatToLose = Math.max(0, newWeightKg - targetWeight);
+
+      const daysLeft = Math.max(
+        1,
+        Math.ceil(
+          (new Date(profile[0].target_date).getTime() -
+            new Date(date).getTime()) /
+            86400000
+        )
+      );
+      const rawDeficit = (fatToLose * 7700) / daysLeft;
+      const cappedDeficit = Math.min(rawDeficit, 500);
+
+      // Derive updated BF% from new weight (FFM unchanged)
+      const newBfPct = Math.round(((newWeightKg - ffm) / newWeightKg) * 1000) / 10;
+
+      await sql`
+        UPDATE nutrition_profile SET
+          weight_kg = ${newWeightKg},
+          estimated_bf_pct = ${newBfPct},
+          daily_deficit = ${Math.round(cappedDeficit)},
+          updated_at = NOW()
+        WHERE id = 1
+      `;
+    }
+  }
+
   return NextResponse.json({ status: "closed", actual });
 }
