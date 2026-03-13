@@ -36,29 +36,34 @@ interface NutritionPlan {
 interface Meal {
   id: number;
   date: string;
-  meal_label: string;
-  preset_id: string | null;
+  meal_slot: string;
+  source: string | null;
+  preset_meal_id: string | null;
   preset_name: string | null;
   preset_tags: string[] | null;
+  portion_multiplier: number;
   items: any;
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
   fiber: number;
-  multiplier: number;
+  notes: string | null;
+  weigh_method: string | null;
   logged_at: string;
 }
 
 interface Drink {
   id: number;
   date: string;
-  drink_id: string;
+  drink_type: string;
   name: string;
+  quantity: number;
   quantity_ml: number;
   calories: number;
   carbs: number;
-  alcohol_g: number;
+  alcohol_grams: number;
+  fat_oxidation_pause_hours: number;
   logged_at: string;
 }
 
@@ -348,7 +353,7 @@ export function NutritionDashboard({
         <MealCard
           key={slot}
           slot={slot}
-          meals={meals.filter((m) => m.meal_label === slot)}
+          meals={meals.filter((m) => m.meal_slot === slot)}
           presets={presets}
           date={date}
           disabled={isClosed}

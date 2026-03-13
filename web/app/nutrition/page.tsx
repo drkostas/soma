@@ -27,7 +27,7 @@ async function getMeals(date: string) {
   return sql`
     SELECT ml.*, pm.name AS preset_name, pm.tags AS preset_tags
     FROM meal_log ml
-    LEFT JOIN preset_meals pm ON ml.preset_id = pm.id
+    LEFT JOIN preset_meals pm ON ml.preset_meal_id = pm.id
     WHERE ml.date = ${date}
     ORDER BY ml.logged_at
   `;

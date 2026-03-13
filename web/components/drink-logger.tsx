@@ -24,12 +24,14 @@ const DRINK_OPTIONS = [
 interface Drink {
   id: number;
   date: string;
-  drink_id: string;
+  drink_type: string;
   name: string;
+  quantity: number;
   quantity_ml: number;
   calories: number;
   carbs: number;
-  alcohol_g: number;
+  alcohol_grams: number;
+  fat_oxidation_pause_hours: number;
   logged_at: string;
 }
 
@@ -140,8 +142,8 @@ export function DrinkLogger({
                 <div className="text-xs text-muted-foreground">
                   {Math.round(drink.calories)} kcal &middot;{" "}
                   {Number(drink.quantity_ml).toFixed(0)}ml
-                  {Number(drink.alcohol_g) > 0 && (
-                    <> &middot; {Number(drink.alcohol_g).toFixed(1)}g alcohol</>
+                  {Number(drink.alcohol_grams) > 0 && (
+                    <> &middot; {Number(drink.alcohol_grams).toFixed(1)}g alcohol</>
                   )}
                 </div>
               </div>

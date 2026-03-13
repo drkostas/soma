@@ -143,15 +143,17 @@ export async function POST(req: NextRequest) {
   `;
 
   const result = await sql`
-    INSERT INTO drink_log (date, drink_id, name, quantity_ml, calories, carbs, alcohol_g)
+    INSERT INTO drink_log (date, drink_type, name, quantity, quantity_ml, calories, carbs, alcohol_grams, fat_oxidation_pause_hours)
     VALUES (
       ${date},
       ${drink_type},
       ${drink.name},
+      ${quantity},
       ${totalMl},
       ${calories},
       ${carbs},
-      ${alcoholGrams}
+      ${alcoholGrams},
+      ${pauseHours}
     )
     RETURNING id
   `;
