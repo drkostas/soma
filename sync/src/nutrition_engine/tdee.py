@@ -48,6 +48,84 @@ CARB_TARGETS_G_PER_KG: dict[str, float] = {
 MAX_DEFICIT: int = 500
 REDS_FLOOR: int = 25  # kcal per kg FFM
 
+# Energy density of body fat (kcal per kg)
+KCAL_PER_KG_FAT: float = 7700
+
+
+# ---------------------------------------------------------------------------
+# Goal-based deficit computation (Task 9)
+# ---------------------------------------------------------------------------
+
+def compute_deficit_from_goal(
+    weight_kg: float,
+    current_bf_pct: float,
+    target_bf_pct: float,
+    target_date,  # date object
+    today=None,   # date object
+) -> dict:
+    """Compute daily caloric deficit needed to reach a body-fat % goal.
+
+    Uses a constant fat-free mass (FFM) assumption: only fat mass changes.
+    Caps the deficit at :data:`MAX_DEFICIT` (500 kcal/day) and assigns a
+    traffic-light safety rating based on weekly weight-loss rate.
+
+    Args:
+        weight_kg: Current body weight in kg.
+        current_bf_pct: Current body-fat percentage (e.g. 17 for 17%).
+        target_bf_pct: Target body-fat percentage (e.g. 12 for 12%).
+        target_date: Date by which to reach the goal.
+        today: Reference date (defaults to ``date.today()``).
+
+    Returns:
+        Dict with keys:
+        - ``daily_deficit``: Capped daily kcal deficit (0-500).
+        - ``fat_to_lose_kg``: Fat mass to lose (kg).
+        - ``timeline_weeks``: Weeks until target_date.
+        - ``weekly_rate_pct``: Projected weekly weight-loss as % of body weight.
+        - ``safety``: Traffic-light rating (``"green"``, ``"yellow"``, ``"red"``).
+    """
+    from datetime import date as date_cls
+
+    if today is None:
+        today = date_cls.today()
+
+    # Fat-free mass stays constant; only fat mass changes
+    ffm_kg = weight_kg * (1 - current_bf_pct / 100)
+    target_weight = ffm_kg / (1 - target_bf_pct / 100)
+    fat_to_lose = weight_kg - target_weight
+
+    if fat_to_lose <= 0:
+        return {
+            "daily_deficit": 0,
+            "fat_to_lose_kg": 0,
+            "timeline_weeks": 0,
+            "weekly_rate_pct": 0,
+            "safety": "green",
+        }
+
+    available_days = max((target_date - today).days, 1)
+    available_weeks = available_days / 7
+
+    raw_deficit = (fat_to_lose * KCAL_PER_KG_FAT) / available_days
+    weekly_rate_pct = (fat_to_lose / available_weeks) / weight_kg * 100
+
+    if raw_deficit > 500 or weekly_rate_pct > 1.0:
+        safety = "red"
+    elif raw_deficit > 400 or weekly_rate_pct > 0.7:
+        safety = "yellow"
+    else:
+        safety = "green"
+
+    capped_deficit = min(raw_deficit, MAX_DEFICIT)
+
+    return {
+        "daily_deficit": round(capped_deficit),
+        "fat_to_lose_kg": round(fat_to_lose, 1),
+        "timeline_weeks": round(available_weeks, 1),
+        "weekly_rate_pct": round(weekly_rate_pct, 2),
+        "safety": safety,
+    }
+
 
 # ---------------------------------------------------------------------------
 # Step calorie helpers (Task 8)
