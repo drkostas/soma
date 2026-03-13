@@ -154,6 +154,7 @@ export function NutritionDashboard({
   const [meals, setMeals] = useState<Meal[]>(initialMeals);
   const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
   const [closing, setClosing] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [workoutEnabled, setWorkoutEnabled] = useState(true);
 
   const isClosed = plan?.status === "closed";
@@ -395,6 +396,40 @@ export function NutritionDashboard({
           </div>
         )}
       </div>
+
+      {/* Quick actions */}
+      {!isClosed && meals.length === 0 && (
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            disabled={copying}
+            onClick={async () => {
+              setCopying(true);
+              try {
+                const yesterday = (() => {
+                  const d = new Date(date + "T12:00:00");
+                  d.setDate(d.getDate() - 1);
+                  return d.toISOString().slice(0, 10);
+                })();
+                const res = await fetch("/api/nutrition/copy-day", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ from_date: yesterday, to_date: date }),
+                });
+                if (res.ok) {
+                  await refreshData();
+                }
+              } finally {
+                setCopying(false);
+              }
+            }}
+          >
+            {copying ? "Copying..." : "Copy Yesterday"}
+          </Button>
+        </div>
+      )}
 
       {/* Meal cards */}
       {slots.map((slot) => (
