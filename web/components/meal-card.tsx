@@ -66,32 +66,25 @@ interface MealCardProps {
   onMealLogged: () => void;
 }
 
-// Compute macro totals from preset items (client-side estimate from items JSON)
-function estimatePresetMacros(items: any[]): {
+// Read pre-computed macro totals from the preset JSONB blob.
+// The preset_meals.items column stores: {items: [...], calories, protein, carbs, fat, fiber}
+function estimatePresetMacros(itemsBlob: any): {
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
   fiber: number;
 } {
-  // Items from the preset_meals table have ingredient_id and grams
-  // We don't have the ingredient DB on the client, so we sum up
-  // item-level macros if they exist, or fall back to 0
-  let calories = 0,
-    protein = 0,
-    carbs = 0,
-    fat = 0,
-    fiber = 0;
-  if (Array.isArray(items)) {
-    for (const item of items) {
-      calories += Number(item.calories) || 0;
-      protein += Number(item.protein) || 0;
-      carbs += Number(item.carbs) || 0;
-      fat += Number(item.fat) || 0;
-      fiber += Number(item.fiber) || 0;
-    }
+  if (itemsBlob && typeof itemsBlob === "object" && !Array.isArray(itemsBlob)) {
+    return {
+      calories: Number(itemsBlob.calories) || 0,
+      protein: Number(itemsBlob.protein) || 0,
+      carbs: Number(itemsBlob.carbs) || 0,
+      fat: Number(itemsBlob.fat) || 0,
+      fiber: Number(itemsBlob.fiber) || 0,
+    };
   }
-  return { calories, protein, carbs, fat, fiber };
+  return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
 }
 
 // ── Component ─────────────────────────────────────────────────
@@ -150,6 +143,12 @@ export function MealCard({
     if (!selectedPreset) return;
     setLogging(true);
     try {
+      // Extract the actual items array from the JSONB blob,
+      // and pass pre-computed macros so the API doesn't need the ingredient DB
+      const blob = selectedPreset.items;
+      const actualItems = Array.isArray(blob) ? blob : blob?.items ?? [];
+      const baseMacros = estimatePresetMacros(blob);
+
       const res = await fetch("/api/nutrition/log-meal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,7 +157,8 @@ export function MealCard({
           meal_slot: slot,
           preset_meal_id: selectedPreset.id,
           portion_multiplier: multiplier,
-          items: selectedPreset.items,
+          items: actualItems,
+          preset_macros: baseMacros,
         }),
       });
       if (res.ok) {

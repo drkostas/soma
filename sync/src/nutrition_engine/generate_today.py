@@ -98,14 +98,16 @@ def generate_today() -> None:
         cur = conn.cursor()
 
         # 1. Get nutrition_profile (singleton, id=1)
-        cur.execute("SELECT target_calories, weight_kg, goal FROM nutrition_profile WHERE id = 1")
+        cur.execute("SELECT target_calories, weight_kg, goal, daily_deficit FROM nutrition_profile WHERE id = 1")
         profile = cur.fetchone()
         if profile is None:
             logger.error("No nutrition_profile found (id=1). Run seed/setup first.")
             cur.close()
             return
 
-        profile_calories, profile_weight, profile_goal = profile[0], profile[1], profile[2]
+        profile_calories, profile_weight, profile_goal, profile_deficit = (
+            profile[0], profile[1], profile[2], profile[3]
+        )
 
         # 2. TDEE — use profile target_calories as a base, else bootstrap from Garmin
         tdee = None
@@ -149,7 +151,7 @@ def generate_today() -> None:
         logger.info("Sleep quality score: %.1f", sleep_score)
 
         # 6. Generate daily plan
-        deficit = DEFAULT_DEFICIT
+        deficit = float(profile_deficit) if profile_deficit else DEFAULT_DEFICIT
         plan = generate_daily_plan(
             tdee=tdee,
             deficit=deficit,

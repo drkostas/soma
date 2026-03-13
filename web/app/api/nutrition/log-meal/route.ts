@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     preset_meal_id,
     portion_multiplier = 1.0,
     items,
+    preset_macros,
   } = body as {
     date: string;
     meal_slot: string;
@@ -29,29 +30,39 @@ export async function POST(req: NextRequest) {
     preset_meal_id?: string;
     portion_multiplier?: number;
     items: MealItem[];
+    preset_macros?: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
     notes?: string;
   };
 
-  if (!date || !meal_slot || !Array.isArray(items) || items.length === 0) {
+  if (!date || !meal_slot) {
     return NextResponse.json(
-      { error: "date, meal_slot, and items (non-empty array) are required" },
+      { error: "date and meal_slot are required" },
       { status: 400 }
     );
   }
 
-  // Compute totals from items, applying portion multiplier
+  // Compute totals: use preset_macros if provided (preset items lack per-item macros),
+  // otherwise sum from individual items
   let calories = 0,
     protein = 0,
     carbs = 0,
     fat = 0,
     fiber = 0;
 
-  for (const item of items) {
-    calories += (Number(item.calories) || 0) * portion_multiplier;
-    protein += (Number(item.protein) || 0) * portion_multiplier;
-    carbs += (Number(item.carbs) || 0) * portion_multiplier;
-    fat += (Number(item.fat) || 0) * portion_multiplier;
-    fiber += (Number(item.fiber) || 0) * portion_multiplier;
+  if (preset_macros && preset_meal_id) {
+    calories = (Number(preset_macros.calories) || 0) * portion_multiplier;
+    protein = (Number(preset_macros.protein) || 0) * portion_multiplier;
+    carbs = (Number(preset_macros.carbs) || 0) * portion_multiplier;
+    fat = (Number(preset_macros.fat) || 0) * portion_multiplier;
+    fiber = (Number(preset_macros.fiber) || 0) * portion_multiplier;
+  } else if (Array.isArray(items)) {
+    for (const item of items) {
+      calories += (Number(item.calories) || 0) * portion_multiplier;
+      protein += (Number(item.protein) || 0) * portion_multiplier;
+      carbs += (Number(item.carbs) || 0) * portion_multiplier;
+      fat += (Number(item.fat) || 0) * portion_multiplier;
+      fiber += (Number(item.fiber) || 0) * portion_multiplier;
+    }
   }
 
   // Ensure nutrition_day row exists for this date
