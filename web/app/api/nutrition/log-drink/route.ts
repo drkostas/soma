@@ -165,3 +165,16 @@ export async function POST(req: NextRequest) {
     fat_oxidation_pause_hours: pauseHours,
   });
 }
+
+export async function DELETE(req: NextRequest) {
+  const sql = getDb();
+  const id = req.nextUrl.searchParams.get("id");
+
+  if (!id) {
+    return NextResponse.json({ error: "id is required" }, { status: 400 });
+  }
+
+  await sql`DELETE FROM drink_log WHERE id = ${Number(id)}`;
+
+  return NextResponse.json({ deleted: true });
+}

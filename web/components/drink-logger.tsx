@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Beer, ChevronDown, ChevronUp, Minus, Plus, X } from "lucide-react";
+import { Beer, ChevronDown, ChevronUp, Minus, Plus, Trash2, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -59,6 +59,8 @@ export function DrinkLogger({
   const [logging, setLogging] = useState(false);
 
   const totalCal = drinks.reduce((s, d) => s + Number(d.calories || 0), 0);
+  const totalAlcoholG = drinks.reduce((s, d) => s + Number(d.alcohol_grams || 0), 0);
+  const fatOxPauseHours = Math.max(...drinks.map((d) => Number(d.fat_oxidation_pause_hours || 0)), 0);
 
   const previewCal = useMemo(() => {
     if (!selectedDrink) return 0;
@@ -98,6 +100,13 @@ export function DrinkLogger({
     setSelectedDrink(null);
     setShowPicker(false);
     setQuantity(1);
+  };
+
+  const handleDeleteDrink = async (drinkId: number) => {
+    const res = await fetch(`/api/nutrition/log-drink?id=${drinkId}`, {
+      method: "DELETE",
+    });
+    if (res.ok) onDrinkLogged();
   };
 
   return (
@@ -147,8 +156,25 @@ export function DrinkLogger({
                   )}
                 </div>
               </div>
+              {!disabled && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  onClick={() => handleDeleteDrink(drink.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              )}
             </div>
           ))}
+
+          {/* Fat oxidation warning */}
+          {drinks.length > 0 && totalAlcoholG > 0 && (
+            <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded px-2 py-1">
+              Fat oxidation paused ~{Math.round(fatOxPauseHours)}h from alcohol
+            </div>
+          )}
 
           {/* Drink picker or add button */}
           {!disabled && !showPicker && !selectedDrink && (
