@@ -439,9 +439,9 @@ DRINK_DATABASE = {
     },
     "beer_craft": {
         "name": "Craft Beer",
-        "calories_per_100ml": 65,
+        "calories_per_100ml": 73.2,
         "carbs_per_100ml": 5.0,
-        "alcohol_pct": 7.0,
+        "alcohol_pct": 7.8,
         "default_ml": 355,
     },
     "wine_red": {
@@ -460,10 +460,10 @@ DRINK_DATABASE = {
     },
     "spirit": {
         "name": "Spirit (neat/rocks)",
-        "calories_per_100ml": 231,
+        "calories_per_100ml": 220.5,
         "carbs_per_100ml": 0,
         "alcohol_pct": 40.0,
-        "default_ml": 45,    # 1.5 oz shot
+        "default_ml": 44,    # 1.5 oz neat pour
     },
     "margarita": {
         "name": "Margarita",
