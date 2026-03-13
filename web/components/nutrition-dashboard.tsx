@@ -201,7 +201,8 @@ export function NutritionDashboard({
     (plan?.plan ? (plan.plan as Record<string, any>).adjustment_reason : null);
 
   const trainingDistanceKm = Number(training?.target_distance_km) || 0;
-  const showDuringWorkout = trainingDistanceKm > 10;
+  const trainingDurationMin = Number(training?.target_duration_min) || 0;
+  const showDuringWorkout = trainingDurationMin > 60 || trainingDistanceKm > 10;
 
   const slots = showDuringWorkout
     ? [...MEAL_SLOTS, "during_workout" as const]
