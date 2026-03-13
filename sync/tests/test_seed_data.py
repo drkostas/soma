@@ -2,6 +2,7 @@
 import pytest
 
 from nutrition_engine.seed_data import INGREDIENTS, PRESET_MEALS, DRINK_DATABASE
+from nutrition_engine.calculator import compute_meal_macros
 
 
 # --- Ingredient tests ---
@@ -83,7 +84,7 @@ REQUIRED_PRESET_FIELDS = ["name", "items"]
 
 class TestPresetMeals:
     def test_minimum_count(self):
-        assert len(PRESET_MEALS) >= 8
+        assert len(PRESET_MEALS) >= 12
 
     def test_required_fields(self):
         for preset_id, preset in PRESET_MEALS.items():
@@ -122,6 +123,76 @@ class TestPresetMeals:
                 assert item["grams"] > 0, (
                     f"Preset '{preset_id}' has item with non-positive grams"
                 )
+
+    # --- Calorie range assertions per preset ---
+
+    def _calories(self, preset_id: str) -> float:
+        macros = compute_meal_macros(
+            PRESET_MEALS[preset_id]["items"], INGREDIENTS
+        )
+        return macros["calories"]
+
+    def test_eggs_avocado_toast_calories(self):
+        cals = self._calories("eggs_avocado_toast")
+        assert 530 <= cals <= 590, f"eggs_avocado_toast: {cals:.0f} kcal"
+
+    def test_protein_oats_calories(self):
+        cals = self._calories("protein_oats")
+        assert 550 <= cals <= 610, f"protein_oats: {cals:.0f} kcal"
+
+    def test_chicken_veggie_plate_calories(self):
+        cals = self._calories("chicken_veggie_plate")
+        assert 250 <= cals <= 310, f"chicken_veggie_plate: {cals:.0f} kcal"
+
+    def test_chicken_rice_bowl_calories(self):
+        cals = self._calories("chicken_rice_bowl")
+        assert 520 <= cals <= 580, f"chicken_rice_bowl: {cals:.0f} kcal"
+
+    def test_salmon_rice_bowl_calories(self):
+        cals = self._calories("salmon_rice_bowl")
+        assert 650 <= cals <= 710, f"salmon_rice_bowl: {cals:.0f} kcal"
+
+    def test_yogurt_snack_bowl_calories(self):
+        cals = self._calories("yogurt_snack_bowl")
+        assert 220 <= cals <= 280, f"yogurt_snack_bowl: {cals:.0f} kcal"
+
+    def test_granola_bowl_calories(self):
+        cals = self._calories("granola_bowl")
+        assert 290 <= cals <= 350, f"granola_bowl: {cals:.0f} kcal"
+
+    def test_pre_sleep_cottage_calories(self):
+        cals = self._calories("pre_sleep_cottage")
+        assert 150 <= cals <= 200, f"pre_sleep_cottage: {cals:.0f} kcal"
+
+    def test_emergency_munchies_box_calories(self):
+        cals = self._calories("emergency_munchies_box")
+        assert 210 <= cals <= 270, f"emergency_munchies_box: {cals:.0f} kcal"
+
+    def test_chipotle_bowl_calories(self):
+        cals = self._calories("chipotle_bowl")
+        assert 670 <= cals <= 730, f"chipotle_bowl: {cals:.0f} kcal"
+
+    def test_energy_gel_single_calories(self):
+        cals = self._calories("energy_gel_single")
+        assert 90 <= cals <= 110, f"energy_gel_single: {cals:.0f} kcal"
+
+    def test_sports_drink_bottle_calories(self):
+        cals = self._calories("sports_drink_bottle")
+        assert 120 <= cals <= 140, f"sports_drink_bottle: {cals:.0f} kcal"
+
+    # --- New preset existence checks ---
+
+    def test_emergency_munchies_box_exists(self):
+        assert "emergency_munchies_box" in PRESET_MEALS
+        preset = PRESET_MEALS["emergency_munchies_box"]
+        assert preset["meal_slot"] == "snack"
+        assert "emergency" in preset["tags"]
+
+    def test_chipotle_bowl_exists(self):
+        assert "chipotle_bowl" in PRESET_MEALS
+        preset = PRESET_MEALS["chipotle_bowl"]
+        assert preset["meal_slot"] == "lunch"
+        assert "lunch" in preset["tags"]
 
 
 # --- Drink database tests ---
