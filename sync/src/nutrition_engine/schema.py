@@ -18,8 +18,22 @@ CREATE TABLE IF NOT EXISTS nutrition_profile (
     target_carbs    REAL,
     target_fat      REAL,
     target_fiber    REAL,
+    estimated_bf_pct REAL,
+    target_bf_pct   REAL,
+    target_date     DATE,
+    tdee_estimate   INTEGER,
+    daily_deficit   INTEGER,
+    ffm_kg          REAL,
     updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Backfill columns for existing installs
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS estimated_bf_pct REAL;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS target_bf_pct   REAL;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS target_date     DATE;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS tdee_estimate   INTEGER;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS daily_deficit   INTEGER;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS ffm_kg          REAL;
 
 -- Ingredient library
 CREATE TABLE IF NOT EXISTS ingredients (
