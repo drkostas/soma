@@ -182,11 +182,13 @@ export function NutritionDashboard({
     meals.reduce((s, m) => s + Number(m.carbs || 0), 0) +
     drinks.reduce((s, d) => s + Number(d.carbs || 0), 0);
   const consumedFat = meals.reduce((s, m) => s + Number(m.fat || 0), 0);
+  const consumedFiber = meals.reduce((s, m) => s + Number(m.fiber || 0), 0);
 
   const targetCal = Number(plan?.target_calories) || 0;
   const targetProtein = Number(plan?.target_protein) || 0;
   const targetCarbs = Number(plan?.target_carbs) || 0;
   const targetFat = Number(plan?.target_fat) || 0;
+  const targetFiber = Number(plan?.target_fiber) || 0;
   const remainingCal = targetCal - consumedCal;
 
   const adjustmentReason =
@@ -254,9 +256,17 @@ export function NutritionDashboard({
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
           <span>
-            {adjustmentReason === "sleep_moderate"
-              ? "Moderate sleep deficit detected - deficit halved for recovery"
-              : "Severe sleep deficit - eating at maintenance today"}
+            {adjustmentReason === "sleep_mild"
+              ? "Mild sleep deficit — targets slightly adjusted"
+              : adjustmentReason === "sleep_moderate" || adjustmentReason === "sleep_moderate_escalated"
+              ? "Moderate sleep deficit — deficit halved for recovery"
+              : adjustmentReason === "sleep_severe" || adjustmentReason === "sleep_severe_escalated"
+              ? "Severe sleep deficit — eating at maintenance today"
+              : adjustmentReason === "sleep_forced_maintenance"
+              ? "Forced maintenance — poor sleep streak"
+              : adjustmentReason === "sleep_diet_break_recommended"
+              ? "Diet break recommended — sustained poor sleep"
+              : "Sleep adjustment active"}
           </span>
         </div>
       )}
@@ -268,7 +278,7 @@ export function NutritionDashboard({
             <div className="text-center">
               <div
                 className={`text-4xl font-bold tabular-nums ${
-                  remainingCal < 0 ? "text-red-500" : ""
+                  remainingCal < 0 ? "text-muted-foreground" : ""
                 }`}
               >
                 {Math.round(remainingCal)}
@@ -284,6 +294,14 @@ export function NutritionDashboard({
             <div className="text-xs text-center text-muted-foreground">
               {Math.round(consumedCal)} / {Math.round(targetCal)} kcal
             </div>
+            {plan && (
+              <div className="text-xs text-muted-foreground space-y-0.5 text-center">
+                <div>BMR: {Math.round((Number(plan?.tdee_used) || 0) - (Number(plan?.exercise_calories) || 0) - (Number(plan?.step_calories) || 0))} kcal</div>
+                <div>Steps ({(Number(plan?.step_goal) || 10000).toLocaleString()}): +{Math.round(Number(plan?.step_calories) || 0)} kcal</div>
+                {Number(plan?.exercise_calories) > 0 && <div>Workout: +{Math.round(Number(plan?.exercise_calories))} kcal</div>}
+                <div>Deficit: -{Math.round(Number(plan?.deficit_used) || 0)} kcal</div>
+              </div>
+            )}
             <div className="grid gap-2 pt-1">
               <MacroBar
                 label="Protein"
@@ -303,6 +321,14 @@ export function NutritionDashboard({
                 target={targetFat}
                 color="[&>[data-slot=progress-indicator]]:bg-rose-500"
               />
+              {targetFiber > 0 && (
+                <MacroBar
+                  label="Fiber"
+                  current={consumedFiber}
+                  target={targetFiber}
+                  color="[&>[data-slot=progress-indicator]]:bg-green-500"
+                />
+              )}
             </div>
           </CardContent>
         </Card>
