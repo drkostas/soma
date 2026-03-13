@@ -40,9 +40,9 @@ const DRINK_DB: Record<
   },
   beer_craft: {
     name: "Craft Beer",
-    calories_per_100ml: 65,
+    calories_per_100ml: 73.2,
     carbs_per_100ml: 5.0,
-    alcohol_pct: 7.0,
+    alcohol_pct: 7.8,
     default_ml: 355,
   },
   wine_red: {
@@ -61,10 +61,10 @@ const DRINK_DB: Record<
   },
   spirit: {
     name: "Spirit (neat/rocks)",
-    calories_per_100ml: 231,
+    calories_per_100ml: 220.5,
     carbs_per_100ml: 0,
     alcohol_pct: 40.0,
-    default_ml: 45,
+    default_ml: 44,
   },
   margarita: {
     name: "Margarita",

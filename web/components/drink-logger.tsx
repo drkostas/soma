@@ -11,10 +11,10 @@ const DRINK_OPTIONS = [
   { key: "beer_light", label: "Light Beer", cal: 103, defaultMl: 355 },
   { key: "beer_regular", label: "Lager", cal: 153, defaultMl: 355 },
   { key: "beer_ipa", label: "IPA", cal: 213, defaultMl: 355 },
-  { key: "beer_craft", label: "Craft", cal: 231, defaultMl: 355 },
+  { key: "beer_craft", label: "Craft", cal: 260, defaultMl: 355 },
   { key: "wine_red", label: "Red Wine", cal: 128, defaultMl: 150 },
   { key: "wine_white", label: "White Wine", cal: 123, defaultMl: 150 },
-  { key: "spirit", label: "Spirit", cal: 104, defaultMl: 45 },
+  { key: "spirit", label: "Spirit", cal: 97, defaultMl: 44 },
   { key: "margarita", label: "Margarita", cal: 264, defaultMl: 240 },
   { key: "old_fashioned", label: "Old Fashioned", cal: 168, defaultMl: 120 },
 ] as const;
