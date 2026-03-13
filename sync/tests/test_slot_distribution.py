@@ -65,7 +65,7 @@ class TestRedistributeRemaining:
         remaining = redistribute_remaining(daily, {})
         assert remaining["breakfast"]["calories"] == 500  # default 25%
 
-    def test_all_meals_eaten_returns_zeros(self):
+    def test_all_meals_eaten_preserves_eaten_values(self):
         daily = {"calories": 2000, "protein": 176, "carbs": 250, "fat": 64, "fiber": 35}
         eaten = {
             "breakfast": {"calories": 500, "protein": 44, "carbs": 62, "fat": 16, "fiber": 7},
@@ -74,8 +74,8 @@ class TestRedistributeRemaining:
             "pre_sleep": {"calories": 200, "protein": 32, "carbs": 25, "fat": 7, "fiber": 5},
         }
         remaining = redistribute_remaining(daily, eaten)
-        for slot in remaining:
-            assert remaining[slot]["calories"] == 0 or slot in eaten
+        for slot in eaten:
+            assert remaining[slot]["calories"] == eaten[slot]["calories"]
 
     def test_overeating_clamps_remaining_to_zero(self):
         """If total eaten exceeds daily target, remaining should be 0 not negative."""
