@@ -105,6 +105,9 @@ CREATE TABLE IF NOT EXISTS drink_log (
     logged_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_meal_log_date ON meal_log(date);
+CREATE INDEX IF NOT EXISTS idx_drink_log_date ON drink_log(date);
+
 -- TDEE history (one row per day, updated by bootstrap / sync)
 CREATE TABLE IF NOT EXISTS tdee_history (
     date                DATE PRIMARY KEY,
