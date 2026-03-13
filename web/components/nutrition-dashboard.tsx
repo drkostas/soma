@@ -18,7 +18,19 @@ interface NutritionPlan {
   target_protein: number | null;
   target_carbs: number | null;
   target_fat: number | null;
-  closed: boolean;
+  target_fiber: number | null;
+  tdee_used: number | null;
+  exercise_calories: number | null;
+  step_calories: number | null;
+  deficit_used: number | null;
+  adjustment_reason: string | null;
+  sleep_quality_score: number | null;
+  training_day_type: string | null;
+  planned_workouts: any | null;
+  step_goal: number | null;
+  is_refeed: boolean;
+  is_diet_break: boolean;
+  status: string;
 }
 
 interface Meal {
@@ -138,7 +150,7 @@ export function NutritionDashboard({
   const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
   const [closing, setClosing] = useState(false);
 
-  const isClosed = plan?.closed === true;
+  const isClosed = plan?.status === "closed";
 
   const refreshData = useCallback(async () => {
     try {
@@ -172,9 +184,9 @@ export function NutritionDashboard({
   const targetFat = Number(plan?.target_fat) || 0;
   const remainingCal = targetCal - consumedCal;
 
-  const adjustmentReason = plan?.plan
-    ? (plan.plan as Record<string, any>).adjustment_reason
-    : null;
+  const adjustmentReason =
+    plan?.adjustment_reason ??
+    (plan?.plan ? (plan.plan as Record<string, any>).adjustment_reason : null);
 
   const trainingDistanceKm = Number(training?.target_distance_km) || 0;
   const showDuringWorkout = trainingDistanceKm > 10;

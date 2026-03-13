@@ -44,13 +44,16 @@ export async function GET(req: NextRequest) {
     fiber: Math.round(fiber),
   };
 
-  // Remaining = plan targets minus consumed (fiber target from profile if available)
+  // Remaining = plan targets minus consumed (fiber target from typed column, fallback to profile)
   let remaining: Record<string, number> | null = null;
   if (plan) {
-    const profileRows = await sql`
-      SELECT target_fiber FROM nutrition_profile WHERE id = 1
-    `;
-    const targetFiber = Number(profileRows[0]?.target_fiber) || 25;
+    let targetFiber = Number(plan.target_fiber) || 0;
+    if (!targetFiber) {
+      const profileRows = await sql`
+        SELECT target_fiber FROM nutrition_profile WHERE id = 1
+      `;
+      targetFiber = Number(profileRows[0]?.target_fiber) || 25;
+    }
 
     remaining = {
       calories: (Number(plan.target_calories) || 0) - consumed.calories,
