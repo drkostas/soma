@@ -18,6 +18,7 @@ INGREDIENTS = {
         "is_raw": True,
         "raw_to_cooked_ratio": 0.75,
         "category": "protein",
+        "usda_fdc_id": 171077,
     },
     "salmon_raw": {
         "name": "Salmon (raw)",
@@ -29,6 +30,7 @@ INGREDIENTS = {
         "is_raw": True,
         "raw_to_cooked_ratio": 0.75,
         "category": "protein",
+        "usda_fdc_id": 175167,
     },
     "eggs_whole": {
         "name": "Eggs (whole)",
@@ -40,6 +42,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": 1.0,
         "category": "protein",
+        "usda_fdc_id": 171287,
     },
     "white_rice_raw": {
         "name": "White Rice (raw)",
@@ -51,6 +54,7 @@ INGREDIENTS = {
         "is_raw": True,
         "raw_to_cooked_ratio": 3.0,
         "category": "carbs",
+        "usda_fdc_id": 169756,
     },
     "oats_dry": {
         "name": "Oats (dry)",
@@ -62,6 +66,7 @@ INGREDIENTS = {
         "is_raw": True,
         "raw_to_cooked_ratio": 2.75,
         "category": "carbs",
+        "usda_fdc_id": 169745,
     },
     "bread_whole_wheat": {
         "name": "Bread (whole wheat)",
@@ -73,6 +78,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "carbs",
+        "usda_fdc_id": 168013,
     },
     "broccoli_raw": {
         "name": "Broccoli (raw)",
@@ -84,6 +90,7 @@ INGREDIENTS = {
         "is_raw": True,
         "raw_to_cooked_ratio": 0.85,
         "category": "vegetable",
+        "usda_fdc_id": 170379,
     },
     "cherry_tomatoes": {
         "name": "Cherry Tomatoes",
@@ -95,6 +102,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "vegetable",
+        "usda_fdc_id": 170457,
     },
     "cucumber": {
         "name": "Cucumber",
@@ -106,6 +114,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "vegetable",
+        "usda_fdc_id": 168409,
     },
     "carrots_raw": {
         "name": "Carrots (raw)",
@@ -117,6 +126,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "vegetable",
+        "usda_fdc_id": 170393,
     },
     "avocado": {
         "name": "Avocado",
@@ -128,6 +138,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "fat",
+        "usda_fdc_id": 171705,
     },
     "olive_oil": {
         "name": "Olive Oil",
@@ -139,6 +150,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "fat",
+        "usda_fdc_id": 171413,
     },
     "greek_yogurt_2pct": {
         "name": "Greek Yogurt 2%",
@@ -150,6 +162,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "dairy",
+        "usda_fdc_id": 170903,
     },
     "milk_2pct": {
         "name": "Milk 2%",
@@ -161,6 +174,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "dairy",
+        "usda_fdc_id": 173438,
     },
     "cottage_cheese_2pct": {
         "name": "Cottage Cheese 2%",
@@ -172,6 +186,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "dairy",
+        "usda_fdc_id": 173417,
     },
     "protein_powder_whey": {
         "name": "Protein Powder (whey)",
@@ -183,6 +198,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "supplement",
+        "usda_fdc_id": 173179,
     },
     "banana": {
         "name": "Banana",
@@ -194,6 +210,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "fruit",
+        "usda_fdc_id": 173944,
     },
     "orange": {
         "name": "Orange",
@@ -205,6 +222,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "fruit",
+        "usda_fdc_id": None,
     },
     "raos_arrabiata": {
         "name": "Rao's Arrabiata Sauce",
@@ -216,6 +234,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "sauce",
+        "usda_fdc_id": None,
     },
     "purely_elizabeth_granola": {
         "name": "Purely Elizabeth Granola",
@@ -227,6 +246,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "carbs",
+        "usda_fdc_id": 174889,
     },
     "energy_gel": {
         "name": "Energy Gel",
@@ -238,6 +258,7 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "supplement",
+        "usda_fdc_id": None,
     },
     "sports_drink": {
         "name": "Sports Drink",
@@ -249,6 +270,19 @@ INGREDIENTS = {
         "is_raw": False,
         "raw_to_cooked_ratio": None,
         "category": "supplement",
+        "usda_fdc_id": None,
+    },
+    "peanut_butter": {
+        "name": "Peanut Butter",
+        "calories_per_100g": 588,
+        "protein_per_100g": 25.1,
+        "carbs_per_100g": 20,
+        "fat_per_100g": 50,
+        "fiber_per_100g": 6,
+        "is_raw": False,
+        "raw_to_cooked_ratio": None,
+        "category": "fat",
+        "usda_fdc_id": 174265,
     },
 }
 
@@ -267,6 +301,7 @@ PRESET_MEALS = {
             {"ingredient_id": "olive_oil", "grams": 5},           # cooking
         ],
         "tags": ["breakfast"],
+        "meal_slot": "breakfast",
     },
     "protein_oats": {
         "name": "Protein Oats",
@@ -277,6 +312,7 @@ PRESET_MEALS = {
             {"ingredient_id": "banana", "grams": 120},           # 1 medium
         ],
         "tags": ["breakfast"],
+        "meal_slot": "breakfast",
     },
     "chicken_veggie_plate": {
         "name": "Chicken Veggie Plate",
@@ -287,6 +323,7 @@ PRESET_MEALS = {
             {"ingredient_id": "olive_oil", "grams": 10},
         ],
         "tags": ["lunch", "dinner"],
+        "meal_slot": "lunch",
     },
     "chicken_rice_bowl": {
         "name": "Chicken Rice Bowl",
@@ -297,6 +334,7 @@ PRESET_MEALS = {
             {"ingredient_id": "olive_oil", "grams": 10},
         ],
         "tags": ["lunch", "dinner"],
+        "meal_slot": "lunch",
     },
     "salmon_rice_bowl": {
         "name": "Salmon Rice Bowl",
@@ -307,6 +345,7 @@ PRESET_MEALS = {
             {"ingredient_id": "cucumber", "grams": 80},
         ],
         "tags": ["lunch", "dinner"],
+        "meal_slot": "dinner",
     },
     "yogurt_snack_bowl": {
         "name": "Yogurt Snack Bowl",
@@ -316,6 +355,7 @@ PRESET_MEALS = {
             {"ingredient_id": "purely_elizabeth_granola", "grams": 30},
         ],
         "tags": ["snack"],
+        "meal_slot": "snack",
     },
     "granola_bowl": {
         "name": "Granola Bowl",
@@ -325,6 +365,7 @@ PRESET_MEALS = {
             {"ingredient_id": "banana", "grams": 120},
         ],
         "tags": ["breakfast", "snack"],
+        "meal_slot": "snack",
     },
     "pre_sleep_cottage": {
         "name": "Pre-Sleep Cottage",
@@ -334,6 +375,7 @@ PRESET_MEALS = {
             {"ingredient_id": "cucumber", "grams": 80},
         ],
         "tags": ["snack", "evening"],
+        "meal_slot": "pre_sleep",
     },
     "energy_gel_single": {
         "name": "Energy Gel",
@@ -341,6 +383,7 @@ PRESET_MEALS = {
             {"ingredient_id": "energy_gel", "grams": 35},        # 1 gel packet
         ],
         "tags": ["pre-run", "during-run"],
+        "meal_slot": "during_workout",
     },
     "sports_drink_bottle": {
         "name": "Sports Drink",
@@ -348,6 +391,7 @@ PRESET_MEALS = {
             {"ingredient_id": "sports_drink", "grams": 500},     # 500ml bottle
         ],
         "tags": ["pre-run", "during-run", "post-run"],
+        "meal_slot": "during_workout",
     },
 }
 

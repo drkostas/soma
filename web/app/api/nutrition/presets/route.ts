@@ -7,7 +7,9 @@ export async function GET() {
   const sql = getDb();
 
   const [presets, ingredients] = await Promise.all([
-    sql`SELECT * FROM preset_meals ORDER BY name`,
+    sql`SELECT id, name, items, tags, meal_slot, total_calories, total_protein,
+               total_carbs, total_fat, total_fiber, is_system, use_count, created_at
+        FROM preset_meals ORDER BY name`,
     sql`SELECT * FROM ingredients ORDER BY category, name`,
   ]);
 
