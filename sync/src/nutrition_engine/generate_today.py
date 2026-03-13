@@ -175,14 +175,30 @@ def generate_today() -> None:
         plan_json = json.dumps(plan)
         cur.execute(
             """
-            INSERT INTO nutrition_day (date, plan, target_calories, target_protein, target_carbs, target_fat)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO nutrition_day (
+                date, plan, target_calories, target_protein, target_carbs, target_fat,
+                target_fiber, tdee_used, deficit_used, adjustment_reason,
+                sleep_quality_score, training_day_type, is_refeed,
+                exercise_calories, step_calories, planned_workouts, step_goal
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (date) DO UPDATE SET
-                plan            = EXCLUDED.plan,
-                target_calories = EXCLUDED.target_calories,
-                target_protein  = EXCLUDED.target_protein,
-                target_carbs    = EXCLUDED.target_carbs,
-                target_fat      = EXCLUDED.target_fat
+                plan                = EXCLUDED.plan,
+                target_calories     = EXCLUDED.target_calories,
+                target_protein      = EXCLUDED.target_protein,
+                target_carbs        = EXCLUDED.target_carbs,
+                target_fat          = EXCLUDED.target_fat,
+                target_fiber        = EXCLUDED.target_fiber,
+                tdee_used           = EXCLUDED.tdee_used,
+                deficit_used        = EXCLUDED.deficit_used,
+                adjustment_reason   = EXCLUDED.adjustment_reason,
+                sleep_quality_score = EXCLUDED.sleep_quality_score,
+                training_day_type   = EXCLUDED.training_day_type,
+                is_refeed           = EXCLUDED.is_refeed,
+                exercise_calories   = EXCLUDED.exercise_calories,
+                step_calories       = EXCLUDED.step_calories,
+                planned_workouts    = EXCLUDED.planned_workouts,
+                step_goal           = EXCLUDED.step_goal
             """,
             (
                 today,
@@ -191,6 +207,17 @@ def generate_today() -> None:
                 plan["target_protein"],
                 plan["target_carbs"],
                 plan["target_fat"],
+                plan.get("target_fiber"),
+                plan.get("tdee_used"),
+                plan.get("deficit_used"),
+                plan.get("adjustment_reason"),
+                plan.get("sleep_quality_score"),
+                plan.get("training_day_type"),
+                plan.get("is_refeed", False),
+                None,   # exercise_calories — computed in later tasks
+                None,   # step_calories — computed in later tasks
+                None,   # planned_workouts — populated in later tasks
+                None,   # step_goal — populated in later tasks
             ),
         )
         cur.close()

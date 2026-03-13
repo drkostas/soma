@@ -75,20 +75,51 @@ CREATE TABLE IF NOT EXISTS preset_meals (
 
 -- Daily nutrition plan / summary
 CREATE TABLE IF NOT EXISTS nutrition_day (
-    date            DATE PRIMARY KEY,
-    plan            JSONB,
-    target_calories INTEGER,
-    target_protein  REAL,
-    target_carbs    REAL,
-    target_fat      REAL,
-    actual_calories REAL DEFAULT 0,
-    actual_protein  REAL DEFAULT 0,
-    actual_carbs    REAL DEFAULT 0,
-    actual_fat      REAL DEFAULT 0,
-    actual_fiber    REAL DEFAULT 0,
-    closed          BOOLEAN DEFAULT FALSE,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
+    date                DATE PRIMARY KEY,
+    plan                JSONB,
+    target_calories     INTEGER,
+    target_protein      REAL,
+    target_carbs        REAL,
+    target_fat          REAL,
+    target_fiber        REAL,
+    tdee_used           REAL,
+    exercise_calories   REAL,
+    step_calories       REAL,
+    deficit_used        REAL,
+    adjustment_reason   TEXT,
+    sleep_quality_score REAL,
+    training_day_type   VARCHAR(20),
+    planned_workouts    JSONB,
+    step_goal           INTEGER,
+    is_refeed           BOOLEAN DEFAULT FALSE,
+    is_diet_break       BOOLEAN DEFAULT FALSE,
+    status              VARCHAR(20) DEFAULT 'active',
+    actual_calories     REAL DEFAULT 0,
+    actual_protein      REAL DEFAULT 0,
+    actual_carbs        REAL DEFAULT 0,
+    actual_fat          REAL DEFAULT 0,
+    actual_fiber        REAL DEFAULT 0,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Backfill columns for existing installs
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS target_fiber        REAL;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS tdee_used           REAL;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS exercise_calories   REAL;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS step_calories       REAL;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS deficit_used        REAL;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS adjustment_reason   TEXT;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS sleep_quality_score REAL;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS training_day_type   VARCHAR(20);
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS planned_workouts    JSONB;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS step_goal           INTEGER;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS is_refeed           BOOLEAN DEFAULT FALSE;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS is_diet_break       BOOLEAN DEFAULT FALSE;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS status              VARCHAR(20) DEFAULT 'active';
+
+-- Migrate closed → status
+UPDATE nutrition_day SET status = 'closed' WHERE closed = TRUE;
+ALTER TABLE nutrition_day DROP COLUMN IF EXISTS closed;
 
 -- Individual meal log entries
 CREATE TABLE IF NOT EXISTS meal_log (

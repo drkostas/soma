@@ -52,9 +52,9 @@ export async function POST(req: NextRequest) {
       actual_carbs    = ${actual.carbs},
       actual_fat      = ${actual.fat},
       actual_fiber    = ${actual.fiber},
-      closed          = TRUE
+      status          = 'closed'
     WHERE date = ${date}
   `;
 
-  return NextResponse.json({ closed: true, actual });
+  return NextResponse.json({ status: "closed", actual });
 }
