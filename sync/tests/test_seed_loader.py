@@ -13,7 +13,7 @@ class TestBuildIngredientInsertSql:
 
     def test_contains_on_conflict_upsert(self):
         sql = build_ingredient_insert_sql(INGREDIENTS)
-        assert "ON CONFLICT (name) DO UPDATE" in sql
+        assert "ON CONFLICT (id) DO UPDATE" in sql
 
     def test_contains_chicken_breast_raw(self):
         sql = build_ingredient_insert_sql(INGREDIENTS)

@@ -14,7 +14,7 @@ from nutrition_engine.seed_data import INGREDIENTS, PRESET_MEALS
 
 
 def build_ingredient_insert_sql(ingredients: dict[str, dict[str, Any]]) -> str:
-    """Build a single INSERT ... ON CONFLICT(name) DO UPDATE for all ingredients.
+    """Build a single INSERT ... ON CONFLICT(id) DO UPDATE for all ingredients.
 
     Args:
         ingredients: The ingredient database mapping id -> ingredient dict.
@@ -48,7 +48,7 @@ def build_ingredient_insert_sql(ingredients: dict[str, dict[str, Any]]) -> str:
         f"(id, name, calories_per_100g, protein_per_100g, carbs_per_100g, "
         f"fat_per_100g, fiber_per_100g, is_raw, raw_to_cooked_ratio, category)\n"
         f"VALUES\n  {values}\n"
-        f"ON CONFLICT (name) DO UPDATE SET\n"
+        f"ON CONFLICT (id) DO UPDATE SET\n"
         f"  calories_per_100g = EXCLUDED.calories_per_100g,\n"
         f"  protein_per_100g  = EXCLUDED.protein_per_100g,\n"
         f"  carbs_per_100g    = EXCLUDED.carbs_per_100g,\n"
