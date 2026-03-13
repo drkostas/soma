@@ -102,16 +102,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Compute fat-free mass
-  const ffmKg = weight_kg * (1 - estimated_bf_pct / 100);
+  const estimatedFfmKg = weight_kg * (1 - estimated_bf_pct / 100);
 
   await sql`
     INSERT INTO nutrition_profile (
       id, weight_kg, estimated_bf_pct, target_bf_pct,
-      target_date, tdee_estimate, daily_deficit, ffm_kg,
+      target_date, tdee_estimate, daily_deficit, estimated_ffm_kg,
       updated_at
     ) VALUES (
       1, ${weight_kg}, ${estimated_bf_pct}, ${target_bf_pct},
-      ${target_date ?? null}, ${tdee_estimate}, ${daily_deficit}, ${ffmKg},
+      ${target_date ?? null}, ${tdee_estimate}, ${daily_deficit}, ${estimatedFfmKg},
       NOW()
     )
     ON CONFLICT (id) DO UPDATE SET
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
       target_date      = EXCLUDED.target_date,
       tdee_estimate    = EXCLUDED.tdee_estimate,
       daily_deficit    = EXCLUDED.daily_deficit,
-      ffm_kg           = EXCLUDED.ffm_kg,
+      estimated_ffm_kg = EXCLUDED.estimated_ffm_kg,
       updated_at       = NOW()
   `;
 
