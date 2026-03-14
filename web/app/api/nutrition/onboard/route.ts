@@ -239,5 +239,20 @@ export async function POST(req: NextRequest) {
       updated_at          = NOW()
   `;
 
+  // Generate today's plan immediately
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const baseUrl = process.env.SOMA_WEB_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3456';
+    await fetch(`${baseUrl}/api/nutrition/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: today }),
+    });
+  } catch {
+    // Non-fatal — plan will be generated on next sync
+  }
+
   return NextResponse.json({ saved: true });
 }
