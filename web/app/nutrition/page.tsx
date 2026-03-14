@@ -88,20 +88,32 @@ async function getBootstrap() {
     estimated_bf_pct = Math.round(Math.max(5, Math.min(50, raw)) * 10) / 10;
   }
 
-  // Fetch recent Hevy exercise names (try/catch — jsonb_array_elements can fail)
-  let recent_exercises: string[] = [];
+  // Fetch Hevy exercise names with session counts (try/catch — jsonb_array_elements can fail)
+  let exercise_stats: { name: string; recent: number; total: number }[] = [];
   try {
     const exerciseRows = await sql`
-      SELECT DISTINCT e->>'title' AS title
-      FROM hevy_raw_data,
-           jsonb_array_elements(raw_json->'exercises') AS e
-      WHERE endpoint_name = 'workout'
-      ORDER BY title
-      LIMIT 80
+      WITH workout_exercises AS (
+        SELECT
+          e->>'title' AS title,
+          (raw_json->>'start_time')::timestamptz AS workout_date
+        FROM hevy_raw_data,
+             jsonb_array_elements(raw_json->'exercises') AS e
+        WHERE endpoint_name = 'workout'
+      )
+      SELECT
+        title AS name,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE workout_date >= NOW() - INTERVAL '28 days')::int AS recent
+      FROM workout_exercises
+      WHERE title IS NOT NULL
+      GROUP BY title
+      ORDER BY recent DESC, total DESC
     `;
-    recent_exercises = exerciseRows
-      .map((r: Record<string, unknown>) => r.title as string)
-      .filter(Boolean);
+    exercise_stats = exerciseRows.map((r: Record<string, unknown>) => ({
+      name: r.name as string,
+      recent: Number(r.recent),
+      total: Number(r.total),
+    }));
   } catch {
     // Malformed data or missing table — proceed with empty list
   }
@@ -114,7 +126,7 @@ async function getBootstrap() {
     sex,
     vo2max,
     estimated_bf_pct,
-    recent_exercises,
+    exercise_stats,
   };
 }
 
