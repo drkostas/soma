@@ -50,7 +50,8 @@ export async function GET() {
         SELECT
           raw_json->'userData'->>'height' AS height_cm,
           raw_json->'userData'->>'birthDate' AS birth_date,
-          raw_json->'userData'->>'gender' AS gender
+          raw_json->'userData'->>'gender' AS gender,
+          raw_json->'userData'->>'vo2MaxRunning' AS vo2max_profile
         FROM garmin_profile_raw
         WHERE endpoint_name = 'user_profile'
         ORDER BY synced_at DESC
@@ -86,9 +87,10 @@ export async function GET() {
       ? Number(weightRows[0].body_fat_pct)
       : null;
 
-  const vo2max = vo2maxRows[0]?.vo2max != null
-    ? Number(vo2maxRows[0].vo2max)
-    : null;
+  // Use fitness_trajectory first, fall back to Garmin profile vo2MaxRunning
+  const vo2FromTrajectory = vo2maxRows[0]?.vo2max != null ? Number(vo2maxRows[0].vo2max) : null;
+  const vo2FromProfile = garminProfileRows[0]?.vo2max_profile != null ? Number(garminProfileRows[0].vo2max_profile) : null;
+  const vo2max = vo2FromTrajectory ?? vo2FromProfile;
 
   // Parse Garmin profile
   const heightCm = garminProfileRows[0]?.height_cm != null
