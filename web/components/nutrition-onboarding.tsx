@@ -224,11 +224,19 @@ function StepProfile({
           />
         </label>
       </div>
-      {form.vo2max && (
-        <div className="text-xs text-muted-foreground">
-          VO2max from Garmin: <span className="font-medium text-foreground">{form.vo2max}</span> mL/kg/min
-        </div>
-      )}
+      <label className="space-y-1">
+        <span className="text-xs text-muted-foreground">
+          VO2max (mL/kg/min){bootstrap.vo2max ? "" : " (not found in Garmin)"}
+        </span>
+        <input
+          type="number"
+          step="0.1"
+          value={form.vo2max || ""}
+          placeholder="e.g., 45"
+          onChange={(e) => update({ vo2max: e.target.value ? Number(e.target.value) : null })}
+          className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+        />
+      </label>
     </div>
   );
 }
