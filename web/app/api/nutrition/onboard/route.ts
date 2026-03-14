@@ -59,21 +59,23 @@ export async function GET() {
       `,
     ]);
 
-  // Fetch Hevy exercises with session counts (last 28 days + total)
-  let exerciseStats: { name: string; recent: number; total: number }[] = [];
+  // Fetch Hevy exercises with session counts and template IDs
+  let exerciseStats: { name: string; recent: number; total: number; template_id: string }[] = [];
   try {
     const exerciseRows = await sql`
       WITH workout_exercises AS (
         SELECT
           jsonb_array_elements(raw_json->'exercises')->>'title' AS title,
+          jsonb_array_elements(raw_json->'exercises')->>'exercise_template_id' AS template_id,
           (raw_json->>'start_time')::timestamptz AS workout_date
         FROM hevy_raw_data
         WHERE endpoint_name = 'workout'
       )
       SELECT
         title AS name,
-        COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE workout_date >= NOW() - INTERVAL '28 days') AS recent
+        MIN(template_id) AS template_id,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE workout_date >= NOW() - INTERVAL '28 days')::int AS recent
       FROM workout_exercises
       WHERE title IS NOT NULL
       GROUP BY title
@@ -83,6 +85,7 @@ export async function GET() {
       name: r.name as string,
       recent: Number(r.recent),
       total: Number(r.total),
+      template_id: r.template_id as string,
     }));
   } catch {
     // Ignore — malformed JSONB or empty table

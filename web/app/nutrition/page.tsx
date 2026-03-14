@@ -88,13 +88,14 @@ async function getBootstrap() {
     estimated_bf_pct = Math.round(Math.max(5, Math.min(50, raw)) * 10) / 10;
   }
 
-  // Fetch Hevy exercise names with session counts (try/catch — jsonb_array_elements can fail)
-  let exercise_stats: { name: string; recent: number; total: number }[] = [];
+  // Fetch Hevy exercise names with session counts and template IDs
+  let exercise_stats: { name: string; recent: number; total: number; template_id: string }[] = [];
   try {
     const exerciseRows = await sql`
       WITH workout_exercises AS (
         SELECT
           e->>'title' AS title,
+          e->>'exercise_template_id' AS template_id,
           (raw_json->>'start_time')::timestamptz AS workout_date
         FROM hevy_raw_data,
              jsonb_array_elements(raw_json->'exercises') AS e
@@ -102,6 +103,7 @@ async function getBootstrap() {
       )
       SELECT
         title AS name,
+        MIN(template_id) AS template_id,
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE workout_date >= NOW() - INTERVAL '28 days')::int AS recent
       FROM workout_exercises
@@ -113,6 +115,7 @@ async function getBootstrap() {
       name: r.name as string,
       recent: Number(r.recent),
       total: Number(r.total),
+      template_id: r.template_id as string,
     }));
   } catch {
     // Malformed data or missing table — proceed with empty list

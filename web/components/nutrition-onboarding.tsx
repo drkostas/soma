@@ -13,8 +13,25 @@ interface BootstrapData {
   sex: string | null;
   vo2max: number | null;
   estimated_bf_pct: number | null;
-  exercise_stats: { name: string; recent: number; total: number }[];
+  exercise_stats: { name: string; recent: number; total: number; template_id: string }[];
 }
+
+// Hevy template ID prefix → slot mapping based on primaryMuscleGroup
+// Template IDs are stable Hevy identifiers. We map by known muscle groups.
+const MUSCLE_GROUP_TO_SLOT: Record<string, string[]> = {
+  lower: ["quadriceps", "glutes", "calves", "adductors", "abductors"],
+  push: ["chest", "shoulders", "triceps"],
+  pull: ["upper_back", "lats", "biceps", "forearms"],
+  hinge: ["hamstrings", "glutes", "lower_back"],
+};
+
+// Known Hevy exercise title patterns → slot (fallback when we don't have muscle group data)
+const TITLE_TO_SLOT: [RegExp, string][] = [
+  [/squat|leg press|hack squat|leg extension|lunge|leg curl|calf|hip abduct|hip adduct/i, "lower"],
+  [/bench|chest|push.?up|dip|fly|shoulder press|overhead press|arnold|lateral raise|front raise|tricep/i, "push"],
+  [/row|pull.?up|pull.?down|lat pull|bicep|curl|face pull|rear delt|reverse fly/i, "pull"],
+  [/deadlift|rdl|romanian|hip thrust|good morning|back extension|hyperextension|glute/i, "hinge"],
+];
 
 interface ProfileFormData {
   weight_kg: number;
@@ -327,6 +344,13 @@ function StepBodyComp({
   );
 }
 
+function getSlotForExercise(name: string): string | null {
+  for (const [pattern, slot] of TITLE_TO_SLOT) {
+    if (pattern.test(name)) return slot;
+  }
+  return null;
+}
+
 function StepExercises({
   form,
   update,
@@ -334,13 +358,13 @@ function StepExercises({
 }: {
   form: ProfileFormData;
   update: (p: Partial<ProfileFormData>) => void;
-  exerciseStats: { name: string; recent: number; total: number }[];
+  exerciseStats: { name: string; recent: number; total: number; template_id: string }[];
 }) {
   const slots = [
     { key: "lower", label: "Lower Body", hint: "Squat, Leg Press, Hack Squat", required: true },
-    { key: "push", label: "Push", hint: "Bench Press, Dumbbell Press", required: true },
-    { key: "pull", label: "Pull", hint: "Barbell Row, Lat Pulldown", required: true },
-    { key: "hinge", label: "Hinge (optional)", hint: "Romanian DL, Deadlift", required: false },
+    { key: "push", label: "Push", hint: "Bench Press, Dumbbell Press, Shoulder Press", required: true },
+    { key: "pull", label: "Pull", hint: "Barbell Row, Lat Pulldown, Bicep Curl", required: true },
+    { key: "hinge", label: "Hinge (optional)", hint: "Romanian DL, Deadlift, Hip Thrust", required: false },
   ];
 
   const selectedNames = form.sentinel_exercises.map((s) => s.exercise_name);
@@ -357,6 +381,17 @@ function StepExercises({
     return form.sentinel_exercises.find((s) => s.slot === slot)?.exercise_name || "";
   }
 
+  function getExercisesForSlot(slotKey: string) {
+    // Filter exercises matching this slot, sorted by recent frequency
+    const matching = exerciseStats.filter((ex) => {
+      const detected = getSlotForExercise(ex.name);
+      return detected === slotKey;
+    });
+    // Also include unmatched exercises at the bottom (under "Other")
+    const unmatched = exerciseStats.filter((ex) => getSlotForExercise(ex.name) === null);
+    return { matching, unmatched };
+  }
+
   return (
     <div className="space-y-4">
       <h3 className="font-semibold">Sentinel Exercises</h3>
@@ -365,40 +400,57 @@ function StepExercises({
         These track your muscle mass changes over time.
       </p>
 
-      {slots.map(({ key, label, hint, required }) => (
-        <label key={key} className="space-y-1 block">
-          <span className="text-xs text-muted-foreground">
-            {label} {required && <span className="text-red-400">*</span>}
-          </span>
-          {exerciseStats.length > 0 ? (
-            <select
-              value={getSlotValue(key)}
-              onChange={(e) => setSlot(key, e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-            >
-              <option value="">Select exercise...</option>
-              {exerciseStats.map((ex) => (
-                <option
-                  key={ex.name}
-                  value={ex.name}
-                  disabled={selectedNames.includes(ex.name) && getSlotValue(key) !== ex.name}
-                >
-                  {ex.name} — {ex.recent} in last 28d / {ex.total} total
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={getSlotValue(key)}
-              onChange={(e) => setSlot(key, e.target.value)}
-              placeholder={`e.g., ${hint.split(",")[0].trim()}`}
-              className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-            />
-          )}
-          <span className="text-[10px] text-muted-foreground/70">{hint}</span>
-        </label>
-      ))}
+      {slots.map(({ key, label, hint, required }) => {
+        const { matching, unmatched } = getExercisesForSlot(key);
+        const hasOptions = matching.length > 0 || unmatched.length > 0;
+
+        return (
+          <label key={key} className="space-y-1 block">
+            <span className="text-xs text-muted-foreground">
+              {label} {required && <span className="text-red-400">*</span>}
+            </span>
+            {hasOptions ? (
+              <select
+                value={getSlotValue(key)}
+                onChange={(e) => setSlot(key, e.target.value)}
+                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+              >
+                <option value="">Select exercise...</option>
+                {matching.map((ex) => (
+                  <option
+                    key={ex.name}
+                    value={ex.name}
+                    disabled={selectedNames.includes(ex.name) && getSlotValue(key) !== ex.name}
+                  >
+                    {ex.name} — {ex.recent} in last 28d / {ex.total} total
+                  </option>
+                ))}
+                {unmatched.length > 0 && matching.length > 0 && (
+                  <option disabled>── Other exercises ──</option>
+                )}
+                {unmatched.map((ex) => (
+                  <option
+                    key={ex.name}
+                    value={ex.name}
+                    disabled={selectedNames.includes(ex.name) && getSlotValue(key) !== ex.name}
+                  >
+                    {ex.name} — {ex.recent} in last 28d / {ex.total} total
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={getSlotValue(key)}
+                onChange={(e) => setSlot(key, e.target.value)}
+                placeholder={`e.g., ${hint.split(",")[0].trim()}`}
+                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+              />
+            )}
+            <span className="text-[10px] text-muted-foreground/70">{hint}</span>
+          </label>
+        );
+      })}
     </div>
   );
 }
