@@ -81,8 +81,16 @@ export function NutritionOnboarding({ bootstrap }: { bootstrap: BootstrapData })
     }
   }
 
+  const canSubmit =
+    form.weight_kg > 0 &&
+    form.height_cm > 0 &&
+    form.age > 0 &&
+    form.tdee_estimate > 0;
+
   return (
     <div className="space-y-4">
+      <h2 className="text-xl font-bold text-center">Set Up Nutrition Tracking</h2>
+
       {/* Step indicator */}
       <div className="flex items-center justify-center gap-1">
         {STEPS.map((s, i) => (
@@ -103,7 +111,7 @@ export function NutritionOnboarding({ bootstrap }: { bootstrap: BootstrapData })
       <Card>
         <CardContent className="pt-4 space-y-4">
           {step === 0 && (
-            <StepProfile form={form} update={update} />
+            <StepProfile form={form} update={update} bootstrap={bootstrap} />
           )}
           {step === 1 && (
             <StepBodyComp form={form} update={update} bootstrap={bootstrap} />
@@ -138,7 +146,7 @@ export function NutritionOnboarding({ bootstrap }: { bootstrap: BootstrapData })
             Next <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         ) : (
-          <Button onClick={handleSubmit} disabled={saving}>
+          <Button onClick={handleSubmit} disabled={saving || !canSubmit}>
             {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
             {saving ? "Saving..." : "Start Tracking"}
           </Button>
@@ -153,10 +161,16 @@ export function NutritionOnboarding({ bootstrap }: { bootstrap: BootstrapData })
 function StepProfile({
   form,
   update,
+  bootstrap,
 }: {
   form: ProfileFormData;
   update: (p: Partial<ProfileFormData>) => void;
+  bootstrap: BootstrapData;
 }) {
+  const missingAge = !bootstrap.age || bootstrap.age === 0;
+  const missingSex = !bootstrap.sex;
+  const missingHeight = !bootstrap.height_cm || bootstrap.height_cm === 0;
+
   return (
     <div className="space-y-3">
       <h3 className="font-semibold">Your Profile</h3>
@@ -165,7 +179,9 @@ function StepProfile({
       </p>
       <div className="grid grid-cols-2 gap-3">
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Age</span>
+          <span className="text-xs text-muted-foreground">
+            Age{missingAge && <span className="text-amber-500/80 ml-1">(not found in Garmin)</span>}
+          </span>
           <input
             type="number"
             value={form.age}
@@ -174,7 +190,9 @@ function StepProfile({
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Sex</span>
+          <span className="text-xs text-muted-foreground">
+            Sex{missingSex && <span className="text-amber-500/80 ml-1">(not found in Garmin)</span>}
+          </span>
           <select
             value={form.sex}
             onChange={(e) => update({ sex: e.target.value })}
@@ -185,7 +203,9 @@ function StepProfile({
           </select>
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Height (cm)</span>
+          <span className="text-xs text-muted-foreground">
+            Height (cm){missingHeight && <span className="text-amber-500/80 ml-1">(not found in Garmin)</span>}
+          </span>
           <input
             type="number"
             value={form.height_cm}
@@ -262,6 +282,14 @@ function StepBodyComp({
         <span>40% (high)</span>
       </div>
 
+      <div className="grid grid-cols-5 text-[10px] text-muted-foreground/70 text-center">
+        <span>8-12%<br/>Visible abs</span>
+        <span>13-17%<br/>Athletic</span>
+        <span>18-22%<br/>Fit</span>
+        <span>23-27%<br/>Average</span>
+        <span>28%+<br/>Above avg</span>
+      </div>
+
       <div className="flex justify-center">
         <Button
           variant="outline"
@@ -334,22 +362,32 @@ function StepExercises({
           <span className="text-xs text-muted-foreground">
             {label} {required && <span className="text-red-400">*</span>}
           </span>
-          <select
-            value={getSlotValue(key)}
-            onChange={(e) => setSlot(key, e.target.value)}
-            className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-          >
-            <option value="">Select exercise...</option>
-            {recentExercises.map((ex) => (
-              <option
-                key={ex}
-                value={ex}
-                disabled={selectedNames.includes(ex) && getSlotValue(key) !== ex}
-              >
-                {ex}
-              </option>
-            ))}
-          </select>
+          {recentExercises.length > 0 ? (
+            <select
+              value={getSlotValue(key)}
+              onChange={(e) => setSlot(key, e.target.value)}
+              className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+            >
+              <option value="">Select exercise...</option>
+              {recentExercises.map((ex) => (
+                <option
+                  key={ex}
+                  value={ex}
+                  disabled={selectedNames.includes(ex) && getSlotValue(key) !== ex}
+                >
+                  {ex}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={getSlotValue(key)}
+              onChange={(e) => setSlot(key, e.target.value)}
+              placeholder={`e.g., ${hint.split(",")[0].trim()}`}
+              className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+            />
+          )}
           <span className="text-[10px] text-muted-foreground/70">{hint}</span>
         </label>
       ))}
