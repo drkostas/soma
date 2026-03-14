@@ -48,6 +48,8 @@ ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS step_goal       INTEGER D
 ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS creatine_dose_g REAL DEFAULT 5.0;
 ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS creatine_start_date DATE;
 ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS creatine_dose_change_date DATE;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS vo2max REAL;
+ALTER TABLE nutrition_profile ADD COLUMN IF NOT EXISTS sentinel_exercises JSONB;
 
 -- Ingredient library
 CREATE TABLE IF NOT EXISTS ingredients (
