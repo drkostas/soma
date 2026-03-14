@@ -48,9 +48,9 @@ export async function GET() {
       `,
       sql`
         SELECT
-          raw_json->>'height' AS height_cm,
-          raw_json->>'birthDate' AS birth_date,
-          raw_json->>'gender' AS gender
+          raw_json->'userData'->>'height' AS height_cm,
+          raw_json->'userData'->>'birthDate' AS birth_date,
+          raw_json->'userData'->>'gender' AS gender
         FROM garmin_profile_raw
         WHERE endpoint_name = 'user_profile'
         ORDER BY synced_at DESC
