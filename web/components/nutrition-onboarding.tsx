@@ -13,7 +13,7 @@ interface BootstrapData {
   sex: string | null;
   vo2max: number | null;
   estimated_bf_pct: number | null;
-  recent_exercises: string[];
+  exercise_stats: { name: string; recent: number; total: number }[];
 }
 
 interface ProfileFormData {
@@ -120,7 +120,7 @@ export function NutritionOnboarding({ bootstrap }: { bootstrap: BootstrapData })
             <StepExercises
               form={form}
               update={update}
-              recentExercises={bootstrap.recent_exercises}
+              exerciseStats={bootstrap.exercise_stats}
             />
           )}
           {step === 3 && (
@@ -330,11 +330,11 @@ function StepBodyComp({
 function StepExercises({
   form,
   update,
-  recentExercises,
+  exerciseStats,
 }: {
   form: ProfileFormData;
   update: (p: Partial<ProfileFormData>) => void;
-  recentExercises: string[];
+  exerciseStats: { name: string; recent: number; total: number }[];
 }) {
   const slots = [
     { key: "lower", label: "Lower Body", hint: "Squat, Leg Press, Hack Squat", required: true },
@@ -366,24 +366,24 @@ function StepExercises({
       </p>
 
       {slots.map(({ key, label, hint, required }) => (
-        <label key={key} className="space-y-1">
+        <label key={key} className="space-y-1 block">
           <span className="text-xs text-muted-foreground">
             {label} {required && <span className="text-red-400">*</span>}
           </span>
-          {recentExercises.length > 0 ? (
+          {exerciseStats.length > 0 ? (
             <select
               value={getSlotValue(key)}
               onChange={(e) => setSlot(key, e.target.value)}
               className="w-full rounded-md border px-3 py-2 text-sm bg-background"
             >
               <option value="">Select exercise...</option>
-              {recentExercises.map((ex) => (
+              {exerciseStats.map((ex) => (
                 <option
-                  key={ex}
-                  value={ex}
-                  disabled={selectedNames.includes(ex) && getSlotValue(key) !== ex}
+                  key={ex.name}
+                  value={ex.name}
+                  disabled={selectedNames.includes(ex.name) && getSlotValue(key) !== ex.name}
                 >
-                  {ex}
+                  {ex.name} — {ex.recent} in last 28d / {ex.total} total
                 </option>
               ))}
             </select>

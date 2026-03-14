@@ -59,20 +59,31 @@ export async function GET() {
       `,
     ]);
 
-  // Fetch Hevy exercises separately — jsonb_array_elements can fail on
-  // malformed data so we wrap in try/catch.
-  let recentExercises: string[] = [];
+  // Fetch Hevy exercises with session counts (last 28 days + total)
+  let exerciseStats: { name: string; recent: number; total: number }[] = [];
   try {
     const exerciseRows = await sql`
-      SELECT DISTINCT
-        jsonb_array_elements(raw_json->'exercises')->>'title' AS title
-      FROM hevy_raw_data
-      WHERE endpoint_name = 'workout'
+      WITH workout_exercises AS (
+        SELECT
+          jsonb_array_elements(raw_json->'exercises')->>'title' AS title,
+          (raw_json->>'start_time')::timestamptz AS workout_date
+        FROM hevy_raw_data
+        WHERE endpoint_name = 'workout'
+      )
+      SELECT
+        title AS name,
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE workout_date >= NOW() - INTERVAL '28 days') AS recent
+      FROM workout_exercises
+      WHERE title IS NOT NULL
+      GROUP BY title
+      ORDER BY recent DESC, total DESC
     `;
-    recentExercises = exerciseRows
-      .map((r: Record<string, unknown>) => r.title as string)
-      .filter(Boolean)
-      .sort();
+    exerciseStats = exerciseRows.map((r: Record<string, unknown>) => ({
+      name: r.name as string,
+      recent: Number(r.recent),
+      total: Number(r.total),
+    }));
   } catch {
     // Ignore — malformed JSONB or empty table
   }
@@ -150,7 +161,7 @@ export async function GET() {
       sex,
       vo2max,
       estimated_bf_pct: estimatedBfPct,
-      recent_exercises: recentExercises,
+      exercise_stats: exerciseStats,
     },
   });
 }
