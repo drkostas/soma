@@ -58,11 +58,12 @@ async function getBootstrap() {
   const weight_kg = Number(weightRows[0]?.weight_kg) || 80;
   const vo2max = fitnessRows[0]?.vo2max ? Number(fitnessRows[0].vo2max) : null;
 
-  // Extract profile fields from Garmin raw JSON
+  // Extract profile fields from Garmin raw JSON (nested under userData)
   const rawProfile = profileRawRows[0]?.raw_json;
-  const height_cm: number | null = rawProfile?.height ? Number(rawProfile.height) : null;
-  const birthDateStr: string | null = rawProfile?.birthDate ?? null;
-  const genderRaw: string | null = rawProfile?.gender ?? null;
+  const userData = rawProfile?.userData ?? rawProfile;
+  const height_cm: number | null = userData?.height ? Number(userData.height) : null;
+  const birthDateStr: string | null = userData?.birthDate ?? null;
+  const genderRaw: string | null = userData?.gender ?? null;
   const sex = genderRaw ? genderRaw.toLowerCase() : null;
 
   // Compute age from birth date
