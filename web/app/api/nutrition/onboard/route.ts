@@ -7,7 +7,8 @@ export const runtime = "edge";
  * GET /api/nutrition/onboard
  *
  * Check whether a nutrition_profile exists.
- * - If no profile: bootstrap TDEE and weight from Garmin data.
+ * - If no profile: bootstrap TDEE, weight, profile info, VO2max, BF%, and
+ *   recent Hevy exercises from Garmin + Hevy data.
  * - If profile exists: return it directly.
  */
 export async function GET() {
@@ -21,33 +22,120 @@ export async function GET() {
     return NextResponse.json({ profile: profileRows[0] });
   }
 
-  // No profile yet — bootstrap from Garmin data
-  const [bmrRows, weightRows] = await Promise.all([
-    sql`
-      SELECT bmr_kilocalories, active_kilocalories
-      FROM daily_health_summary
-      WHERE bmr_kilocalories IS NOT NULL
-      ORDER BY date DESC
-      LIMIT 1
-    `,
-    sql`
-      SELECT weight_grams / 1000.0 AS weight_kg, body_fat_pct
-      FROM weight_log
-      WHERE weight_grams IS NOT NULL
-      ORDER BY date DESC
-      LIMIT 1
-    `,
-  ]);
+  // No profile yet — bootstrap from Garmin + Hevy data
+  const [bmrRows, weightRows, vo2maxRows, garminProfileRows] =
+    await Promise.all([
+      sql`
+        SELECT bmr_kilocalories, active_kilocalories
+        FROM daily_health_summary
+        WHERE bmr_kilocalories IS NOT NULL
+        ORDER BY date DESC
+        LIMIT 1
+      `,
+      sql`
+        SELECT weight_grams / 1000.0 AS weight_kg, body_fat_pct
+        FROM weight_log
+        WHERE weight_grams IS NOT NULL
+        ORDER BY date DESC
+        LIMIT 1
+      `,
+      sql`
+        SELECT vo2max
+        FROM fitness_trajectory
+        WHERE vo2max IS NOT NULL
+        ORDER BY date DESC
+        LIMIT 1
+      `,
+      sql`
+        SELECT
+          raw_json->>'height' AS height_cm,
+          raw_json->>'birthDate' AS birth_date,
+          raw_json->>'gender' AS gender
+        FROM garmin_profile_raw
+        WHERE endpoint_name = 'user_profile'
+        ORDER BY synced_at DESC
+        LIMIT 1
+      `,
+    ]);
+
+  // Fetch Hevy exercises separately — jsonb_array_elements can fail on
+  // malformed data so we wrap in try/catch.
+  let recentExercises: string[] = [];
+  try {
+    const exerciseRows = await sql`
+      SELECT DISTINCT
+        jsonb_array_elements(raw_json->'exercises')->>'title' AS title
+      FROM hevy_raw_data
+      WHERE endpoint_name = 'workout'
+    `;
+    recentExercises = exerciseRows
+      .map((r: Record<string, unknown>) => r.title as string)
+      .filter(Boolean)
+      .sort();
+  } catch {
+    // Ignore — malformed JSONB or empty table
+  }
 
   const bmr = Number(bmrRows[0]?.bmr_kilocalories) || 0;
   const activeKcal = Number(bmrRows[0]?.active_kilocalories) || 0;
-  const tdee =
-    bmr > 0 ? Math.round(bmr + activeKcal * 0.75) : 2300;
+  const tdee = bmr > 0 ? Math.round(bmr + activeKcal * 0.75) : 2300;
 
   const weightKg = Number(weightRows[0]?.weight_kg) || 80;
-  const garminBfPct = weightRows[0]?.body_fat_pct != null
-    ? Number(weightRows[0].body_fat_pct)
+  const garminBfPct =
+    weightRows[0]?.body_fat_pct != null
+      ? Number(weightRows[0].body_fat_pct)
+      : null;
+
+  const vo2max = vo2maxRows[0]?.vo2max != null
+    ? Number(vo2maxRows[0].vo2max)
     : null;
+
+  // Parse Garmin profile
+  const heightCm = garminProfileRows[0]?.height_cm != null
+    ? Number(garminProfileRows[0].height_cm)
+    : null;
+
+  let age: number | null = null;
+  if (garminProfileRows[0]?.birth_date) {
+    const birth = new Date(garminProfileRows[0].birth_date as string);
+    const now = new Date();
+    age = now.getFullYear() - birth.getFullYear();
+    const monthDiff = now.getMonth() - birth.getMonth();
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && now.getDate() < birth.getDate())
+    ) {
+      age--;
+    }
+  }
+
+  const genderRaw = garminProfileRows[0]?.gender as string | undefined;
+  const sex =
+    genderRaw === "MALE"
+      ? "male"
+      : genderRaw === "FEMALE"
+        ? "female"
+        : null;
+
+  // NHANES body-fat estimation
+  // BF% = 47.35 + 0.035*age - 11.07*isMale - 0.177*height + 0.191*weight
+  //        + 0.345*bmi - 0.137*vo2max
+  let estimatedBfPct: number | null = null;
+  if (heightCm != null && heightCm > 0 && age != null) {
+    const isMale = sex === "male" ? 1 : 0;
+    const heightM = heightCm / 100;
+    const bmi = weightKg / (heightM * heightM);
+    const v = vo2max ?? 40;
+    const raw =
+      47.35 +
+      0.035 * age -
+      11.07 * isMale -
+      0.177 * heightCm +
+      0.191 * weightKg +
+      0.345 * bmi -
+      0.137 * v;
+    estimatedBfPct = Math.round(Math.min(50, Math.max(5, raw)) * 10) / 10;
+  }
 
   return NextResponse.json({
     profile: null,
@@ -55,6 +143,12 @@ export async function GET() {
       tdee,
       weight_kg: weightKg,
       garmin_bf_pct: garminBfPct,
+      height_cm: heightCm,
+      age,
+      sex,
+      vo2max,
+      estimated_bf_pct: estimatedBfPct,
+      recent_exercises: recentExercises,
     },
   });
 }
@@ -76,6 +170,11 @@ export async function POST(req: NextRequest) {
     tdee_estimate,
     daily_deficit,
     weight_kg,
+    height_cm,
+    age,
+    sex,
+    vo2max,
+    sentinel_exercises,
   } = body as {
     estimated_bf_pct: number;
     target_bf_pct: number;
@@ -83,6 +182,11 @@ export async function POST(req: NextRequest) {
     tdee_estimate: number;
     daily_deficit: number;
     weight_kg: number;
+    height_cm?: number;
+    age?: number;
+    sex?: string;
+    vo2max?: number;
+    sentinel_exercises?: string[];
   };
 
   if (
@@ -103,26 +207,36 @@ export async function POST(req: NextRequest) {
 
   // Compute fat-free mass
   const estimatedFfmKg = weight_kg * (1 - estimated_bf_pct / 100);
+  const sentinelJson =
+    sentinel_exercises != null ? JSON.stringify(sentinel_exercises) : null;
 
   await sql`
     INSERT INTO nutrition_profile (
       id, weight_kg, estimated_bf_pct, target_bf_pct,
       target_date, tdee_estimate, daily_deficit, estimated_ffm_kg,
+      height_cm, age, sex, vo2max, sentinel_exercises,
       updated_at
     ) VALUES (
       1, ${weight_kg}, ${estimated_bf_pct}, ${target_bf_pct},
       ${target_date ?? null}, ${tdee_estimate}, ${daily_deficit}, ${estimatedFfmKg},
+      ${height_cm ?? null}, ${age ?? null}, ${sex ?? null},
+      ${vo2max ?? null}, ${sentinelJson}::jsonb,
       NOW()
     )
     ON CONFLICT (id) DO UPDATE SET
-      weight_kg        = EXCLUDED.weight_kg,
-      estimated_bf_pct = EXCLUDED.estimated_bf_pct,
-      target_bf_pct    = EXCLUDED.target_bf_pct,
-      target_date      = EXCLUDED.target_date,
-      tdee_estimate    = EXCLUDED.tdee_estimate,
-      daily_deficit    = EXCLUDED.daily_deficit,
-      estimated_ffm_kg = EXCLUDED.estimated_ffm_kg,
-      updated_at       = NOW()
+      weight_kg           = EXCLUDED.weight_kg,
+      estimated_bf_pct    = EXCLUDED.estimated_bf_pct,
+      target_bf_pct       = EXCLUDED.target_bf_pct,
+      target_date         = EXCLUDED.target_date,
+      tdee_estimate       = EXCLUDED.tdee_estimate,
+      daily_deficit       = EXCLUDED.daily_deficit,
+      estimated_ffm_kg    = EXCLUDED.estimated_ffm_kg,
+      height_cm           = EXCLUDED.height_cm,
+      age                 = EXCLUDED.age,
+      sex                 = EXCLUDED.sex,
+      vo2max              = EXCLUDED.vo2max,
+      sentinel_exercises  = EXCLUDED.sentinel_exercises,
+      updated_at          = NOW()
   `;
 
   return NextResponse.json({ saved: true });
