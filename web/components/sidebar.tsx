@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { Loader2 } from "lucide-react";
 import {
   LayoutDashboard,
   Dumbbell,
@@ -36,6 +37,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -58,9 +60,10 @@ export function Sidebar() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router]);
 
-  // Close drawer on navigation
+  // Close drawer + clear loading on navigation
   useEffect(() => {
     setDrawerOpen(false);
+    setNavigatingTo(null);
   }, [pathname]);
 
   return (
@@ -119,21 +122,29 @@ export function Sidebar() {
         <nav className="flex flex-1 flex-col gap-0.5 p-2 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const isLoading = navigatingTo === item.href;
             const Icon = item.icon;
 
             return (
               <Link
                 key={item.label}
                 href={item.href}
+                onClick={() => { if (!isActive) setNavigatingTo(item.href); }}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm active:scale-[0.96] active:opacity-70",
                   isActive
                     ? "bg-accent text-accent-foreground font-medium"
+                    : isLoading
+                    ? "bg-accent/50 text-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                ) : (
+                  <Icon className="h-4 w-4 shrink-0" />
+                )}
                 <span>{item.label}</span>
                 <span className="ml-auto text-[10px] text-muted-foreground/50 hidden md:inline">
                   ⌘{item.shortcut}

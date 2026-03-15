@@ -155,16 +155,16 @@
 
 /* Touch feedback — instant visual response on tap */
 button, a, [role="button"], [data-clickable] {
-  -webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: transparent !important;
   touch-action: manipulation;
 }
-button:active, a:active, [role="button"]:active, [data-clickable]:active {
-  transform: scale(0.97);
-  opacity: 0.8;
-  transition: transform 0.05s ease, opacity 0.05s ease;
-}
-button, a, [role="button"] {
-  transition: transform 0.1s ease, opacity 0.1s ease;
+button:active:not(:disabled),
+a:active,
+[role="button"]:active,
+[data-clickable]:active {
+  transform: scale(0.96) !important;
+  opacity: 0.7 !important;
+  transition: transform 0.04s ease, opacity 0.04s ease !important;
 }
 
 /* Page transition loading bar */
