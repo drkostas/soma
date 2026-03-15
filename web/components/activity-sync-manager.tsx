@@ -188,16 +188,16 @@ function ActivityRow({
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium truncate">{activity.name}</span>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-          <span>{typeLabel}</span>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
+          <span className="whitespace-nowrap">{typeLabel}</span>
           <span>&middot;</span>
-          <span>{formatDate(activity.start_time)}</span>
+          <span className="whitespace-nowrap">{formatDate(activity.start_time)}</span>
           <span>&middot;</span>
-          <span>{formatDuration(activity.duration)}</span>
+          <span className="whitespace-nowrap">{formatDuration(activity.duration)}</span>
           {dist && (
             <>
               <span>&middot;</span>
-              <span>{dist}</span>
+              <span className="whitespace-nowrap">{dist}</span>
             </>
           )}
         </div>
