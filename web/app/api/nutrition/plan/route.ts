@@ -170,6 +170,32 @@ export async function GET(req: NextRequest) {
       dayTargets.fat += fatEquiv;
     }
 
+    // ── Step dedup: subtract run steps from step calories when run is ON ──
+    const stepCalories = Number(plan.step_calories) || 0;
+    const stepGoal = Number(plan.step_goal) || 10000;
+    let adjustedStepCalories = stepCalories;
+    let runStepEstimate = 0;
+
+    if (runEnabled && plan.exercise_calories) {
+      // Estimate run steps: ~1300 steps per km
+      const runDistanceRows = await sql`
+        SELECT target_distance_km FROM training_plan_day d
+        JOIN training_plan p ON d.plan_id = p.id
+        WHERE p.status = 'active' AND d.day_date = ${date}
+        LIMIT 1
+      `;
+      const distKm = Number(runDistanceRows[0]?.target_distance_km) || 0;
+      runStepEstimate = Math.round(distKm * 1300);
+
+      if (stepGoal > 0 && runStepEstimate > 0) {
+        const calPerStep = stepCalories / stepGoal;
+        const runStepCal = Math.round(runStepEstimate * calPerStep);
+        adjustedStepCalories = Math.max(0, stepCalories - runStepCal);
+        // Adjust target calories: remove the double-counted run step calories
+        dayTargets.calories = Math.max(0, dayTargets.calories - runStepCal);
+      }
+    }
+
     remaining = {
       calories: dayTargets.calories - consumed.calories,
       protein: Math.round(dayTargets.protein - consumed.protein),
