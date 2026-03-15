@@ -291,7 +291,7 @@ export function MealCard({
     if (!savePresetName.trim() || !lastComposedItems) return;
     setSaving(true);
     try {
-      await fetch("/api/nutrition/presets", {
+      const res = await fetch("/api/nutrition/presets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -301,6 +301,7 @@ export function MealCard({
           totals: lastComposedTotals,
         }),
       });
+      if (!res.ok) return; // keep prompt open on failure
       setShowSavePrompt(false);
       setSavePresetName("");
       setLastComposedItems(null);
