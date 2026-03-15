@@ -567,6 +567,7 @@ CREATE TABLE IF NOT EXISTS nutrition_day (
     is_refeed           BOOLEAN DEFAULT FALSE,
     is_diet_break       BOOLEAN DEFAULT FALSE,
     status              VARCHAR(20) DEFAULT 'active',
+    skipped_slots       TEXT[] DEFAULT '{}',
     actual_calories     REAL DEFAULT 0,
     actual_protein      REAL DEFAULT 0,
     actual_carbs        REAL DEFAULT 0,
