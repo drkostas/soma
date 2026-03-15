@@ -121,6 +121,11 @@ export function MealCard({
   const [showCompose, setShowCompose] = useState(false);
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   const [composedPortions, setComposedPortions] = useState<PortionResult[] | null>(null);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [savePresetName, setSavePresetName] = useState("");
+  const [lastComposedItems, setLastComposedItems] = useState<any[] | null>(null);
+  const [lastComposedTotals, setLastComposedTotals] = useState<any | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const handleSkip = async () => {
     setSkipping(true);
@@ -268,14 +273,48 @@ export function MealCard({
         }),
       });
       if (res.ok) {
+        // Store for potential save-as-preset
+        setLastComposedItems(items);
+        setLastComposedTotals(totals);
         setComposedPortions(null);
         setSelectedIngredients(new Set());
         setShowCompose(false);
         onMealLogged();
+        setShowSavePrompt(true);
       }
     } finally {
       setLogging(false);
     }
+  };
+
+  const handleSavePreset = async () => {
+    if (!savePresetName.trim() || !lastComposedItems) return;
+    setSaving(true);
+    try {
+      await fetch("/api/nutrition/presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: savePresetName.trim(),
+          items: lastComposedItems,
+          slot,
+          totals: lastComposedTotals,
+        }),
+      });
+      setShowSavePrompt(false);
+      setSavePresetName("");
+      setLastComposedItems(null);
+      setLastComposedTotals(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDismissSave = () => {
+    setShowSavePrompt(false);
+    setSavePresetName("");
+    setLastComposedItems(null);
+    setLastComposedTotals(null);
   };
 
   const handleComposeCancel = () => {
@@ -540,6 +579,31 @@ export function MealCard({
               onCancel={handleComposeCancel}
               logging={logging}
             />
+          )}
+
+          {/* Save as preset prompt */}
+          {showSavePrompt && (
+            <div className="space-y-2 rounded-md border border-dashed p-3">
+              <span className="text-xs text-muted-foreground">
+                Save as preset for reuse?
+              </span>
+              <input
+                type="text"
+                placeholder="Preset name..."
+                value={savePresetName}
+                onChange={(e) => setSavePresetName(e.target.value)}
+                className="w-full rounded-md border px-2 py-1.5 text-sm bg-background"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" className="flex-1" onClick={handleDismissSave}>
+                  Skip
+                </Button>
+                <Button size="sm" className="flex-1" disabled={saving || !savePresetName.trim()} onClick={handleSavePreset}>
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       )}
