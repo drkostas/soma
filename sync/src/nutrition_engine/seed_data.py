@@ -16,7 +16,7 @@ INGREDIENTS = {
         "fat_per_100g": 2.6,
         "fiber_per_100g": 0,
         "is_raw": True,
-        "raw_to_cooked_ratio": 0.70,
+        "raw_to_cooked_ratio": 0.72,  # USDA pan-fried medium
         "category": "protein",
         "usda_fdc_id": 171077,
     },
@@ -28,7 +28,7 @@ INGREDIENTS = {
         "fat_per_100g": 13.4,
         "fiber_per_100g": 0,
         "is_raw": True,
-        "raw_to_cooked_ratio": 0.70,
+        "raw_to_cooked_ratio": 0.84,  # USDA pan-fried medium (fish yield ~84%)
         "category": "protein",
         "usda_fdc_id": 175167,
     },
@@ -88,7 +88,7 @@ INGREDIENTS = {
         "fat_per_100g": 0.4,
         "fiber_per_100g": 2.6,
         "is_raw": True,
-        "raw_to_cooked_ratio": 0.90,
+        "raw_to_cooked_ratio": 0.92,  # USDA AH-102 boiled+drained
         "category": "vegetable",
         "usda_fdc_id": 170379,
     },
@@ -99,8 +99,8 @@ INGREDIENTS = {
         "carbs_per_100g": 3.9,
         "fat_per_100g": 0.2,
         "fiber_per_100g": 1.2,
-        "is_raw": False,
-        "raw_to_cooked_ratio": None,
+        "is_raw": True,
+        "raw_to_cooked_ratio": 0.87,  # burst + lose juice when boiled ~13% loss
         "category": "vegetable",
         "usda_fdc_id": 170457,
     },
@@ -123,8 +123,8 @@ INGREDIENTS = {
         "carbs_per_100g": 9.6,
         "fat_per_100g": 0.2,
         "fiber_per_100g": 2.8,
-        "is_raw": False,
-        "raw_to_cooked_ratio": None,
+        "is_raw": True,
+        "raw_to_cooked_ratio": 1.0,  # boiled ~neutral weight (absorbs water, offsets softening)
         "category": "vegetable",
         "usda_fdc_id": 170393,
     },
