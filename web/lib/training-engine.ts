@@ -465,13 +465,13 @@ export const NODE_THRESHOLDS: Record<
   bb_z: { good: 1.0, bad: -2.0 },
   tsb: { good: 15, bad: -20 },
   ctl: { good: 60, bad: 10 },
-  atl: { good: 30, bad: 80, inverted: true }, // lower ATL = more rested
-  readiness_factor: { good: 0.97, bad: 1.05, inverted: true }, // lower = faster = better
-  fatigue_factor: { good: 0.98, bad: 1.03, inverted: true },
-  weight_factor: { good: 0.97, bad: 1.03, inverted: true },
+  atl: { good: 30, bad: 80 }, // lower ATL = more rested; good<bad encodes direction
+  readiness_factor: { good: 0.97, bad: 1.05 }, // lower = faster = better
+  fatigue_factor: { good: 0.98, bad: 1.03 },
+  weight_factor: { good: 0.97, bad: 1.03 },
   composite_score: { good: 1.0, bad: -2.0 },
   vdot: { good: 55, bad: 35 },
-  decoupling: { good: 3, bad: 8, inverted: true }, // lower decoupling = better
+  decoupling: { good: 3, bad: 8 }, // lower decoupling = better
 };
 
 /**

@@ -98,6 +98,9 @@ function formatDuration(minutes: number): string {
     const m = Math.round(minutes % 60);
     return m > 0 ? `${h}h${m}m` : `${h}h`;
   }
+  if (minutes < 1) {
+    return `${Math.round(minutes * 60)}s`;
+  }
   return `${Math.round(minutes)}min`;
 }
 
@@ -428,7 +431,7 @@ function StepBlock({
           )}
           {estimatedMinutes != null && estimatedMinutes > 0 && (
             <span className="text-[10px] font-mono text-muted-foreground/60 whitespace-nowrap">
-              {isEstimated ? "~" : ""}{estimatedMinutes}min
+              {isEstimated ? "~" : ""}{formatDuration(estimatedMinutes)}
             </span>
           )}
         </div>

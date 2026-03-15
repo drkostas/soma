@@ -1,4 +1,4 @@
-/** Estimate half-marathon time from VDOT using Daniels/Gilbert equations (client-side fallback). */
+/** Estimate half-marathon time from VDOT using Daniels/Gilbert equations. */
 export function estimateHMSeconds(vdot: number): number {
   const HM_M = 21097.5;
   // Binary search: vdot_from_race(HM_M, t) == vdot
@@ -13,4 +13,15 @@ export function estimateHMSeconds(vdot: number): number {
     if (computed > vdot) lo = mid; else hi = mid;
   }
   return Math.round((lo + hi) / 2);
+}
+
+/** Inverse of estimateHMSeconds: given HM time in seconds, return the VDOT. */
+export function vdotFromHmSeconds(seconds: number): number {
+  // Higher VDOT = faster (fewer seconds)
+  let lo = 20, hi = 85;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    if (estimateHMSeconds(mid) > seconds) lo = mid; else hi = mid;
+  }
+  return Math.round((lo + hi) / 2 * 10) / 10;
 }

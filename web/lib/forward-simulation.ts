@@ -14,6 +14,7 @@ import {
 } from "./training-engine";
 import { getBasePace, getHRZone } from "./vdot-pace-zones";
 import { projectVdotSeries, DEFAULT_BANISTER, type BanisterParams, type DailyLoad } from "./banister-projection";
+import { estimateHMSeconds } from "./vdot-utils";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -32,6 +33,7 @@ export interface SimulationSeeds {
   planDays: PlanDay[];
   sliderMultiplier: number;
   comparison?: ComparisonData;
+  epocScaleFactor?: number; // scale plan loads (distance×intensity) to EPOC units
 }
 
 export interface PlanDay {
@@ -73,6 +75,9 @@ export interface ProjectedDay {
 
   // Projected fitness
   projectedVdot: number;
+
+  // Model output: predicted HM pace (base HM pace × merge factors)
+  predictedHmPace: number | null; // sec/km, null for rest days
 
   // Adaptation delta
   paceChangePct: number;
@@ -130,6 +135,7 @@ function downgradeRunType(runType: string, light: "yellow" | "red"): string {
 
 export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
   const { pmc, banister, readiness, fitness, planDays, sliderMultiplier } = seeds;
+  const epocScale = seeds.epocScaleFactor ?? 1;
 
   const tau1 = banister.tau1;
   const tau2 = banister.tau2;
@@ -150,23 +156,57 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
   // Track recent gym days for sequencing
   const recentGymDates: string[] = [];
 
-  // Build daily loads array for Banister projection
+  // Banister projection: use fitted p0 (historical baseline) with calibrated warm-start
+  // so accumulated loads reproduce currentVdot at plan start, then plan loads add
+  // realistic incremental improvement (dips after hard days, recovery on rest, taper peak).
+  const k1 = seeds.banister?.k1 ?? DEFAULT_BANISTER.k1;
+  const k2 = seeds.banister?.k2 ?? DEFAULT_BANISTER.k2;
+  const currentVdot = seeds.fitness?.vdotAdjusted ?? DEFAULT_BANISTER.p0;
+  const fittedP0 = seeds.banister?.p0 ?? DEFAULT_BANISTER.p0;
+
   const banisterParams: BanisterParams = {
-    p0: seeds.banister?.p0 ?? DEFAULT_BANISTER.p0,
-    k1: seeds.banister?.k1 ?? DEFAULT_BANISTER.k1,
-    k2: seeds.banister?.k2 ?? DEFAULT_BANISTER.k2,
+    p0: fittedP0,
+    k1,
+    k2,
     tau1: seeds.banister?.tau1 ?? DEFAULT_BANISTER.tau1,
     tau2: seeds.banister?.tau2 ?? DEFAULT_BANISTER.tau2,
   };
 
-  // First pass: estimate loads for all days to feed Banister
-  const dailyLoads: DailyLoad[] = planDays.map(day => ({
-    date: day.dayDate,
-    load: estimateDayLoad(day, sliderMultiplier),
-  }));
+  // Calibrate warm-start: find load level that makes Banister output ≈ currentVdot at plan start.
+  // Solve: currentVdot = p0 + warmLoad * (k1·Σexp(-dt/τ1) - k2·Σexp(-dt/τ2))
+  const WARMUP_DAYS = 60;
+  let fitnessDecaySum = 0;
+  let fatigueDecaySum = 0;
+  for (let dt = 1; dt <= WARMUP_DAYS; dt++) {
+    fitnessDecaySum += Math.exp(-dt / tau1);
+    fatigueDecaySum += Math.exp(-dt / tau2);
+  }
+  const vdotGap = currentVdot - fittedP0;
+  const denominator = k1 * fitnessDecaySum - k2 * fatigueDecaySum;
+  const warmStartLoad = denominator > 0.001 ? vdotGap / denominator : 0;
 
-  // Project VDOT for every day
-  const vdotSeries = projectVdotSeries(dailyLoads, banisterParams);
+  // Build warm-start loads
+  const warmStartLoads: DailyLoad[] = [];
+  if (planDays.length > 0 && warmStartLoad > 0) {
+    const startMs = new Date(planDays[0].dayDate + "T00:00:00").getTime();
+    for (let i = WARMUP_DAYS; i >= 1; i--) {
+      warmStartLoads.push({
+        date: new Date(startMs - i * 86400000).toISOString().split("T")[0],
+        load: warmStartLoad,
+      });
+    }
+  }
+
+  // First pass: estimate EPOC-scaled loads for Banister (run only — gym doesn't affect VDOT)
+  const planLoads: DailyLoad[] = planDays.map(day => ({
+    date: day.dayDate,
+    load: estimateDayLoad(day, sliderMultiplier).runLoad * epocScale,
+  }));
+  const dailyLoads: DailyLoad[] = [...warmStartLoads, ...planLoads];
+
+  // Project VDOT for every day using full Banister model
+  const allVdots = projectVdotSeries(dailyLoads, banisterParams);
+  const vdotSeries = allVdots.slice(warmStartLoads.length);
 
   for (let dayIndex = 0; dayIndex < planDays.length; dayIndex++) {
     const day = planDays[dayIndex];
@@ -187,11 +227,16 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
 
     if (!isFuture || isCompleted) {
       // Past/completed days: use actual data, just propagate PMC
-      const estimatedLoad = estimateDayLoad(day, sliderMultiplier);
-      ctl = estimatedLoad * alphaCtl + ctl * (1 - alphaCtl);
-      atl = estimatedLoad * alphaAtl + atl * (1 - alphaAtl);
+      const { runLoad, gymLoad } = estimateDayLoad(day, sliderMultiplier);
+      const epocLoad = runLoad * epocScale + gymLoad; // run load scaled to EPOC, gym already in EPOC
+      const totalLoad = runLoad + gymLoad;
+      ctl = epocLoad * alphaCtl + ctl * (1 - alphaCtl);
+      atl = epocLoad * alphaAtl + atl * (1 - alphaAtl);
 
-      const pastBasePace = getBasePace(fitness.vdotAdjusted, day.runType);
+      // Use per-day Banister VDOT (varies over time) instead of static current VDOT
+      const pastVdot = vdotSeries[dayIndex] ?? fitness.vdotAdjusted;
+      const pastBasePace = getBasePace(pastVdot, day.runType);
+      const pastHmBase = isRest ? null : Math.round(estimateHMSeconds(pastVdot) / 21.0975);
 
       results.push({
         dayDate: day.dayDate,
@@ -207,10 +252,11 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
         adjustedPace: pastBasePace,
         originalDistanceKm: day.targetDistanceKm,
         adjustedDistanceKm: day.targetDistanceKm,
-        projectedVdot: fitness.vdotAdjusted,
+        projectedVdot: pastVdot,
+        predictedHmPace: pastHmBase,
         paceChangePct: 0,
         distanceChangePct: 0,
-        estimatedLoad,
+        estimatedLoad: totalLoad,
         basePaceForType: pastBasePace,
         hrZone: day.runType === "rest" ? null : getHRZone(day.runType),
         trafficLight: "green",
@@ -223,22 +269,24 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
 
     // ── Future day: full projection ──
 
-    // 1. Estimate training load
-    const estimatedLoad = estimateDayLoad(day, sliderMultiplier);
+    // 1. Estimate training load (run load in raw units, gym load in EPOC units)
+    const { runLoad, gymLoad } = estimateDayLoad(day, sliderMultiplier);
+    const epocLoad = runLoad * epocScale + gymLoad; // run scaled to EPOC, gym already EPOC
+    const totalLoad = runLoad + gymLoad;
 
-    // 2. Propagate PMC with personal tau
-    ctl = estimatedLoad * alphaCtl + ctl * (1 - alphaCtl);
-    atl = estimatedLoad * alphaAtl + atl * (1 - alphaAtl);
+    // 2. Propagate PMC with personal tau (using EPOC-scale loads to match actual CTL/ATL)
+    ctl = epocLoad * alphaCtl + ctl * (1 - alphaCtl);
+    atl = epocLoad * alphaAtl + atl * (1 - alphaAtl);
     const tsb = ctl - atl;
 
-    // 3. Project readiness (load-reactive model)
+    // 3. Project readiness (load-reactive model, using EPOC-scale loads)
     if (isRest) {
       projectedZ = projectedZ + (0 - projectedZ) * 0.4;
     } else {
       const intensity = INTENSITY_MULTIPLIER[day.runType] ?? 0.6;
       if (intensity >= 0.9) {
-        // Hard session: z drops
-        projectedZ -= Math.min(estimatedLoad / 200, 1.0);
+        // Hard session: z drops (denominator calibrated for EPOC-scale ~200)
+        projectedZ -= Math.min(epocLoad / 200, 1.0);
       } else {
         // Easy day: z recovers 0.2/day toward 0
         projectedZ = projectedZ + (0 - projectedZ) * 0.2;
@@ -267,12 +315,14 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
     let combinedFactor: number;
     let adjustedPace: number | null;
     let adjustedDistanceKm: number;
+    let predictedHmPace: number | null;
 
     if (rf < 0) {
       // REST signal (z <= -2.0)
       combinedFactor = 1.0;
       adjustedPace = null;
       adjustedDistanceKm = 0;
+      predictedHmPace = null;
     } else {
       combinedFactor = rf * ff * weightFactor;
       const delta = combinedFactor - 1.0;
@@ -285,6 +335,11 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
       adjustedDistanceKm = Math.round(
         day.targetDistanceKm * (2.0 - combinedFactor) * 10,
       ) / 10;
+
+      // Predicted HM pace: base HM pace from VDOT × merge factors
+      const dayVdot = vdotSeries[dayIndex] ?? fitness.vdotAdjusted;
+      const baseHmPace = estimateHMSeconds(dayVdot) / 21.0975;
+      predictedHmPace = Math.round(baseHmPace * sliderAdjusted);
     }
 
     // 5. Project VDOT via Banister model
@@ -313,9 +368,10 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
       originalDistanceKm: day.targetDistanceKm,
       adjustedDistanceKm,
       projectedVdot,
+      predictedHmPace,
       paceChangePct,
       distanceChangePct,
-      estimatedLoad,
+      estimatedLoad: totalLoad,
       basePaceForType,
       hrZone,
       trafficLight: light,
@@ -330,17 +386,20 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function estimateDayLoad(day: PlanDay, sliderMultiplier: number): number {
-  if (day.runType === "rest") return 0;
+/** Estimate day's training load in raw units (distance × intensity).
+ *  Gym load is returned separately since it's already in EPOC-like units
+ *  and must NOT be multiplied by the EPOC scale factor.
+ */
+function estimateDayLoad(day: PlanDay, sliderMultiplier: number): { runLoad: number; gymLoad: number } {
+  if (day.runType === "rest") return { runLoad: 0, gymLoad: 0 };
 
   const intensity = INTENSITY_MULTIPLIER[day.runType] ?? 0.6;
-  const paceFactor = 1.0;
-  const baseLoad = day.targetDistanceKm * paceFactor * intensity;
+  const runLoad = day.targetDistanceKm * intensity * sliderMultiplier;
 
-  // Add gym load estimate if gym day (~40 scaled cross-modal load for avg session)
-  const gymLoad = day.gymWorkout ? 40 : 0;
+  // Gym load in EPOC units directly (~60 EPOC for a typical strength session)
+  const gymLoad = day.gymWorkout ? 60 : 0;
 
-  return (baseLoad + gymLoad) * sliderMultiplier;
+  return { runLoad, gymLoad };
 }
 
 function checkSequencingConflict(

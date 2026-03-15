@@ -18,6 +18,7 @@ export interface RawBackendStep {
   target_pace_max?: number
   target_hr_min?: number
   target_hr_max?: number
+  hr_zone?: number
   description?: string
   repeats?: number
   // Already-normalized fields (passthrough)

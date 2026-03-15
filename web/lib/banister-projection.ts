@@ -38,7 +38,7 @@ export interface DailyLoad {
 // ── Defaults ──────────────────────────────────────────────────
 
 export const DEFAULT_BANISTER: BanisterParams = {
-  p0: 47.0,
+  p0: 47.0, // Should be overridden with actual current VO2max
   k1: 0.1,
   k2: 0.1,
   tau1: 42,
@@ -92,6 +92,44 @@ export function projectVdotSeries(
 }
 
 /**
+ * Project fitness-only VDOT series (no fatigue term).
+ *
+ * Returns p0 + k1 * Σ(w(i) * exp(-(t-i)/τ1)) — the "performance potential"
+ * representing what the athlete could achieve with fresh legs.
+ *
+ * Use this for trajectory charts. Daily fatigue oscillation is handled
+ * separately by forward simulation merge factors (readiness, TSB).
+ *
+ * @param loads  Chronologically sorted array of daily loads.
+ * @param params Banister model parameters.
+ * @returns      Parallel array of projected fitness-only VDOT values.
+ */
+export function projectFitnessOnlySeries(
+  loads: DailyLoad[],
+  params: BanisterParams,
+): number[] {
+  const { p0, k1, tau1 } = params;
+  const result: number[] = [];
+
+  for (let t = 0; t < loads.length; t++) {
+    let fitnessSum = 0;
+
+    for (let i = 0; i < t; i++) {
+      const dt = daysBetween(loads[i].date, loads[t].date);
+      if (dt <= 0) continue;
+
+      const w = loads[i].load;
+      fitnessSum += w * Math.exp(-dt / tau1);
+    }
+
+    const vdot = p0 + k1 * fitnessSum;
+    result.push(Math.round(vdot * 10) / 10);
+  }
+
+  return result;
+}
+
+/**
  * Project VDOT at a single target date.
  *
  * @param loads      Chronologically sorted array of daily loads.
@@ -121,5 +159,6 @@ export function projectVdotAt(
 
   if (!hasContribution) return p0;
 
-  return Math.round((p0 + k1 * fitnessSum - k2 * fatigueSum) * 10) / 10;
+  const vdot = p0 + k1 * fitnessSum - k2 * fatigueSum;
+  return Math.round(vdot * 10) / 10;
 }
