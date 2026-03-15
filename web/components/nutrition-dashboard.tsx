@@ -334,9 +334,9 @@ export function NutritionDashboard({
               <div className="text-[10px] text-muted-foreground text-center">
                 {breakdown.bmr} BMR
                 {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} steps`}
-                {breakdown.runCalories > 0 && ` + ${breakdown.runCalories} run`}
+                {breakdown.runCalories > 0 && ` + ${breakdown.runCalories} run${breakdown.runActual ? " \u2713" : " ~"}`}
                 {breakdown.gymBreakdown && breakdown.gymBreakdown.length > 0
-                  ? breakdown.gymBreakdown.map((w: any) => ` + ${w.calories} ${w.title}`).join("")
+                  ? breakdown.gymBreakdown.map((w: any) => ` + ${w.calories} ${w.title}${w.actual ? " \u2713" : " ~"}`).join("")
                   : breakdown.gymCalories > 0 ? ` + ${breakdown.gymCalories} gym` : ""}
                 {breakdown.deficit > 0 && ` \u2212 ${breakdown.deficit} deficit`}
                 {breakdown.drinkCalories > 0 && ` \u2212 ${breakdown.drinkCalories} drinks`}
@@ -383,6 +383,9 @@ export function NutritionDashboard({
                       <>
                         <span className="text-muted-foreground">
                           Run ({breakdown.runDistanceKm}km)
+                          <span className={`ml-1 text-[9px] ${breakdown.runActual ? "text-green-500" : "text-amber-500"}`}>
+                            {breakdown.runActual ? "actual" : "predicted"}
+                          </span>
                         </span>
                         <span className="tabular-nums text-right text-green-500">+{breakdown.runCalories}</span>
                       </>
@@ -393,6 +396,9 @@ export function NutritionDashboard({
                         <React.Fragment key={w.title}>
                           <span className="text-muted-foreground">
                             Gym: {w.title}
+                            <span className={`ml-1 text-[9px] ${w.actual ? "text-green-500" : "text-amber-500"}`}>
+                              {w.actual ? "actual" : "predicted"}
+                            </span>
                           </span>
                           <span className="tabular-nums text-right text-green-500">+{w.calories}</span>
                         </React.Fragment>
