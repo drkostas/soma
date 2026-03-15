@@ -16,6 +16,7 @@ import logging
 from datetime import date, timedelta
 
 from db import get_connection
+from nutrition_engine.close_yesterday import close_yesterday
 from nutrition_engine.daily_plan import (
     adjust_deficit_for_sleep,
     adjust_for_sleep_history,
@@ -122,6 +123,12 @@ def generate_today() -> None:
     today = date.today()
 
     with get_connection() as conn:
+        # Auto-close yesterday first
+        try:
+            close_yesterday(conn)
+        except Exception as e:
+            logger.warning("Failed to auto-close yesterday: %s", e)
+
         cur = conn.cursor()
 
         # 1. Read full nutrition_profile (singleton, id=1)
