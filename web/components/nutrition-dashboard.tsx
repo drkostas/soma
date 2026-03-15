@@ -356,7 +356,7 @@ export function NutritionDashboard({
                     <span className="tabular-nums text-right">{breakdown.bmr}</span>
 
                     <span className="text-muted-foreground">
-                      Steps ({(breakdown.stepGoal || 10000).toLocaleString()} goal)
+                      Steps ({(breakdown.expectedSteps || breakdown.stepGoal || 10000).toLocaleString()}{breakdown.expectedSteps && breakdown.expectedSteps !== breakdown.stepGoal ? ` / ${(breakdown.stepGoal || 10000).toLocaleString()} goal` : " goal"})
                       {breakdown.runStepEstimate > 0 && (
                         <span className="text-[10px]"> excl. ~{breakdown.runStepEstimate} run steps</span>
                       )}
@@ -542,6 +542,9 @@ export function NutritionDashboard({
         runEnabled={runEnabled}
         selectedWorkouts={selectedWorkouts}
         exerciseCalories={Number(plan?.exercise_calories) || 0}
+        expectedSteps={breakdown?.expectedSteps || Number(plan?.step_goal) || 10000}
+        stepGoal={Number(plan?.step_goal) || 10000}
+        runStepEstimate={breakdown?.runStepEstimate || 0}
         onActivityChanged={refreshData}
       />
 

@@ -172,11 +172,19 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Step dedup: subtract run steps from step calories when run is ON ──
-    const stepCalories = Number(plan.step_calories) || 0;
+    const stepCaloriesRaw = Number(plan.step_calories) || 0;
     const stepGoal = Number(plan.step_goal) || 10000;
+    const expectedSteps = Number(plan.expected_steps) || stepGoal;
+    // Scale step calories to expected steps
+    const stepCalPerStep = stepGoal > 0 ? stepCaloriesRaw / stepGoal : 0;
+    let stepCalories = Math.round(expectedSteps * stepCalPerStep);
     let adjustedStepCalories = stepCalories;
     let runStepEstimate = 0;
     let runDistanceKm = 0;
+
+    // Adjust base target calories for expected steps vs step_goal difference
+    const stepCalDelta = stepCalories - (Number(plan.step_calories) || 0);
+    dayTargets.calories = Math.max(0, dayTargets.calories + stepCalDelta);
 
     if (runEnabled && plan.exercise_calories) {
       // Estimate run steps: ~1300 steps per km
@@ -190,8 +198,7 @@ export async function GET(req: NextRequest) {
       runStepEstimate = Math.round(runDistanceKm * 1300);
 
       if (stepGoal > 0 && runStepEstimate > 0) {
-        const calPerStep = stepCalories / stepGoal;
-        const runStepCal = Math.round(runStepEstimate * calPerStep);
+        const runStepCal = Math.round(runStepEstimate * stepCalPerStep);
         adjustedStepCalories = Math.max(0, stepCalories - runStepCal);
         // Adjust target calories: remove the double-counted run step calories
         dayTargets.calories = Math.max(0, dayTargets.calories - runStepCal);
@@ -228,8 +235,10 @@ export async function GET(req: NextRequest) {
     breakdown = {
       bmr: Math.round(Number((planObj as Record<string, unknown>)?.bmr) || Number(plan.tdee_used) || 2000),
       stepCalories: adjustedStepCalories,
-      stepCaloriesRaw: stepCalories,
+      stepCaloriesRaw: stepCaloriesRaw,
       stepGoal,
+      expectedSteps,
+      minSteps: runEnabled ? runStepEstimate : 0,
       runStepEstimate,
       runCalories: runCal,
       runEnabled,

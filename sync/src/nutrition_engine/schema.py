@@ -142,6 +142,7 @@ ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS status              VARCHAR(2
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS skipped_slots       TEXT[] DEFAULT '{}';
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS run_enabled         BOOLEAN DEFAULT TRUE;
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS selected_workouts   TEXT[] DEFAULT '{}';
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS expected_steps      INTEGER;
 
 -- Migrate closed → status
 UPDATE nutrition_day SET status = 'closed' WHERE closed = TRUE;

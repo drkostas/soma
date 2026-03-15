@@ -27,6 +27,9 @@ interface ActivitySelectorProps {
   runEnabled: boolean;
   selectedWorkouts: string[];
   exerciseCalories: number;
+  expectedSteps: number;
+  stepGoal: number;
+  runStepEstimate: number;
   onActivityChanged: () => void;
 }
 
@@ -36,12 +39,22 @@ export function ActivitySelector({
   runEnabled: initialRunEnabled,
   selectedWorkouts: initialSelectedWorkouts,
   exerciseCalories,
+  expectedSteps: initialExpectedSteps,
+  stepGoal,
+  runStepEstimate,
   onActivityChanged,
 }: ActivitySelectorProps) {
   const [runEnabled, setRunEnabled] = useState(initialRunEnabled);
   const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>(initialSelectedWorkouts);
+  const [steps, setSteps] = useState(initialExpectedSteps || stepGoal);
   const [routines, setRoutines] = useState<RoutineCalories[]>([]);
   const [saving, setSaving] = useState(false);
+  const minSteps = runEnabled ? runStepEstimate : 0;
+
+  // Sync steps from parent when expectedSteps prop changes (e.g., after refreshData)
+  useEffect(() => {
+    setSteps(initialExpectedSteps || stepGoal);
+  }, [initialExpectedSteps, stepGoal]);
 
   // Fetch available routines with their average calories
   useEffect(() => {
@@ -52,7 +65,7 @@ export function ActivitySelector({
   }, []);
 
   const saveSelections = useCallback(
-    async (run: boolean, workouts: string[]) => {
+    async (run: boolean, workouts: string[], stepsOverride?: number) => {
       setSaving(true);
       try {
         const res = await fetch("/api/nutrition/activity-select", {
@@ -62,6 +75,7 @@ export function ActivitySelector({
             date,
             run_enabled: run,
             selected_workouts: workouts,
+            expected_steps: stepsOverride ?? steps,
           }),
         });
         if (res.ok) {
@@ -71,13 +85,17 @@ export function ActivitySelector({
         setSaving(false);
       }
     },
-    [date, onActivityChanged],
+    [date, onActivityChanged, steps],
   );
 
   const toggleRun = () => {
     const next = !runEnabled;
     setRunEnabled(next);
-    saveSelections(next, selectedWorkouts);
+    // When enabling run, ensure steps are at least the run step estimate
+    const newMinSteps = next ? runStepEstimate : 0;
+    const adjustedSteps = Math.max(steps, newMinSteps);
+    setSteps(adjustedSteps);
+    saveSelections(next, selectedWorkouts, adjustedSteps);
   };
 
   const toggleWorkout = (title: string) => {
@@ -85,7 +103,7 @@ export function ActivitySelector({
       ? selectedWorkouts.filter((w) => w !== title)
       : [...selectedWorkouts, title];
     setSelectedWorkouts(next);
-    saveSelections(runEnabled, next);
+    saveSelections(runEnabled, next, steps);
   };
 
   const hasRun = training && training.target_distance_km && training.target_distance_km > 0;
@@ -131,6 +149,41 @@ export function ActivitySelector({
             </span>
           </button>
         )}
+
+        {/* Expected steps */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Expected steps</span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => {
+                const next = Math.max(minSteps, steps - 1000);
+                setSteps(next);
+                saveSelections(runEnabled, selectedWorkouts, next);
+              }}
+              disabled={steps <= minSteps}
+            >
+              <span className="text-xs">&minus;</span>
+            </Button>
+            <span className="text-xs tabular-nums w-14 text-center font-medium">
+              {steps.toLocaleString()}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => {
+                const next = steps + 1000;
+                setSteps(next);
+                saveSelections(runEnabled, selectedWorkouts, next);
+              }}
+            >
+              <span className="text-xs">+</span>
+            </Button>
+          </div>
+        </div>
 
         {/* Gym routine chips */}
         {routines.length > 0 && (

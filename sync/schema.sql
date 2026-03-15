@@ -570,6 +570,7 @@ CREATE TABLE IF NOT EXISTS nutrition_day (
     skipped_slots       TEXT[] DEFAULT '{}',
     run_enabled         BOOLEAN DEFAULT TRUE,
     selected_workouts   TEXT[] DEFAULT '{}',
+    expected_steps      INTEGER,
     actual_calories     REAL DEFAULT 0,
     actual_protein      REAL DEFAULT 0,
     actual_carbs        REAL DEFAULT 0,
