@@ -22,6 +22,7 @@ interface ComposeMealViewProps {
     totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number },
   ) => void;
   onCancel: () => void;
+  onEditIngredients?: () => void;
   logging?: boolean;
 }
 
@@ -31,6 +32,7 @@ export function ComposeMealView({
   budget,
   onLog,
   onCancel,
+  onEditIngredients,
   logging = false,
 }: ComposeMealViewProps) {
   const [portions, setPortions] = useState(initialPortions);
@@ -89,7 +91,19 @@ export function ComposeMealView({
   return (
     <div className="space-y-3 rounded-md border p-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Composed Meal</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Composed Meal</span>
+          {onEditIngredients && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 text-[10px] px-1.5 text-muted-foreground"
+              onClick={onEditIngredients}
+            >
+              ± ingredients
+            </Button>
+          )}
+        </div>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCancel}>
           <X className="h-3.5 w-3.5" />
         </Button>
