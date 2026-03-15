@@ -5,10 +5,11 @@ export const runtime = "edge";
 
 export async function POST(req: NextRequest) {
   const sql = getDb();
-  const { date, run_enabled, selected_workouts } = (await req.json()) as {
+  const { date, run_enabled, selected_workouts, expected_steps } = (await req.json()) as {
     date: string;
     run_enabled: boolean;
     selected_workouts: string[];
+    expected_steps?: number | null;
   };
 
   if (!date) {
@@ -25,7 +26,8 @@ export async function POST(req: NextRequest) {
   await sql`
     UPDATE nutrition_day
     SET run_enabled = ${run_enabled},
-        selected_workouts = ${selected_workouts}
+        selected_workouts = ${selected_workouts},
+        expected_steps = ${expected_steps ?? null}
     WHERE date = ${date}
   `;
 
