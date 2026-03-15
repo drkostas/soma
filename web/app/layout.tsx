@@ -52,7 +52,7 @@ export default function RootLayout({
             <DemoBanner repoUrl="https://github.com/drkostas/soma" />
           )}
           <Sidebar />
-          <main className={`min-h-screen bg-background pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-4 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]${isDemo ? " md:pt-8" : ""}`}>
+          <main className={`min-h-screen bg-background pb-[env(safe-area-inset-bottom,0.5rem)] pt-[calc(env(safe-area-inset-top,0px)+3rem)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]${isDemo ? " md:pt-8" : ""}`}>
             {children}
           </main>
           <Toaster richColors />

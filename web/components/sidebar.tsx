@@ -136,37 +136,8 @@ export function Sidebar() {
         </nav>
       </aside>
 
-      {/* Mobile bottom nav — 5 primary items */}
-      <MobileBottomNav pathname={pathname} />
+      {/* No bottom nav — hamburger drawer handles all navigation */}
     </>
   );
 }
 
-function MobileBottomNav({ pathname }: { pathname: string }) {
-  const mobileItems = navItems.filter((i) => i.mobile);
-
-  return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-sidebar safe-area-pb safe-area-pl safe-area-pr">
-      <div className="flex items-center justify-around px-1 py-1">
-        {mobileItems.map((item) => {
-          const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] rounded-lg transition-colors",
-                isActive ? "text-primary" : "text-muted-foreground"
-              )}
-            >
-              <Icon className="h-5 w-5" />
-              <span className="text-[10px] mt-0.5 leading-none">{item.label}</span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
