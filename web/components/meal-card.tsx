@@ -392,39 +392,64 @@ export function MealCard({
       {expanded && (
         <CardContent className="pt-0 space-y-2">
           {/* Logged meals */}
-          {meals.map((meal) => (
-            <div
-              key={meal.id}
-              className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm"
-            >
-              <div className="min-w-0">
-                <div className="font-medium truncate">
-                  {meal.preset_name || "Custom meal"}
-                  {meal.portion_multiplier !== 1 && (
-                    <span className="text-muted-foreground ml-1">
-                      ({meal.portion_multiplier}x)
-                    </span>
+          {meals.map((meal) => {
+            const itemsList: { ingredient_id?: string; grams?: number; cooked_grams?: number }[] =
+              Array.isArray(meal.items) ? meal.items : (meal.items?.items ?? []);
+            const ingLookup = new Map(
+              ((ingredients ?? []) as Ingredient[]).map((i) => [i.id, i]),
+            );
+            return (
+              <div
+                key={meal.id}
+                className="rounded-md bg-muted/50 px-3 py-2 text-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      {meal.preset_name || "Custom meal"}
+                      {meal.portion_multiplier !== 1 && (
+                        <span className="text-muted-foreground ml-1">
+                          ({meal.portion_multiplier}x)
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {Math.round(meal.calories)} kcal &middot;{" "}
+                      {Math.round(meal.protein)}P &middot;{" "}
+                      {Math.round(meal.carbs)}C &middot; {Math.round(meal.fat)}F
+                    </div>
+                  </div>
+                  {!disabled && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => handleDelete(meal.id)}
+                      disabled={deleting === meal.id}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {Math.round(meal.calories)} kcal &middot;{" "}
-                  {Math.round(meal.protein)}P &middot;{" "}
-                  {Math.round(meal.carbs)}C &middot; {Math.round(meal.fat)}F
-                </div>
+                {itemsList.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {itemsList.map((item, idx) => {
+                      const ing = ingLookup.get(item.ingredient_id ?? "");
+                      const name = ing?.name ?? item.ingredient_id ?? "?";
+                      const grams = item.cooked_grams ?? item.grams ?? 0;
+                      const label = item.cooked_grams ? "cooked" : (ing?.is_raw ? "raw" : "");
+                      return (
+                        <div key={idx} className="text-[10px] text-muted-foreground flex justify-between">
+                          <span>{name}</span>
+                          <span className="tabular-nums">{grams}g{label ? ` ${label}` : ""}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              {!disabled && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={() => handleDelete(meal.id)}
-                  disabled={deleting === meal.id}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {/* Skipped state — show badge with undo */}
           {!disabled && skipped && meals.length === 0 && (
