@@ -69,13 +69,14 @@ export function MealDetailModal({ open, onClose, meal, ingredients, onEdit }: Me
         {sortedItems.length > 0 && (
           <div className="space-y-2">
             <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Ingredients</div>
-            <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-2 gap-y-1 text-xs">
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-x-2 gap-y-1 text-xs">
               <span className="text-[10px] text-muted-foreground">Name</span>
               <span className="text-[10px] text-muted-foreground text-right">g</span>
               <span className="text-[10px] text-muted-foreground text-right">cal</span>
               <span className="text-[10px] text-muted-foreground text-right">P</span>
               <span className="text-[10px] text-muted-foreground text-right">C</span>
               <span className="text-[10px] text-muted-foreground text-right">F</span>
+              <span className="text-[10px] text-muted-foreground text-right">Fi</span>
               {sortedItems.map((item, idx) => {
                 const ing = ingMap.get(item.ingredient_id ?? "");
                 const name = ing?.name ?? item.ingredient_id ?? "?";
@@ -88,6 +89,7 @@ export function MealDetailModal({ open, onClose, meal, ingredients, onEdit }: Me
                 const p = item.protein ?? (rawG * (ing?.protein_per_100g ?? 0) / 100);
                 const c = item.carbs ?? (rawG * (ing?.carbs_per_100g ?? 0) / 100);
                 const f = item.fat ?? (rawG * (ing?.fat_per_100g ?? 0) / 100);
+                const fi = item.fiber ?? (rawG * (ing?.fiber_per_100g ?? 0) / 100);
                 return (
                   <React.Fragment key={idx}>
                     <span className="truncate">
@@ -99,6 +101,7 @@ export function MealDetailModal({ open, onClose, meal, ingredients, onEdit }: Me
                     <span className="tabular-nums text-right text-blue-500">{Math.round(p)}</span>
                     <span className="tabular-nums text-right text-amber-500">{Math.round(c)}</span>
                     <span className="tabular-nums text-right text-rose-500">{Math.round(f)}</span>
+                    <span className="tabular-nums text-right text-green-500">{Math.round(fi)}</span>
                   </React.Fragment>
                 );
               })}

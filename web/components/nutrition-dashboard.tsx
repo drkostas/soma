@@ -307,15 +307,27 @@ export function NutritionDashboard({
           <CardContent className="pt-4 space-y-3">
             {/* Main calories display */}
             <div className="text-center">
-              <div className={`text-4xl font-bold tabular-nums ${remainingCal < 0 ? "text-muted-foreground" : ""}`}>
-                {Math.round(remainingCal)}
-              </div>
-              <div className="text-xs text-muted-foreground">calories remaining</div>
+              {!dataReady ? (
+                <div className="h-12 flex items-center justify-center">
+                  <div className="text-sm text-muted-foreground animate-pulse">calculating...</div>
+                </div>
+              ) : (
+                <>
+                  <div className={`text-4xl font-bold tabular-nums ${remainingCal < 0 ? "text-muted-foreground" : ""}`}>
+                    {Math.round(remainingCal)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">calories remaining</div>
+                </>
+              )}
             </div>
-            <Progress value={Math.min(100, (consumedCal / targetCal) * 100)} className="h-3" />
-            <div className="text-xs text-center text-muted-foreground">
-              {Math.round(consumedCal)} / {Math.round(targetCal)} kcal
-            </div>
+            {dataReady && (
+              <>
+                <Progress value={Math.min(100, (consumedCal / targetCal) * 100)} className="h-3" />
+                <div className="text-xs text-center text-muted-foreground">
+                  {Math.round(consumedCal)} / {Math.round(targetCal)} kcal
+                </div>
+              </>
+            )}
 
             {/* One-line equation summary — only after dynamic data loads */}
             {dataReady && breakdown && (
@@ -416,12 +428,13 @@ export function NutritionDashboard({
                 {slotBudgets && (
                   <div className="space-y-1">
                     <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Per-Meal Budget</div>
-                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
+                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
                       <span className="text-muted-foreground text-[10px]">Slot</span>
                       <span className="text-muted-foreground text-[10px] text-right">kcal</span>
                       <span className="text-muted-foreground text-[10px] text-right">P</span>
                       <span className="text-muted-foreground text-[10px] text-right">C</span>
                       <span className="text-muted-foreground text-[10px] text-right">F</span>
+                      <span className="text-muted-foreground text-[10px] text-right">Fi</span>
                       {Object.entries(slotBudgets).map(([slot, macros]: [string, any]) => (
                         <React.Fragment key={slot}>
                           <span className={skippedSlots.includes(slot) ? "text-muted-foreground/50 line-through" : ""}>
@@ -431,6 +444,7 @@ export function NutritionDashboard({
                           <span className="tabular-nums text-right text-blue-500">{Math.round(macros.protein)}</span>
                           <span className="tabular-nums text-right text-amber-500">{Math.round(macros.carbs)}</span>
                           <span className="tabular-nums text-right text-rose-500">{Math.round(macros.fat)}</span>
+                          <span className="tabular-nums text-right text-green-500">{Math.round(macros.fiber || 0)}</span>
                         </React.Fragment>
                       ))}
                     </div>
