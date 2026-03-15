@@ -164,6 +164,11 @@ async function getPresets() {
   return sql`SELECT * FROM preset_meals ORDER BY name`;
 }
 
+async function getIngredients() {
+  const sql = getDb();
+  return sql`SELECT * FROM ingredients ORDER BY category, name`;
+}
+
 async function getTrainingDay(date: string) {
   const sql = getDb();
   const rows = await sql`
@@ -217,12 +222,13 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
   }
 
   // Profile exists — load dashboard data
-  const [plan, meals, drinks, presets, training, health, sleep] =
+  const [plan, meals, drinks, presets, ingredients, training, health, sleep] =
     await Promise.all([
       safeQuery(() => getNutritionDay(today), null),
       safeQuery(() => getMeals(today), []),
       safeQuery(() => getDrinks(today), []),
       safeQuery(() => getPresets(), []),
+      safeQuery(() => getIngredients(), []),
       safeQuery(() => getTrainingDay(today), null),
       safeQuery(() => getHealthSummary(today), null),
       safeQuery(() => getSleepDetail(today), null),
@@ -236,6 +242,7 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
         meals={meals}
         drinks={drinks}
         presets={presets}
+        ingredients={ingredients}
         training={training}
         health={health}
         sleep={sleep}

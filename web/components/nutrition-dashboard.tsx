@@ -104,6 +104,7 @@ interface NutritionDashboardProps {
   meals: any[];
   drinks: any[];
   presets: any[];
+  ingredients: any[];
   training: any;
   health: any;
   sleep: any;
@@ -146,6 +147,7 @@ export function NutritionDashboard({
   meals: initialMeals,
   drinks: initialDrinks,
   presets,
+  ingredients,
   training,
   health,
   sleep,
@@ -156,6 +158,8 @@ export function NutritionDashboard({
   const [closing, setClosing] = useState(false);
   const [copying, setCopying] = useState(false);
   const [workoutEnabled, setWorkoutEnabled] = useState(true);
+  const [skippedSlots, setSkippedSlots] = useState<string[]>(initialPlan?.skipped_slots ?? []);
+  const [slotBudgets, setSlotBudgets] = useState<Record<string, Record<string, number>> | null>(null);
 
   const isClosed = plan?.status === "closed";
 
@@ -167,6 +171,8 @@ export function NutritionDashboard({
       if (data.plan) setPlan(data.plan);
       if (data.meals) setMeals(data.meals);
       if (data.drinks) setDrinks(data.drinks);
+      setSkippedSlots(data.skippedSlots ?? []);
+      if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
     } catch {
       // silent refresh failure
     }
@@ -439,9 +445,13 @@ export function NutritionDashboard({
           slot={slot}
           meals={meals.filter((m) => m.meal_slot === slot)}
           presets={presets}
+          ingredients={ingredients}
+          slotBudget={slotBudgets?.[slot] ?? null}
+          skipped={skippedSlots.includes(slot)}
           date={date}
           disabled={isClosed}
           onMealLogged={refreshData}
+          onSlotSkipped={refreshData}
         />
       ))}
 
