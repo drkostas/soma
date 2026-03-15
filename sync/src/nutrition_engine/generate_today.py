@@ -287,15 +287,20 @@ def generate_today() -> None:
             ffm_kg=ffm_kg,
         )
 
-        # Apply sleep boosts
+        # Apply sleep boosts — recompute carbs to maintain calorie target
         target_protein = macros["protein"] + protein_boost
         target_fiber = macros["fiber"] + fiber_boost
+        if protein_boost > 0:
+            # Extra protein calories displace carb calories
+            target_carbs = max(0, round((macros["calories"] - target_protein * 4 - macros["fat"] * 9) / 4))
+        else:
+            target_carbs = macros["carbs"]
 
         # Build the plan dict (stored as JSONB for backward compatibility)
         plan = {
             "target_calories": macros["calories"],
             "target_protein": target_protein,
-            "target_carbs": macros["carbs"],
+            "target_carbs": target_carbs,
             "target_fat": macros["fat"],
             "target_fiber": target_fiber,
             "tdee_used": round(base_tdee + step_cal + exercise_cal),
@@ -360,7 +365,7 @@ def generate_today() -> None:
                 plan_json,
                 macros["calories"],
                 target_protein,
-                macros["carbs"],
+                target_carbs,
                 macros["fat"],
                 target_fiber,
                 round(base_tdee + step_cal + exercise_cal),
@@ -384,7 +389,7 @@ def generate_today() -> None:
             today,
             macros["calories"],
             target_protein,
-            macros["carbs"],
+            target_carbs,
             macros["fat"],
             training_day,
             adjusted_deficit,
