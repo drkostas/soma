@@ -253,6 +253,7 @@ def compute_exercise_calories(
     sex: str,
     has_gym: bool = False,
     gym_duration_min: float = 60,
+    run_distance_km: float = 0,
 ) -> float:
     """Sum calories across all workout steps + optional gym session.
 
@@ -264,6 +265,8 @@ def compute_exercise_calories(
         sex: ``"male"`` or ``"female"``.
         has_gym: Whether the day includes a gym session.
         gym_duration_min: Duration of gym session in minutes (default 60).
+        run_distance_km: Planned run distance in km. Used as fallback when
+            workout_steps is empty/None (e.g. easy/rest run days).
 
     Returns:
         Total estimated exercise calories (kcal).
@@ -273,6 +276,11 @@ def compute_exercise_calories(
     if workout_steps:
         for step in workout_steps:
             total += estimate_step_calories(step, weight_kg, age, sex)
+
+    # Distance-based fallback when no structured workout_steps
+    if total == 0 and run_distance_km > 0:
+        # ~1 kcal/kg/km is the standard running energy cost (ACSM)
+        total = run_distance_km * 1.0 * weight_kg
 
     if has_gym:
         total += gym_duration_min * GYM_KCAL_PER_MIN * (1 + GYM_EPOC_FRACTION)

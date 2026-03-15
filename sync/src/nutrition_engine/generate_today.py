@@ -188,7 +188,7 @@ def generate_today() -> None:
         # 5. Fetch today's training_plan_day → extract workout info
         cur.execute(
             """
-            SELECT d.run_type, d.gym_workout, d.workout_steps
+            SELECT d.run_type, d.gym_workout, d.workout_steps, d.target_distance_km
             FROM training_plan_day d
             JOIN training_plan p ON d.plan_id = p.id
             WHERE p.status = 'active' AND d.day_date = %s
@@ -199,14 +199,14 @@ def generate_today() -> None:
         plan_day_row = cur.fetchone()
 
         if plan_day_row is not None:
-            run_type, gym_workout, workout_steps_raw = plan_day_row
+            run_type, gym_workout, workout_steps_raw, target_distance_km = plan_day_row
             # Parse workout_steps JSONB
             if isinstance(workout_steps_raw, str):
                 workout_steps = json.loads(workout_steps_raw) if workout_steps_raw else None
             else:
                 workout_steps = workout_steps_raw  # already a list/dict from psycopg2
         else:
-            run_type, gym_workout, workout_steps = None, None, None
+            run_type, gym_workout, workout_steps, target_distance_km = None, None, None, None
 
         training_day = _classify_training_day_from_row(run_type, gym_workout)
         has_gym = gym_workout is not None and str(gym_workout).strip() != ""
@@ -219,6 +219,7 @@ def generate_today() -> None:
             age=age,
             sex=sex,
             has_gym=has_gym,
+            run_distance_km=float(target_distance_km) if target_distance_km else 0,
         )
         logger.info("Exercise calories: %.0f", exercise_cal)
 
