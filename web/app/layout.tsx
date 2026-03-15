@@ -6,6 +6,7 @@ import { DemoBanner } from "@/components/demo-banner";
 import { Toaster } from "sonner";
 import { SWRegister } from "@/components/sw-register";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
+import { NavProgress } from "@/components/nav-progress";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -51,6 +52,7 @@ export default function RootLayout({
           {isDemo && (
             <DemoBanner repoUrl="https://github.com/drkostas/soma" />
           )}
+          <NavProgress />
           <Sidebar />
           <main className={`min-h-screen bg-background pb-[env(safe-area-inset-bottom,0.5rem)] pt-[calc(env(safe-area-inset-top,0px)+3rem)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]${isDemo ? " md:pt-8" : ""}`}>
             {children}

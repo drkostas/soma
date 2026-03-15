@@ -152,3 +152,34 @@
 .safe-area-pr {
   padding-right: env(safe-area-inset-right, 0px);
 }
+
+/* Touch feedback — instant visual response on tap */
+button, a, [role="button"], [data-clickable] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+button:active, a:active, [role="button"]:active, [data-clickable]:active {
+  transform: scale(0.97);
+  opacity: 0.8;
+  transition: transform 0.05s ease, opacity 0.05s ease;
+}
+button, a, [role="button"] {
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+/* Page transition loading bar */
+.page-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 9999;
+  background: var(--primary);
+  animation: loading-slide 1.5s ease-in-out infinite;
+}
+@keyframes loading-slide {
+  0% { transform: translateX(-100%); width: 30%; }
+  50% { transform: translateX(30%); width: 60%; }
+  100% { transform: translateX(100%); width: 30%; }
+}
