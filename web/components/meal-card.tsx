@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { IngredientPicker } from "@/components/ingredient-picker";
 import { ComposeMealView } from "@/components/compose-meal-view";
-import { type Ingredient, type PortionResult, solvePortions } from "@/lib/portion-solver";
+import { type Ingredient, type PortionResult, solvePortions, computeItemMacros } from "@/lib/portion-solver";
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -317,6 +317,33 @@ export function MealCard({
     setLastComposedTotals(null);
   };
 
+  const handleCustomizePreset = () => {
+    if (!selectedPreset || !ingredients?.length) return;
+    const blob = selectedPreset.items;
+    const presetItems: { ingredient_id: string; grams: number }[] =
+      Array.isArray(blob) ? blob : blob?.items ?? [];
+    const ingLookup = new Map(
+      (ingredients as Ingredient[]).map((i) => [i.id, i]),
+    );
+    const portions: PortionResult[] = presetItems
+      .map((item) => {
+        const ing = ingLookup.get(item.ingredient_id);
+        if (!ing) return null;
+        const macros = computeItemMacros(ing, item.grams);
+        return {
+          ingredient_id: item.ingredient_id,
+          grams: item.grams,
+          increment:
+            { protein: 25, carbs: 10, vegetable: 25, fat: 5, dairy: 25, sauce: 10, fruit: 25, supplement: 5 }[ing.category] ?? 10,
+          ...macros,
+        };
+      })
+      .filter((p): p is PortionResult => p !== null);
+    setComposedPortions(portions);
+    setSelectedPreset(null);
+    setShowPicker(false);
+  };
+
   const handleComposeCancel = () => {
     setComposedPortions(null);
     setSelectedIngredients(new Set());
@@ -536,7 +563,7 @@ export function MealCard({
                 ))}
               </div>
 
-              {/* Log + Cancel */}
+              {/* Log + Customize + Cancel */}
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -546,6 +573,16 @@ export function MealCard({
                 >
                   Cancel
                 </Button>
+                {ingredients && ingredients.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={handleCustomizePreset}
+                  >
+                    Customize
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   className="flex-1"

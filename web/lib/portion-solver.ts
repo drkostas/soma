@@ -12,6 +12,8 @@ export interface Ingredient {
   fat_per_100g: number;
   fiber_per_100g: number;
   category: string;
+  is_raw?: boolean;
+  raw_to_cooked_ratio?: number | null;
 }
 
 export interface MacroTarget {
@@ -164,6 +166,24 @@ export function computeItemMacros(ing: Ingredient, grams: number) {
     fat: Math.round(m.fat * 10) / 10,
     fiber: Math.round(m.fiber * 10) / 10,
   };
+}
+
+/** Convert between raw and cooked grams using the ingredient's ratio. */
+export function rawToCooked(ing: Ingredient, rawGrams: number): number {
+  const ratio = ing.raw_to_cooked_ratio;
+  if (!ing.is_raw || !ratio || ratio <= 0) return rawGrams;
+  return Math.round(rawGrams * ratio);
+}
+
+export function cookedToRaw(ing: Ingredient, cookedGrams: number): number {
+  const ratio = ing.raw_to_cooked_ratio;
+  if (!ing.is_raw || !ratio || ratio <= 0) return cookedGrams;
+  return Math.round(cookedGrams / ratio);
+}
+
+/** Check if an ingredient supports cooked weight toggle. */
+export function hasRawCookedToggle(ing: Ingredient): boolean {
+  return !!ing.is_raw && !!ing.raw_to_cooked_ratio && ing.raw_to_cooked_ratio > 0 && ing.raw_to_cooked_ratio !== 1;
 }
 
 /** Sum macros across a list of portion results. */
