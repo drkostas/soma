@@ -158,7 +158,7 @@ export function NutritionDashboard({
   const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
   const [closing, setClosing] = useState(false);
   const [copying, setCopying] = useState(false);
-  const [workoutEnabled, setWorkoutEnabled] = useState(true);
+  // workoutEnabled removed — activity toggles now flow through API via ActivitySelector
   const [runEnabled, setRunEnabled] = useState<boolean>(initialPlan?.run_enabled ?? true);
   const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>(initialPlan?.selected_workouts ?? []);
   const [gymCalories, setGymCalories] = useState<number>(0);
@@ -209,14 +209,13 @@ export function NutritionDashboard({
   const consumedFat = meals.reduce((s, m) => s + Number(m.fat || 0), 0);
   const consumedFiber = meals.reduce((s, m) => s + Number(m.fiber || 0), 0);
 
-  const exerciseCal = Number(plan?.exercise_calories) || 0;
-  const targetCal = workoutEnabled
-    ? (Number(plan?.target_calories) || 0)
-    : (Number(plan?.target_calories) || 0) - exerciseCal;
-  const targetProtein = Number(plan?.target_protein) || 0;
-  const targetCarbs = Number(plan?.target_carbs) || 0;
-  const targetFat = Number(plan?.target_fat) || 0;
-  const targetFiber = Number(plan?.target_fiber) || 0;
+  // Use breakdown-adjusted targets (computed by plan API accounting for run/gym toggles)
+  // Fall back to raw plan values for initial render before breakdown loads
+  const targetCal = breakdown?.adjustedTargets?.calories ?? (Number(plan?.target_calories) || 0);
+  const targetProtein = breakdown?.adjustedTargets?.protein ?? (Number(plan?.target_protein) || 0);
+  const targetCarbs = breakdown?.adjustedTargets?.carbs ?? (Number(plan?.target_carbs) || 0);
+  const targetFat = breakdown?.adjustedTargets?.fat ?? (Number(plan?.target_fat) || 0);
+  const targetFiber = breakdown?.adjustedTargets?.fiber ?? (Number(plan?.target_fiber) || 0);
   const remainingCal = targetCal - consumedCal;
 
   const adjustmentReason =
@@ -322,7 +321,9 @@ export function NutritionDashboard({
                 {breakdown.bmr} BMR
                 {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} steps`}
                 {breakdown.runCalories > 0 && ` + ${breakdown.runCalories} run`}
-                {breakdown.gymCalories > 0 && ` + ${breakdown.gymCalories} gym`}
+                {breakdown.gymBreakdown && breakdown.gymBreakdown.length > 0
+                  ? breakdown.gymBreakdown.map((w: any) => ` + ${w.calories} ${w.title}`).join("")
+                  : breakdown.gymCalories > 0 ? ` + ${breakdown.gymCalories} gym` : ""}
                 {breakdown.deficit > 0 && ` \u2212 ${breakdown.deficit} deficit`}
                 {` = ${breakdown.targetIntake}`}
               </div>
@@ -372,14 +373,23 @@ export function NutritionDashboard({
                       </>
                     )}
 
-                    {breakdown.gymCalories > 0 && (
+                    {breakdown.gymBreakdown && breakdown.gymBreakdown.length > 0 ? (
+                      breakdown.gymBreakdown.map((w: any) => (
+                        <React.Fragment key={w.title}>
+                          <span className="text-muted-foreground">
+                            Gym: {w.title}
+                          </span>
+                          <span className="tabular-nums text-right text-green-500">+{w.calories}</span>
+                        </React.Fragment>
+                      ))
+                    ) : breakdown.gymCalories > 0 ? (
                       <>
                         <span className="text-muted-foreground">
                           Gym ({breakdown.selectedWorkouts?.join(", ")})
                         </span>
                         <span className="tabular-nums text-right text-green-500">+{breakdown.gymCalories}</span>
                       </>
-                    )}
+                    ) : null}
 
                     <span className="text-muted-foreground font-medium border-t pt-1">Total burn</span>
                     <span className="tabular-nums text-right font-medium border-t pt-1">{breakdown.totalBurn}</span>
@@ -503,16 +513,6 @@ export function NutritionDashboard({
               <Badge variant="outline" className="text-[10px] px-1 py-0">
                 {training.load_level}
               </Badge>
-            )}
-            {exerciseCal > 0 && (
-              <Button
-                variant={workoutEnabled ? "default" : "outline"}
-                size="sm"
-                className="h-6 text-xs ml-1"
-                onClick={() => setWorkoutEnabled(!workoutEnabled)}
-              >
-                {workoutEnabled ? "ON" : "OFF"}
-              </Button>
             )}
           </div>
         )}
