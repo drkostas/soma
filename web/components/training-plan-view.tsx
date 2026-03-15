@@ -325,13 +325,13 @@ export function TrainingPlanView({
                     {weekDays.map((day) => {
                       const isToday = day.day_date === today;
                       const isPast = day.day_date < today;
-                      const isFuture = day.day_date > today;
+                      const isFuture = day.day_date >= today;
                       const runColor =
                         runTypeColors[day.run_type] || runTypeColors.easy;
                       const match = matchByDayId.get(day.id);
                       const delta = deltaByDayId.get(day.id);
                       const projected = projectedDays?.find(p => p.dayId === day.id);
-                      const hasDeltaOverlay = isFuture && !!delta;
+                      const hasDeltaOverlay = isFuture && !day.completed && !!delta;
                       const isClickable = isPast && match?.matched;
 
                       return (

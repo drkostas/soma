@@ -35,7 +35,7 @@ export async function GET() {
     sql`SELECT ctl, atl, tsb FROM pmc_daily ORDER BY date DESC LIMIT 1`
       .catch(() => []),
     // Banister params (latest fitted)
-    sql`SELECT p0, k1, k2, tau1, tau2, n_anchors, fitted_at::text
+    sql`SELECT p0, k1, k2, tau1, tau2, n_anchors, current_vdot, fitted_at::text
         FROM banister_params ORDER BY fitted_at DESC LIMIT 1`
       .catch(() => []),
     // Today's readiness
@@ -58,7 +58,7 @@ export async function GET() {
                d.run_title, d.target_distance_km, d.workout_steps,
                d.load_level, d.gym_workout, d.gym_notes, d.completed,
                d.garmin_workout_id, d.garmin_push_status,
-               d.session_quality_score, d.actual_distance_km
+               d.actual_distance_km
         FROM training_plan_day d
         JOIN training_plan p ON d.plan_id = p.id
         WHERE p.status = 'active'
@@ -80,15 +80,15 @@ export async function GET() {
           AND h.training_readiness_score IS NOT NULL
         ORDER BY h.date`
       .catch(() => []),
-    // Garmin VO2max for comparison
-    sql`SELECT date::text as date, vo2max, vdot_adjusted
+    // Garmin VO2max + weight for comparison (weight needed for inline VDOT adjustment)
+    sql`SELECT date::text as date, vo2max, vdot_adjusted, weight_kg
         FROM fitness_trajectory
         WHERE date >= CURRENT_DATE - interval '90 days'
           AND vo2max IS NOT NULL
         ORDER BY date`
       .catch(() => []),
-    // Garmin race predictions for comparison
-    sql`SELECT date::text as date, race_prediction_seconds, vdot_adjusted, vo2max
+    // Race predictions for comparison (Daniels from VDOT + Garmin race prediction)
+    sql`SELECT date::text as date, race_prediction_seconds, vdot_adjusted, vo2max, weight_kg
         FROM fitness_trajectory
         WHERE date >= CURRENT_DATE - interval '90 days'
           AND vo2max IS NOT NULL
@@ -97,13 +97,39 @@ export async function GET() {
   ]);
 
   const pmc = pmcRows[0] ?? { ctl: 0, atl: 0, tsb: 0 };
-  const banister = banisterRows[0] ?? { p0: 45.0, k1: 0.05, k2: 0.08, tau1: 42, tau2: 7, n_anchors: 0 };
+  const fitness = fitnessRows[0] ?? { vo2max: 47, vdot_adjusted: 47, weight_kg: 80.5 };
+  const banister = banisterRows[0] ?? { p0: 0, k1: 0.05, k2: 0.08, tau1: 42, tau2: 7, n_anchors: 0, current_vdot: 0 };
   const readiness = readinessRows[0] ?? { composite_score: 0, traffic_light: "green", flags: [] };
   const calib = calibRows[0] ?? { phase: 1, data_days: 0, weights: { hrv: 0.25, sleep: 0.25, rhr: 0.25, bb: 0.25 }, force_equal: false };
-  const fitness = fitnessRows[0] ?? { vo2max: 47, vdot_adjusted: 47, weight_kg: 80.5 };
+
+  // Race-calibrated VDOT from Banister model — no Garmin fallback
+  const banisterCurrentVdot = Number(banister.current_vdot) || 0;
+  const effectiveVdot = banisterCurrentVdot;
+
+  // Compute EPOC scale factor: plan loads use distance×intensity (0-15 range)
+  // but actual loads are EPOC-based (100-500+ range). Scale plan loads to match.
+  const INTENSITY: Record<string, number> = {
+    easy: 0.6, recovery: 0.5, tempo: 1.0, threshold: 1.0,
+    intervals: 1.2, long: 0.8, race: 1.3, rest: 0,
+  };
+  const recentActualLoads = garminLoadRows
+    .map((r: any) => Number(r.daily_load ?? 0))
+    .filter((v: number) => v > 0)
+    .slice(-30);
+  const avgActualLoad = recentActualLoads.length > 0
+    ? recentActualLoads.reduce((s: number, v: number) => s + v, 0) / recentActualLoads.length
+    : 0;
+  const rawPlanLoads = planDays
+    .map((d: any) => ((Number(d.target_distance_km) || 0) * (INTENSITY[(d as any).run_type] || 0.6)))
+    .filter((v: number) => v > 0);
+  const avgRawPlanLoad = rawPlanLoads.length > 0
+    ? rawPlanLoads.reduce((s: number, v: number) => s + v, 0) / rawPlanLoads.length
+    : 1;
+  const epocScaleFactor = avgActualLoad > 0 ? avgActualLoad / avgRawPlanLoad : 1;
 
   return NextResponse.json({
     today,
+    epocScaleFactor,
     pmc: {
       ctl: Number(pmc.ctl),
       atl: Number(pmc.atl),
@@ -130,7 +156,7 @@ export async function GET() {
     },
     fitness: {
       vo2max: Number(fitness.vo2max),
-      vdotAdjusted: Number(fitness.vdot_adjusted ?? fitness.vo2max),
+      vdotAdjusted: effectiveVdot,
       weightKg: Number(fitness.weight_kg),
       calibrationWeightKg: 80.5,
     },
@@ -148,7 +174,6 @@ export async function GET() {
       completed: d.completed,
       garminWorkoutId: d.garmin_workout_id,
       garminPushStatus: d.garmin_push_status,
-      sessionQuality: d.session_quality_score ? Number(d.session_quality_score) : null,
       actualDistanceKm: d.actual_distance_km ? Number(d.actual_distance_km) : null,
     })),
     comparison: {
@@ -163,17 +188,39 @@ export async function GET() {
         garminScore: Number(r.garmin_score ?? 0),
         ourScore: Number(r.our_score ?? 0),
       })),
-      fitness: garminVo2Rows.map((r: any) => ({
-        date: r.date,
-        garminVo2max: Number(r.vo2max ?? 0),
-        // Only show ourVdot when weight-adjusted value differs from raw VO2max
-        ourVdot: r.vdot_adjusted ? Number(r.vdot_adjusted) : null,
-      })),
-      racePrediction: garminRaceRows.map((r: any) => ({
-        date: r.date,
-        garminSeconds: r.race_prediction_seconds ? Number(r.race_prediction_seconds) : null,
-        ourVdot: r.vdot_adjusted ? Number(r.vdot_adjusted) : (r.vo2max ? Number(r.vo2max) : null),
-      })),
+      fitness: (() => {
+        const calibWeight = 80.5; // reference weight for VDOT calibration
+        let lastWeight: number | null = null;
+        return garminVo2Rows.map((r: any) => {
+          const vo2 = Number(r.vo2max ?? 0);
+          if (r.weight_kg != null) lastWeight = Number(r.weight_kg);
+          // Use DB vdot_adjusted if available, otherwise compute from weight
+          const vdotAdj = r.vdot_adjusted != null
+            ? Number(r.vdot_adjusted)
+            : lastWeight ? vo2 * (calibWeight / lastWeight) : vo2;
+          return {
+            date: r.date,
+            garminVo2max: vo2,
+            ourVdot: Math.round(vdotAdj * 10) / 10,
+          };
+        });
+      })(),
+      racePrediction: (() => {
+        const calibWeight = Number(fitness.weight_kg) || 80.5;
+        let lastWeight: number | null = null;
+        return garminRaceRows.map((r: any) => {
+          const vo2 = Number(r.vo2max ?? 0);
+          if (r.weight_kg != null) lastWeight = Number(r.weight_kg);
+          const vdotAdj = r.vdot_adjusted != null
+            ? Number(r.vdot_adjusted)
+            : lastWeight ? vo2 * (calibWeight / lastWeight) : vo2;
+          return {
+            date: r.date,
+            garminSeconds: r.race_prediction_seconds ? Number(r.race_prediction_seconds) : null,
+            ourVdot: Math.round(vdotAdj * 10) / 10,
+          };
+        });
+      })(),
     },
   });
 }

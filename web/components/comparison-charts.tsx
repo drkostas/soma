@@ -61,6 +61,7 @@ export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonC
         ourColor="oklch(0.65 0.15 50)"
         hoveredDate={hoveredDate}
         onHoverDate={onHoverDate}
+        tightYAxis
       />
       <ChartCard
         title="Race Prediction"
@@ -77,6 +78,7 @@ export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonC
         hoveredDate={hoveredDate}
         onHoverDate={onHoverDate}
         invertY
+        tightYAxis
         formatValue={(s) => {
           const h = Math.floor(s / 3600);
           const m = Math.floor((s % 3600) / 60);
@@ -88,7 +90,7 @@ export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonC
   );
 }
 
-function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminLabel, ourColor, hoveredDate, onHoverDate, invertY, formatValue }: {
+function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminLabel, ourColor, hoveredDate, onHoverDate, invertY, formatValue, tightYAxis }: {
   title: string;
   subtitle: string;
   data: any[];
@@ -101,6 +103,7 @@ function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminL
   onHoverDate: (date: string | null) => void;
   invertY?: boolean;
   formatValue?: (v: number) => string;
+  tightYAxis?: boolean;
 }) {
   if (data.length === 0) {
     return (
@@ -116,6 +119,19 @@ function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminL
     );
   }
 
+  // Compute tight Y domain from actual data values with 10% padding
+  let yDomain: [number, number] | undefined;
+  if (tightYAxis) {
+    const vals = data.flatMap(d => [d[ourKey], d[garminKey]]).filter((v): v is number => v != null && isFinite(v));
+    if (vals.length > 0) {
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      const range = max - min || 1;
+      const pad = range * 0.15;
+      yDomain = [Math.floor(min - pad), Math.ceil(max + pad)];
+    }
+  }
+
   return (
     <Card>
       <CardContent className="pt-4 pb-2 px-4">
@@ -128,7 +144,7 @@ function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminL
             if (e?.activeLabel) onHoverDate(e.activeLabel);
           }} onMouseLeave={() => onHoverDate(null)}>
             <XAxis dataKey="date" hide />
-            <YAxis hide={!formatValue} reversed={invertY} width={formatValue ? 52 : 0} tickFormatter={formatValue} tick={{ fontSize: 10, fill: "oklch(0.55 0 0)" }} />
+            <YAxis hide={!formatValue} reversed={invertY} width={formatValue ? 52 : 0} tickFormatter={formatValue} tick={{ fontSize: 10, fill: "oklch(0.55 0 0)" }} domain={yDomain} />
             <Tooltip
               contentStyle={{ backgroundColor: "oklch(0.15 0.01 250)", border: "1px solid oklch(0.3 0.01 250)", borderRadius: "6px", fontSize: "11px" }}
               labelStyle={{ color: "oklch(0.7 0 0)" }}

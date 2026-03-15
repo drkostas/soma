@@ -12,6 +12,7 @@ import {
   computeAdjustedPace,
 } from "@/lib/training-engine";
 import { getBasePace } from "@/lib/vdot-pace-zones";
+import { estimateHMSeconds } from "@/lib/vdot-utils";
 
 export const runtime = "edge";
 
@@ -78,7 +79,7 @@ export async function GET(request: Request) {
   let banisterRows: Record<string, unknown>[] = [];
   try {
     banisterRows = await sql`
-      SELECT p0, k1, k2, tau1, tau2, n_anchors
+      SELECT p0, k1, k2, tau1, tau2, n_anchors, current_vdot
       FROM banister_params ORDER BY fitted_at DESC LIMIT 1
     `;
   } catch {
@@ -116,9 +117,9 @@ export async function GET(request: Request) {
   const atl = pmc ? Number(pmc.atl) || 0 : 0;
   const tsb = pmc ? Number(pmc.tsb) || 0 : 0;
 
-  // Extract fitness values
-  const vo2max = fitness ? Number(fitness.vo2max) || null : null;
-  const vdotAdj = fitness ? Number(fitness.vdot_adjusted) || null : null;
+  // Extract VDOT from Banister model — no Garmin fallback
+  const banisterVdot = banisterRows[0] ? Number((banisterRows[0] as any).current_vdot) || null : null;
+  const vdotAdj = banisterVdot;
 
   // Calibration weights (default equal)
   const calibWeights: Record<string, number> = calib?.weights ?? {
@@ -145,21 +146,20 @@ export async function GET(request: Request) {
     // training_plan tables may not exist yet — gracefully skip
   }
   const runType = (todayPlan[0]?.run_type as string) || "easy";
-  const currentVdot = vdotAdj ?? vo2max ?? 47;
+  const currentVdot = vdotAdj ?? 0;
   const basePace = getBasePace(currentVdot, runType);
+
+  // Base HM pace from VDOT (Daniels equation)
+  const baseHmPace = Math.round(estimateHMSeconds(currentVdot) / 21.0975);
 
   // Compute factors
   const rf = readinessFactorCalc(compositeScore);
   const ff = fatigueFactorCalc(tsb);
   const wf = weightKg != null ? weightKg / 80.5 : 1.0; // calibration weight = 80.5 kg
   const sliderFactor = 1.0; // default
-  const adjustedPace = computeAdjustedPace(
-    basePace,
-    compositeScore,
-    tsb,
-    wf,
-    sliderFactor,
-  );
+  // Predicted HM pace = base HM pace × merge factors (readiness, fatigue, weight)
+  const combinedFactor = rf < 0 ? 1.0 : rf * ff * wf;
+  const adjustedPace = rf < 0 ? null : Math.round(baseHmPace * combinedFactor);
 
   // ─── Build nodes ───────────────────────────────────────────
 
@@ -197,14 +197,16 @@ export async function GET(request: Request) {
     { id: "weight_ema", column: "pmc", label: "Weight EMA", value: weightKg != null ? round(weightKg, 1) : null, unit: "kg", color: "oklch(0.7 0.05 250)", normalizedValue: 0, tooltip: { ...tooltip("weight_ema"), inputs: ["weight_raw"] } },
 
     // Merge layer
-    { id: "readiness_factor", column: "merge", label: "Readiness Factor", value: rf < 0 ? null : round(rf, 4), unit: "x", color: colorForNode("readiness_factor", rf < 0 ? null : rf), normalizedValue: rf < 0 ? 1.0 : factorNorm(rf), tooltip: { ...tooltip("readiness_factor"), inputs: ["hrv_z", "sleep_z", "rhr_z", "bb_z"] } },
-    { id: "fatigue_factor", column: "merge", label: "Fatigue Factor", value: round(ff, 4), unit: "x", color: colorForNode("fatigue_factor", ff), normalizedValue: factorNorm(ff), tooltip: { ...tooltip("fatigue_factor"), inputs: ["tsb"] } },
-    { id: "weight_factor", column: "merge", label: "Weight Factor", value: round(wf, 4), unit: "x", color: colorForNode("weight_factor", wf), normalizedValue: factorNorm(wf), tooltip: { ...tooltip("weight_factor"), inputs: ["weight_ema"] } },
-    { id: "slider_factor", column: "merge", label: "Slider", value: sliderFactor, unit: "x", color: "oklch(0.7 0.12 250)", normalizedValue: factorNorm(sliderFactor), tooltip: { ...tooltip("slider_factor"), inputs: [] } },
+    { id: "readiness_factor", column: "merge", label: "Readiness Factor", value: rf < 0 ? null : round(rf, 4), unit: "×", color: colorForNode("readiness_factor", rf < 0 ? null : rf), normalizedValue: rf < 0 ? 1.0 : factorNorm(rf), tooltip: { ...tooltip("readiness_factor"), inputs: ["hrv_z", "sleep_z", "rhr_z", "bb_z"] } },
+    { id: "fatigue_factor", column: "merge", label: "Fatigue Factor", value: round(ff, 4), unit: "×", color: colorForNode("fatigue_factor", ff), normalizedValue: factorNorm(ff), tooltip: { ...tooltip("fatigue_factor"), inputs: ["tsb"] } },
+    { id: "weight_factor", column: "merge", label: "Weight Factor", value: round(wf, 4), unit: "×", color: colorForNode("weight_factor", wf), normalizedValue: factorNorm(wf), tooltip: { ...tooltip("weight_factor"), inputs: ["weight_ema"] } },
+    { id: "slider_factor", column: "merge", label: "Slider", value: sliderFactor, unit: "×", color: "oklch(0.7 0.12 250)", normalizedValue: factorNorm(sliderFactor), tooltip: { ...tooltip("slider_factor"), inputs: [] } },
 
     // Output layer — output nodes use readiness composite as their activation proxy
-    { id: "adjusted_pace", column: "output", label: "Adjusted Pace", value: adjustedPace != null ? round(adjustedPace, 1) : null, unit: "s/km", color: adjustedPace != null ? "oklch(0.7 0.15 142)" : "oklch(0.6 0.2 25)", normalizedValue: adjustedPace != null ? clamp01(Math.abs(adjustedPace - basePace) / 30) : 1.0, tooltip: { ...tooltip("adjusted_pace"), inputs: ["readiness_factor", "fatigue_factor", "weight_factor", "slider_factor"] } },
-    { id: "vdot", column: "output", label: "VDOT", value: vdotAdj != null ? round(vdotAdj, 1) : vo2max != null ? round(vo2max, 1) : null, unit: "", color: colorForNode("vdot", vdotAdj ?? vo2max), normalizedValue: clamp01(((vdotAdj ?? vo2max) ?? 0) / 60), tooltip: { ...tooltip("vdot"), inputs: ["weight_ema"] } },
+    { id: "vdot", column: "merge", label: "VDOT", value: vdotAdj != null ? round(vdotAdj, 1) : null, unit: "", color: colorForNode("vdot", vdotAdj), normalizedValue: clamp01((vdotAdj ?? 0) / 60), tooltip: { ...tooltip("vdot"), inputs: ["weight_ema", "ctl"] } },
+
+    // Output layer
+    { id: "adjusted_pace", column: "output", label: "Predicted HM Pace", value: adjustedPace != null ? round(adjustedPace, 0) : null, unit: "s/km", color: adjustedPace != null ? "oklch(0.7 0.15 142)" : "oklch(0.6 0.2 25)", normalizedValue: adjustedPace != null ? clamp01(Math.abs(adjustedPace - baseHmPace) / 30) : 1.0, tooltip: { ...tooltip("adjusted_pace"), inputs: ["vdot", "readiness_factor", "fatigue_factor", "weight_factor", "slider_factor"] } },
   ];
 
   // ─── Banister parameter nodes ─────────────────────────────
@@ -271,8 +273,18 @@ export async function GET(request: Request) {
     { from: "weight_factor", to: "adjusted_pace", weight: Math.min(1, Math.abs(wf - 1.0) / 0.05) || 0.15 },
     { from: "slider_factor", to: "adjusted_pace", weight: 0.15 },
 
-    // Weight -> VDOT — faint default
+    // VDOT -> Adjusted Pace (VDOT determines base pace via Daniels table)
+    { from: "vdot", to: "adjusted_pace", weight: 1.0 },
+
+    // Weight -> VDOT (weight-adjusted VDOT = base * calibration_weight / current_weight)
     { from: "weight_ema", to: "vdot", weight: 0.15 },
+
+    // CTL -> VDOT (Banister: training fitness feeds VDOT projection)
+    { from: "ctl", to: "vdot", weight: 0.3 },
+
+    // Slider -> PMC (slider scales training load, shifting CTL/ATL)
+    { from: "slider_factor", to: "ctl", weight: 0.15 },
+    { from: "slider_factor", to: "atl", weight: 0.15 },
   ];
 
   // ─── Banister parameter edges ─────────────────────────────
@@ -281,6 +293,7 @@ export async function GET(request: Request) {
     edges.push(
       { from: "banister_tau1", to: "ctl", weight: 1.0 },
       { from: "banister_tau2", to: "atl", weight: 1.0 },
+      { from: "banister_p0", to: "vdot", weight: 1.0 },
     );
   }
 

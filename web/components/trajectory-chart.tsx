@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
 import {
   ComposedChart,
   Line,
@@ -15,6 +15,7 @@ import {
   Customized,
 } from "recharts";
 import type { ProjectedDay } from "@/lib/forward-simulation";
+import { estimateHMSeconds } from "@/lib/vdot-utils";
 
 interface TrajectoryEntry {
   date: string;
@@ -39,17 +40,44 @@ interface TrajectoryChartProps {
   projectedDays?: ProjectedDay[] | null;
 }
 
-// ── VDOT → pace conversion (Daniels approximation) ──────────
-// Returns HM pace as "M:SS /km" string
+// ── VDOT → pace/time conversions (Daniels/Gilbert) ──────────
+
+function formatSeconds(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.round(sec % 60);
+  return h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function vdotToHmPace(vdot: number): string {
-  // Approximate HM time in minutes from VDOT (Daniels tables curve fit)
-  // HM_min ≈ 210000 / vdot / 60 — simplified from Daniels regression
-  const hmSeconds = 210000 / vdot;
+  const hmSeconds = estimateHMSeconds(vdot);
   const paceSecPerKm = hmSeconds / 21.0975;
   const min = Math.floor(paceSecPerKm / 60);
   const sec = Math.round(paceSecPerKm % 60);
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
+
+function formatPace(secPerKm: number): string {
+  const min = Math.floor(secPerKm / 60);
+  const sec = Math.round(secPerKm % 60);
+  return `${min}:${sec.toString().padStart(2, "0")}`;
+}
+
+function formatHmTime(vdot: number): string {
+  return formatSeconds(estimateHMSeconds(vdot));
+}
+
+function formatTimeDelta(seconds: number): string {
+  const sign = seconds >= 0 ? "+" : "-";
+  const abs = Math.abs(seconds);
+  const m = Math.floor(abs / 60);
+  const s = Math.round(abs % 60);
+  return `${sign}${m}:${String(s).padStart(2, "0")}`;
+}
+
+const PROJECTED_COLOR = "oklch(70% 0.18 200)"; // teal — Banister prediction
 
 // ── Colors for secondary dimension lines ─────────────────────
 
@@ -132,7 +160,7 @@ function GradientActiveLine(props: any) {
 
 // ── Custom tooltip ───────────────────────────────────────────
 
-function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
+function makeCustomTooltip(projectedDays?: ProjectedDay[] | null, goalVdot?: number, visibleLines?: Set<string>) {
   return function CustomTooltip({ active, payload }: any) {
     if (!active || !payload?.length) return null;
 
@@ -150,8 +178,15 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
       day: "numeric",
     });
 
-    // Look up forward-simulation projected day for formula breakdown
     const projectedDay = projectedDays?.find(p => p.dayDate === data.date);
+
+    const hmPaceVisible = !visibleLines || visibleLines.has("hmPace");
+    // Use the actual plotted hmPace value (merge-adjusted, from forward simulation)
+    const hmPaceSecKm: number | null = data.hmPace;
+    // Total HM time from the plotted pace
+    const hmTimeSec = hmPaceSecKm != null ? hmPaceSecKm * 21.0975 : null;
+    const goalHmSec = goalVdot ? estimateHMSeconds(goalVdot) : null;
+    const hmGapSec = hmTimeSec != null && goalHmSec != null ? hmTimeSec - goalHmSec : null;
 
     return (
       <div
@@ -162,23 +197,27 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
           fontSize: "12px",
           color: "var(--card-foreground)",
           padding: "8px 12px",
+          maxWidth: 260,
         }}
       >
         <div className="font-medium mb-1">{dateStr}</div>
         <div className="space-y-0.5 text-[11px]">
-          <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Target VDOT</span>
-            <span className="font-mono tabular-nums">{optimal?.toFixed(1)}</span>
-          </div>
-          {actual !== null && actual !== undefined && (
+          {(!visibleLines || visibleLines.has("optimal")) && (
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Banister VDOT</span>
+              <span className="font-mono tabular-nums">{optimal?.toFixed(1)}</span>
+            </div>
+          )}
+          {actual !== null && actual !== undefined && (!visibleLines || visibleLines.has("actual")) && (
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">Actual VDOT</span>
               <span className="font-mono tabular-nums">{actual?.toFixed(1)}</span>
             </div>
           )}
-          {gap !== null && (
+          {/* projectedVdot merged into optimal — both use full Banister model */}
+          {gap !== null && (!visibleLines || (visibleLines.has("optimal") && visibleLines.has("actual"))) && (
             <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
-              <span className="text-muted-foreground">Gap</span>
+              <span className="text-muted-foreground">Gap (actual)</span>
               <span
                 className="font-mono tabular-nums"
                 style={{
@@ -193,28 +232,64 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
               </span>
             </div>
           )}
-          {projected != null && actual == null && (
+          {shadow != null && (!visibleLines || visibleLines.has("shadow")) && (
             <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
-              <span style={{ color: "oklch(62% 0.12 142)" }}>Projected</span>
-              <span className="font-mono tabular-nums" style={{ color: "oklch(62% 0.12 142)" }}>
-                {projected.toFixed(1)}
-              </span>
-            </div>
-          )}
-          {shadow != null && (
-            <div className="flex justify-between gap-4 border-t border-border/50 pt-0.5 mt-0.5">
-              <span className="text-muted-foreground" style={{ color: "oklch(80% 0.15 85)" }}>
-                What-if
-              </span>
+              <span style={{ color: "oklch(80% 0.15 85)" }}>What-if</span>
               <span className="font-mono tabular-nums" style={{ color: "oklch(80% 0.15 85)" }}>
                 {shadow.toFixed(1)}
               </span>
             </div>
           )}
+          {/* HM race time vs goal */}
+          {hmPaceSecKm != null && hmPaceVisible && (
+            <div className="border-t border-border/50 pt-1 mt-1 space-y-0.5">
+              <div className="flex justify-between gap-4">
+                <span style={{ color: HM_PACE_COLOR }}>HM pace</span>
+                <span className="font-mono tabular-nums" style={{ color: HM_PACE_COLOR }}>
+                  {formatPace(hmPaceSecKm)}/km
+                </span>
+              </div>
+              {hmTimeSec != null && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Predicted HM</span>
+                  <span className="font-mono tabular-nums font-medium">
+                    {formatSeconds(hmTimeSec)}
+                  </span>
+                </div>
+              )}
+              {goalVdot != null && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Goal HM</span>
+                  <span className="font-mono tabular-nums">
+                    {formatHmTime(goalVdot)}
+                  </span>
+                </div>
+              )}
+              {hmGapSec != null && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Gap</span>
+                  <span
+                    className="font-mono tabular-nums font-medium"
+                    style={{
+                      color: hmGapSec > 0
+                        ? "oklch(60% 0.22 25)"
+                        : "oklch(62% 0.17 142)",
+                    }}
+                  >
+                    {formatTimeDelta(hmGapSec)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           {/* Secondary dimension values */}
-          {(data.ctl != null || data.readiness != null || data.weightEffect != null) && (
+          {(
+            (data.ctl != null && (!visibleLines || visibleLines.has("ctl"))) ||
+            (data.readiness != null && (!visibleLines || visibleLines.has("readiness"))) ||
+            (data.weightEffect != null && (!visibleLines || visibleLines.has("weightEffect")))
+          ) && (
             <div className="border-t border-border/50 pt-0.5 mt-0.5 space-y-0.5">
-              {data.ctl != null && (
+              {data.ctl != null && (!visibleLines || visibleLines.has("ctl")) && (
                 <div className="flex justify-between gap-4">
                   <span style={{ color: DIM_COLORS.ctl }}>Fitness (CTL)</span>
                   <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.ctl }}>
@@ -222,7 +297,7 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
                   </span>
                 </div>
               )}
-              {data.readiness != null && (
+              {data.readiness != null && (!visibleLines || visibleLines.has("readiness")) && (
                 <div className="flex justify-between gap-4">
                   <span style={{ color: DIM_COLORS.readiness }}>Readiness</span>
                   <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.readiness }}>
@@ -230,7 +305,7 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
                   </span>
                 </div>
               )}
-              {data.weightEffect != null && (
+              {data.weightEffect != null && (!visibleLines || visibleLines.has("weightEffect")) && (
                 <div className="flex justify-between gap-4">
                   <span style={{ color: DIM_COLORS.weightEffect }}>Weight Effect</span>
                   <span className="font-mono tabular-nums" style={{ color: DIM_COLORS.weightEffect }}>
@@ -240,10 +315,10 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
               )}
             </div>
           )}
-          {/* Formula breakdown from forward simulation */}
-          {projectedDay && (
-            <div className="mt-2 pt-2 border-t border-border/30 space-y-1">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Formula Breakdown</div>
+          {/* Formula breakdown from forward simulation — only when VDOT/pace lines visible */}
+          {projectedDay && visibleLines && (visibleLines.has("optimal") || visibleLines.has("actual")) && (
+            <div className="mt-1 pt-1 border-t border-border/30 space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Formula</div>
               <div className="text-xs grid grid-cols-2 gap-x-3 gap-y-0.5">
                 <span className="text-muted-foreground">Readiness</span>
                 <span className="font-mono">{projectedDay.readinessFactor.toFixed(4)}x</span>
@@ -255,7 +330,6 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
                 <span className="font-mono font-bold">{projectedDay.combinedFactor.toFixed(4)}x</span>
               </div>
               <div className="text-xs">
-                <span className="text-muted-foreground">Traffic light: </span>
                 <span className={
                   projectedDay.trafficLight === "green" ? "text-green-400"
                   : projectedDay.trafficLight === "yellow" ? "text-yellow-400"
@@ -266,16 +340,74 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null) {
               </div>
             </div>
           )}
-          {/* VDOT → pace explainer */}
-          {(actual != null || optimal != null) && (
-            <p className="text-[10px] text-muted-foreground mt-1 border-t border-border/50 pt-1">
-              VDOT {(actual ?? optimal).toFixed(1)} ≈ {vdotToHmPace(actual ?? optimal)}/km HM pace
-            </p>
-          )}
         </div>
       </div>
     );
   };
+}
+
+// ── Line visibility definitions ──────────────────────────────
+
+const HM_PACE_COLOR = "oklch(70% 0.18 330)"; // pink-purple
+
+const TRAJECTORY_LINES = [
+  { key: "optimal", label: "Banister VDOT", color: "oklch(65% 0.15 250)" },
+  { key: "actual", label: "Actual VDOT", color: "oklch(62% 0.17 142)" },
+  { key: "hmPace", label: "Expected HM pace", color: HM_PACE_COLOR },
+  { key: "shadow", label: "What-if", color: "oklch(80% 0.15 85)" },
+  { key: "ctl", label: "Fitness (CTL)", color: DIM_COLORS.ctl },
+  { key: "readiness", label: "Readiness", color: DIM_COLORS.readiness },
+  { key: "weightEffect", label: "Weight Effect", color: DIM_COLORS.weightEffect },
+] as const;
+
+function LineVisibilityDropdown({
+  visible,
+  onToggle,
+  availableKeys,
+}: {
+  visible: Set<string>;
+  onToggle: (key: string) => void;
+  availableKeys: Set<string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const available = TRAJECTORY_LINES.filter((l) => availableKeys.has(l.key));
+  const activeCount = available.filter((l) => visible.has(l.key)).length;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-[11px] px-2 py-0.5 rounded border border-border bg-card text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Lines ({activeCount}/{available.length})
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-md shadow-lg py-1 min-w-[180px]" onClick={(e) => e.stopPropagation()}>
+            {available.map((l) => (
+              <label
+                key={l.key}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer text-[11px]"
+              >
+                <input
+                  type="checkbox"
+                  checked={visible.has(l.key)}
+                  onChange={() => onToggle(l.key)}
+                  className="rounded border-border"
+                />
+                <span
+                  className="w-3 h-0.5 rounded-full shrink-0"
+                  style={{ backgroundColor: l.color }}
+                />
+                <span className="text-foreground">{l.label}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 // ── Main chart component ─────────────────────────────────────
@@ -289,6 +421,35 @@ export function TrajectoryChart({
   onHoverDate,
   projectedDays,
 }: TrajectoryChartProps) {
+  const STORAGE_KEY = "trajectory-visible-lines";
+  const [visible, setVisible] = useState<Set<string>>(() => {
+    const defaults = new Set<string>(TRAJECTORY_LINES.map((l) => l.key));
+    if (typeof window === "undefined") return defaults;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        // Filter out removed keys (like projectedVdot which was merged into optimal)
+        const validKeys = defaults;
+        const filtered = (JSON.parse(saved) as string[]).filter((k) => validKeys.has(k));
+        return filtered.length > 0 ? new Set<string>(filtered) : defaults;
+      }
+    } catch { /* ignore */ }
+    return defaults;
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...visible])); } catch { /* ignore */ }
+  }, [visible]);
+
+  function toggleLine(key: string) {
+    setVisible((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   if (!data || data.length === 0) {
     return (
       <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
@@ -305,22 +466,43 @@ export function TrajectoryChart({
     }
   }
 
-  const chartData = data.map((d) => ({
-    date: d.date,
-    optimal: Number(d.optimal.toFixed(1)),
-    actual: d.actual !== null ? Number(Number(d.actual).toFixed(1)) : null,
-    projectedVdot: d.projectedVdot != null ? Number(Number(d.projectedVdot).toFixed(1)) : null,
-    shadow: shadowMap.get(d.date) ?? null,
-    ctl: d.ctl ?? null,
-    readiness: d.readiness ?? null,
-    weightEffect: d.weightEffect ?? null,
-  }));
+  // HM pace: derived directly from Banister VDOT (no merge factors —
+  // the Banister model already accounts for fatigue via k2 term;
+  // merge factors are for per-workout pace adjustments, not trajectory trend)
+  const chartData = data.map((d) => {
+    let hmPace: number | null = null;
+    if (d.optimal > 0) {
+      hmPace = Math.round(estimateHMSeconds(d.optimal) / 21.0975);
+    }
+    return {
+      date: d.date,
+      optimal: Number(d.optimal.toFixed(1)),
+      actual: d.actual !== null ? Number(Number(d.actual).toFixed(1)) : null,
+      projectedVdot: d.projectedVdot != null ? Number(Number(d.projectedVdot).toFixed(1)) : null,
+      hmPace,
+      shadow: shadowMap.get(d.date) ?? null,
+      ctl: d.ctl ?? null,
+      readiness: d.readiness ?? null,
+      weightEffect: d.weightEffect ?? null,
+    };
+  });
 
   // Check if we have any secondary dimension data
   const hasCTL = chartData.some((d) => d.ctl !== null);
   const hasReadiness = chartData.some((d) => d.readiness !== null);
   const hasWeightEffect = chartData.some((d) => d.weightEffect !== null);
-  const hasSecondary = hasCTL || hasReadiness || hasWeightEffect;
+  const hasSecondary = (hasCTL && visible.has("ctl")) || (hasReadiness && visible.has("readiness")) || (hasWeightEffect && visible.has("weightEffect"));
+
+  // Build set of available line keys (only lines that have data)
+  const availableKeys = new Set<string>(["optimal"]);
+  if (chartData.some((d) => d.actual !== null)) availableKeys.add("actual");
+  if (chartData.some((d) => d.hmPace !== null)) availableKeys.add("hmPace");
+  if (shadowData && shadowData.length > 0) availableKeys.add("shadow");
+  if (hasCTL) availableKeys.add("ctl");
+  if (hasReadiness) availableKeys.add("readiness");
+  if (hasWeightEffect) availableKeys.add("weightEffect");
+
+  const showHmPaceAxis = visible.has("hmPace") && chartData.some((d) => d.hmPace !== null);
 
   // "You Are Here" — find the current VDOT at or nearest to today
   const todayEntry = chartData.find((d) => d.date === today);
@@ -352,10 +534,14 @@ export function TrajectoryChart({
   });
   const inflectionVdot = inflectionEntry?.optimal ?? null;
 
-  // Goal VDOT tiers (hardcoded to match existing reference lines)
-  const goalA = 52;
-  const goalB = 49;
-  const goalC = 47.5;
+  // Race-day fitness VDOT for annotation (performance potential)
+  const raceDayEntry = chartData.find((d) => d.date === raceDate);
+  const raceDayProjectedVdot = raceDayEntry?.optimal ?? null;
+
+  // Goal VDOT tiers — A = goalVdot prop, B and C are progressively easier
+  const goalA = goalVdot;
+  const goalB = goalVdot - 2;
+  const goalC = goalVdot - 3.5;
 
   // Hover handlers for date emission
   const handleMouseMove = useCallback(
@@ -372,10 +558,14 @@ export function TrajectoryChart({
   }, [onHoverDate]);
 
   return (
+    <div>
+    <div className="flex justify-end mb-1" onClick={(e) => e.stopPropagation()}>
+      <LineVisibilityDropdown visible={visible} onToggle={toggleLine} availableKeys={availableKeys} />
+    </div>
     <ResponsiveContainer width="100%" height={280}>
       <ComposedChart
         data={chartData}
-        margin={{ top: 18, right: hasSecondary ? 40 : 20, left: 0, bottom: 5 }}
+        margin={{ top: 18, right: (hasSecondary || showHmPaceAxis) ? 50 : 20, left: 0, bottom: 5 }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
@@ -407,7 +597,7 @@ export function TrajectoryChart({
           yAxisId="vdot"
           className="text-[10px]"
           tickLine={false}
-          domain={[46, 53]}
+          domain={["auto", "auto"]}
           label={{
             value: "VDOT (Daniels index)",
             angle: -90,
@@ -429,7 +619,24 @@ export function TrajectoryChart({
             width={35}
           />
         )}
-        <Tooltip content={makeCustomTooltip(projectedDays)} />
+        {/* Pace Y-axis (sec/km) — reversed so faster pace is higher */}
+        {showHmPaceAxis && (
+          <YAxis
+            yAxisId="pace"
+            orientation="right"
+            tick={hasSecondary ? false : { fontSize: 9, fill: HM_PACE_COLOR }}
+            tickLine={false}
+            reversed
+            domain={["dataMin - 5", "dataMax + 5"]}
+            tickFormatter={(v: number) => {
+              const m = Math.floor(v / 60);
+              const s = Math.round(v % 60);
+              return `${m}:${String(s).padStart(2, "0")}`;
+            }}
+            width={hasSecondary ? 0 : 40}
+          />
+        )}
+        <Tooltip content={makeCustomTooltip(projectedDays, goalVdot, visible)} />
 
         {/* Taper region annotation */}
         {showTaper && (
@@ -511,7 +718,7 @@ export function TrajectoryChart({
           strokeDasharray="2 4"
           strokeOpacity={0.4}
           label={{
-            value: "A (1:35)",
+            value: `A (${formatHmTime(goalA)})`,
             position: "right",
             fontSize: 8,
             fill: "oklch(62% 0.17 142)",
@@ -524,7 +731,7 @@ export function TrajectoryChart({
           strokeDasharray="2 4"
           strokeOpacity={0.4}
           label={{
-            value: "B (1:40)",
+            value: `B (${formatHmTime(goalB)})`,
             position: "right",
             fontSize: 8,
             fill: "oklch(65% 0.15 250)",
@@ -537,7 +744,7 @@ export function TrajectoryChart({
           strokeDasharray="2 4"
           strokeOpacity={0.4}
           label={{
-            value: "C (1:43)",
+            value: `C (${formatHmTime(goalC)})`,
             position: "right",
             fontSize: 8,
             fill: "oklch(80% 0.18 87)",
@@ -561,47 +768,40 @@ export function TrajectoryChart({
         )}
 
         {/* Optimal VDOT — dashed line */}
-        <Line
-          yAxisId="vdot"
-          type="monotone"
-          dataKey="optimal"
-          stroke="oklch(65% 0.15 250)"
-          strokeWidth={2}
-          strokeDasharray="6 3"
-          dot={false}
-          name="optimal"
-        />
+        {visible.has("optimal") && (
+          <Line
+            yAxisId="vdot"
+            type="monotone"
+            dataKey="optimal"
+            stroke="oklch(65% 0.15 250)"
+            strokeWidth={2}
+            strokeDasharray="6 3"
+            dot={false}
+            name="optimal"
+          />
+        )}
 
         {/* Actual VDOT — per-segment gradient coloring via custom shape */}
-        <Line
-          yAxisId="vdot"
-          type="monotone"
-          dataKey="actual"
-          stroke="oklch(62% 0.17 142)"
-          strokeWidth={2.5}
-          dot={<GapDot />}
-          connectNulls
-          name="actual"
-          shape={(lineProps: any) => (
-            <GradientActiveLine {...lineProps} data={chartData} />
-          )}
-        />
+        {visible.has("actual") && (
+          <Line
+            yAxisId="vdot"
+            type="monotone"
+            dataKey="actual"
+            stroke="oklch(62% 0.17 142)"
+            strokeWidth={2.5}
+            dot={<GapDot />}
+            connectNulls
+            name="actual"
+            shape={(lineProps: any) => (
+              <GradientActiveLine {...lineProps} data={chartData} />
+            )}
+          />
+        )}
 
-        {/* Future projection — dotted line from last actual to race day */}
-        <Line
-          yAxisId="vdot"
-          type="monotone"
-          dataKey="projectedVdot"
-          stroke="oklch(62% 0.12 142)"
-          strokeWidth={1.5}
-          strokeDasharray="4 4"
-          dot={false}
-          connectNulls={false}
-          name="projected"
-        />
+        {/* projectedVdot merged into optimal — both use same Banister model */}
 
         {/* Shadow / what-if curve (only rendered when shadow data exists) */}
-        {shadowData && shadowData.length > 0 && (
+        {visible.has("shadow") && shadowData && shadowData.length > 0 && (
           <Line
             yAxisId="vdot"
             type="monotone"
@@ -617,7 +817,7 @@ export function TrajectoryChart({
         )}
 
         {/* You Are Here — prominent marker at current position */}
-        {youAreHereDate && youAreHereVdot != null && (
+        {visible.has("actual") && youAreHereDate && youAreHereVdot != null && (
           <ReferenceDot
             yAxisId="vdot"
             x={youAreHereDate}
@@ -636,8 +836,43 @@ export function TrajectoryChart({
           />
         )}
 
+        {/* Race-day predicted HM time annotation */}
+        {visible.has("optimal") && raceDayProjectedVdot != null && (
+          <ReferenceDot
+            yAxisId="vdot"
+            x={raceDate}
+            y={raceDayProjectedVdot}
+            r={5}
+            fill="oklch(65% 0.15 250)"
+            stroke="white"
+            strokeWidth={1.5}
+            label={{
+              value: `HM ≈ ${formatHmTime(raceDayProjectedVdot)}`,
+              position: "left",
+              fontSize: 9,
+              fill: "oklch(65% 0.15 250)",
+              fontWeight: 600,
+              offset: 8,
+            }}
+          />
+        )}
+
+        {/* ── Expected HM pace line ── */}
+        {showHmPaceAxis && (
+          <Line
+            yAxisId="pace"
+            type="monotone"
+            dataKey="hmPace"
+            stroke={HM_PACE_COLOR}
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+            name="Expected HM pace"
+          />
+        )}
+
         {/* ── Secondary dimension lines (thin, semi-transparent) ── */}
-        {hasCTL && (
+        {hasCTL && visible.has("ctl") && (
           <Line
             yAxisId="norm"
             type="monotone"
@@ -650,7 +885,7 @@ export function TrajectoryChart({
             name="CTL"
           />
         )}
-        {hasReadiness && (
+        {hasReadiness && visible.has("readiness") && (
           <Line
             yAxisId="norm"
             type="monotone"
@@ -663,7 +898,7 @@ export function TrajectoryChart({
             name="Readiness"
           />
         )}
-        {hasWeightEffect && (
+        {hasWeightEffect && visible.has("weightEffect") && (
           <Line
             yAxisId="norm"
             type="monotone"
@@ -678,5 +913,6 @@ export function TrajectoryChart({
         )}
       </ComposedChart>
     </ResponsiveContainer>
+    </div>
   );
 }

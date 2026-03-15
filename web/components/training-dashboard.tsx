@@ -19,10 +19,11 @@ import {
   DEFAULT_BASE_PACE,
   recomputeGraphForSlider,
   adjustStepTargets,
+  colorForNode,
 } from "@/lib/training-engine";
+import { estimateHMSeconds } from "@/lib/vdot-utils";
 import { normalizeSteps } from "@/lib/normalize-steps";
 import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type ComparisonData } from "@/lib/forward-simulation";
-import { estimateHMSeconds } from "@/lib/vdot-utils";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -45,11 +46,18 @@ export interface ReferenceData {
   }[];
 }
 
+export interface TrajectoryNorms {
+  ctlMin: number; ctlRange: number;
+  readinessMin: number; readinessRange: number;
+  weightMin: number; weightRange: number;
+}
+
 interface TrainingDashboardProps {
   planDays: any[];
   today: string;
   raceInfo: { race_date: string; goal_time_seconds: number; plan_name: string } | null;
   trajectoryData: { date: string; optimal: number; actual: number | null; projectedVdot?: number | null; ctl: number | null; readiness: number | null; weightEffect: number | null }[];
+  trajectoryNorms: TrajectoryNorms | null;
   currentVdot: number;
   goalVdot: number;
   referenceData: ReferenceData;
@@ -184,6 +192,45 @@ function computeShadowGraph(
   return recomputeGraphForSlider(baseGraph, sliderValue);
 }
 
+/** Build a computation graph from a forward-simulation projected day (for future date hover). */
+function buildGraphFromProjection(
+  baseGraph: ComputationGraph,
+  projected: ProjectedDay,
+): ComputationGraph {
+  // Raw signals and z-scores are unknown for future dates
+  const unknownForFuture = new Set([
+    "hrv_raw", "sleep_raw", "rhr_raw", "bb_raw", "epoc_raw", "weight_raw",
+    "hrv_z", "sleep_z", "rhr_z", "bb_z", "weight_ema",
+  ]);
+
+  const nodes = baseGraph.nodes.map(n => {
+    const clone = { ...n };
+
+    if (unknownForFuture.has(n.id)) {
+      clone.value = null;
+      clone.color = "oklch(40% 0.02 250)";
+      return clone;
+    }
+
+    switch (n.id) {
+      case "ctl": clone.value = Math.round(projected.ctl * 10) / 10; break;
+      case "atl": clone.value = Math.round(projected.atl * 10) / 10; break;
+      case "tsb": clone.value = Math.round(projected.tsb * 10) / 10; break;
+      case "readiness_factor":
+        clone.value = projected.readinessFactor < 0 ? null : Math.round(projected.readinessFactor * 10000) / 10000;
+        break;
+      case "fatigue_factor": clone.value = Math.round(projected.fatigueFactor * 10000) / 10000; break;
+      case "weight_factor": clone.value = Math.round(projected.weightFactor * 10000) / 10000; break;
+      case "adjusted_pace": clone.value = projected.predictedHmPace; break;
+      case "vdot": clone.value = Math.round(projected.projectedVdot * 10) / 10; break;
+      case "slider_factor": clone.value = 1.0; break;
+    }
+    clone.color = colorForNode(n.id, clone.value);
+    return clone;
+  });
+  return { ...baseGraph, nodes };
+}
+
 // ── Component ─────────────────────────────────────────────────
 
 export function TrainingDashboard({
@@ -191,6 +238,7 @@ export function TrainingDashboard({
   today,
   raceInfo,
   trajectoryData,
+  trajectoryNorms,
   currentVdot,
   goalVdot,
   referenceData,
@@ -281,16 +329,17 @@ export function TrainingDashboard({
     return computeShadowGraph(graphData.graph, sliderValue);
   }, [graphData, sliderValue]);
 
-  // Trajectory from forward simulation — replaces decorative S-curve for projected points
+  // Trajectory from forward simulation — includes all days (rest included for continuous curve)
   const trajectoryFromSim = useMemo(() => {
     if (!forwardSim) return null;
     return forwardSim
-      .filter(d => !d.isRest)
       .map(d => ({
         date: d.dayDate,
         projectedVdot: d.projectedVdot,
         ctl: d.ctl,
         tsb: d.tsb,
+        projectedZ: d.projectedZ,
+        weightFactor: d.weightFactor,
         adaptationMagnitude: Math.abs(d.paceChangePct),
         adaptationColor: d.paceChangePct < -0.5 ? "oklch(0.7 0.15 142)"  // green = faster
           : d.paceChangePct > 0.5 ? "oklch(0.7 0.15 25)"   // red = slower
@@ -298,26 +347,82 @@ export function TrainingDashboard({
       }));
   }, [forwardSim]);
 
-  // Merge forward sim projections into trajectory data
+  // Expand normalization range to include projected values (prevents clamping to 100%)
+  const expandedNorms = useMemo(() => {
+    if (!trajectoryNorms) return null;
+    if (!trajectoryFromSim || trajectoryFromSim.length === 0) return trajectoryNorms;
+    const simCtls = trajectoryFromSim.map(d => d.ctl);
+    const simZs = trajectoryFromSim.map(d => d.projectedZ);
+    const histCtlMax = trajectoryNorms.ctlMin + trajectoryNorms.ctlRange;
+    const histReadMax = trajectoryNorms.readinessMin + trajectoryNorms.readinessRange;
+    const allCtlMin = Math.min(trajectoryNorms.ctlMin, ...simCtls);
+    const allCtlMax = Math.max(histCtlMax, ...simCtls);
+    const allReadMin = Math.min(trajectoryNorms.readinessMin, ...simZs);
+    const allReadMax = Math.max(histReadMax, ...simZs);
+    return {
+      ctlMin: allCtlMin,
+      ctlRange: Math.max(allCtlMax - allCtlMin, 1),
+      readinessMin: allReadMin,
+      readinessRange: Math.max(allReadMax - allReadMin, 1),
+      weightMin: trajectoryNorms.weightMin,
+      weightRange: trajectoryNorms.weightRange,
+    };
+  }, [trajectoryNorms, trajectoryFromSim]);
+
+  // Merge forward sim projections into trajectory data (fills future dims)
   const mergedTrajectory = useMemo(() => {
     if (!trajectoryFromSim || !trajectoryData.length) return trajectoryData;
 
+    const norms = expandedNorms;
     const simMap = new Map(trajectoryFromSim.map(d => [d.date, d]));
+    const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
     return trajectoryData.map(point => {
       const sim = simMap.get(point.date);
-      if (sim) {
-        return {
-          ...point,
-          projectedVdot: sim.projectedVdot,
-          // Add forward sim metadata for hover tooltip
-          simCtl: sim.ctl,
-          simTsb: sim.tsb,
-        };
+      if (!sim) return point;
+
+      const isFuture = point.date > today;
+      let ctlNorm = point.ctl;
+      let readinessNorm = point.readiness;
+      let weightNorm = point.weightEffect;
+
+      if (isFuture && norms) {
+        // Future dates: always use forward-sim projected values
+        // (server forward-fill gives flat lines; sim evolves with planned loads)
+        ctlNorm = clamp01((sim.ctl - norms.ctlMin) / norms.ctlRange);
+        readinessNorm = clamp01((sim.projectedZ - norms.readinessMin) / norms.readinessRange);
+        // Weight: keep last known value (we don't project weight changes)
+        // weightNorm already forward-filled from server data — leave as-is
+      } else {
+        // Past dates: only fill when server data is missing
+        if (ctlNorm == null && norms) {
+          ctlNorm = clamp01((sim.ctl - norms.ctlMin) / norms.ctlRange);
+        }
+        if (readinessNorm == null && norms) {
+          readinessNorm = clamp01((sim.projectedZ - norms.readinessMin) / norms.readinessRange);
+        }
+        if (weightNorm == null && norms && sim.weightFactor > 0) {
+          weightNorm = clamp01(1 - (sim.weightFactor - 0.95) / 0.1);
+        }
       }
-      return point;
+
+      // For future dates, use forward sim's VDOT so slider affects the trajectory curve.
+      // The forward sim responds to slider changes; the server's optimal is static.
+      const optimal = isFuture && sim.projectedVdot > 0
+        ? sim.projectedVdot
+        : point.optimal;
+
+      return {
+        ...point,
+        optimal,
+        ctl: ctlNorm,
+        readiness: readinessNorm,
+        weightEffect: weightNorm,
+        simCtl: sim.ctl,
+        simTsb: sim.tsb,
+      };
     });
-  }, [trajectoryData, trajectoryFromSim]);
+  }, [trajectoryData, trajectoryFromSim, expandedNorms, today]);
 
   // Shadow trajectory for delta simulation
   const shadowTrajectory = useMemo(() => {
@@ -416,6 +521,17 @@ export function TrainingDashboard({
       return;
     }
 
+    // For future dates, build graph from forward simulation (no API call needed)
+    if (date > today && forwardSim && graphData) {
+      const projected = forwardSim.find(d => d.dayDate === date);
+      if (projected) {
+        const builtGraph = buildGraphFromProjection(graphData.graph, projected);
+        graphCacheRef.current.set(date, builtGraph);
+        setHoveredGraph(builtGraph);
+        return;
+      }
+    }
+
     // Check cache first
     const cached = graphCacheRef.current.get(date);
     if (cached) {
@@ -449,7 +565,7 @@ export function TrainingDashboard({
         }
       }
     }, 150);
-  }, [today]);
+  }, [today, forwardSim, graphData]);
 
   const handleSave = useCallback(async () => {
     if (deltaWorkouts.length === 0 && editedSteps.size === 0) return;
