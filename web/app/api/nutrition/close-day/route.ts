@@ -43,7 +43,53 @@ export async function POST(req: NextRequest) {
     fiber: Math.round(Number(m.fiber)),
   };
 
-  // Update nutrition_day with actuals and mark closed
+  // ── Reconcile with actual activity data ──
+  let actualSteps = 0;
+  let actualRunCalories = 0;
+  let actualGymCalories = 0;
+
+  try {
+    // Actual steps from Garmin
+    const stepsRow = await sql`
+      SELECT total_steps FROM daily_health_summary WHERE date = ${date}
+    `;
+    actualSteps = Number(stepsRow[0]?.total_steps) || 0;
+
+    // Actual run calories from Garmin activities for this date
+    const runCalRow = await sql`
+      SELECT SUM((raw_json->>'calories')::float) AS total_run_cal
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'activity_detail'
+        AND (raw_json->>'startTimeLocal')::date = ${date}::date
+        AND raw_json->>'activityType' IN ('running', 'trail_running', 'treadmill_running')
+    `;
+    actualRunCalories = Math.round(Number(runCalRow[0]?.total_run_cal) || 0);
+
+    // Actual gym calories from workout_enrichment
+    const gymCalRow = await sql`
+      SELECT SUM(calories) AS total_gym_cal
+      FROM workout_enrichment
+      WHERE workout_date = ${date}
+    `;
+    actualGymCalories = Math.round(Number(gymCalRow[0]?.total_gym_cal) || 0);
+  } catch {
+    // Graceful — tables may not exist in demo
+  }
+
+  // Store reconciliation data in the plan JSONB
+  const existingPlanRow = await sql`SELECT plan FROM nutrition_day WHERE date = ${date}`;
+  const existingPlan = (existingPlanRow[0]?.plan as Record<string, unknown>) || {};
+  const reconciledPlan = {
+    ...existingPlan,
+    reconciled: {
+      actual_steps: actualSteps,
+      actual_run_calories: actualRunCalories,
+      actual_gym_calories: actualGymCalories,
+      reconciled_at: new Date().toISOString(),
+    },
+  };
+
+  // Update nutrition_day with actuals, reconciliation data, and mark closed
   await sql`
     UPDATE nutrition_day
     SET
@@ -52,6 +98,7 @@ export async function POST(req: NextRequest) {
       actual_carbs    = ${actual.carbs},
       actual_fat      = ${actual.fat},
       actual_fiber    = ${actual.fiber},
+      plan            = ${JSON.stringify(reconciledPlan)},
       status          = 'closed'
     WHERE date = ${date}
   `;
