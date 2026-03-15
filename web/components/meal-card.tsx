@@ -418,6 +418,7 @@ export function MealCard({
                       {Math.round(meal.calories)} kcal &middot;{" "}
                       {Math.round(meal.protein)}P &middot;{" "}
                       {Math.round(meal.carbs)}C &middot; {Math.round(meal.fat)}F
+                      {!disabled && <span className="text-[9px] ml-1.5 text-muted-foreground/60">20+ min</span>}
                     </div>
                   </div>
                   {!disabled && (
@@ -434,24 +435,37 @@ export function MealCard({
                 </div>
                 {itemsList.length > 0 && (
                   <div className="mt-1 space-y-0.5">
-                    {itemsList.map((item, idx) => {
-                      const ing = ingLookup.get(item.ingredient_id ?? "");
-                      const name = ing?.name ?? item.ingredient_id ?? "?";
-                      const rawG = item.grams ?? 0;
-                      const ratio = ing?.raw_to_cooked_ratio;
-                      const isRaw = ing?.is_raw && ratio && ratio > 0 && ratio !== 1;
-                      const cookedG = item.cooked_grams ?? (isRaw ? Math.round(rawG * (ratio as number)) : 0);
-                      return (
-                        <div key={idx} className="text-[10px] text-muted-foreground flex justify-between">
-                          <span>{name}</span>
-                          <span className="tabular-nums">
-                            {isRaw
-                              ? `${cookedG}g cooked (${rawG}g raw)`
-                              : `${rawG}g`}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {(() => {
+                      const sortedItems = [...itemsList].sort((a, b) => {
+                        const order: Record<string, number> = { vegetable: 0, protein: 1, carbs: 2, fruit: 3, dairy: 4, fat: 5, sauce: 6, supplement: 7 };
+                        const catA = ingLookup.get(a.ingredient_id ?? "")?.category ?? "zzz";
+                        const catB = ingLookup.get(b.ingredient_id ?? "")?.category ?? "zzz";
+                        return (order[catA] ?? 99) - (order[catB] ?? 99);
+                      });
+                      return sortedItems.map((item, idx) => {
+                        const ing = ingLookup.get(item.ingredient_id ?? "");
+                        const name = ing?.name ?? item.ingredient_id ?? "?";
+                        const rawG = item.grams ?? 0;
+                        const ratio = ing?.raw_to_cooked_ratio;
+                        const isRaw = ing?.is_raw && ratio && ratio > 0 && ratio !== 1;
+                        const cookedG = item.cooked_grams ?? (isRaw ? Math.round(rawG * (ratio as number)) : 0);
+                        return (
+                          <div key={idx} className="text-[10px] text-muted-foreground flex justify-between">
+                            <span>
+                              {name}
+                              {idx === 0 && ing?.category === "vegetable" && (
+                                <span className="text-[8px] text-green-600 ml-1">eat first</span>
+                              )}
+                            </span>
+                            <span className="tabular-nums">
+                              {isRaw
+                                ? `${cookedG}g cooked (${rawG}g raw)`
+                                : `${rawG}g`}
+                            </span>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </div>
@@ -467,6 +481,13 @@ export function MealCard({
               <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={handleSkip} disabled={skipping}>
                 Undo
               </Button>
+            </div>
+          )}
+
+          {/* Water preload reminder for unfilled slots */}
+          {!disabled && !skipped && meals.length === 0 && !showPicker && !selectedPreset && !showCompose && !composedPortions && (
+            <div className="text-[10px] text-blue-400 text-center py-0.5">
+              Drink 500ml water 30 min before eating
             </div>
           )}
 
