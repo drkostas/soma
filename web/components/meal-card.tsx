@@ -66,7 +66,11 @@ interface MealCardProps {
   presets: Preset[];
   date: string;
   disabled: boolean;
+  skipped?: boolean;
+  slotBudget?: Record<string, number> | null;
+  ingredients?: any[];
   onMealLogged: () => void;
+  onSlotSkipped?: () => void;
 }
 
 // Read pre-computed macro totals from the preset JSONB blob.
@@ -98,7 +102,11 @@ export function MealCard({
   presets,
   date,
   disabled,
+  skipped,
+  slotBudget,
+  ingredients,
   onMealLogged,
+  onSlotSkipped,
 }: MealCardProps) {
   const [expanded, setExpanded] = useState(meals.length > 0);
   const [showPicker, setShowPicker] = useState(false);
@@ -106,6 +114,23 @@ export function MealCard({
   const [multiplier, setMultiplier] = useState(1);
   const [logging, setLogging] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [skipping, setSkipping] = useState(false);
+
+  const handleSkip = async () => {
+    setSkipping(true);
+    try {
+      const res = await fetch("/api/nutrition/skip-slot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, slot }),
+      });
+      if (res.ok) {
+        onSlotSkipped?.();
+      }
+    } finally {
+      setSkipping(false);
+    }
+  };
 
   const slotLabel = SLOT_LABELS[slot] || slot;
   const slotIcon = SLOT_ICONS[slot] || "";
@@ -198,7 +223,7 @@ export function MealCard({
   return (
     <Card>
       <button
-        className="w-full flex items-center justify-between px-4 py-3 text-left"
+        className={`w-full flex items-center justify-between px-4 py-3 text-left ${skipped ? "opacity-50" : ""}`}
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-2">
@@ -261,16 +286,34 @@ export function MealCard({
             </div>
           ))}
 
-          {/* Preset picker or add button */}
-          {!disabled && !showPicker && !selectedPreset && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-muted-foreground"
-              onClick={() => setShowPicker(true)}
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Add meal
+          {/* Skipped state — show badge with undo */}
+          {!disabled && skipped && meals.length === 0 && (
+            <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+              <span className="text-xs text-muted-foreground italic">
+                Skipped — budget moved to other meals
+              </span>
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={handleSkip} disabled={skipping}>
+                Undo
+              </Button>
+            </div>
+          )}
+
+          {/* Empty slot — Add meal + Skip side by side */}
+          {!disabled && !skipped && !showPicker && !selectedPreset && meals.length === 0 && (
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" className="flex-1 text-muted-foreground" onClick={() => setShowPicker(true)}>
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add meal
+              </Button>
+              <Button variant="ghost" size="sm" className="text-muted-foreground text-xs" onClick={handleSkip} disabled={skipping}>
+                Skip
+              </Button>
+            </div>
+          )}
+
+          {/* Has meals — just Add meal button */}
+          {!disabled && !skipped && !showPicker && !selectedPreset && meals.length > 0 && (
+            <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setShowPicker(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add meal
             </Button>
           )}
 
