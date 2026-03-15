@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Dumbbell,
@@ -12,6 +12,8 @@ import {
   Moon,
   Cable,
   Music2,
+  UtensilsCrossed,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   Tooltip,
@@ -23,14 +25,15 @@ import { SyncButton } from "@/components/sync-button";
 import { SomaLogo } from "@/components/soma-logo";
 
 const navItems = [
-  { href: "/", icon: LayoutDashboard, label: "Overview", shortcut: "1" },
-  { href: "/running", icon: Footprints, label: "Running", shortcut: "2" },
-  { href: "/training", icon: Target, label: "Training", shortcut: "3" },
-  { href: "/workouts", icon: Dumbbell, label: "Gym", shortcut: "4" },
-  { href: "/activities", icon: Mountain, label: "Activities", shortcut: "5" },
-  { href: "/sleep", icon: Moon, label: "Sleep", shortcut: "6" },
-  { href: "/playlist", icon: Music2, label: "Playlist", shortcut: "7" },
-  { href: "/connections", icon: Cable, label: "Sync", shortcut: "8" },
+  { href: "/", icon: LayoutDashboard, label: "Overview", shortcut: "1", mobile: true },
+  { href: "/nutrition", icon: UtensilsCrossed, label: "Nutrition", shortcut: "0", mobile: true },
+  { href: "/running", icon: Footprints, label: "Running", shortcut: "2", mobile: true },
+  { href: "/training", icon: Target, label: "Training", shortcut: "3", mobile: false },
+  { href: "/workouts", icon: Dumbbell, label: "Gym", shortcut: "4", mobile: true },
+  { href: "/activities", icon: Mountain, label: "Activities", shortcut: "5", mobile: false },
+  { href: "/sleep", icon: Moon, label: "Sleep", shortcut: "6", mobile: true },
+  { href: "/playlist", icon: Music2, label: "Playlist", shortcut: "7", mobile: false },
+  { href: "/connections", icon: Cable, label: "Sync", shortcut: "8", mobile: false },
 ];
 
 export function Sidebar() {
@@ -114,21 +117,58 @@ export function Sidebar() {
         </nav>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-border bg-sidebar px-1 py-1 safe-area-pb">
-        {navItems.map((item) => {
+      {/* Mobile bottom nav — 5 primary items + More */}
+      <MobileNav pathname={pathname} />
+    </>
+  );
+}
+
+function MobileNav({ pathname }: { pathname: string }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const mobileItems = navItems.filter((i) => i.mobile);
+  const moreItems = navItems.filter((i) => !i.mobile);
+  const isMoreActive = moreItems.some((i) => pathname.startsWith(i.href));
+
+  return (
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-sidebar safe-area-pb">
+      {/* More menu overlay */}
+      {moreOpen && (
+        <div className="absolute bottom-full left-0 right-0 bg-sidebar border-t border-border p-2 space-y-1">
+          {moreItems.map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                onClick={() => setMoreOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm",
+                  isActive ? "text-primary bg-accent" : "text-muted-foreground"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Bottom bar */}
+      <div className="flex items-center justify-around px-1 py-1">
+        {mobileItems.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
           return (
             <Link
               key={item.label}
               href={item.href}
+              onClick={() => setMoreOpen(false)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] rounded-lg transition-colors",
-                isActive
-                  ? "text-primary"
-                  : "text-muted-foreground"
+                isActive ? "text-primary" : "text-muted-foreground"
               )}
             >
               <Icon className="h-5 w-5" />
@@ -136,7 +176,19 @@ export function Sidebar() {
             </Link>
           );
         })}
-      </nav>
-    </>
+
+        {/* More button */}
+        <button
+          onClick={() => setMoreOpen(!moreOpen)}
+          className={cn(
+            "flex flex-col items-center justify-center min-w-[44px] min-h-[44px] rounded-lg transition-colors",
+            isMoreActive || moreOpen ? "text-primary" : "text-muted-foreground"
+          )}
+        >
+          <MoreHorizontal className="h-5 w-5" />
+          <span className="text-[10px] mt-0.5 leading-none">More</span>
+        </button>
+      </div>
+    </nav>
   );
 }
