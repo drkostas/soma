@@ -8,6 +8,9 @@ import {
   type PortionResult,
   computeItemMacros,
   sumPortionMacros,
+  rawToCooked,
+  cookedToRaw,
+  hasRawCookedToggle,
 } from "@/lib/portion-solver";
 
 interface ComposeMealViewProps {
@@ -31,6 +34,8 @@ export function ComposeMealView({
   logging = false,
 }: ComposeMealViewProps) {
   const [portions, setPortions] = useState(initialPortions);
+  // Track which ingredients are in "cooked" display mode (key = ingredient_id)
+  const [cookedMode, setCookedMode] = useState<Set<string>>(new Set());
 
   const ingMap = useMemo(() => {
     const m = new Map<string, Ingredient>();
@@ -38,15 +43,34 @@ export function ComposeMealView({
     return m;
   }, [ingredients]);
 
+  const toggleCookedMode = (ingredientId: string) => {
+    setCookedMode((prev) => {
+      const next = new Set(prev);
+      if (next.has(ingredientId)) next.delete(ingredientId);
+      else next.add(ingredientId);
+      return next;
+    });
+  };
+
   const adjustGrams = (ingredientId: string, delta: number) => {
+    const ing = ingMap.get(ingredientId);
+    const isCooked = cookedMode.has(ingredientId);
+
     setPortions((prev) =>
       prev.map((p) => {
         if (p.ingredient_id !== ingredientId) return p;
-        const newGrams = Math.max(0, p.grams + delta);
-        const ing = ingMap.get(ingredientId);
-        if (!ing) return { ...p, grams: newGrams };
-        const macros = computeItemMacros(ing, newGrams);
-        return { ...p, grams: newGrams, ...macros };
+        let newRawGrams: number;
+        if (isCooked && ing && hasRawCookedToggle(ing)) {
+          // Delta is in cooked grams — convert to raw
+          const currentCooked = rawToCooked(ing, p.grams);
+          const newCooked = Math.max(0, currentCooked + delta);
+          newRawGrams = cookedToRaw(ing, newCooked);
+        } else {
+          newRawGrams = Math.max(0, p.grams + delta);
+        }
+        if (!ing) return { ...p, grams: newRawGrams };
+        const macros = computeItemMacros(ing, newRawGrams);
+        return { ...p, grams: newRawGrams, ...macros };
       }),
     );
   };
@@ -74,20 +98,33 @@ export function ComposeMealView({
       <div className="space-y-1.5">
         {portions.map((p) => {
           const ing = ingMap.get(p.ingredient_id);
+          const canToggle = ing && hasRawCookedToggle(ing);
+          const isCooked = cookedMode.has(p.ingredient_id);
+          const displayGrams = isCooked && ing ? rawToCooked(ing, p.grams) : p.grams;
           return (
-            <div key={p.ingredient_id} className="flex items-center justify-between text-sm">
-              <span className="truncate flex-1 min-w-0">{ing?.name ?? p.ingredient_id}</span>
-              <div className="flex items-center gap-1 shrink-0 ml-2">
-                <Button variant="ghost" size="icon" className="h-6 w-6"
-                  onClick={() => adjustGrams(p.ingredient_id, -p.increment)} disabled={p.grams <= 0}>
-                  <Minus className="h-3 w-3" />
-                </Button>
-                <span className="text-xs tabular-nums w-10 text-center font-medium">{p.grams}g</span>
-                <Button variant="ghost" size="icon" className="h-6 w-6"
-                  onClick={() => adjustGrams(p.ingredient_id, p.increment)}>
-                  <Plus className="h-3 w-3" />
-                </Button>
+            <div key={p.ingredient_id} className="text-sm">
+              <div className="flex items-center justify-between">
+                <span className="truncate flex-1 min-w-0">{ing?.name ?? p.ingredient_id}</span>
+                <div className="flex items-center gap-1 shrink-0 ml-2">
+                  <Button variant="ghost" size="icon" className="h-6 w-6"
+                    onClick={() => adjustGrams(p.ingredient_id, -p.increment)} disabled={p.grams <= 0}>
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <span className="text-xs tabular-nums w-10 text-center font-medium">{displayGrams}g</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6"
+                    onClick={() => adjustGrams(p.ingredient_id, p.increment)}>
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
+              {canToggle && (
+                <button
+                  className="text-[10px] text-muted-foreground ml-0.5 hover:text-foreground"
+                  onClick={() => toggleCookedMode(p.ingredient_id)}
+                >
+                  {isCooked ? `cooked (${p.grams}g raw)` : "switch to cooked weight"}
+                </button>
+              )}
             </div>
           );
         })}
