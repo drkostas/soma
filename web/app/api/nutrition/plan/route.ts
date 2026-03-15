@@ -86,6 +86,9 @@ export async function GET(req: NextRequest) {
 
   const plan = planRows[0] ?? null;
   const skippedSlots: string[] = plan?.skipped_slots ?? [];
+  const runEnabled: boolean = plan?.run_enabled ?? true;
+  const selectedWorkouts: string[] = plan?.selected_workouts ?? [];
+  let gymCalories = 0;
 
   // Sum consumed macros from meals + drinks
   let calories = 0,
@@ -136,6 +139,37 @@ export async function GET(req: NextRequest) {
       fiber: targetFiber,
     };
 
+    // ── Adjust targets based on activity selections ──
+    const baseRunCal = Number(plan.exercise_calories) || 0;
+    const runCal = runEnabled ? baseRunCal : 0;
+
+    if (selectedWorkouts.length > 0) {
+      const gymRows = await sql`
+        WITH ranked AS (
+          SELECT hevy_title, calories,
+                 ROW_NUMBER() OVER (PARTITION BY hevy_title ORDER BY workout_date DESC) as rn
+          FROM workout_enrichment
+          WHERE hevy_title = ANY(${selectedWorkouts})
+            AND calories IS NOT NULL AND calories > 0
+        )
+        SELECT ROUND(AVG(calories))::int AS avg_cal
+        FROM ranked WHERE rn <= 5
+      `;
+      gymCalories = Number(gymRows[0]?.avg_cal) || 0;
+    }
+
+    const activityCalories = runCal + gymCalories;
+    const calorieAdjustment = activityCalories - baseRunCal;
+    dayTargets.calories = Math.max(0, dayTargets.calories + calorieAdjustment);
+
+    // If no run, shift 10% of carb calories to fat
+    if (!runEnabled && dayTargets.carbs > 0) {
+      const carbShift = Math.round(dayTargets.carbs * 0.1);
+      const fatEquiv = Math.round((carbShift * 4) / 9);
+      dayTargets.carbs -= carbShift;
+      dayTargets.fat += fatEquiv;
+    }
+
     remaining = {
       calories: dayTargets.calories - consumed.calories,
       protein: Math.round(dayTargets.protein - consumed.protein),
@@ -170,5 +204,8 @@ export async function GET(req: NextRequest) {
     remaining,
     slotBudgets,
     skippedSlots,
+    runEnabled,
+    selectedWorkouts,
+    gymCalories,
   });
 }
