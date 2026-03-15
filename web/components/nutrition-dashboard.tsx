@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -164,6 +164,9 @@ export function NutritionDashboard({
   const [gymCalories, setGymCalories] = useState<number>(0);
   const [skippedSlots, setSkippedSlots] = useState<string[]>(initialPlan?.skipped_slots ?? []);
   const [slotBudgets, setSlotBudgets] = useState<Record<string, Record<string, number>> | null>(null);
+  const [budgetExpanded, setBudgetExpanded] = useState(false);
+  const [breakdown, setBreakdown] = useState<any>(null);
+  const [trend7d, setTrend7d] = useState<any>(null);
 
   const isClosed = plan?.status === "closed";
 
@@ -180,6 +183,8 @@ export function NutritionDashboard({
       setGymCalories(data.gymCalories ?? 0);
       setSkippedSlots(data.skippedSlots ?? []);
       if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
+      if (data.breakdown) setBreakdown(data.breakdown);
+      if (data.trend7d) setTrend7d(data.trend7d);
     } catch {
       // silent refresh failure
     }
@@ -294,59 +299,173 @@ export function NutritionDashboard({
       {targetCal > 0 ? (
         <Card>
           <CardContent className="pt-4 space-y-3">
+            {/* Main calories display */}
             <div className="text-center">
-              <div
-                className={`text-4xl font-bold tabular-nums ${
-                  remainingCal < 0 ? "text-muted-foreground" : ""
-                }`}
-              >
+              <div className={`text-4xl font-bold tabular-nums ${remainingCal < 0 ? "text-muted-foreground" : ""}`}>
                 {Math.round(remainingCal)}
               </div>
-              <div className="text-xs text-muted-foreground">
-                calories remaining
-              </div>
+              <div className="text-xs text-muted-foreground">calories remaining</div>
             </div>
-            <Progress
-              value={Math.min(100, (consumedCal / targetCal) * 100)}
-              className="h-3"
-            />
+            <Progress value={Math.min(100, (consumedCal / targetCal) * 100)} className="h-3" />
             <div className="text-xs text-center text-muted-foreground">
               {Math.round(consumedCal)} / {Math.round(targetCal)} kcal
             </div>
-            {plan && (
-              <div className="text-xs text-muted-foreground space-y-0.5 text-center">
-                <div>BMR: {Math.round((Number(plan?.tdee_used) || 0) - (Number(plan?.exercise_calories) || 0) - (Number(plan?.step_calories) || 0))} kcal</div>
-                <div>Steps ({(Number(plan?.step_goal) || 10000).toLocaleString()}): +{Math.round(Number(plan?.step_calories) || 0)} kcal</div>
-                {Number(plan?.exercise_calories) > 0 && <div>Workout: +{Math.round(Number(plan?.exercise_calories))} kcal</div>}
-                <div>Deficit: -{Math.round(Number(plan?.deficit_used) || 0)} kcal</div>
+
+            {/* One-line equation summary (always visible) */}
+            {breakdown && (
+              <div className="text-[10px] text-muted-foreground text-center">
+                {breakdown.bmr} BMR
+                {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} steps`}
+                {breakdown.runCalories > 0 && ` + ${breakdown.runCalories} run`}
+                {breakdown.gymCalories > 0 && ` + ${breakdown.gymCalories} gym`}
+                {breakdown.deficit > 0 && ` \u2212 ${breakdown.deficit} deficit`}
+                {` = ${breakdown.targetIntake}`}
               </div>
             )}
+
+            {/* 7-day trend summary (always visible) */}
+            {trend7d && trend7d.closedDays > 0 && (
+              <div className={`text-xs text-center font-medium ${
+                trend7d.totalDelta < 0 ? "text-green-500" : trend7d.totalDelta > 0 ? "text-amber-500" : "text-muted-foreground"
+              }`}>
+                7d: {trend7d.totalDelta > 0 ? "+" : ""}{trend7d.totalDelta} kcal ({trend7d.closedDays}d avg: {trend7d.closedDays > 0 ? Math.round(trend7d.totalDelta / trend7d.closedDays) : 0})
+              </div>
+            )}
+
+            {/* Expand/collapse toggle */}
+            <button
+              className="w-full text-[10px] text-muted-foreground text-center hover:text-foreground transition-colors"
+              onClick={() => setBudgetExpanded(!budgetExpanded)}
+            >
+              {budgetExpanded ? "\u25B2 hide details" : "\u25BC show details"}
+            </button>
+
+            {/* Expanded breakdown */}
+            {budgetExpanded && breakdown && (
+              <div className="space-y-3 border-t pt-3">
+                {/* Calorie equation breakdown */}
+                <div className="space-y-1">
+                  <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Calorie Breakdown</div>
+                  <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-xs">
+                    <span className="text-muted-foreground">Passive burn (BMR)</span>
+                    <span className="tabular-nums text-right">{breakdown.bmr}</span>
+
+                    <span className="text-muted-foreground">
+                      Steps ({(breakdown.stepGoal || 10000).toLocaleString()} goal)
+                      {breakdown.runStepEstimate > 0 && (
+                        <span className="text-[10px]"> excl. ~{breakdown.runStepEstimate} run steps</span>
+                      )}
+                    </span>
+                    <span className="tabular-nums text-right text-green-500">+{breakdown.stepCalories}</span>
+
+                    {breakdown.runCalories > 0 && (
+                      <>
+                        <span className="text-muted-foreground">
+                          Run ({breakdown.runDistanceKm}km)
+                        </span>
+                        <span className="tabular-nums text-right text-green-500">+{breakdown.runCalories}</span>
+                      </>
+                    )}
+
+                    {breakdown.gymCalories > 0 && (
+                      <>
+                        <span className="text-muted-foreground">
+                          Gym ({breakdown.selectedWorkouts?.join(", ")})
+                        </span>
+                        <span className="tabular-nums text-right text-green-500">+{breakdown.gymCalories}</span>
+                      </>
+                    )}
+
+                    <span className="text-muted-foreground font-medium border-t pt-1">Total burn</span>
+                    <span className="tabular-nums text-right font-medium border-t pt-1">{breakdown.totalBurn}</span>
+
+                    <span className="text-muted-foreground">Deficit goal</span>
+                    <span className="tabular-nums text-right text-rose-500">&minus;{breakdown.deficit}</span>
+
+                    <span className="font-medium border-t pt-1">Target intake</span>
+                    <span className="tabular-nums text-right font-bold border-t pt-1">{breakdown.targetIntake}</span>
+                  </div>
+                </div>
+
+                {/* Per-slot budget */}
+                {slotBudgets && (
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Per-Meal Budget</div>
+                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
+                      <span className="text-muted-foreground text-[10px]">Slot</span>
+                      <span className="text-muted-foreground text-[10px] text-right">kcal</span>
+                      <span className="text-muted-foreground text-[10px] text-right">P</span>
+                      <span className="text-muted-foreground text-[10px] text-right">C</span>
+                      <span className="text-muted-foreground text-[10px] text-right">F</span>
+                      {Object.entries(slotBudgets).map(([slot, macros]: [string, any]) => (
+                        <React.Fragment key={slot}>
+                          <span className={skippedSlots.includes(slot) ? "text-muted-foreground/50 line-through" : ""}>
+                            {slot.replace("_", "-")}
+                          </span>
+                          <span className="tabular-nums text-right">{Math.round(macros.calories)}</span>
+                          <span className="tabular-nums text-right text-blue-500">{Math.round(macros.protein)}</span>
+                          <span className="tabular-nums text-right text-amber-500">{Math.round(macros.carbs)}</span>
+                          <span className="tabular-nums text-right text-rose-500">{Math.round(macros.fat)}</span>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 7-day trend table */}
+                {trend7d && trend7d.days.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">7-Day Trend</div>
+                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
+                      <span className="text-muted-foreground text-[10px]">Date</span>
+                      <span className="text-muted-foreground text-[10px] text-right">Target</span>
+                      <span className="text-muted-foreground text-[10px] text-right">Actual</span>
+                      <span className="text-muted-foreground text-[10px] text-right">+/&minus;</span>
+                      {trend7d.days.map((d: any) => {
+                        const dayLabel = new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+                        return (
+                          <React.Fragment key={d.date}>
+                            <span>{dayLabel}</span>
+                            <span className="tabular-nums text-right">{d.target || "\u2013"}</span>
+                            <span className="tabular-nums text-right">{d.closed ? d.actual : "\u2013"}</span>
+                            <span className={`tabular-nums text-right ${
+                              d.delta == null ? "text-muted-foreground" : d.delta < 0 ? "text-green-500" : d.delta > 0 ? "text-amber-500" : ""
+                            }`}>
+                              {d.delta != null ? (d.delta > 0 ? `+${d.delta}` : d.delta) : "\u2013"}
+                            </span>
+                          </React.Fragment>
+                        );
+                      })}
+                      {/* Total row */}
+                      {trend7d.closedDays > 0 && (
+                        <React.Fragment key="trend-total">
+                          <span className="font-medium border-t pt-1">Total</span>
+                          <span className="border-t pt-1" />
+                          <span className="border-t pt-1" />
+                          <span className={`tabular-nums text-right font-bold border-t pt-1 ${
+                            trend7d.totalDelta < 0 ? "text-green-500" : trend7d.totalDelta > 0 ? "text-amber-500" : ""
+                          }`}>
+                            {trend7d.totalDelta > 0 ? `+${trend7d.totalDelta}` : trend7d.totalDelta}
+                          </span>
+                        </React.Fragment>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Macro bars (always visible) */}
             <div className="grid gap-2 pt-1">
-              <MacroBar
-                label="Protein"
-                current={consumedProtein}
-                target={targetProtein}
-                color="[&>[data-slot=progress-indicator]]:bg-blue-500"
-              />
-              <MacroBar
-                label="Carbs"
-                current={consumedCarbs}
-                target={targetCarbs}
-                color="[&>[data-slot=progress-indicator]]:bg-amber-500"
-              />
-              <MacroBar
-                label="Fat"
-                current={consumedFat}
-                target={targetFat}
-                color="[&>[data-slot=progress-indicator]]:bg-rose-500"
-              />
+              <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
+                color="[&>[data-slot=progress-indicator]]:bg-blue-500" />
+              <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
+                color="[&>[data-slot=progress-indicator]]:bg-amber-500" />
+              <MacroBar label="Fat" current={consumedFat} target={targetFat}
+                color="[&>[data-slot=progress-indicator]]:bg-rose-500" />
               {targetFiber > 0 && (
-                <MacroBar
-                  label="Fiber"
-                  current={consumedFiber}
-                  target={targetFiber}
-                  color="[&>[data-slot=progress-indicator]]:bg-green-500"
-                />
+                <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
+                  color="[&>[data-slot=progress-indicator]]:bg-green-500" />
               )}
             </div>
           </CardContent>
