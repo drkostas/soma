@@ -372,7 +372,9 @@ export function NutritionDashboard({
                     <span className="tabular-nums text-right">{breakdown.bmr}</span>
 
                     <span className="text-muted-foreground">
-                      Steps ({(breakdown.expectedSteps || breakdown.stepGoal || 10000).toLocaleString()}{breakdown.expectedSteps && breakdown.expectedSteps !== breakdown.stepGoal ? ` / ${(breakdown.stepGoal || 10000).toLocaleString()} goal` : " goal"})
+                      Steps ({breakdown.actualSteps !== null && breakdown.actualSteps !== undefined
+                        ? `${breakdown.actualSteps.toLocaleString()} actual`
+                        : `${(breakdown.expectedSteps || breakdown.stepGoal || 10000).toLocaleString()} expected`})
                       {breakdown.runStepEstimate > 0 && (
                         <span className="text-[10px]"> excl. ~{breakdown.runStepEstimate} run steps</span>
                       )}
