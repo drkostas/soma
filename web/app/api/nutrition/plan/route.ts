@@ -166,27 +166,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const activityCalories = runCal + gymCalories;
-    const calorieAdjustment = activityCalories - baseRunCal;
-    dayTargets.calories = Math.max(0, dayTargets.calories + calorieAdjustment);
+    // Note: dayTargets.calories will be fully recomputed below from components
 
-    // If no run, shift 10% of carb calories to fat
-    if (!runEnabled && dayTargets.carbs > 0) {
-      const carbShift = Math.round(dayTargets.carbs * 0.1);
-      const fatEquiv = Math.round((carbShift * 4) / 9);
-      dayTargets.carbs -= carbShift;
-      dayTargets.fat += fatEquiv;
-    }
+    // ── Dynamic step calories: recompute from weight + step formula ──
+    const profileRows = await sql`SELECT weight_kg, step_goal FROM nutrition_profile WHERE id = 1`;
+    const weightKg = Number(profileRows[0]?.weight_kg) || 79.2;
 
-    // ── Step dedup: subtract run steps from step calories when run is ON ──
-    const stepCaloriesRaw = Number(plan.step_calories) || 0;
     let stepGoal = Number(plan.step_goal) || 0;
     if (!stepGoal || stepGoal === 10000) {
-      // Fall back to profile step_goal (which may have the real Garmin goal)
-      const profileStepRows = await sql`
-        SELECT step_goal FROM nutrition_profile WHERE id = 1
-      `;
-      const profileStepGoal = Number(profileStepRows[0]?.step_goal) || 0;
+      const profileStepGoal = Number(profileRows[0]?.step_goal) || 0;
       if (profileStepGoal && profileStepGoal !== 10000) {
         stepGoal = profileStepGoal;
       } else {
@@ -194,34 +182,44 @@ export async function GET(req: NextRequest) {
       }
     }
     const expectedSteps = Number(plan.expected_steps) || stepGoal;
-    // Scale step calories to expected steps
-    const stepCalPerStep = stepGoal > 0 ? stepCaloriesRaw / stepGoal : 0;
-    let stepCalories = Math.round(expectedSteps * stepCalPerStep);
-    let adjustedStepCalories = stepCalories;
+
+    // Recompute step calories from scratch using weight-based formula
+    const calPerStep = 0.0005 * weightKg;
+    const rawStepCalories = Math.round(expectedSteps * calPerStep);
+
+    let adjustedStepCalories = rawStepCalories;
     let runStepEstimate = 0;
     let runDistanceKm = 0;
 
-    // Adjust base target calories for expected steps vs step_goal difference
-    const stepCalDelta = stepCalories - (Number(plan.step_calories) || 0);
-    dayTargets.calories = Math.max(0, dayTargets.calories + stepCalDelta);
+    // Fetch run distance for step dedup
+    const runDistanceRows = await sql`
+      SELECT target_distance_km FROM training_plan_day d
+      JOIN training_plan p ON d.plan_id = p.id
+      WHERE p.status = 'active' AND d.day_date = ${date}
+      LIMIT 1
+    `;
+    runDistanceKm = Number(runDistanceRows[0]?.target_distance_km) || 0;
 
-    if (runEnabled && plan.exercise_calories) {
-      // Estimate run steps: ~1300 steps per km
-      const runDistanceRows = await sql`
-        SELECT target_distance_km FROM training_plan_day d
-        JOIN training_plan p ON d.plan_id = p.id
-        WHERE p.status = 'active' AND d.day_date = ${date}
-        LIMIT 1
-      `;
-      runDistanceKm = Number(runDistanceRows[0]?.target_distance_km) || 0;
+    if (runEnabled && runDistanceKm > 0) {
       runStepEstimate = Math.round(runDistanceKm * 1300);
+      adjustedStepCalories = Math.round(Math.max(0, expectedSteps - runStepEstimate) * calPerStep);
+    }
 
-      if (stepGoal > 0 && runStepEstimate > 0) {
-        const runStepCal = Math.round(runStepEstimate * stepCalPerStep);
-        adjustedStepCalories = Math.max(0, stepCalories - runStepCal);
-        // Adjust target calories: remove the double-counted run step calories
-        dayTargets.calories = Math.max(0, dayTargets.calories - runStepCal);
-      }
+    // Recompute target from components: BMR + adjustedSteps + runCal + gymCal - deficit
+    const baseBmr = Number(plan.tdee_used) - Number(plan.step_calories || 0) - Number(plan.exercise_calories || 0);
+    dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + runCal + gymCalories - (Number(plan.deficit_used) || 0));
+
+    // Recompute macros to match adjusted target
+    dayTargets.protein = Math.round(weightKg * 2.2);
+    dayTargets.fat = Math.round(weightKg * 0.8);
+    dayTargets.carbs = Math.round(Math.max(0, (dayTargets.calories - dayTargets.protein * 4 - dayTargets.fat * 9) / 4));
+
+    // If no run, shift 10% of carb calories to fat
+    if (!runEnabled && dayTargets.carbs > 0) {
+      const carbShift = Math.round(dayTargets.carbs * 0.1);
+      const fatEquiv = Math.round((carbShift * 4) / 9);
+      dayTargets.carbs -= carbShift;
+      dayTargets.fat += fatEquiv;
     }
 
     remaining = {
@@ -250,11 +248,10 @@ export async function GET(req: NextRequest) {
     slotBudgets = redistributeRemaining(dayTargets, eatenBySlot, skippedSlots);
 
     // ── Build observability breakdown ──
-    const planObj = plan.plan as Record<string, unknown> | null;
     breakdown = {
-      bmr: Math.round(Number((planObj as Record<string, unknown>)?.bmr) || Number(plan.tdee_used) || 2000),
+      bmr: Math.round(baseBmr),
       stepCalories: adjustedStepCalories,
-      stepCaloriesRaw: stepCaloriesRaw,
+      stepCaloriesRaw: rawStepCalories,
       stepGoal,
       expectedSteps,
       minSteps: runEnabled ? runStepEstimate : 0,
