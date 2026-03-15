@@ -216,6 +216,17 @@ export async function GET(req: NextRequest) {
     }
     const expectedSteps = Number(plan.expected_steps) || stepGoal;
 
+    // Actual steps from Garmin
+    let actualSteps: number | null = null;
+    try {
+      const stepsRow = await sql`
+        SELECT total_steps FROM daily_health_summary WHERE date = ${date}
+      `;
+      if (stepsRow[0]?.total_steps) {
+        actualSteps = Number(stepsRow[0].total_steps);
+      }
+    } catch {}
+
     // Recompute step calories from scratch using weight-based formula
     const calPerStep = 0.0005 * weightKg;
     const rawStepCalories = Math.round(expectedSteps * calPerStep);
@@ -320,6 +331,7 @@ export async function GET(req: NextRequest) {
       stepCaloriesRaw: rawStepCalories,
       stepGoal,
       expectedSteps,
+      actualSteps,
       minSteps: runEnabled ? runStepEstimate : 0,
       runStepEstimate,
       runCalories: effectiveRunCal,
