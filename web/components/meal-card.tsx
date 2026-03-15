@@ -4,6 +4,9 @@ import { useState, useMemo } from "react";
 import { Trash2, Plus, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { IngredientPicker } from "@/components/ingredient-picker";
+import { ComposeMealView } from "@/components/compose-meal-view";
+import { type Ingredient, type PortionResult, solvePortions } from "@/lib/portion-solver";
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -115,6 +118,9 @@ export function MealCard({
   const [logging, setLogging] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [skipping, setSkipping] = useState(false);
+  const [showCompose, setShowCompose] = useState(false);
+  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
+  const [composedPortions, setComposedPortions] = useState<PortionResult[] | null>(null);
 
   const handleSkip = async () => {
     setSkipping(true);
@@ -220,6 +226,64 @@ export function MealCard({
     setMultiplier(1);
   };
 
+  const handleToggleIngredient = (id: string) => {
+    setSelectedIngredients((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleIngredientsDone = () => {
+    if (!ingredients?.length || selectedIngredients.size === 0) return;
+    const selected = (ingredients as Ingredient[]).filter((i) =>
+      selectedIngredients.has(i.id),
+    );
+    const budget = slotBudget
+      ? {
+          calories: Number(slotBudget.calories) || 500,
+          protein: Number(slotBudget.protein) || 40,
+          carbs: Number(slotBudget.carbs) || 50,
+          fat: Number(slotBudget.fat) || 20,
+        }
+      : { calories: 500, protein: 40, carbs: 50, fat: 20 };
+    const portions = solvePortions(selected, budget);
+    setComposedPortions(portions);
+  };
+
+  const handleComposeLog = async (
+    items: { ingredient_id: string; grams: number; calories: number; protein: number; carbs: number; fat: number; fiber: number }[],
+    totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number },
+  ) => {
+    setLogging(true);
+    try {
+      const res = await fetch("/api/nutrition/log-meal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          meal_slot: slot,
+          items,
+        }),
+      });
+      if (res.ok) {
+        setComposedPortions(null);
+        setSelectedIngredients(new Set());
+        setShowCompose(false);
+        onMealLogged();
+      }
+    } finally {
+      setLogging(false);
+    }
+  };
+
+  const handleComposeCancel = () => {
+    setComposedPortions(null);
+    setSelectedIngredients(new Set());
+    setShowCompose(false);
+  };
+
   return (
     <Card>
       <button
@@ -299,7 +363,7 @@ export function MealCard({
           )}
 
           {/* Empty slot — Add meal + Skip side by side */}
-          {!disabled && !skipped && !showPicker && !selectedPreset && meals.length === 0 && (
+          {!disabled && !skipped && !showPicker && !selectedPreset && !showCompose && !composedPortions && meals.length === 0 && (
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" className="flex-1 text-muted-foreground" onClick={() => setShowPicker(true)}>
                 <Plus className="h-3.5 w-3.5 mr-1" /> Add meal
@@ -311,7 +375,7 @@ export function MealCard({
           )}
 
           {/* Has meals — just Add meal button */}
-          {!disabled && !skipped && !showPicker && !selectedPreset && meals.length > 0 && (
+          {!disabled && !skipped && !showPicker && !selectedPreset && !showCompose && !composedPortions && meals.length > 0 && (
             <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setShowPicker(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" /> Add meal
             </Button>
@@ -352,6 +416,22 @@ export function MealCard({
                   </span>
                 )}
               </div>
+              {ingredients && ingredients.length > 0 && (
+                <>
+                  <div className="w-full border-t my-1.5" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7 w-full"
+                    onClick={() => {
+                      setShowPicker(false);
+                      setShowCompose(true);
+                    }}
+                  >
+                    Compose custom meal...
+                  </Button>
+                </>
+              )}
             </div>
           )}
 
@@ -437,6 +517,29 @@ export function MealCard({
                 </Button>
               </div>
             </div>
+          )}
+
+          {/* Ingredient picker (compose step 1) */}
+          {!disabled && showCompose && !composedPortions && (
+            <IngredientPicker
+              ingredients={(ingredients ?? []) as Ingredient[]}
+              selected={selectedIngredients}
+              onToggle={handleToggleIngredient}
+              onDone={handleIngredientsDone}
+              onCancel={handleComposeCancel}
+            />
+          )}
+
+          {/* Compose meal view (compose step 2) */}
+          {!disabled && composedPortions && (
+            <ComposeMealView
+              portions={composedPortions}
+              ingredients={(ingredients ?? []) as Ingredient[]}
+              budget={slotBudget ?? null}
+              onLog={handleComposeLog}
+              onCancel={handleComposeCancel}
+              logging={logging}
+            />
           )}
         </CardContent>
       )}
