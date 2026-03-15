@@ -21,6 +21,7 @@ const MACROS = ["calories", "protein", "carbs", "fat", "fiber"] as const;
 function redistributeRemaining(
   dayTargets: Record<string, number>,
   eatenBySlot: Record<string, Record<string, number>>,
+  skippedSlots: string[] = [],
 ): Record<string, Record<string, number>> {
   const totalEaten: Record<string, number> = {};
   for (const m of MACROS) totalEaten[m] = 0;
@@ -29,6 +30,13 @@ function redistributeRemaining(
   for (const [slot, vals] of Object.entries(eatenBySlot)) {
     filledSlots.add(slot);
     for (const m of MACROS) totalEaten[m] += vals[m] ?? 0;
+  }
+
+  // Treat skipped slots as filled (zero macros) so their budget redistributes
+  for (const s of skippedSlots) {
+    if (!filledSlots.has(s)) {
+      filledSlots.add(s);
+    }
   }
 
   const remaining: Record<string, number> = {};
@@ -77,6 +85,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   const plan = planRows[0] ?? null;
+  const skippedSlots: string[] = plan?.skipped_slots ?? [];
 
   // Sum consumed macros from meals + drinks
   let calories = 0,
@@ -150,7 +159,7 @@ export async function GET(req: NextRequest) {
       eatenBySlot[slot].fiber += Number(m.fiber) || 0;
     }
 
-    slotBudgets = redistributeRemaining(dayTargets, eatenBySlot);
+    slotBudgets = redistributeRemaining(dayTargets, eatenBySlot, skippedSlots);
   }
 
   return NextResponse.json({
@@ -160,5 +169,6 @@ export async function GET(req: NextRequest) {
     consumed,
     remaining,
     slotBudgets,
+    skippedSlots,
   });
 }
