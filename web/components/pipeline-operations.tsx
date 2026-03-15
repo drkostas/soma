@@ -153,18 +153,18 @@ function DataCoverageTab({ dataCounts }: { dataCounts: DataCount[] }) {
       </CardHeader>
       <CardContent>
         <div className="space-y-1">
-          <div className="grid grid-cols-4 text-xs text-muted-foreground font-medium py-2 border-b border-border">
-            <span>Table</span>
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 text-xs text-muted-foreground font-medium py-2 border-b border-border">
+            <span className="truncate">Table</span>
             <span className="text-right">Records</span>
-            <span className="text-right">Unique Items</span>
-            <span className="text-right">Endpoints</span>
+            <span className="text-right hidden sm:block">Unique</span>
+            <span className="text-right hidden sm:block">Endpoints</span>
           </div>
           {dataCounts.map((d) => (
             <div
               key={d.table_name}
-              className="grid grid-cols-4 text-sm py-2 border-b border-border/50 last:border-0"
+              className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 text-sm py-2 border-b border-border/50 last:border-0"
             >
-              <span className="font-medium">{d.table_name}</span>
+              <span className="font-medium truncate min-w-0">{d.table_name}</span>
               <span className="text-right font-mono">
                 {Number(d.record_count).toLocaleString()}
               </span>
@@ -195,26 +195,26 @@ function SyncRunsTab({ syncLogs }: { syncLogs: SyncLogEntry[] }) {
     <Card>
       <CardContent className="pt-6">
         <div className="space-y-1">
-          <div className="grid grid-cols-4 text-xs text-muted-foreground font-medium py-2 border-b border-border">
-            <span>Type</span>
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 text-xs text-muted-foreground font-medium py-2 border-b border-border">
+            <span className="truncate">Type</span>
             <span>Status</span>
-            <span className="text-right">Records</span>
+            <span className="text-right hidden sm:block">Records</span>
             <span className="text-right">Time</span>
           </div>
           {syncLogs.map((log) => (
             <div
               key={log.id}
-              className="grid grid-cols-4 text-sm py-2 border-b border-border/50 last:border-0 hover:bg-accent/10 -mx-2 px-2 rounded transition-colors"
+              className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 text-sm py-2 border-b border-border/50 last:border-0 hover:bg-accent/10 -mx-2 px-2 rounded transition-colors"
             >
-              <span className="font-medium">{log.sync_type}</span>
+              <span className="font-medium truncate min-w-0">{log.sync_type}</span>
               <span>
                 <BackfillStatusBadge status={log.status} />
               </span>
-              <span className="text-right font-mono">
+              <span className="text-right font-mono hidden sm:block">
                 {log.records_synced}
               </span>
-              <span className="text-right font-mono text-xs text-muted-foreground">
-                {new Date(log.started_at).toLocaleString()}
+              <span className="text-right font-mono text-xs text-muted-foreground whitespace-nowrap">
+                {new Date(log.started_at).toLocaleTimeString()}
               </span>
             </div>
           ))}
