@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { IngredientPicker } from "@/components/ingredient-picker";
 import { ComposeMealView } from "@/components/compose-meal-view";
+import { MealDetailModal } from "@/components/meal-detail-modal";
 import { type Ingredient, type PortionResult, solvePortions, computeItemMacros } from "@/lib/portion-solver";
 
 // ── Constants ─────────────────────────────────────────────────
@@ -126,6 +127,7 @@ export function MealCard({
   const [lastComposedItems, setLastComposedItems] = useState<any[] | null>(null);
   const [lastComposedTotals, setLastComposedTotals] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
+  const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
 
   const handleSkip = async () => {
     setSkipping(true);
@@ -402,7 +404,8 @@ export function MealCard({
             return (
               <div
                 key={meal.id}
-                className="rounded-md bg-muted/50 px-3 py-2 text-sm"
+                className="rounded-md bg-muted/50 px-3 py-2 text-sm cursor-pointer hover:bg-muted/70 transition-colors"
+                onClick={() => setDetailMeal(meal)}
               >
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
@@ -426,7 +429,7 @@ export function MealCard({
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 shrink-0"
-                      onClick={() => handleDelete(meal.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(meal.id); }}
                       disabled={deleting === meal.id}
                     >
                       <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -706,6 +709,42 @@ export function MealCard({
               </div>
             </div>
           )}
+
+          {/* Meal detail modal */}
+          <MealDetailModal
+            open={detailMeal !== null}
+            onClose={() => setDetailMeal(null)}
+            meal={detailMeal}
+            ingredients={(ingredients ?? []) as Ingredient[]}
+            onEdit={detailMeal && !disabled ? () => {
+              // Load meal into compose view for editing
+              const itemsList: { ingredient_id: string; grams: number }[] =
+                Array.isArray(detailMeal.items) ? detailMeal.items : (detailMeal.items?.items ?? []);
+              const ids = new Set(itemsList.map((i) => i.ingredient_id));
+              setSelectedIngredients(ids);
+              // Create portions from the meal's items
+              const ingLookup = new Map(
+                ((ingredients ?? []) as Ingredient[]).map((i) => [i.id, i]),
+              );
+              const portions: PortionResult[] = itemsList
+                .map((item) => {
+                  const ing = ingLookup.get(item.ingredient_id);
+                  if (!ing) return null;
+                  const macros = computeItemMacros(ing, item.grams);
+                  return {
+                    ingredient_id: item.ingredient_id,
+                    grams: item.grams,
+                    increment: { protein: 25, carbs: 10, vegetable: 25, fat: 5, dairy: 25, sauce: 10, fruit: 25, supplement: 5 }[ing.category] ?? 10,
+                    ...macros,
+                  };
+                })
+                .filter((p): p is PortionResult => p !== null);
+              setComposedPortions(portions);
+              // Delete the old meal so the new composed one replaces it
+              handleDelete(detailMeal.id);
+              setDetailMeal(null);
+            } : undefined}
+          />
         </CardContent>
       )}
     </Card>
