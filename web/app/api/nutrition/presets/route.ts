@@ -38,19 +38,27 @@ export async function POST(req: NextRequest) {
     fiber: totals.fiber,
   };
 
-  const tags = slot ? [slot] : [];
+  // Build a PG-compatible tags literal: '{breakfast}' or '{}'
+  const tagsLiteral = slot ? `{${slot}}` : "{}";
+  const mealSlot = slot || null;
   const presetId = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_${Date.now()}`;
+  const itemsJson = JSON.stringify(itemsBlob);
 
-  const result = await sql`
-    INSERT INTO preset_meals (id, name, items, tags, meal_slot, total_calories, total_protein, total_carbs, total_fat, total_fiber, is_system)
-    VALUES (
-      ${presetId}, ${name}, ${JSON.stringify(itemsBlob)}, ${tags}, ${slot},
-      ${Math.round(totals.calories)}, ${Math.round(totals.protein)},
-      ${Math.round(totals.carbs)}, ${Math.round(totals.fat)},
-      ${Math.round(totals.fiber)}, false
-    )
-    RETURNING id
-  `;
+  try {
+    const result = await sql`
+      INSERT INTO preset_meals (id, name, items, tags, meal_slot, total_calories, total_protein, total_carbs, total_fat, total_fiber, is_system)
+      VALUES (
+        ${presetId}, ${name}, ${itemsJson}::jsonb, ${tagsLiteral}::text[], ${mealSlot},
+        ${Math.round(totals.calories)}, ${Math.round(totals.protein)},
+        ${Math.round(totals.carbs)}, ${Math.round(totals.fat)},
+        ${Math.round(totals.fiber)}, false
+      )
+      RETURNING id
+    `;
 
-  return NextResponse.json({ id: result[0].id });
+    return NextResponse.json({ id: result[0].id });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: "Failed to save preset", detail: msg }, { status: 500 });
+  }
 }

@@ -144,6 +144,8 @@ export async function GET(req: NextRequest) {
     const baseRunCal = Number(plan.exercise_calories) || 0;
     const runCal = runEnabled ? baseRunCal : 0;
 
+    let gymBreakdown: { title: string; calories: number }[] = [];
+
     if (selectedWorkouts.length > 0) {
       const gymRows = await sql`
         WITH ranked AS (
@@ -153,10 +155,15 @@ export async function GET(req: NextRequest) {
           WHERE hevy_title = ANY(${selectedWorkouts})
             AND calories IS NOT NULL AND calories > 0
         )
-        SELECT ROUND(AVG(calories))::int AS avg_cal
+        SELECT hevy_title, ROUND(AVG(calories))::int AS avg_cal
         FROM ranked WHERE rn <= 5
+        GROUP BY hevy_title
       `;
-      gymCalories = Number(gymRows[0]?.avg_cal) || 0;
+      for (const r of gymRows) {
+        const cal = Number(r.avg_cal) || 0;
+        gymCalories += cal;
+        gymBreakdown.push({ title: r.hevy_title as string, calories: cal });
+      }
     }
 
     const activityCalories = runCal + gymCalories;
@@ -173,7 +180,19 @@ export async function GET(req: NextRequest) {
 
     // ── Step dedup: subtract run steps from step calories when run is ON ──
     const stepCaloriesRaw = Number(plan.step_calories) || 0;
-    const stepGoal = Number(plan.step_goal) || 10000;
+    let stepGoal = Number(plan.step_goal) || 0;
+    if (!stepGoal || stepGoal === 10000) {
+      // Fall back to profile step_goal (which may have the real Garmin goal)
+      const profileStepRows = await sql`
+        SELECT step_goal FROM nutrition_profile WHERE id = 1
+      `;
+      const profileStepGoal = Number(profileStepRows[0]?.step_goal) || 0;
+      if (profileStepGoal && profileStepGoal !== 10000) {
+        stepGoal = profileStepGoal;
+      } else {
+        stepGoal = stepGoal || 10000;
+      }
+    }
     const expectedSteps = Number(plan.expected_steps) || stepGoal;
     // Scale step calories to expected steps
     const stepCalPerStep = stepGoal > 0 ? stepCaloriesRaw / stepGoal : 0;
@@ -244,10 +263,18 @@ export async function GET(req: NextRequest) {
       runEnabled,
       runDistanceKm,
       gymCalories,
+      gymBreakdown,
       selectedWorkouts,
       deficit: Number(plan.deficit_used) || 0,
       totalBurn: 0,
       targetIntake: dayTargets.calories,
+      adjustedTargets: {
+        calories: dayTargets.calories,
+        protein: dayTargets.protein,
+        carbs: dayTargets.carbs,
+        fat: dayTargets.fat,
+        fiber: dayTargets.fiber,
+      },
     };
     breakdown.totalBurn = (breakdown.bmr as number) + adjustedStepCalories + runCal + gymCalories;
   }
