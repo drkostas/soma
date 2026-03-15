@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { MealCard } from "@/components/meal-card";
 import { DrinkLogger } from "@/components/drink-logger";
+import { ActivitySelector } from "@/components/activity-selector";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -158,6 +159,9 @@ export function NutritionDashboard({
   const [closing, setClosing] = useState(false);
   const [copying, setCopying] = useState(false);
   const [workoutEnabled, setWorkoutEnabled] = useState(true);
+  const [runEnabled, setRunEnabled] = useState<boolean>(initialPlan?.run_enabled ?? true);
+  const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>(initialPlan?.selected_workouts ?? []);
+  const [gymCalories, setGymCalories] = useState<number>(0);
   const [skippedSlots, setSkippedSlots] = useState<string[]>(initialPlan?.skipped_slots ?? []);
   const [slotBudgets, setSlotBudgets] = useState<Record<string, Record<string, number>> | null>(null);
 
@@ -171,6 +175,9 @@ export function NutritionDashboard({
       if (data.plan) setPlan(data.plan);
       if (data.meals) setMeals(data.meals);
       if (data.drinks) setDrinks(data.drinks);
+      setRunEnabled(data.runEnabled ?? true);
+      setSelectedWorkouts(data.selectedWorkouts ?? []);
+      setGymCalories(data.gymCalories ?? 0);
       setSkippedSlots(data.skippedSlots ?? []);
       if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
     } catch {
@@ -403,6 +410,16 @@ export function NutritionDashboard({
           </div>
         )}
       </div>
+
+      {/* Activity selector */}
+      <ActivitySelector
+        date={date}
+        training={training}
+        runEnabled={runEnabled}
+        selectedWorkouts={selectedWorkouts}
+        exerciseCalories={Number(plan?.exercise_calories) || 0}
+        onActivityChanged={refreshData}
+      />
 
       {/* Quick actions */}
       {!isClosed && meals.length === 0 && (
