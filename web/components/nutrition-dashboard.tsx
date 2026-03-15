@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -189,6 +189,11 @@ export function NutritionDashboard({
       // silent refresh failure
     }
   }, [date]);
+
+  // Load breakdown + trend data on mount
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
   // Compute consumed totals
   const consumedCal =
