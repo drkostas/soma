@@ -211,7 +211,22 @@ def process_day(sync_date: date):
                 tr = parse_training_readiness(raw_by_endpoint["training_readiness"])
                 parsed.update(tr)
 
+            # Merge Garmin race predictions (HM time)
+            if "race_predictions" in raw_by_endpoint:
+                rp = raw_by_endpoint["race_predictions"]
+                if isinstance(rp, dict) and rp.get("timeHalfMarathon"):
+                    parsed["garmin_hm_prediction_seconds"] = int(rp["timeHalfMarathon"])
+
             upsert_daily_health(conn, parsed)
+
+            # Sync Garmin step goal to nutrition_profile
+            garmin_step_goal = raw_by_endpoint["user_summary"].get("dailyStepGoal")
+            if garmin_step_goal and int(garmin_step_goal) > 0:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE nutrition_profile SET step_goal = %s WHERE id = 1 AND (step_goal IS NULL OR step_goal != %s)",
+                        (int(garmin_step_goal), int(garmin_step_goal)),
+                    )
 
         # Parse weigh_ins / daily_weigh_ins -> weight_log
         for ep in ("daily_weigh_ins", "weigh_ins"):
