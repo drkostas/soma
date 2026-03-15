@@ -167,6 +167,7 @@ export function NutritionDashboard({
   const [budgetExpanded, setBudgetExpanded] = useState(false);
   const [breakdown, setBreakdown] = useState<any>(null);
   const [trend7d, setTrend7d] = useState<any>(null);
+  const [dataReady, setDataReady] = useState(false);
 
   const isClosed = plan?.status === "closed";
 
@@ -185,8 +186,9 @@ export function NutritionDashboard({
       if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
       if (data.breakdown) setBreakdown(data.breakdown);
       if (data.trend7d) setTrend7d(data.trend7d);
+      setDataReady(true);
     } catch {
-      // silent refresh failure
+      setDataReady(true); // still mark ready on error
     }
   }, [date]);
 
@@ -315,8 +317,8 @@ export function NutritionDashboard({
               {Math.round(consumedCal)} / {Math.round(targetCal)} kcal
             </div>
 
-            {/* One-line equation summary (always visible) */}
-            {breakdown && (
+            {/* One-line equation summary — only after dynamic data loads */}
+            {dataReady && breakdown && (
               <div className="text-[10px] text-muted-foreground text-center">
                 {breakdown.bmr} BMR
                 {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} steps`}
@@ -325,6 +327,7 @@ export function NutritionDashboard({
                   ? breakdown.gymBreakdown.map((w: any) => ` + ${w.calories} ${w.title}`).join("")
                   : breakdown.gymCalories > 0 ? ` + ${breakdown.gymCalories} gym` : ""}
                 {breakdown.deficit > 0 && ` \u2212 ${breakdown.deficit} deficit`}
+                {breakdown.drinkCalories > 0 && ` \u2212 ${breakdown.drinkCalories} drinks`}
                 {` = ${breakdown.targetIntake}`}
               </div>
             )}
@@ -396,6 +399,13 @@ export function NutritionDashboard({
 
                     <span className="text-muted-foreground">Deficit goal</span>
                     <span className="tabular-nums text-right text-rose-500">&minus;{breakdown.deficit}</span>
+
+                    {breakdown.drinkCalories > 0 && (
+                      <>
+                        <span className="text-muted-foreground">Drinks (alcohol)</span>
+                        <span className="tabular-nums text-right text-rose-500">&minus;{breakdown.drinkCalories}</span>
+                      </>
+                    )}
 
                     <span className="font-medium border-t pt-1">Target intake</span>
                     <span className="tabular-nums text-right font-bold border-t pt-1">{breakdown.targetIntake}</span>
