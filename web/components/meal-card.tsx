@@ -344,6 +344,16 @@ export function MealCard({
     setShowPicker(false);
   };
 
+  const handleEditIngredients = () => {
+    // Go back to picker, pre-selecting current ingredients from the composed portions
+    if (composedPortions) {
+      const ids = new Set(composedPortions.map((p) => p.ingredient_id));
+      setSelectedIngredients(ids);
+    }
+    setComposedPortions(null);
+    setShowCompose(true);
+  };
+
   const handleComposeCancel = () => {
     setComposedPortions(null);
     setSelectedIngredients(new Set());
@@ -614,6 +624,7 @@ export function MealCard({
               budget={slotBudget ?? null}
               onLog={handleComposeLog}
               onCancel={handleComposeCancel}
+              onEditIngredients={handleEditIngredients}
               logging={logging}
             />
           )}
