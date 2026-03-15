@@ -65,14 +65,18 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Hamburger button — fixed top-left, always visible */}
-      <button
-        onClick={() => setDrawerOpen(!drawerOpen)}
-        className="fixed top-[env(safe-area-inset-top,0px)] left-[env(safe-area-inset-left,0px)] z-50 flex h-12 w-12 items-center justify-center text-muted-foreground hover:text-foreground transition-colors md:left-0 md:top-0"
-        aria-label="Toggle menu"
-      >
-        {drawerOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </button>
+      {/* Sticky top bar with hamburger */}
+      <div className="fixed top-0 left-0 right-0 z-50 safe-area-pt safe-area-pl safe-area-pr bg-background/80 backdrop-blur-md border-b border-border/50">
+        <div className="flex h-12 items-center px-1">
+          <button
+            onClick={() => setDrawerOpen(!drawerOpen)}
+            className="flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-lg"
+            aria-label="Toggle menu"
+          >
+            {drawerOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
+      </div>
 
       {/* Overlay */}
       {drawerOpen && (
