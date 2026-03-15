@@ -29,8 +29,8 @@ class TestComputeMacroTargets:
     def test_rest_day_macros(self):
         """Rest day: 2300 TDEE - 400 deficit + 0 exercise = 1900, 80kg.
 
-        Carb floor (rest = 3.0 g/kg × 80 = 240g) exceeds remainder (155g),
-        so fat is reduced to compensate (down to absolute floor 0.5 g/kg = 40g).
+        Carbs are strict remainder after protein and fat to guarantee
+        macro-calorie consistency (no carb floor override).
         """
         result = compute_macro_targets(
             tdee=2300,
@@ -41,9 +41,13 @@ class TestComputeMacroTargets:
         )
         assert result["calories"] == 1900
         assert result["protein"] == 176   # 80 * 2.2 = 176
-        assert result["carbs"] == 240     # carb floor: 3.0 * 80 = 240
-        assert result["fat"] == 40        # reduced from 64 (floor: 0.5 * 80 = 40)
+        assert result["fat"] == 64        # 80 * 0.8 = 64
+        # carbs = (1900 - 176*4 - 64*9) / 4 = (1900 - 704 - 576) / 4 = 155
+        assert result["carbs"] == 155
         assert result["fiber"] == 35
+        # Verify macro-calorie consistency
+        macro_cal = result["protein"] * 4 + result["carbs"] * 4 + result["fat"] * 9
+        assert abs(macro_cal - result["calories"]) <= 9
 
     def test_exercise_calories_more_carbs_than_rest(self):
         """Day with exercise calories should have more carbs than rest day."""
@@ -108,14 +112,15 @@ class TestComputeMacroTargets:
         assert result["protein"] == round(80 * 1.8)
 
     def test_custom_fat_per_kg(self):
-        """Custom fat 1.0 g/kg = 80g, but carb floor (240g) pushes total over
-        target, so fat is reduced to 71g to compensate."""
+        """Custom fat 1.0 g/kg = 80g. Carbs are strict remainder."""
         result = compute_macro_targets(
             tdee=2300, deficit=0, weight_kg=80,
             fat_g_per_kg=1.0,
         )
-        # Fat starts at 80g but is reduced because carb floor (240g) exceeds remainder (219g)
-        assert result["fat"] == 71
+        # Fat stays at requested 80g (no carb floor to force reduction)
+        assert result["fat"] == 80
+        # carbs = (2300 - 176*4 - 80*9) / 4 = (2300 - 704 - 720) / 4 = 219
+        assert result["carbs"] == 219
 
     def test_zero_deficit(self):
         result = compute_macro_targets(
@@ -147,10 +152,15 @@ class TestCarbPeriodization:
         assert long["carbs"] > rest["carbs"]
         assert long["carbs"] >= 80 * 4.5  # at least 4.5 g/kg for long runs
 
-    def test_carb_floor_enforced(self):
-        # Even with low exercise calories, carb floor should be respected for the training type
+    def test_carbs_as_remainder_with_exercise(self):
+        # Carbs are strict remainder — no floor override, but exercise calories add room
         result = compute_macro_targets(1800, 0, 80, exercise_calories=500, training_day_type="hard_run")
-        assert result["carbs"] >= 80 * 4.0  # hard_run floor is 4.25 g/kg
+        # target = 1800 + 500 - 0 = 2300; carbs = (2300 - 176*4 - 64*9) / 4 = 255
+        expected_carbs = round((2300 - 176 * 4 - 64 * 9) / 4)
+        assert result["carbs"] == expected_carbs
+        # Verify macro-calorie consistency
+        macro_cal = result["protein"] * 4 + result["carbs"] * 4 + result["fat"] * 9
+        assert abs(macro_cal - result["calories"]) <= 9
 
     def test_fat_reduced_when_carb_floor_active(self):
         # When carb floor is active, fat should be reduced to compensate (never protein)
@@ -160,9 +170,14 @@ class TestCarbPeriodization:
         if hard["carbs"] > normal["carbs"]:
             assert hard["fat"] <= normal["fat"]  # fat reduced to compensate
 
-    def test_rest_day_carbs_at_least_floor(self):
+    def test_rest_day_carbs_are_remainder(self):
+        # Carbs are strict remainder, no floor override
         result = compute_macro_targets(2200, 300, 80, exercise_calories=0, training_day_type="rest")
-        assert result["carbs"] >= 80 * 3.0  # rest floor is 3.0 g/kg
+        # target = 2200 - 300 = 1900; carbs = (1900 - 176*4 - 64*9) / 4 = 155
+        expected_carbs = round((1900 - 176 * 4 - 64 * 9) / 4)
+        assert result["carbs"] == expected_carbs
+        macro_cal = result["protein"] * 4 + result["carbs"] * 4 + result["fat"] * 9
+        assert abs(macro_cal - result["calories"]) <= 9
 
 
 class TestConstants:
