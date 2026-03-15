@@ -140,6 +140,8 @@ ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS is_refeed           BOOLEAN D
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS is_diet_break       BOOLEAN DEFAULT FALSE;
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS status              VARCHAR(20) DEFAULT 'active';
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS skipped_slots       TEXT[] DEFAULT '{}';
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS run_enabled         BOOLEAN DEFAULT TRUE;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS selected_workouts   TEXT[] DEFAULT '{}';
 
 -- Migrate closed → status
 UPDATE nutrition_day SET status = 'closed' WHERE closed = TRUE;
