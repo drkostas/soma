@@ -120,6 +120,7 @@ export async function GET(req: NextRequest) {
   // Compute day targets, remaining, and per-slot budgets
   let remaining: Record<string, number> | null = null;
   let slotBudgets: Record<string, Record<string, number>> | null = null;
+  let breakdown: Record<string, unknown> | null = null;
 
   if (plan) {
     // Resolve fiber target (plan column first, fallback to profile)
@@ -175,6 +176,7 @@ export async function GET(req: NextRequest) {
     const stepGoal = Number(plan.step_goal) || 10000;
     let adjustedStepCalories = stepCalories;
     let runStepEstimate = 0;
+    let runDistanceKm = 0;
 
     if (runEnabled && plan.exercise_calories) {
       // Estimate run steps: ~1300 steps per km
@@ -184,8 +186,8 @@ export async function GET(req: NextRequest) {
         WHERE p.status = 'active' AND d.day_date = ${date}
         LIMIT 1
       `;
-      const distKm = Number(runDistanceRows[0]?.target_distance_km) || 0;
-      runStepEstimate = Math.round(distKm * 1300);
+      runDistanceKm = Number(runDistanceRows[0]?.target_distance_km) || 0;
+      runStepEstimate = Math.round(runDistanceKm * 1300);
 
       if (stepGoal > 0 && runStepEstimate > 0) {
         const calPerStep = stepCalories / stepGoal;
@@ -220,7 +222,60 @@ export async function GET(req: NextRequest) {
     }
 
     slotBudgets = redistributeRemaining(dayTargets, eatenBySlot, skippedSlots);
+
+    // ── Build observability breakdown ──
+    const planObj = plan.plan as Record<string, unknown> | null;
+    breakdown = {
+      bmr: Math.round(Number((planObj as Record<string, unknown>)?.bmr) || Number(plan.tdee_used) || 2000),
+      stepCalories: adjustedStepCalories,
+      stepCaloriesRaw: stepCalories,
+      stepGoal,
+      runStepEstimate,
+      runCalories: runCal,
+      runEnabled,
+      runDistanceKm,
+      gymCalories,
+      selectedWorkouts,
+      deficit: Number(plan.deficit_used) || 0,
+      totalBurn: 0,
+      targetIntake: dayTargets.calories,
+    };
+    breakdown.totalBurn = (breakdown.bmr as number) + adjustedStepCalories + runCal + gymCalories;
   }
+
+  // ── 7-day rolling trend ──
+  const trendRows = await sql`
+    SELECT
+      date,
+      target_calories,
+      actual_calories,
+      status
+    FROM nutrition_day
+    WHERE date >= ${date}::date - interval '6 days'
+      AND date <= ${date}::date
+    ORDER BY date
+  `;
+
+  const trend7d = {
+    days: trendRows.map((r: Record<string, unknown>) => ({
+      date: r.date,
+      target: Number(r.target_calories) || 0,
+      actual: Number(r.actual_calories) || 0,
+      closed: r.status === "closed",
+      delta:
+        r.status === "closed"
+          ? (Number(r.actual_calories) || 0) - (Number(r.target_calories) || 0)
+          : null,
+    })),
+    totalDelta: trendRows
+      .filter((r: Record<string, unknown>) => r.status === "closed")
+      .reduce(
+        (sum: number, r: Record<string, unknown>) =>
+          sum + ((Number(r.actual_calories) || 0) - (Number(r.target_calories) || 0)),
+        0,
+      ),
+    closedDays: trendRows.filter((r: Record<string, unknown>) => r.status === "closed").length,
+  };
 
   return NextResponse.json({
     plan,
@@ -233,5 +288,7 @@ export async function GET(req: NextRequest) {
     runEnabled,
     selectedWorkouts,
     gymCalories,
+    breakdown,
+    trend7d,
   });
 }
