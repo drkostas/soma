@@ -104,7 +104,9 @@ export async function GET(req: NextRequest) {
     fat += Number(m.fat) || 0;
     fiber += Number(m.fiber) || 0;
   }
+  let drinkCalories = 0;
   for (const d of drinkRows) {
+    drinkCalories += Number(d.calories) || 0;
     calories += Number(d.calories) || 0;
     carbs += Number(d.carbs) || 0;
   }
@@ -166,6 +168,37 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // ── Check for actual completed activities today ──
+    let actualRunCalories: number | null = null;
+    let actualGymByTitle: Record<string, number> = {};
+
+    try {
+      // Actual run calories from Garmin (summary endpoint, running type)
+      const runActualRows = await sql`
+        SELECT COALESCE(SUM((raw_json->>'calories')::float), 0) AS total_cal
+        FROM garmin_activity_raw
+        WHERE endpoint_name = 'summary'
+          AND raw_json->'activityType'->>'typeKey' = 'running'
+          AND (raw_json->>'startTimeLocal')::date = ${date}::date
+      `;
+      const runCal2 = Number(runActualRows[0]?.total_cal) || 0;
+      if (runCal2 > 0) actualRunCalories = Math.round(runCal2);
+
+      // Actual gym calories from workout_enrichment for today
+      const gymActualRows = await sql`
+        SELECT hevy_title, calories
+        FROM workout_enrichment
+        WHERE workout_date = ${date}::date
+      `;
+      for (const r of gymActualRows) {
+        if (r.hevy_title) {
+          actualGymByTitle[r.hevy_title as string] = Math.round(Number(r.calories) || 0);
+        }
+      }
+    } catch {
+      // Graceful — tables may not exist in demo
+    }
+
     // Note: dayTargets.calories will be fully recomputed below from components
 
     // ── Dynamic step calories: recompute from weight + step formula ──
@@ -207,7 +240,27 @@ export async function GET(req: NextRequest) {
 
     // Recompute target from components: BMR + adjustedSteps + runCal + gymCal - deficit
     const baseBmr = Number(plan.tdee_used) - Number(plan.step_calories || 0) - Number(plan.exercise_calories || 0);
-    dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + runCal + gymCalories - (Number(plan.deficit_used) || 0));
+
+    // Effective calories: actual if completed, predicted if pending
+    const effectiveRunCal = runEnabled
+      ? (actualRunCalories !== null ? actualRunCalories : runCal)
+      : 0;
+
+    let effectiveGymCal = 0;
+    const gymBreakdownFinal: { title: string; calories: number; actual: boolean }[] = [];
+    for (const workout of selectedWorkouts) {
+      if (actualGymByTitle[workout] !== undefined) {
+        effectiveGymCal += actualGymByTitle[workout];
+        gymBreakdownFinal.push({ title: workout, calories: actualGymByTitle[workout], actual: true });
+      } else {
+        const predicted = gymBreakdown.find((g: any) => g.title === workout);
+        const predCal = predicted?.calories ?? 0;
+        effectiveGymCal += predCal;
+        gymBreakdownFinal.push({ title: workout, calories: predCal, actual: false });
+      }
+    }
+
+    dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal - (Number(plan.deficit_used) || 0));
 
     // Recompute macros to match adjusted target
     dayTargets.protein = Math.round(weightKg * 2.2);
@@ -220,6 +273,19 @@ export async function GET(req: NextRequest) {
       const fatEquiv = Math.round((carbShift * 4) / 9);
       dayTargets.carbs -= carbShift;
       dayTargets.fat += fatEquiv;
+    }
+
+    // ── Alcohol offset: reduce food macro targets by drink calories ──
+    if (drinkCalories > 0) {
+      dayTargets.calories = Math.max(0, dayTargets.calories - drinkCalories);
+      // Reduce carbs first (alcohol inhibits carb oxidation), then fat
+      const carbGramsToRemove = Math.min(Math.round(drinkCalories / 4), dayTargets.carbs);
+      dayTargets.carbs -= carbGramsToRemove;
+      const remainingDrinkCal = drinkCalories - carbGramsToRemove * 4;
+      if (remainingDrinkCal > 0) {
+        const fatGramsToRemove = Math.min(Math.round(remainingDrinkCal / 9), dayTargets.fat);
+        dayTargets.fat -= fatGramsToRemove;
+      }
     }
 
     remaining = {
@@ -256,14 +322,17 @@ export async function GET(req: NextRequest) {
       expectedSteps,
       minSteps: runEnabled ? runStepEstimate : 0,
       runStepEstimate,
-      runCalories: runCal,
+      runCalories: effectiveRunCal,
+      runActual: actualRunCalories !== null,
+      runPredicted: runCal,
       runEnabled,
       runDistanceKm,
-      gymCalories,
-      gymBreakdown,
+      gymCalories: effectiveGymCal,
+      gymBreakdown: gymBreakdownFinal,
       selectedWorkouts,
+      drinkCalories,
       deficit: Number(plan.deficit_used) || 0,
-      totalBurn: 0,
+      totalBurn: Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal),
       targetIntake: dayTargets.calories,
       adjustedTargets: {
         calories: dayTargets.calories,
@@ -273,7 +342,6 @@ export async function GET(req: NextRequest) {
         fiber: dayTargets.fiber,
       },
     };
-    breakdown.totalBurn = (breakdown.bmr as number) + adjustedStepCalories + runCal + gymCalories;
   }
 
   // ── 7-day rolling trend ──
