@@ -65,18 +65,27 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Sticky top bar with hamburger */}
-      <div className="fixed top-0 left-0 right-0 z-50 safe-area-pt safe-area-pl safe-area-pr bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="flex h-12 items-center px-1">
+      {/* App header bar — solid background covering status bar + notch */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-border">
+        {/* Status bar spacer — solid fill behind clock/notch/icons */}
+        <div className="safe-area-pt" />
+        {/* Header content */}
+        <div className="flex h-11 items-center px-2 safe-area-pl safe-area-pr">
           <button
             onClick={() => setDrawerOpen(!drawerOpen)}
-            className="flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-lg"
+            className="flex h-9 w-9 items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded-lg shrink-0"
             aria-label="Toggle menu"
           >
             {drawerOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
+          <div className="flex-1 flex items-center justify-center">
+            <span className="text-sm font-semibold">
+              {navItems.find((n) => n.href === "/" ? pathname === "/" : pathname.startsWith(n.href))?.label ?? "Soma"}
+            </span>
+          </div>
+          <div className="w-9 shrink-0" /> {/* Balance the hamburger width */}
         </div>
-      </div>
+      </header>
 
       {/* Overlay */}
       {drawerOpen && (
