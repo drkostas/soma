@@ -79,6 +79,8 @@ export function ComposeMealView({
 
   const totals = useMemo(() => sumPortionMacros(portions), [portions]);
   const fitsBudget = budget != null && totals.calories <= (budget.calories ?? Infinity) * 1.05;
+  const totalGrams = useMemo(() => portions.reduce((s, p) => s + p.grams, 0), [portions]);
+  const volumeScore = totals.calories > 0 ? totalGrams / totals.calories : 0;
 
   const handleLog = () => {
     const items = portions.map((p) => ({
@@ -110,7 +112,12 @@ export function ComposeMealView({
       </div>
 
       <div className="space-y-1.5">
-        {portions.map((p) => {
+        {[...portions].sort((a, b) => {
+          const order: Record<string, number> = { vegetable: 0, protein: 1, carbs: 2, fruit: 3, dairy: 4, fat: 5, sauce: 6, supplement: 7 };
+          const catA = ingMap.get(a.ingredient_id)?.category ?? "zzz";
+          const catB = ingMap.get(b.ingredient_id)?.category ?? "zzz";
+          return (order[catA] ?? 99) - (order[catB] ?? 99);
+        }).map((p) => {
           const ing = ingMap.get(p.ingredient_id);
           const canToggle = ing && hasRawCookedToggle(ing);
           const isCooked = cookedMode.has(p.ingredient_id);
@@ -154,6 +161,17 @@ export function ComposeMealView({
       {budget && (
         <div className={`text-xs text-center ${fitsBudget ? "text-green-600" : "text-amber-600"}`}>
           {fitsBudget ? "Fits slot budget" : `${totals.calories - Math.round(budget.calories)} kcal over budget`}
+        </div>
+      )}
+
+      {/* Volume score */}
+      {totals.calories > 0 && (
+        <div className={`text-xs text-center ${
+          volumeScore >= 1.5 ? "text-green-600" : volumeScore >= 0.8 ? "text-muted-foreground" : "text-amber-600"
+        }`}>
+          {volumeScore >= 1.5 ? "High volume meal \u2014 great for satiety"
+           : volumeScore >= 0.8 ? `${totalGrams}g total \u2014 moderate volume`
+           : "Low volume \u2014 consider adding vegetables for fullness"}
         </div>
       )}
 
