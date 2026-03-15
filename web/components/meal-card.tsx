@@ -437,12 +437,18 @@ export function MealCard({
                     {itemsList.map((item, idx) => {
                       const ing = ingLookup.get(item.ingredient_id ?? "");
                       const name = ing?.name ?? item.ingredient_id ?? "?";
-                      const grams = item.cooked_grams ?? item.grams ?? 0;
-                      const label = item.cooked_grams ? "cooked" : (ing?.is_raw ? "raw" : "");
+                      const rawG = item.grams ?? 0;
+                      const ratio = ing?.raw_to_cooked_ratio;
+                      const isRaw = ing?.is_raw && ratio && ratio > 0 && ratio !== 1;
+                      const cookedG = item.cooked_grams ?? (isRaw ? Math.round(rawG * (ratio as number)) : 0);
                       return (
                         <div key={idx} className="text-[10px] text-muted-foreground flex justify-between">
                           <span>{name}</span>
-                          <span className="tabular-nums">{grams}g{label ? ` ${label}` : ""}</span>
+                          <span className="tabular-nums">
+                            {isRaw
+                              ? `${cookedG}g cooked (${rawG}g raw)`
+                              : `${rawG}g`}
+                          </span>
                         </div>
                       );
                     })}
