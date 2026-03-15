@@ -41,7 +41,16 @@ sync/strava_backfill_data/
 
 # Design plans and internal docs
 docs/
+research/
 .vercel
+
+# Claude Code
+.claude/
+CLAUDE.md
+**/CLAUDE.md
+
+# Playwright MCP
+.playwright-mcp/
 
 # Git worktrees
 .worktrees/
