@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Trash2, Plus, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { NumberInput } from "@/components/number-input";
 import { IngredientPicker } from "@/components/ingredient-picker";
 import { ComposeMealView } from "@/components/compose-meal-view";
 import { MealDetailModal } from "@/components/meal-detail-modal";
@@ -34,8 +35,6 @@ const SLOT_TAG_MAP: Record<string, string[]> = {
   pre_sleep: ["snack", "evening"],
   during_workout: ["pre-run", "during-run", "post-run"],
 };
-
-const MULTIPLIER_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5] as const;
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -690,20 +689,15 @@ export function MealCard({
                 </div>
               )}
 
-              {/* Multiplier buttons */}
-              <div className="flex items-center justify-center gap-1.5">
-                {MULTIPLIER_OPTIONS.map((m) => (
-                  <Button
-                    key={m}
-                    variant={multiplier === m ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2.5"
-                    onClick={() => setMultiplier(m)}
-                  >
-                    {m}x
-                  </Button>
-                ))}
-              </div>
+              {/* Multiplier slider */}
+              <NumberInput
+                value={multiplier}
+                onChange={setMultiplier}
+                min={0.5}
+                max={2.0}
+                step={0.05}
+                suffix="x"
+              />
 
               {/* Log + Customize + Cancel */}
               <div className="flex gap-2">
