@@ -298,19 +298,17 @@ export async function GET(req: NextRequest) {
       dayTargets.calories = Number(plan.target_calories);
     }
 
-    // Recompute macros to match adjusted target (skip if manual override)
-    if (!manualOverride) {
-      dayTargets.protein = Math.round(weightKg * 2.2);
-      dayTargets.fat = Math.round(weightKg * 0.8);
-      dayTargets.carbs = Math.round(Math.max(0, (dayTargets.calories - dayTargets.protein * 4 - dayTargets.fat * 9) / 4));
+    // Recompute macros to match adjusted target
+    dayTargets.protein = Math.round(weightKg * 2.2);
+    dayTargets.fat = Math.round(weightKg * 0.8);
+    dayTargets.carbs = Math.round(Math.max(0, (dayTargets.calories - dayTargets.protein * 4 - dayTargets.fat * 9) / 4));
 
-      // If no run, shift 10% of carb calories to fat
-      if (!runEnabled && dayTargets.carbs > 0) {
-        const carbShift = Math.round(dayTargets.carbs * 0.1);
-        const fatEquiv = Math.round((carbShift * 4) / 9);
-        dayTargets.carbs -= carbShift;
-        dayTargets.fat += fatEquiv;
-      }
+    // If no run, shift 10% of carb calories to fat
+    if (!runEnabled && dayTargets.carbs > 0) {
+      const carbShift = Math.round(dayTargets.carbs * 0.1);
+      const fatEquiv = Math.round((carbShift * 4) / 9);
+      dayTargets.carbs -= carbShift;
+      dayTargets.fat += fatEquiv;
     }
 
     // ── Alcohol offset: reduce food macro targets by drink calories ──
