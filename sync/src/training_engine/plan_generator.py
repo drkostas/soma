@@ -16,8 +16,12 @@ from training_engine.vdot import all_paces, hm_goal_paces
 # ===============================
 
 def _step(step_type, duration_type, duration_value, target_type="open",
-          target_pace_min=None, target_pace_max=None, description=""):
-    """Build a single workout step dict."""
+          target_pace_min=None, target_pace_max=None, description="",
+          hr_zone=None):
+    """Build a single workout step dict.
+
+    hr_zone: Garmin HR zone number (1-5) as secondary target.
+    """
     s = {
         "step_type": step_type,
         "duration_type": duration_type,
@@ -28,82 +32,110 @@ def _step(step_type, duration_type, duration_value, target_type="open",
     if target_type == "pace" and target_pace_min is not None:
         s["target_pace_min"] = target_pace_min
         s["target_pace_max"] = target_pace_max
+    if hr_zone is not None:
+        s["hr_zone"] = hr_zone
     return s
 
 
-def _warmup(distance_m, e_pace_min, e_pace_max):
-    return _step("warmup", "distance", distance_m, "pace", e_pace_min, e_pace_max, "Easy warmup")
+def _warmup(distance_m):
+    return _step("warmup", "distance", distance_m, "hr", description="Easy warmup",
+                 hr_zone=2)
 
 
-def _cooldown(distance_m, e_pace_min, e_pace_max):
-    return _step("cooldown", "distance", distance_m, "pace", e_pace_min, e_pace_max, "Easy cooldown")
+def _cooldown(distance_m):
+    return _step("cooldown", "distance", distance_m, "hr", description="Easy cooldown",
+                 hr_zone=2)
+
+
+def _lap_button(description="Press lap to continue"):
+    return _step("rest", "lap_button", 0, "open", description=description)
 
 
 def _recovery_jog(duration_sec):
-    return _step("recovery", "time", duration_sec, "open", description="Recovery jog")
+    return _step("recovery", "time", duration_sec, "hr", description="Recovery jog",
+                 hr_zone=2)
 
 
 def _recovery_jog_distance(distance_m):
-    return _step("recovery", "distance", distance_m, "open", description="Recovery jog")
+    return _step("recovery", "distance", distance_m, "hr", description="Recovery jog",
+                 hr_zone=2)
 
 
 def build_easy_run_steps(distance_km, e_pace_min, e_pace_max):
-    """Simple easy run."""
+    """Simple easy run — HR zone only, no pace target."""
     return [
-        _step("interval", "distance", int(distance_km * 1000), "pace",
-              e_pace_min, e_pace_max, f"Easy {distance_km} km"),
+        _step("warmup", "distance", int(distance_km * 1000), "hr",
+              description=f"Easy {distance_km} km", hr_zone=2),
     ]
 
 
 def build_easy_with_strides_steps(distance_km, e_pace_min, e_pace_max, stride_count, r_pace_min, r_pace_max):
-    """Easy run followed by strides at R-pace with 100m recovery jog."""
-    easy_distance = distance_km * 1000 - stride_count * 200  # subtract stride + recovery distance
+    """Easy run followed by strides at R-pace with 60s recovery jog.
+
+    Structure: warmup + (N-1)x(stride+recovery) + 1 final stride + cooldown.
+    The last stride has no recovery, so it sits outside the repeat group.
+    """
+    easy_distance = int((distance_km - 0.5) * 1000)
     steps = [
-        _step("interval", "distance", int(easy_distance), "pace",
-              e_pace_min, e_pace_max, f"Easy run"),
+        _step("warmup", "distance", easy_distance, "hr",
+              description="Easy run", hr_zone=2),
+        _lap_button("Press lap to start strides"),
     ]
-    for i in range(stride_count):
+    # First N-1 strides with recovery (these form the repeat group)
+    repeat_count = stride_count - 1
+    for i in range(repeat_count):
         steps.append(
-            _step("interval", "distance", 100, "pace",
-                  r_pace_min, r_pace_max, f"Stride {i+1}/{stride_count}")
+            _step("interval", "time", 20, "pace",
+                  r_pace_min, r_pace_max, f"Stride {i+1}/{repeat_count}",
+                  hr_zone=4)
         )
-        if i < stride_count - 1:
-            steps.append(_recovery_jog_distance(100))
-        else:
-            # Last stride: 100m easy jog to finish
-            steps.append(
-                _step("cooldown", "distance", 100, "open", description="Easy jog to finish")
-            )
+        steps.append(_recovery_jog(60))
+    # Last stride — no recovery, outside the repeat
+    steps.append(
+        _step("interval", "time", 20, "pace",
+              r_pace_min, r_pace_max, "Final stride", hr_zone=4)
+    )
+    steps.append(
+        _step("cooldown", "distance", 500, "hr",
+              description="Easy cooldown", hr_zone=2)
+    )
     return steps
+
+
+PACE_RANGE = 7  # ±7 sec/km range for interval targets
 
 
 def build_cruise_intervals_steps(reps, rep_distance_m, t_pace, recovery_sec,
                                  wu_km, cd_km, e_pace_min, e_pace_max):
     """Warmup + cruise intervals at T-pace + cooldown."""
-    steps = [_warmup(int(wu_km * 1000), e_pace_min, e_pace_max)]
+    steps = [_warmup(int(wu_km * 1000)), _lap_button("Press lap to start intervals")]
     for i in range(reps):
         steps.append(
             _step("interval", "distance", rep_distance_m, "pace",
-                  t_pace, t_pace, f"Cruise interval {i+1}/{reps} @ T-pace")
+                  t_pace - PACE_RANGE, t_pace + PACE_RANGE,
+                  f"Cruise interval {i+1}/{reps} @ T-pace",
+                  hr_zone=3)
         )
         if i < reps - 1:
             steps.append(_recovery_jog(recovery_sec))
-    steps.append(_cooldown(int(cd_km * 1000), e_pace_min, e_pace_max))
+    steps.append(_cooldown(int(cd_km * 1000)))
     return steps
 
 
 def build_vo2max_intervals_steps(reps, rep_distance_m, i_pace, recovery_sec,
                                  wu_km, cd_km, e_pace_min, e_pace_max):
     """Warmup + VO2max intervals at I-pace + cooldown."""
-    steps = [_warmup(int(wu_km * 1000), e_pace_min, e_pace_max)]
+    steps = [_warmup(int(wu_km * 1000)), _lap_button("Press lap to start intervals")]
     for i in range(reps):
         steps.append(
             _step("interval", "distance", rep_distance_m, "pace",
-                  i_pace, i_pace, f"VO2max interval {i+1}/{reps} @ I-pace")
+                  i_pace - PACE_RANGE, i_pace + PACE_RANGE,
+                  f"VO2max interval {i+1}/{reps} @ I-pace",
+                  hr_zone=4)
         )
         if i < reps - 1:
             steps.append(_recovery_jog(recovery_sec))
-    steps.append(_cooldown(int(cd_km * 1000), e_pace_min, e_pace_max))
+    steps.append(_cooldown(int(cd_km * 1000)))
     return steps
 
 
@@ -111,10 +143,12 @@ def build_hm_tempo_steps(tempo_distance_km, tempo_pace, wu_km, cd_km,
                          e_pace_min, e_pace_max):
     """Warmup + continuous tempo at HM pace + cooldown."""
     steps = [
-        _warmup(int(wu_km * 1000), e_pace_min, e_pace_max),
+        _warmup(int(wu_km * 1000)),
+        _lap_button("Press lap to start tempo"),
         _step("interval", "distance", int(tempo_distance_km * 1000), "pace",
-              tempo_pace, tempo_pace, f"{tempo_distance_km} km continuous @ HM pace"),
-        _cooldown(int(cd_km * 1000), e_pace_min, e_pace_max),
+              tempo_pace - PACE_RANGE, tempo_pace + PACE_RANGE, f"{tempo_distance_km} km continuous @ HM pace",
+              hr_zone=3),
+        _cooldown(int(cd_km * 1000)),
     ]
     return steps
 
@@ -122,15 +156,16 @@ def build_hm_tempo_steps(tempo_distance_km, tempo_pace, wu_km, cd_km,
 def build_hm_pace_intervals_steps(reps, rep_distance_m, hm_pace, recovery_sec,
                                   wu_km, cd_km, e_pace_min, e_pace_max):
     """Warmup + HM-pace reps + cooldown."""
-    steps = [_warmup(int(wu_km * 1000), e_pace_min, e_pace_max)]
+    steps = [_warmup(int(wu_km * 1000)), _lap_button("Press lap to start intervals")]
     for i in range(reps):
         steps.append(
             _step("interval", "distance", rep_distance_m, "pace",
-                  hm_pace, hm_pace, f"HM-pace rep {i+1}/{reps}")
+                  hm_pace - PACE_RANGE, hm_pace + PACE_RANGE, f"HM-pace rep {i+1}/{reps}",
+                  hr_zone=3)
         )
         if i < reps - 1:
             steps.append(_recovery_jog(recovery_sec))
-    steps.append(_cooldown(int(cd_km * 1000), e_pace_min, e_pace_max))
+    steps.append(_cooldown(int(cd_km * 1000)))
     return steps
 
 
@@ -140,25 +175,28 @@ def build_long_run_steps(distance_km, e_pace_min, e_pace_max,
     if fast_finish_km > 0 and fast_finish_pace_min is not None:
         easy_km = distance_km - fast_finish_km
         return [
-            _step("interval", "distance", int(easy_km * 1000), "pace",
-                  e_pace_min, e_pace_max, f"Easy {easy_km} km"),
+            _step("warmup", "distance", int(easy_km * 1000), "pace",
+                  e_pace_min, e_pace_max, f"Easy {easy_km} km", hr_zone=2),
             _step("interval", "distance", int(fast_finish_km * 1000), "pace",
                   fast_finish_pace_min, fast_finish_pace_max,
-                  f"Fast finish {fast_finish_km} km"),
+                  f"Fast finish {fast_finish_km} km", hr_zone=3),
         ]
     return [
-        _step("interval", "distance", int(distance_km * 1000), "pace",
-              e_pace_min, e_pace_max, f"Long run {distance_km} km"),
+        _step("warmup", "distance", int(distance_km * 1000), "pace",
+              e_pace_min, e_pace_max, f"Long run {distance_km} km", hr_zone=2),
     ]
 
 
 def build_progression_long_run_steps(segments):
     """Long run with progression segments. Each segment: (km, pace_min, pace_max, description)."""
+    # HR zone increases with pace: easy=2, moderate=3, hard=3
     steps = []
-    for km, pace_min, pace_max, desc in segments:
+    for i, (km, pace_min, pace_max, desc) in enumerate(segments):
+        step_type = "warmup" if i == 0 else "interval"
+        hr = 2 if i == 0 else 3
         steps.append(
-            _step("interval", "distance", int(km * 1000), "pace",
-                  pace_min, pace_max, desc)
+            _step(step_type, "distance", int(km * 1000), "pace",
+                  pace_min, pace_max, desc, hr_zone=hr)
         )
     return steps
 
@@ -167,90 +205,103 @@ def build_threshold_plus_speed_steps(t_reps, t_distance_m, t_pace, t_recovery_se
                                      r_reps, r_distance_m, r_pace_min, r_pace_max, r_recovery_m,
                                      wu_km, cd_km, e_pace_min, e_pace_max):
     """Week 2 Thursday combo: threshold intervals + speed reps."""
-    steps = [_warmup(int(wu_km * 1000), e_pace_min, e_pace_max)]
+    steps = [_warmup(int(wu_km * 1000)), _lap_button("Press lap to start threshold")]
     # Threshold portion
     for i in range(t_reps):
         steps.append(
             _step("interval", "distance", t_distance_m, "pace",
-                  t_pace, t_pace, f"Threshold {i+1}/{t_reps} @ T-pace")
+                  t_pace - PACE_RANGE, t_pace + PACE_RANGE, f"Threshold {i+1}/{t_reps} @ T-pace",
+                  hr_zone=3)
         )
         if i < t_reps - 1:
             steps.append(_recovery_jog(t_recovery_sec))
-    # Transition jog
-    steps.append(_recovery_jog(120))
+    # Transition between phases
+    steps.append(_lap_button("Press lap to start speed reps"))
     # Speed reps
     for i in range(r_reps):
         steps.append(
             _step("interval", "distance", r_distance_m, "pace",
-                  r_pace_min, r_pace_max, f"Speed rep {i+1}/{r_reps} @ R-pace")
+                  r_pace_min, r_pace_max, f"Speed rep {i+1}/{r_reps} @ R-pace",
+                  hr_zone=4)
         )
         if i < r_reps - 1:
             steps.append(_recovery_jog_distance(r_recovery_m))
-    steps.append(_cooldown(int(cd_km * 1000), e_pace_min, e_pace_max))
+    steps.append(_cooldown(int(cd_km * 1000)))
     return steps
 
 
 def build_sharpener_steps(reps, rep_distance_m, pace, recovery_sec,
                           wu_km, cd_km, e_pace_min, e_pace_max, description="Sharpener"):
     """Taper quality session: warmup + reps at goal pace + cooldown."""
-    steps = [_warmup(int(wu_km * 1000), e_pace_min, e_pace_max)]
+    steps = [_warmup(int(wu_km * 1000)), _lap_button("Press lap to start intervals")]
     for i in range(reps):
         steps.append(
             _step("interval", "distance", rep_distance_m, "pace",
-                  pace, pace, f"{description} {i+1}/{reps}")
+                  pace - PACE_RANGE, pace + PACE_RANGE, f"{description} {i+1}/{reps}",
+                  hr_zone=3)
         )
         if i < reps - 1:
             steps.append(_recovery_jog(recovery_sec))
-    steps.append(_cooldown(int(cd_km * 1000), e_pace_min, e_pace_max))
+    steps.append(_cooldown(int(cd_km * 1000)))
     return steps
 
 
 def build_final_sharpener_steps(wu_km, reps_800, pace_800, stride_count,
                                 r_pace_min, r_pace_max, cd_km, e_pace_min, e_pace_max):
     """Race week final sharpener: WU + 800m reps + strides + CD."""
-    steps = [_warmup(int(wu_km * 1000), e_pace_min, e_pace_max)]
+    steps = [_warmup(int(wu_km * 1000)), _lap_button("Press lap to start intervals")]
     for i in range(reps_800):
         steps.append(
             _step("interval", "distance", 800, "pace",
-                  pace_800, pace_800, f"800m rep {i+1}/{reps_800} @ HM pace")
+                  pace_800 - PACE_RANGE, pace_800 + PACE_RANGE, f"800m rep {i+1}/{reps_800} @ HM pace",
+                  hr_zone=3)
         )
         if i < reps_800 - 1:
             steps.append(_recovery_jog(120))
     # Transition
     steps.append(_recovery_jog(90))
-    # Strides
-    for i in range(stride_count):
+    # Strides: N-1 with recovery (repeat group) + 1 final
+    repeat_count = stride_count - 1
+    for i in range(repeat_count):
         steps.append(
-            _step("interval", "distance", 100, "pace",
-                  r_pace_min, r_pace_max, f"Stride {i+1}/{stride_count}")
+            _step("interval", "time", 20, "pace",
+                  r_pace_min, r_pace_max, f"Stride {i+1}/{repeat_count}",
+                  hr_zone=4)
         )
-        if i < stride_count - 1:
-            steps.append(_recovery_jog_distance(100))
-    steps.append(_cooldown(int(cd_km * 1000), e_pace_min, e_pace_max))
+        steps.append(_recovery_jog(60))
+    steps.append(
+        _step("interval", "time", 20, "pace",
+              r_pace_min, r_pace_max, "Final stride", hr_zone=4)
+    )
+    steps.append(_cooldown(int(cd_km * 1000)))
     return steps
 
 
 def build_race_steps(distance_km, goal_pace):
     """Race day workout."""
     return [
-        _step("warmup", "distance", 2000, "open", description="Pre-race warmup"),
+        _step("warmup", "distance", 2000, "open", description="Pre-race warmup",
+              hr_zone=2),
         _step("interval", "distance", int(distance_km * 1000), "pace",
-              goal_pace, goal_pace, f"RACE {distance_km} km"),
+              goal_pace, goal_pace, f"RACE {distance_km} km", hr_zone=3),
     ]
 
 
 def build_shakeout_steps(distance_km, e_pace_min, e_pace_max, pickup_count=3):
     """Race week shakeout: easy jog with short pickups."""
-    # Easy portion minus pickups
     steps = [
-        _step("interval", "distance", int(distance_km * 1000 - pickup_count * 100), "pace",
-              e_pace_min, e_pace_max, f"Easy shakeout"),
+        _step("warmup", "distance", int(distance_km * 1000 - 500), "hr",
+              description="Easy shakeout", hr_zone=2),
     ]
     for i in range(pickup_count):
         steps.append(
             _step("interval", "time", 15, "open",
-                  description=f"Pickup {i+1}/{pickup_count} (15s)")
+                  description=f"Pickup {i+1}/{pickup_count} (15s)", hr_zone=3)
         )
+    steps.append(
+        _step("cooldown", "distance", 500, "hr",
+              description="Easy cooldown", hr_zone=2)
+    )
     return steps
 
 
