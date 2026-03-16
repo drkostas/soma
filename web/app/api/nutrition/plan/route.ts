@@ -202,7 +202,20 @@ export async function GET(req: NextRequest) {
 
     // ── Dynamic step calories: recompute from weight + step formula ──
     const profileRows = await sql`SELECT weight_kg, step_goal, daily_deficit, tdee_estimate FROM nutrition_profile WHERE id = 1`;
-    const weightKg = Number(profileRows[0]?.weight_kg) || 79.2;
+    let weightKg = Number(profileRows[0]?.weight_kg) || 79.2;
+
+    // Use latest weight from weight_log (more current than profile)
+    try {
+      const weightRows = await sql`
+        SELECT weight_grams / 1000.0 AS weight_kg FROM weight_log
+        WHERE weight_grams IS NOT NULL
+        ORDER BY date DESC LIMIT 1
+      `;
+      if (weightRows[0]?.weight_kg) {
+        const lw = Number(weightRows[0].weight_kg);
+        if (lw > 0) weightKg = lw;
+      }
+    } catch {}
     const defaultDeficit = Number(profileRows[0]?.daily_deficit) || 500;
 
     let stepGoal = Number(plan.step_goal) || 0;
@@ -412,16 +425,22 @@ export async function GET(req: NextRequest) {
   `;
 
   const trend7d = {
-    days: trendRows.map((r: Record<string, unknown>) => ({
-      date: r.date,
-      target: Number(r.target_calories) || 0,
-      actual: Number(r.actual_calories) || 0,
-      closed: r.status === "closed",
-      delta:
-        r.status === "closed"
-          ? (Number(r.actual_calories) || 0) - (Number(r.target_calories) || 0)
-          : null,
-    })),
+    days: trendRows.map((r: Record<string, unknown>) => {
+      const isCurrentDay = String(r.date) === date;
+      const displayTarget = isCurrentDay && breakdown
+        ? Number((breakdown as any).targetIntake)
+        : Number(r.target_calories) || 0;
+      return {
+        date: r.date,
+        target: displayTarget,
+        actual: Number(r.actual_calories) || 0,
+        closed: r.status === "closed",
+        delta:
+          r.status === "closed"
+            ? (Number(r.actual_calories) || 0) - displayTarget
+            : null,
+      };
+    }),
     totalDelta: trendRows
       .filter((r: Record<string, unknown>) => r.status === "closed")
       .reduce(
