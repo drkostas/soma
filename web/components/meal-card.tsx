@@ -129,6 +129,12 @@ export function MealCard({
   const [saving, setSaving] = useState(false);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
   const [editingMealId, setEditingMealId] = useState<number | null>(null);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickName, setQuickName] = useState("");
+  const [quickCal, setQuickCal] = useState("");
+  const [quickP, setQuickP] = useState("");
+  const [quickC, setQuickC] = useState("");
+  const [quickF, setQuickF] = useState("");
 
   const handleSkip = async () => {
     setSkipping(true);
@@ -233,6 +239,35 @@ export function MealCard({
     setShowPicker(false);
     setMultiplier(1);
     setEditingMealId(null);
+  };
+
+  const handleQuickAdd = async () => {
+    setLogging(true);
+    try {
+      const cal = Number(quickCal) || 0;
+      const p = Number(quickP) || 0;
+      const c = Number(quickC) || 0;
+      const f = Number(quickF) || 0;
+      const items = [{
+        ingredient_id: `custom_${Date.now()}`,
+        grams: 0,
+        calories: cal, protein: p, carbs: c, fat: f, fiber: 0,
+        name: quickName || "Custom food",
+      }];
+      await fetch("/api/nutrition/log-meal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date, meal_slot: slot, source: "quick_add",
+          items, calories: cal, protein: p, carbs: c, fat: f, fiber: 0,
+        }),
+      });
+      setShowQuickAdd(false);
+      setQuickName(""); setQuickCal(""); setQuickP(""); setQuickC(""); setQuickF("");
+      onMealLogged();
+    } finally {
+      setLogging(false);
+    }
   };
 
   const handleToggleIngredient = (id: string) => {
@@ -503,11 +538,37 @@ export function MealCard({
             </div>
           )}
 
-          {/* Empty slot — Add meal + Skip side by side */}
-          {!disabled && !skipped && !showPicker && !selectedPreset && !showCompose && !composedPortions && meals.length === 0 && (
+          {/* Quick add form */}
+          {showQuickAdd && (
+            <div className="space-y-2 p-3 border border-border/50 rounded-lg">
+              <input
+                placeholder="Name (e.g., Restaurant burger)"
+                className="w-full text-sm bg-background border border-border rounded px-2 py-1"
+                value={quickName}
+                onChange={e => setQuickName(e.target.value)}
+              />
+              <div className="grid grid-cols-4 gap-2">
+                <input placeholder="kcal" type="number" className="text-sm bg-background border border-border rounded px-2 py-1" value={quickCal} onChange={e => setQuickCal(e.target.value)} />
+                <input placeholder="P" type="number" className="text-sm bg-background border border-border rounded px-2 py-1" value={quickP} onChange={e => setQuickP(e.target.value)} />
+                <input placeholder="C" type="number" className="text-sm bg-background border border-border rounded px-2 py-1" value={quickC} onChange={e => setQuickC(e.target.value)} />
+                <input placeholder="F" type="number" className="text-sm bg-background border border-border rounded px-2 py-1" value={quickF} onChange={e => setQuickF(e.target.value)} />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" className="text-xs" onClick={handleQuickAdd} disabled={logging || !quickCal}>Add</Button>
+                <Button size="sm" variant="ghost" className="text-xs" onClick={() => setShowQuickAdd(false)}>Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Empty slot — Add meal + Quick add + Skip side by side */}
+          {!disabled && !skipped && !showPicker && !selectedPreset && !showCompose && !composedPortions && !showQuickAdd && meals.length === 0 && (
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" className="flex-1 text-muted-foreground" onClick={() => setShowPicker(true)}>
                 <Plus className="h-3.5 w-3.5 mr-1" /> Add meal
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground" onClick={() => setShowQuickAdd(true)} disabled={disabled}>
+                <Plus className="h-3 w-3" />
+                Quick add
               </Button>
               <Button variant="ghost" size="sm" className="text-muted-foreground text-xs" onClick={handleSkip} disabled={skipping}>
                 Skip
@@ -515,11 +576,17 @@ export function MealCard({
             </div>
           )}
 
-          {/* Has meals — just Add meal button */}
-          {!disabled && !skipped && !showPicker && !selectedPreset && !showCompose && !composedPortions && meals.length > 0 && (
-            <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setShowPicker(true)}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add meal
-            </Button>
+          {/* Has meals — Add meal + Quick add buttons */}
+          {!disabled && !skipped && !showPicker && !selectedPreset && !showCompose && !composedPortions && !showQuickAdd && meals.length > 0 && (
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" className="flex-1 text-muted-foreground" onClick={() => setShowPicker(true)}>
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add meal
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground" onClick={() => setShowQuickAdd(true)} disabled={disabled}>
+                <Plus className="h-3 w-3" />
+                Quick add
+              </Button>
+            </div>
           )}
 
           {/* Preset picker */}
