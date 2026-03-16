@@ -353,10 +353,12 @@ export function NutritionDashboard({
                 </div>
               ) : (
                 <>
-                  <div className={`text-4xl font-bold tabular-nums ${remainingCal < 0 ? "text-muted-foreground" : ""}`}>
-                    {Math.round(remainingCal)}
+                  <div className={`text-4xl font-bold tabular-nums ${remainingCal < 0 ? "text-rose-500" : ""}`}>
+                    {remainingCal < 0 ? `+${Math.abs(Math.round(remainingCal))}` : Math.round(remainingCal)}
                   </div>
-                  <div className="text-xs text-muted-foreground">calories remaining</div>
+                  <div className="text-xs text-muted-foreground">
+                    {remainingCal < 0 ? "calories over budget" : "calories remaining"}
+                  </div>
                 </>
               )}
             </div>
