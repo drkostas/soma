@@ -98,7 +98,7 @@ interface MealCardProps {
   skipped?: boolean;
   slotBudget?: Record<string, number> | null;
   ingredients?: any[];
-  onMealLogged: () => void;
+  onMealLogged: (changedSlot?: string) => void;
   onSlotSkipped?: () => void;
 }
 
@@ -238,7 +238,7 @@ export function MealCard({
         setSelectedPreset(null);
         setShowPicker(false);
         setMultiplier(1);
-        onMealLogged();
+        onMealLogged(slot);
       }
     } finally {
       setLogging(false);
@@ -252,7 +252,7 @@ export function MealCard({
         method: "DELETE",
       });
       if (res.ok) {
-        onMealLogged();
+        onMealLogged(slot);
       }
     } finally {
       setDeleting(null);
@@ -289,7 +289,7 @@ export function MealCard({
       });
       setShowQuickAdd(false);
       setQuickName(""); setQuickCal(""); setQuickP(""); setQuickC(""); setQuickF("");
-      onMealLogged();
+      onMealLogged(slot);
     } finally {
       setLogging(false);
     }
@@ -349,7 +349,7 @@ export function MealCard({
         setComposedPortions(null);
         setSelectedIngredients(new Set());
         setShowCompose(false);
-        onMealLogged();
+        onMealLogged(slot);
         setShowSavePrompt(true);
       }
     } finally {

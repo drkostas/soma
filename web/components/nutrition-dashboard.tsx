@@ -175,6 +175,7 @@ export function NutritionDashboard({
   const [breakdown, setBreakdown] = useState<any>(null);
   const [trend7d, setTrend7d] = useState<any>(null);
   const [dataReady, setDataReady] = useState(false);
+  const [rebalanceToast, setRebalanceToast] = useState<string | null>(null);
 
   const isClosed = plan?.status === "closed";
 
@@ -198,6 +199,31 @@ export function NutritionDashboard({
       setDataReady(true); // still mark ready on error
     }
   }, [date]);
+
+  const rebalanceMeals = useCallback(async (changedSlot?: string) => {
+    try {
+      const res = await fetch("/api/nutrition/rebalance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, changedSlot }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.changes && data.changes.length > 0) {
+        const msg = data.changes
+          .map((c: any) => `${c.ingredient} ${c.from}g \u2192 ${c.to}g`)
+          .join(", ");
+        setRebalanceToast(msg);
+        setTimeout(() => setRebalanceToast(null), 5000);
+        await refreshData();
+      }
+    } catch {}
+  }, [date, refreshData]);
+
+  const handleMealChanged = useCallback(async (changedSlot?: string) => {
+    await refreshData();
+    await rebalanceMeals(changedSlot);
+  }, [refreshData, rebalanceMeals]);
 
   // Load breakdown + trend data on mount
   useEffect(() => {
@@ -713,7 +739,7 @@ export function NutritionDashboard({
             skipped={skippedSlots.includes(slot)}
             date={date}
             disabled={isClosed}
-            onMealLogged={refreshData}
+            onMealLogged={(slot?: string) => handleMealChanged(slot)}
             onSlotSkipped={refreshData}
           />
         ))}
@@ -723,7 +749,7 @@ export function NutritionDashboard({
           drinks={drinks}
           date={date}
           disabled={isClosed}
-          onDrinkLogged={refreshData}
+          onDrinkLogged={() => handleMealChanged()}
         />
 
         {/* Close Day button */}
@@ -738,6 +764,12 @@ export function NutritionDashboard({
           </Button>
         )}
       </div>
+      {rebalanceToast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-card border border-border rounded-lg px-4 py-2 text-sm shadow-lg z-50 max-w-sm text-center animate-in fade-in slide-in-from-bottom-2">
+          Adjusted: {rebalanceToast}
+          <button onClick={() => setRebalanceToast(null)} className="ml-2 text-muted-foreground hover:text-foreground">{"\u2715"}</button>
+        </div>
+      )}
     </div>
   );
 }
