@@ -25,7 +25,8 @@ function autoMealName(items: any[]): string {
       .replace(/_raw$/, "")
       .replace(/_(dry|whole)$/i, "")
       .replace(/_\d+pct$/i, "")
-      .replace(/^(protein_powder_|greek_yogurt_?)/, (m) => m.includes("protein") ? "whey_" : "yogurt_")
+      .replace(/^protein_powder_whey$/, "whey")
+      .replace(/^greek_yogurt.*/, "yogurt")
       .replace(/_/g, " ")
       .replace(/\b\w/g, (c: string) => c.toUpperCase())
       .trim();
