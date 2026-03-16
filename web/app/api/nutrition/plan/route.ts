@@ -417,24 +417,32 @@ export async function GET(req: NextRequest) {
       date::text AS date,
       target_calories,
       actual_calories,
-      status
+      status,
+      manual_override,
+      deficit_used
     FROM nutrition_day
     WHERE date >= ${date}::date - interval '6 days'
       AND date <= ${date}::date
     ORDER BY date
   `;
 
+  // Goal deficit from profile (the user's real target, e.g. 800/day)
+  const goalDeficit = defaultDeficit;
+
   const trend7d = {
+    goalDeficit,
     days: trendRows.map((r: Record<string, unknown>) => {
       const isCurrentDay = String(r.date) === date;
       const displayTarget = isCurrentDay && breakdown
         ? Number((breakdown as any).targetIntake)
         : Number(r.target_calories) || 0;
+      const isManual = r.manual_override === true;
       return {
         date: r.date,
         target: displayTarget,
         actual: Number(r.actual_calories) || 0,
         closed: r.status === "closed",
+        manual: isManual,
         delta:
           r.status === "closed"
             ? (Number(r.actual_calories) || 0) - displayTarget
@@ -449,6 +457,20 @@ export async function GET(req: NextRequest) {
         0,
       ),
     closedDays: trendRows.filter((r: Record<string, unknown>) => r.status === "closed").length,
+    // Goal-based tracking: how much ACTUAL deficit vs the 800/day goal
+    // For closed days: deficit = burn - actual_eaten. We approximate burn as target + deficit_used
+    goalTotalDeficit: trendRows
+      .filter((r: Record<string, unknown>) => r.status === "closed")
+      .reduce((sum: number, r: Record<string, unknown>) => {
+        const actual = Number(r.actual_calories) || 0;
+        const target = Number(r.target_calories) || 0;
+        const deficitUsed = Number(r.deficit_used) || goalDeficit;
+        const estimatedBurn = target + deficitUsed;
+        return sum + (estimatedBurn - actual);
+      }, 0),
+    goalExpectedDeficit: trendRows
+      .filter((r: Record<string, unknown>) => r.status === "closed")
+      .length * goalDeficit,
   };
 
   return NextResponse.json({
