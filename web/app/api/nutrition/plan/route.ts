@@ -216,7 +216,7 @@ export async function GET(req: NextRequest) {
         if (lw > 0) weightKg = lw;
       }
     } catch {}
-    const defaultDeficit = Number(profileRows[0]?.daily_deficit) || 500;
+    const defaultDeficit = profileRows[0]?.daily_deficit != null ? Number(profileRows[0].daily_deficit) : 500;
 
     let stepGoal = Number(plan.step_goal) || 0;
     if (!stepGoal || stepGoal === 10000) {
@@ -309,7 +309,7 @@ export async function GET(req: NextRequest) {
 
     // Use profile deficit unless manual_override (then use stored deficit_used)
     const effectiveDeficit = manualOverride
-      ? (Number(plan.deficit_used) || defaultDeficit)
+      ? (plan.deficit_used != null ? Number(plan.deficit_used) : defaultDeficit)
       : defaultDeficit;
     dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal - effectiveDeficit);
 
