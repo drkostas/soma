@@ -16,21 +16,23 @@ logger = logging.getLogger(__name__)
 
 
 def close_yesterday(conn) -> None:
-    """Close yesterday's nutrition_day with reconciled actuals."""
-    yesterday = date.today() - timedelta(days=1)
+    """Close all unclosed past nutrition days with reconciled actuals."""
+    today = date.today()
 
     with conn.cursor() as cur:
-        # Check if yesterday exists and is still active
+        # Find ALL unclosed past days (not just yesterday)
         cur.execute(
-            "SELECT status, selected_workouts, run_enabled, plan "
-            "FROM nutrition_day WHERE date = %s",
-            (yesterday,),
+            "SELECT date, selected_workouts, run_enabled, plan "
+            "FROM nutrition_day WHERE date < %s AND status = 'active' "
+            "ORDER BY date",
+            (today,),
         )
-        row = cur.fetchone()
-        if row is None or row[0] == "closed":
+        unclosed_days = cur.fetchall()
+        if not unclosed_days:
             return
 
-        status, selected_workouts, run_enabled, plan_json = row
+    for yesterday, selected_workouts, run_enabled, plan_json in unclosed_days:
+      with conn.cursor() as cur:
         selected = selected_workouts or []
 
         # 1. Actual steps
