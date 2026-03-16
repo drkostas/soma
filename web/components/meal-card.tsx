@@ -128,6 +128,7 @@ export function MealCard({
   const [lastComposedTotals, setLastComposedTotals] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
+  const [editingMealId, setEditingMealId] = useState<number | null>(null);
 
   const handleSkip = async () => {
     setSkipping(true);
@@ -231,6 +232,7 @@ export function MealCard({
     setSelectedPreset(null);
     setShowPicker(false);
     setMultiplier(1);
+    setEditingMealId(null);
   };
 
   const handleToggleIngredient = (id: string) => {
@@ -265,6 +267,12 @@ export function MealCard({
   ) => {
     setLogging(true);
     try {
+      // If editing, delete the old meal first
+      if (editingMealId) {
+        await fetch(`/api/nutrition/log-meal?id=${editingMealId}`, { method: "DELETE" });
+        setEditingMealId(null);
+      }
+
       const res = await fetch("/api/nutrition/log-meal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -361,6 +369,7 @@ export function MealCard({
     setComposedPortions(null);
     setSelectedIngredients(new Set());
     setShowCompose(false);
+    setEditingMealId(null);
   };
 
   return (
@@ -740,8 +749,8 @@ export function MealCard({
                 })
                 .filter((p): p is PortionResult => p !== null);
               setComposedPortions(portions);
-              // Delete the old meal so the new composed one replaces it
-              handleDelete(detailMeal.id);
+              // Mark the old meal for deletion on successful save
+              setEditingMealId(detailMeal.id);
               setDetailMeal(null);
             } : undefined}
           />
