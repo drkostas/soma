@@ -245,7 +245,7 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
     ]);
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-6">
+    <div className="max-w-lg mx-auto px-4 py-6 lg:max-w-5xl">
       <NutritionDashboard
         date={today}
         plan={plan}
