@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useEffect } from "react";
-import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -238,6 +238,16 @@ export function NutritionDashboard({
     ? [...MEAL_SLOTS, "during_workout" as const]
     : [...MEAL_SLOTS];
 
+  // Unlock manual override handler
+  const handleUnlock = async () => {
+    await fetch("/api/nutrition/activity-select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, manual_override: false }),
+    });
+    await refreshData();
+  };
+
   // Close day handler
   const handleCloseDay = async () => {
     setClosing(true);
@@ -281,10 +291,28 @@ export function NutritionDashboard({
               Closed
             </Badge>
           )}
+          {isClosed && (
+            <button
+              onClick={async () => {
+                await fetch("/api/nutrition/reopen-day", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ date }),
+                });
+                await refreshData();
+              }}
+              className="text-[10px] text-muted-foreground hover:text-foreground underline ml-1"
+            >
+              reopen
+            </button>
+          )}
           {breakdown?.manualOverride && !isClosed && (
             <Badge variant="secondary" className="gap-1 text-amber-500 border-amber-500/30">
               <Lock className="h-3 w-3" />
               Offset Plan
+              <button onClick={handleUnlock} className="ml-1 hover:text-foreground">
+                <X className="h-3 w-3" />
+              </button>
             </Badge>
           )}
         </div>
