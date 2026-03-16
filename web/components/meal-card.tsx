@@ -23,9 +23,11 @@ function autoMealName(items: any[]): string {
     const raw = item.name || item.ingredient_id || "";
     return raw
       .replace(/_raw$/, "")
+      .replace(/_(dry|whole)$/i, "")
+      .replace(/_\d+pct$/i, "")
+      .replace(/^(protein_powder_|greek_yogurt_?)/, (m) => m.includes("protein") ? "whey_" : "yogurt_")
       .replace(/_/g, " ")
       .replace(/\b\w/g, (c: string) => c.toUpperCase())
-      .replace(/\d+Pct$/i, "")
       .trim();
   });
   if (names.length <= 1) return names[0] || "Custom meal";
