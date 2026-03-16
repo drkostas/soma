@@ -489,26 +489,30 @@ export function NutritionDashboard({
                 {slotBudgets && (
                   <div className="space-y-1">
                     <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Per-Meal Budget</div>
-                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
-                      <span className="text-muted-foreground text-[10px]">Slot</span>
-                      <span className="text-muted-foreground text-[10px] text-right">kcal</span>
-                      <span className="text-muted-foreground text-[10px] text-right">P</span>
-                      <span className="text-muted-foreground text-[10px] text-right">C</span>
-                      <span className="text-muted-foreground text-[10px] text-right">F</span>
-                      <span className="text-muted-foreground text-[10px] text-right">Fi</span>
-                      {Object.entries(slotBudgets).map(([slot, macros]: [string, any]) => (
-                        <React.Fragment key={slot}>
-                          <span className={skippedSlots.includes(slot) ? "text-muted-foreground/50 line-through" : ""}>
-                            {slot.replace("_", "-")}
-                          </span>
-                          <span className="tabular-nums text-right">{Math.round(macros.calories)}</span>
-                          <span className="tabular-nums text-right text-blue-500">{Math.round(macros.protein)}</span>
-                          <span className="tabular-nums text-right text-amber-500">{Math.round(macros.carbs)}</span>
-                          <span className="tabular-nums text-right text-rose-500">{Math.round(macros.fat)}</span>
-                          <span className="tabular-nums text-right text-green-500">{Math.round(macros.fiber || 0)}</span>
-                        </React.Fragment>
-                      ))}
-                    </div>
+                    {skippedSlots.length >= 4 ? (
+                      <div className="text-xs text-muted-foreground text-center py-2">Fasting day — all meals skipped</div>
+                    ) : (
+                      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
+                        <span className="text-muted-foreground text-[10px]">Slot</span>
+                        <span className="text-muted-foreground text-[10px] text-right">kcal</span>
+                        <span className="text-muted-foreground text-[10px] text-right">P</span>
+                        <span className="text-muted-foreground text-[10px] text-right">C</span>
+                        <span className="text-muted-foreground text-[10px] text-right">F</span>
+                        <span className="text-muted-foreground text-[10px] text-right">Fi</span>
+                        {Object.entries(slotBudgets).map(([slot, macros]: [string, any]) => (
+                          <React.Fragment key={slot}>
+                            <span className={skippedSlots.includes(slot) ? "text-muted-foreground/50 line-through" : ""}>
+                              {slot.replace("_", "-")}
+                            </span>
+                            <span className="tabular-nums text-right">{Math.round(macros.calories)}</span>
+                            <span className="tabular-nums text-right text-blue-500">{Math.round(macros.protein)}</span>
+                            <span className="tabular-nums text-right text-amber-500">{Math.round(macros.carbs)}</span>
+                            <span className="tabular-nums text-right text-rose-500">{Math.round(macros.fat)}</span>
+                            <span className="tabular-nums text-right text-green-500">{Math.round(macros.fiber || 0)}</span>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

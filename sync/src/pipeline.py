@@ -7,6 +7,7 @@ from datetime import date, timedelta
 
 from garmin_client import init_garmin
 from garmin_sync import sync_day, sync_activities_for_date, sync_activity_details, sync_garmin_workouts, push_pending_plans
+from training_engine.garmin_workout_builder import push_plan_to_garmin
 from hevy_sync import sync_all_workouts
 from hevy_client import HevyClient
 from parsers import process_day
@@ -835,6 +836,16 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
     except Exception as e:
         print(f"Strava sync error (non-fatal): {e}")
 
+    # --- Training engine ---
+    print(f"\nRunning training engine...")
+    try:
+        from training_engine.runner import run_training_engine
+        with get_connection() as conn:
+            run_training_engine(conn)
+        print(f"  Training engine: OK")
+    except Exception as e:
+        print(f"  Training engine error (non-fatal): {e}")
+
     # --- Auto-enrich new/stale workouts ---
     print(f"\nEnriching workouts with HR & calorie data...")
     try:
@@ -842,6 +853,15 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
         print(f"  Enriched: {enriched} workouts")
     except Exception as e:
         print(f"  Enrichment error: {e}")
+
+    # --- Generate today's nutrition plan ---
+    print(f"\nGenerating today's nutrition plan...")
+    try:
+        from nutrition_engine.generate_today import generate_today
+        generate_today()
+        print(f"  Nutrition plan: OK")
+    except Exception as e:
+        print(f"  Nutrition plan error (non-fatal): {e}")
 
     # --- Upload enriched workouts to Garmin ---
     print(f"\nUploading enriched workouts to Garmin...")
@@ -1011,6 +1031,21 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
         print(f"  Pushed: {pushed} plans")
     except Exception as e:
         print(f"  Push plans error (non-fatal): {e}")
+
+    # --- Push pending training plan workouts to Garmin ---
+    print(f"\nPushing pending training plan workouts to Garmin...")
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM training_plan WHERE status = 'active' LIMIT 1")
+                row = cur.fetchone()
+            if row:
+                tp_pushed = push_plan_to_garmin(conn, client, row[0])
+                print(f"  Pushed: {tp_pushed} training plan workouts")
+            else:
+                print(f"  No active training plan found")
+    except Exception as e:
+        print(f"  Training plan push error (non-fatal): {e}")
 
     # --- Log completion ---
     total = total_raw + total_activities
