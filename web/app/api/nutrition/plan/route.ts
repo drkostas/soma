@@ -229,7 +229,10 @@ export async function GET(req: NextRequest) {
 
     // Recompute step calories from scratch using weight-based formula
     const calPerStep = 0.0005 * weightKg;
-    const rawStepCalories = Math.round(expectedSteps * calPerStep);
+    const isClosed = plan?.status === "closed";
+    const isPast = date < new Date().toISOString().slice(0, 10);
+    const stepsForCalc = (isClosed || isPast) && actualSteps !== null ? actualSteps : expectedSteps;
+    const rawStepCalories = Math.round(stepsForCalc * calPerStep);
 
     let adjustedStepCalories = rawStepCalories;
     let runStepEstimate = 0;
@@ -291,7 +294,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal - (Number(plan.deficit_used) || defaultDeficit));
+    // Use profile deficit unless manual_override (then use stored deficit_used)
+    const effectiveDeficit = manualOverride
+      ? (Number(plan.deficit_used) || defaultDeficit)
+      : defaultDeficit;
+    dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal - effectiveDeficit);
 
     // If manual_override, use stored target instead of computed
     if (manualOverride && Number(plan.target_calories) > 0) {
@@ -302,6 +309,15 @@ export async function GET(req: NextRequest) {
     dayTargets.protein = Math.round(weightKg * 2.2);
     dayTargets.fat = Math.round(weightKg * 0.8);
     dayTargets.carbs = Math.round(Math.max(0, (dayTargets.calories - dayTargets.protein * 4 - dayTargets.fat * 9) / 4));
+
+    // Scale protein+fat down if they exceed calorie budget (extreme deficit days)
+    const macroFloorCal = dayTargets.protein * 4 + dayTargets.fat * 9;
+    if (macroFloorCal > dayTargets.calories && dayTargets.calories > 0) {
+      const scale = dayTargets.calories / macroFloorCal;
+      dayTargets.protein = Math.round(dayTargets.protein * scale);
+      dayTargets.fat = Math.round(dayTargets.fat * scale);
+      dayTargets.carbs = 0;
+    }
 
     // If no run, shift 10% of carb calories to fat
     if (!runEnabled && dayTargets.carbs > 0) {
@@ -368,9 +384,10 @@ export async function GET(req: NextRequest) {
       gymBreakdown: gymBreakdownFinal,
       selectedWorkouts,
       drinkCalories,
-      deficit: Number(plan.deficit_used) || defaultDeficit,
+      deficit: effectiveDeficit,
       totalBurn: Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal),
       targetIntake: dayTargets.calories,
+      manualOverride,
       adjustedTargets: {
         calories: dayTargets.calories,
         protein: dayTargets.protein,
