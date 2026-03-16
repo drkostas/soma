@@ -427,7 +427,11 @@ export async function GET(req: NextRequest) {
   `;
 
   // Goal deficit from profile (the user's real target, e.g. 800/day)
-  const goalDeficit = defaultDeficit;
+  let goalDeficit = 800;
+  try {
+    const profRows = await sql`SELECT daily_deficit FROM nutrition_profile WHERE id = 1`;
+    goalDeficit = profRows[0]?.daily_deficit != null ? Number(profRows[0].daily_deficit) : 800;
+  } catch {}
 
   const trend7d = {
     goalDeficit,
