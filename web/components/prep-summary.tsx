@@ -56,9 +56,9 @@ export function PrepSummary({ meals, desktop }: { meals: Meal[]; desktop?: boole
       }
     }
 
-    // Filter to ingredients in 2+ DIFFERENT meals
+    // Filter to cookable ingredients (is_raw) in 2+ DIFFERENT meals
     return Object.entries(groups)
-      .filter(([, g]) => g.meals.length >= 2)
+      .filter(([, g]) => g.isRaw && g.meals.length >= 2)
       .map(([id, g]): PrepItem => ({
         ingredientId: id,
         name: g.name,
