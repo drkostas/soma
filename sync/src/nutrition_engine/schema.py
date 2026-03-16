@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS ingredients (
 
 -- Backfill ingredients columns for existing installs
 ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS usda_fdc_id INTEGER;
+ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS shrink_priority INTEGER DEFAULT 2;
 
 -- Preset meal templates
 CREATE TABLE IF NOT EXISTS preset_meals (
