@@ -5,9 +5,9 @@ export const runtime = "edge";
 
 /* ── Per-slot distribution fractions ── */
 const SLOT_DISTRIBUTION: Record<string, Record<string, number>> = {
-  breakfast: { calories: 0.25, protein: 0.25, carbs: 0.25, fat: 0.25, fiber: 0.2 },
-  lunch: { calories: 0.3, protein: 0.25, carbs: 0.3, fat: 0.3, fiber: 0.3 },
-  dinner: { calories: 0.35, protein: 0.32, carbs: 0.35, fat: 0.35, fiber: 0.35 },
+  breakfast: { calories: 0.28, protein: 0.25, carbs: 0.28, fat: 0.28, fiber: 0.2 },
+  lunch: { calories: 0.25, protein: 0.25, carbs: 0.25, fat: 0.25, fiber: 0.3 },
+  dinner: { calories: 0.37, protein: 0.32, carbs: 0.37, fat: 0.37, fiber: 0.35 },
   pre_sleep: { calories: 0.1, protein: 0.18, carbs: 0.1, fat: 0.1, fiber: 0.15 },
 };
 
