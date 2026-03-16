@@ -351,6 +351,9 @@ def generate_today() -> None:
                 planned_workouts = json.dumps(pw)
 
         # 11. Upsert into nutrition_day
+        # NOTE: ON CONFLICT preserves user-set columns (skipped_slots, run_enabled,
+        # selected_workouts, expected_steps, manual_override) because they are NOT
+        # in the UPDATE SET clause. Only plan-computed columns are refreshed.
         plan_json = json.dumps(plan)
         cur.execute(
             """
