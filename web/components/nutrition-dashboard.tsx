@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { MealCard } from "@/components/meal-card";
 import { DrinkLogger } from "@/components/drink-logger";
 import { ActivitySelector } from "@/components/activity-selector";
+import { PrepSummary } from "@/components/prep-summary";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -654,10 +655,18 @@ export function NutritionDashboard({
             : "Activities finalized"
           }
         />
+
+        <div className="hidden lg:block">
+          <PrepSummary meals={meals} desktop />
+        </div>
       </div>
 
       {/* ── RIGHT COLUMN: meals, drinks, close day ── */}
       <div className="space-y-4">
+        <div className="lg:hidden">
+          <PrepSummary meals={meals} />
+        </div>
+
         {/* Quick actions */}
         {!isClosed && meals.length === 0 && (
           <div className="flex gap-2">
