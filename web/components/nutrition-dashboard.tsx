@@ -563,7 +563,12 @@ export function NutritionDashboard({
                                   {dayLabel}
                                   {d.manual && <span className="text-amber-500 text-[9px] ml-0.5">*</span>}
                                 </span>
-                                <span className="tabular-nums text-right">{d.target || "\u2013"}</span>
+                                <span className="tabular-nums text-right">
+                                  {d.target || "\u2013"}
+                                  {d.offsetTarget != null && (
+                                    <span className="text-muted-foreground/50 text-[9px] ml-0.5">({d.offsetTarget})</span>
+                                  )}
+                                </span>
                                 <span className="tabular-nums text-right">{d.closed ? d.actual : "\u2013"}</span>
                                 <span className={`tabular-nums text-right ${
                                   d.delta == null ? "text-muted-foreground" : d.delta < 0 ? "text-green-500" : d.delta > 0 ? "text-amber-500" : ""
@@ -573,10 +578,10 @@ export function NutritionDashboard({
                               </React.Fragment>
                             );
                           })}
-                          {/* Total vs plan */}
+                          {/* Total */}
                           {trend7d.closedDays > 0 && (
                             <React.Fragment key="trend-total">
-                              <span className="font-medium border-t pt-1">vs plan</span>
+                              <span className="font-medium border-t pt-1">Total ({trend7d.closedDays}d)</span>
                               <span className="border-t pt-1" />
                               <span className="border-t pt-1" />
                               <span className={`tabular-nums text-right font-bold border-t pt-1 ${
@@ -586,26 +591,9 @@ export function NutritionDashboard({
                               </span>
                             </React.Fragment>
                           )}
-                          {/* Goal deficit progress */}
-                          {trend7d.closedDays > 0 && trend7d.goalTotalDeficit != null && (
-                            <React.Fragment key="trend-goal">
-                              <span className="font-medium text-[10px]">
-                                deficit ({trend7d.closedDays}d)
-                              </span>
-                              <span className="tabular-nums text-right text-[10px] text-muted-foreground">
-                                goal: {trend7d.goalExpectedDeficit}
-                              </span>
-                              <span />
-                              <span className={`tabular-nums text-right font-bold ${
-                                trend7d.goalTotalDeficit >= trend7d.goalExpectedDeficit ? "text-green-500" : "text-amber-500"
-                              }`}>
-                                {Math.round(trend7d.goalTotalDeficit)}
-                              </span>
-                            </React.Fragment>
-                          )}
                         </div>
-                        {trend7d.closedDays > 0 && trend7d.days.some((d: any) => d.manual) && (
-                          <div className="text-[9px] text-muted-foreground/60">* manual/offset target</div>
+                        {trend7d.days.some((d: any) => d.manual) && (
+                          <div className="text-[9px] text-muted-foreground/60">* offset target in parentheses · +/− vs {trend7d.goalDeficit}/day goal</div>
                         )}
                       </div>
                     )}
