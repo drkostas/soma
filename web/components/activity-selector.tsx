@@ -31,6 +31,7 @@ interface ActivitySelectorProps {
   stepGoal: number;
   runStepEstimate: number;
   onActivityChanged: () => void;
+  disabled?: boolean;
 }
 
 export function ActivitySelector({
@@ -43,6 +44,7 @@ export function ActivitySelector({
   stepGoal,
   runStepEstimate,
   onActivityChanged,
+  disabled,
 }: ActivitySelectorProps) {
   const [runEnabled, setRunEnabled] = useState(initialRunEnabled);
   const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>(initialSelectedWorkouts);
@@ -109,117 +111,122 @@ export function ActivitySelector({
   const hasRun = training && training.target_distance_km && training.target_distance_km > 0;
 
   return (
-    <Card>
-      <CardContent className="py-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
-            Today&apos;s Activity
-          </span>
-          {saving && (
-            <span className="text-[10px] text-muted-foreground animate-pulse">
-              saving...
+    <div className={disabled ? "opacity-50 pointer-events-none" : ""}>
+      <Card>
+        <CardContent className="py-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              Today&apos;s Activity
             </span>
-          )}
-        </div>
+            {saving && (
+              <span className="text-[10px] text-muted-foreground animate-pulse">
+                saving...
+              </span>
+            )}
+          </div>
 
-        {/* Run toggle */}
-        {hasRun && (
-          <button
-            className={`w-full flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
-              runEnabled
-                ? "bg-primary/10 border border-primary/30"
-                : "bg-muted/30 border border-transparent opacity-60"
-            }`}
-            onClick={toggleRun}
-          >
-            <div className="flex items-center gap-2">
-              <span>🏃</span>
-              <div className="text-left">
-                <div className="font-medium text-xs">
-                  {training!.run_title || training!.run_type || "Run"}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  {training!.target_distance_km}km
-                  {training!.load_level && ` · ${training!.load_level}`}
+          {/* Run toggle */}
+          {hasRun && (
+            <button
+              className={`w-full flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
+                runEnabled
+                  ? "bg-primary/10 border border-primary/30"
+                  : "bg-muted/30 border border-transparent opacity-60"
+              }`}
+              onClick={toggleRun}
+            >
+              <div className="flex items-center gap-2">
+                <span>🏃</span>
+                <div className="text-left">
+                  <div className="font-medium text-xs">
+                    {training!.run_title || training!.run_type || "Run"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {training!.target_distance_km}km
+                    {training!.load_level && ` · ${training!.load_level}`}
+                  </div>
                 </div>
               </div>
-            </div>
-            <span className="text-xs tabular-nums">
-              {runEnabled ? "ON" : "OFF"}
-            </span>
-          </button>
-        )}
+              <span className="text-xs tabular-nums">
+                {runEnabled ? "ON" : "OFF"}
+              </span>
+            </button>
+          )}
 
-        {/* Expected steps */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Expected steps</span>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => {
-                const next = Math.max(minSteps, steps - 1000);
-                setSteps(next);
-                saveSelections(runEnabled, selectedWorkouts, next);
-              }}
-              disabled={steps <= minSteps}
-            >
-              <span className="text-xs">&minus;</span>
-            </Button>
-            <span className="text-xs tabular-nums w-14 text-center font-medium">
-              {steps.toLocaleString()}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => {
-                const next = steps + 1000;
-                setSteps(next);
-                saveSelections(runEnabled, selectedWorkouts, next);
-              }}
-            >
-              <span className="text-xs">+</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Gym routine chips */}
-        {routines.length > 0 && (
-          <div>
-            <span className="text-[10px] text-muted-foreground mb-1.5 block">
-              Gym Workouts
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {routines.map((r) => {
-                const isSelected = selectedWorkouts.includes(r.hevy_title);
-                return (
-                  <Button
-                    key={r.hevy_title}
-                    variant={isSelected ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => toggleWorkout(r.hevy_title)}
-                  >
-                    {r.hevy_title}
-                    <span className="ml-1 opacity-60">
-                      {r.avg_calories}cal
-                    </span>
-                  </Button>
-                );
-              })}
+          {/* Expected steps */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Expected steps</span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => {
+                  const next = Math.max(minSteps, steps - 1000);
+                  setSteps(next);
+                  saveSelections(runEnabled, selectedWorkouts, next);
+                }}
+                disabled={steps <= minSteps}
+              >
+                <span className="text-xs">&minus;</span>
+              </Button>
+              <span className="text-xs tabular-nums w-14 text-center font-medium">
+                {steps.toLocaleString()}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => {
+                  const next = steps + 1000;
+                  setSteps(next);
+                  saveSelections(runEnabled, selectedWorkouts, next);
+                }}
+              >
+                <span className="text-xs">+</span>
+              </Button>
             </div>
           </div>
-        )}
 
-        {/* No activity available */}
-        {!hasRun && routines.length === 0 && (
-          <div className="text-xs text-muted-foreground text-center py-1">
-            No training data available
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          {/* Gym routine chips */}
+          {routines.length > 0 && (
+            <div>
+              <span className="text-[10px] text-muted-foreground mb-1.5 block">
+                Gym Workouts
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {routines.map((r) => {
+                  const isSelected = selectedWorkouts.includes(r.hevy_title);
+                  return (
+                    <Button
+                      key={r.hevy_title}
+                      variant={isSelected ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => toggleWorkout(r.hevy_title)}
+                    >
+                      {r.hevy_title}
+                      <span className="ml-1 opacity-60">
+                        {r.avg_calories}cal
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* No activity available */}
+          {!hasRun && routines.length === 0 && (
+            <div className="text-xs text-muted-foreground text-center py-1">
+              No training data available
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      {disabled && (
+        <div className="text-[10px] text-amber-500 mt-1">Target locked — offset plan</div>
+      )}
+    </div>
   );
 }

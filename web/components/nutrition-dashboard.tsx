@@ -281,6 +281,12 @@ export function NutritionDashboard({
               Closed
             </Badge>
           )}
+          {breakdown?.manualOverride && !isClosed && (
+            <Badge variant="secondary" className="gap-1 text-amber-500 border-amber-500/30">
+              <Lock className="h-3 w-3" />
+              Offset Plan
+            </Badge>
+          )}
         </div>
         <a href={`/nutrition?date=${(() => { const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })()}`}>
           <Button variant="ghost" size="icon"><ChevronRight className="h-4 w-4" /></Button>
@@ -338,15 +344,21 @@ export function NutritionDashboard({
             {/* One-line equation summary — only after dynamic data loads */}
             {dataReady && breakdown && (
               <div className="text-[10px] text-muted-foreground text-center">
-                {breakdown.bmr} BMR
-                {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} steps`}
-                {breakdown.runCalories > 0 && ` + ${breakdown.runCalories} run${breakdown.runActual ? " \u2713" : " ~"}`}
-                {breakdown.gymBreakdown && breakdown.gymBreakdown.length > 0
-                  ? breakdown.gymBreakdown.map((w: any) => ` + ${w.calories} ${w.title}${w.actual ? " \u2713" : " ~"}`).join("")
-                  : breakdown.gymCalories > 0 ? ` + ${breakdown.gymCalories} gym` : ""}
-                {breakdown.deficit > 0 && ` \u2212 ${breakdown.deficit} deficit`}
-                {breakdown.drinkCalories > 0 && ` \u2212 ${breakdown.drinkCalories} drinks`}
-                {` = ${breakdown.targetIntake}`}
+                {breakdown.manualOverride ? (
+                  <>Manual target: {breakdown.targetIntake} kcal</>
+                ) : (
+                  <>
+                    {breakdown.bmr} BMR
+                    {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} steps`}
+                    {breakdown.runCalories > 0 && ` + ${breakdown.runCalories} run${breakdown.runActual ? " \u2713" : " ~"}`}
+                    {breakdown.gymBreakdown && breakdown.gymBreakdown.length > 0
+                      ? breakdown.gymBreakdown.map((w: any) => ` + ${w.calories} ${w.title}${w.actual ? " \u2713" : " ~"}`).join("")
+                      : breakdown.gymCalories > 0 ? ` + ${breakdown.gymCalories} gym` : ""}
+                    {breakdown.deficit > 0 && ` \u2212 ${breakdown.deficit} deficit`}
+                    {breakdown.drinkCalories > 0 && ` \u2212 ${breakdown.drinkCalories} drinks`}
+                    {` = ${breakdown.targetIntake}`}
+                  </>
+                )}
               </div>
             )}
 
@@ -509,18 +521,22 @@ export function NutritionDashboard({
             )}
 
             {/* Macro bars (always visible) */}
-            <div className="grid gap-2 pt-1">
-              <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
-                color="[&>[data-slot=progress-indicator]]:bg-blue-500" />
-              <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
-                color="[&>[data-slot=progress-indicator]]:bg-amber-500" />
-              <MacroBar label="Fat" current={consumedFat} target={targetFat}
-                color="[&>[data-slot=progress-indicator]]:bg-rose-500" />
-              {targetFiber > 0 && (
-                <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
-                  color="[&>[data-slot=progress-indicator]]:bg-green-500" />
-              )}
-            </div>
+            {dataReady ? (
+              <div className="grid gap-2 pt-1">
+                <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
+                  color="[&>[data-slot=progress-indicator]]:bg-blue-500" />
+                <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
+                  color="[&>[data-slot=progress-indicator]]:bg-amber-500" />
+                <MacroBar label="Fat" current={consumedFat} target={targetFat}
+                  color="[&>[data-slot=progress-indicator]]:bg-rose-500" />
+                {targetFiber > 0 && (
+                  <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
+                    color="[&>[data-slot=progress-indicator]]:bg-green-500" />
+                )}
+              </div>
+            ) : (
+              <div className="h-24" />
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -584,6 +600,7 @@ export function NutritionDashboard({
         stepGoal={Number(plan?.step_goal) || 10000}
         runStepEstimate={breakdown?.runStepEstimate || 0}
         onActivityChanged={refreshData}
+        disabled={breakdown?.manualOverride}
       />
 
       {/* Quick actions */}
