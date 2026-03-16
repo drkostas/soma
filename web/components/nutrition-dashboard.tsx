@@ -373,7 +373,12 @@ export function NutritionDashboard({
             {dataReady && breakdown && (
               <div className="text-[10px] text-muted-foreground text-center">
                 {breakdown.manualOverride ? (
-                  <>Manual target: {breakdown.targetIntake} kcal</>
+                  <>
+                    Manual target: {breakdown.targetIntake} kcal
+                    {breakdown.deficit > 0 && (
+                      <span className="text-muted-foreground/60"> (deficit: {breakdown.deficit})</span>
+                    )}
+                  </>
                 ) : (
                   <>
                     {breakdown.bmr} BMR
@@ -628,7 +633,11 @@ export function NutritionDashboard({
         stepGoal={Number(plan?.step_goal) || 10000}
         runStepEstimate={breakdown?.runStepEstimate || 0}
         onActivityChanged={refreshData}
-        disabled={breakdown?.manualOverride}
+        disabled={(() => {
+          const isPast = date < new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+          const hasActuals = breakdown?.runActual || breakdown?.gymBreakdown?.some((w: any) => w.actual);
+          return breakdown?.manualOverride || (isPast && hasActuals) || isClosed;
+        })()}
       />
 
       {/* Quick actions */}
