@@ -437,27 +437,37 @@ export async function GET(req: NextRequest) {
     goalDeficit,
     days: trendRows.map((r: Record<string, unknown>) => {
       const isCurrentDay = String(r.date) === date;
-      const displayTarget = isCurrentDay && breakdown
+      const storedTarget = isCurrentDay && breakdown
         ? Number((breakdown as any).targetIntake)
         : Number(r.target_calories) || 0;
       const isManual = r.manual_override === true;
+      const deficitUsed = Number(r.deficit_used) || goalDeficit;
+      // Estimate burn = target + deficit_used, then compute goal target at 800/day
+      const estimatedBurn = storedTarget + deficitUsed;
+      const goalTarget = Math.round(estimatedBurn - goalDeficit);
       return {
         date: r.date,
-        target: displayTarget,
+        target: goalTarget, // primary: what you'd eat at goal deficit
+        offsetTarget: isManual ? storedTarget : null, // secondary: offset plan target (if manual)
         actual: Number(r.actual_calories) || 0,
         closed: r.status === "closed",
         manual: isManual,
         delta:
           r.status === "closed"
-            ? (Number(r.actual_calories) || 0) - displayTarget
+            ? (Number(r.actual_calories) || 0) - goalTarget
             : null,
       };
     }),
     totalDelta: trendRows
       .filter((r: Record<string, unknown>) => r.status === "closed")
       .reduce(
-        (sum: number, r: Record<string, unknown>) =>
-          sum + ((Number(r.actual_calories) || 0) - (Number(r.target_calories) || 0)),
+        (sum: number, r: Record<string, unknown>) => {
+          const target = Number(r.target_calories) || 0;
+          const defUsed = Number(r.deficit_used) || goalDeficit;
+          const burn = target + defUsed;
+          const goalTgt = burn - goalDeficit;
+          return sum + ((Number(r.actual_calories) || 0) - goalTgt);
+        },
         0,
       ),
     closedDays: trendRows.filter((r: Record<string, unknown>) => r.status === "closed").length,
