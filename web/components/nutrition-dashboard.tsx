@@ -640,6 +640,11 @@ export function NutritionDashboard({
           const hasActuals = breakdown?.runActual || breakdown?.gymBreakdown?.some((w: any) => w.actual);
           return breakdown?.manualOverride || (isPast && hasActuals) || isClosed;
         })()}
+        disabledReason={
+          breakdown?.manualOverride ? "Target locked — offset plan"
+          : isClosed ? "Day is closed"
+          : "Activities finalized"
+        }
       />
 
       {/* Quick actions */}
