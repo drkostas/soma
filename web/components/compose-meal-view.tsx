@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Minus, Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NumberInput } from "@/components/number-input";
 import {
   type Ingredient,
   type PortionResult,
@@ -54,7 +55,8 @@ export function ComposeMealView({
     });
   };
 
-  const adjustGrams = (ingredientId: string, delta: number) => {
+  /** Set absolute display-unit grams for an ingredient (handles cooked→raw conversion). */
+  const handlePortionChange = (ingredientId: string, displayGrams: number) => {
     const ing = ingMap.get(ingredientId);
     const isCooked = cookedMode.has(ingredientId);
 
@@ -63,12 +65,9 @@ export function ComposeMealView({
         if (p.ingredient_id !== ingredientId) return p;
         let newRawGrams: number;
         if (isCooked && ing && hasRawCookedToggle(ing)) {
-          // Delta is in cooked grams — convert to raw
-          const currentCooked = rawToCooked(ing, p.grams);
-          const newCooked = Math.max(0, currentCooked + delta);
-          newRawGrams = cookedToRaw(ing, newCooked);
+          newRawGrams = cookedToRaw(ing, Math.max(0, displayGrams));
         } else {
-          newRawGrams = Math.max(0, p.grams + delta);
+          newRawGrams = Math.max(0, displayGrams);
         }
         if (!ing) return { ...p, grams: newRawGrams };
         const macros = computeItemMacros(ing, newRawGrams);
@@ -124,19 +123,17 @@ export function ComposeMealView({
           const displayGrams = isCooked && ing ? rawToCooked(ing, p.grams) : p.grams;
           return (
             <div key={p.ingredient_id} className="text-sm">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="truncate flex-1 min-w-0">{ing?.name ?? p.ingredient_id}</span>
-                <div className="flex items-center gap-1 shrink-0 ml-2">
-                  <Button variant="ghost" size="icon" className="h-6 w-6"
-                    onClick={() => adjustGrams(p.ingredient_id, -p.increment)} disabled={p.grams <= 0}>
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="text-xs tabular-nums w-10 text-center font-medium">{displayGrams}g</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6"
-                    onClick={() => adjustGrams(p.ingredient_id, p.increment)}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
+                <NumberInput
+                  value={Math.round(displayGrams)}
+                  onChange={(v) => handlePortionChange(p.ingredient_id, v)}
+                  min={0}
+                  max={500}
+                  step={p.increment}
+                  suffix="g"
+                  className="w-36 shrink-0"
+                />
               </div>
               {canToggle && (
                 <button

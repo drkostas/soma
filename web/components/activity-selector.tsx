@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { NumberInput } from "@/components/number-input";
 
 interface TrainingDay {
   run_type: string | null;
@@ -110,6 +111,22 @@ export function ActivitySelector({
     saveSelections(runEnabled, next, steps);
   };
 
+  // Debounced save for slider-driven changes (steps)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedSave = useCallback(
+    (overrides: { expected_steps?: number }) => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveSelections(
+          runEnabled,
+          selectedWorkouts,
+          overrides.expected_steps ?? steps,
+        );
+      }, 400);
+    },
+    [runEnabled, selectedWorkouts, steps, saveSelections],
+  );
+
   const hasRun = training && training.target_distance_km && training.target_distance_km > 0;
 
   return (
@@ -156,39 +173,18 @@ export function ActivitySelector({
           )}
 
           {/* Expected steps */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Expected steps</span>
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => {
-                  const next = Math.max(minSteps, steps - 1000);
-                  setSteps(next);
-                  saveSelections(runEnabled, selectedWorkouts, next);
-                }}
-                disabled={steps <= minSteps}
-              >
-                <span className="text-xs">&minus;</span>
-              </Button>
-              <span className="text-xs tabular-nums w-14 text-center font-medium">
-                {steps.toLocaleString()}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => {
-                  const next = steps + 1000;
-                  setSteps(next);
-                  saveSelections(runEnabled, selectedWorkouts, next);
-                }}
-              >
-                <span className="text-xs">+</span>
-              </Button>
-            </div>
-          </div>
+          <NumberInput
+            value={steps}
+            onChange={(v) => {
+              setSteps(v);
+              debouncedSave({ expected_steps: v });
+            }}
+            min={minSteps}
+            max={30000}
+            step={250}
+            suffix="steps"
+            label="Expected steps"
+          />
 
           {/* Gym routine chips */}
           {routines.length > 0 && (
