@@ -428,10 +428,10 @@ export function NutritionDashboard({
 
               {/* 7-day trend summary (always visible) */}
               {trend7d && trend7d.closedDays > 0 && (
-                <div className={`text-xs text-center font-medium ${
-                  trend7d.totalDelta < 0 ? "text-green-500" : trend7d.totalDelta > 0 ? "text-amber-500" : "text-muted-foreground"
-                }`}>
-                  7d: {trend7d.totalDelta > 0 ? "+" : ""}{trend7d.totalDelta} kcal ({trend7d.closedDays}d avg: {trend7d.closedDays > 0 ? Math.round(trend7d.totalDelta / trend7d.closedDays) : 0})
+                <div className="text-xs text-center font-medium">
+                  <span className={trend7d.goalTotalDeficit >= trend7d.goalExpectedDeficit ? "text-green-500" : "text-amber-500"}>
+                    Deficit: {Math.round(trend7d.goalTotalDeficit)} / {trend7d.goalExpectedDeficit} kcal ({trend7d.closedDays}d)
+                  </span>
                 </div>
               )}
 
@@ -559,7 +559,10 @@ export function NutritionDashboard({
                             const dayLabel = new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
                             return (
                               <React.Fragment key={d.date}>
-                                <span>{dayLabel}</span>
+                                <span>
+                                  {dayLabel}
+                                  {d.manual && <span className="text-amber-500 text-[9px] ml-0.5">*</span>}
+                                </span>
                                 <span className="tabular-nums text-right">{d.target || "\u2013"}</span>
                                 <span className="tabular-nums text-right">{d.closed ? d.actual : "\u2013"}</span>
                                 <span className={`tabular-nums text-right ${
@@ -570,10 +573,10 @@ export function NutritionDashboard({
                               </React.Fragment>
                             );
                           })}
-                          {/* Total row */}
+                          {/* Total vs plan */}
                           {trend7d.closedDays > 0 && (
                             <React.Fragment key="trend-total">
-                              <span className="font-medium border-t pt-1">Total</span>
+                              <span className="font-medium border-t pt-1">vs plan</span>
                               <span className="border-t pt-1" />
                               <span className="border-t pt-1" />
                               <span className={`tabular-nums text-right font-bold border-t pt-1 ${
@@ -583,7 +586,27 @@ export function NutritionDashboard({
                               </span>
                             </React.Fragment>
                           )}
+                          {/* Goal deficit progress */}
+                          {trend7d.closedDays > 0 && trend7d.goalTotalDeficit != null && (
+                            <React.Fragment key="trend-goal">
+                              <span className="font-medium text-[10px]">
+                                deficit ({trend7d.closedDays}d)
+                              </span>
+                              <span className="tabular-nums text-right text-[10px] text-muted-foreground">
+                                goal: {trend7d.goalExpectedDeficit}
+                              </span>
+                              <span />
+                              <span className={`tabular-nums text-right font-bold ${
+                                trend7d.goalTotalDeficit >= trend7d.goalExpectedDeficit ? "text-green-500" : "text-amber-500"
+                              }`}>
+                                {Math.round(trend7d.goalTotalDeficit)}
+                              </span>
+                            </React.Fragment>
+                          )}
                         </div>
+                        {trend7d.closedDays > 0 && trend7d.days.some((d: any) => d.manual) && (
+                          <div className="text-[9px] text-muted-foreground/60">* manual/offset target</div>
+                        )}
                       </div>
                     )}
                   </div>
