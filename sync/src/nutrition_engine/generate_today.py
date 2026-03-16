@@ -131,6 +131,17 @@ def generate_today() -> None:
 
         cur = conn.cursor()
 
+        # Skip if today already has a manual_override plan
+        cur.execute(
+            "SELECT manual_override FROM nutrition_day WHERE date = %s",
+            (today,),
+        )
+        existing = cur.fetchone()
+        if existing and existing[0]:
+            logger.info("Skipping %s — manual_override is set", today)
+            cur.close()
+            return
+
         # 1. Read full nutrition_profile (singleton, id=1)
         cur.execute(
             "SELECT target_calories, weight_kg, goal, daily_deficit,"
@@ -173,8 +184,9 @@ def generate_today() -> None:
         bmr = None
         cur.execute(
             "SELECT bmr_kilocalories FROM daily_health_summary "
-            "WHERE bmr_kilocalories IS NOT NULL "
-            "ORDER BY date DESC LIMIT 1"
+            "WHERE date < %s AND bmr_kilocalories > 1500 "
+            "ORDER BY date DESC LIMIT 1",
+            (today,),
         )
         health_row = cur.fetchone()
         if health_row and health_row[0]:
