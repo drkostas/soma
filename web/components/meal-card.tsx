@@ -10,6 +10,29 @@ import { ComposeMealView } from "@/components/compose-meal-view";
 import { MealDetailModal } from "@/components/meal-detail-modal";
 import { type Ingredient, type PortionResult, solvePortions, computeItemMacros } from "@/lib/portion-solver";
 
+// ── Helpers ───────────────────────────────────────────────────
+
+/** Generate a readable name from meal items, e.g. "Salmon, Broccoli & Yogurt" */
+function autoMealName(items: any[]): string {
+  if (!items || items.length === 0) return "Custom meal";
+  // Sort by calories desc, pick top 3
+  const sorted = [...items].sort((a, b) => (b.calories || 0) - (a.calories || 0));
+  const top = sorted.slice(0, 3);
+  const names = top.map((item) => {
+    // Use name field if present, otherwise prettify ingredient_id
+    const raw = item.name || item.ingredient_id || "";
+    return raw
+      .replace(/_raw$/, "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c: string) => c.toUpperCase())
+      .replace(/\d+Pct$/i, "")
+      .trim();
+  });
+  if (names.length <= 1) return names[0] || "Custom meal";
+  if (names.length === 2) return `${names[0]} & ${names[1]}`;
+  return `${names[0]}, ${names[1]} & ${names[2]}`;
+}
+
 // ── Constants ─────────────────────────────────────────────────
 
 const SLOT_LABELS: Record<string, string> = {
@@ -453,7 +476,7 @@ export function MealCard({
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
                     <div className="font-medium truncate">
-                      {meal.preset_name || "Custom meal"}
+                      {meal.preset_name || autoMealName(meal.items)}
                       {meal.portion_multiplier !== 1 && (
                         <span className="text-muted-foreground ml-1">
                           ({meal.portion_multiplier}x)
