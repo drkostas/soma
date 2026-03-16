@@ -128,10 +128,10 @@ export async function GET(req: NextRequest) {
     // Resolve fiber target (plan column first, fallback to profile)
     let targetFiber = Number(plan.target_fiber) || 0;
     if (!targetFiber) {
-      const profileRows = await sql`
+      const fiberRows = await sql`
         SELECT target_fiber FROM nutrition_profile WHERE id = 1
       `;
-      targetFiber = Number(profileRows[0]?.target_fiber) || 25;
+      targetFiber = Number(fiberRows[0]?.target_fiber) || 25;
     }
 
     const dayTargets: Record<string, number> = {
@@ -143,8 +143,7 @@ export async function GET(req: NextRequest) {
     };
 
     // ── Adjust targets based on activity selections ──
-    const baseRunCal = Number(plan.exercise_calories) || 0;
-    const runCal = runEnabled ? baseRunCal : 0;
+    const manualOverride: boolean = plan?.manual_override ?? false;
 
     let gymBreakdown: { title: string; calories: number }[] = [];
 
@@ -202,8 +201,9 @@ export async function GET(req: NextRequest) {
     // Note: dayTargets.calories will be fully recomputed below from components
 
     // ── Dynamic step calories: recompute from weight + step formula ──
-    const profileRows = await sql`SELECT weight_kg, step_goal FROM nutrition_profile WHERE id = 1`;
+    const profileRows = await sql`SELECT weight_kg, step_goal, daily_deficit, tdee_estimate FROM nutrition_profile WHERE id = 1`;
     const weightKg = Number(profileRows[0]?.weight_kg) || 79.2;
+    const defaultDeficit = Number(profileRows[0]?.daily_deficit) || 500;
 
     let stepGoal = Number(plan.step_goal) || 0;
     if (!stepGoal || stepGoal === 10000) {
@@ -246,11 +246,31 @@ export async function GET(req: NextRequest) {
 
     if (runEnabled && runDistanceKm > 0) {
       runStepEstimate = Math.round(runDistanceKm * 1300);
-      adjustedStepCalories = Math.round(Math.max(0, expectedSteps - runStepEstimate) * calPerStep);
+      const MIN_NEAT_STEPS = 3000;
+      const netSteps = Math.max(MIN_NEAT_STEPS, expectedSteps - runStepEstimate);
+      adjustedStepCalories = Math.round(netSteps * calPerStep);
     }
 
-    // Recompute target from components: BMR + adjustedSteps + runCal + gymCal - deficit
-    const baseBmr = Number(plan.tdee_used) - Number(plan.step_calories || 0) - Number(plan.exercise_calories || 0);
+    // Compute run calories — use plan value, or estimate from distance × weight
+    let baseRunCal = Number(plan.exercise_calories) || 0;
+    if (baseRunCal === 0 && runDistanceKm > 0) {
+      baseRunCal = Math.round(runDistanceKm * 1.0 * weightKg);
+    }
+    const runCal = runEnabled ? baseRunCal : 0;
+
+    // ── Reliable BMR: query most recent full-day from daily_health_summary ──
+    let baseBmr = 0;
+    try {
+      const bmrRows = await sql`
+        SELECT bmr_kilocalories FROM daily_health_summary
+        WHERE date < ${date}::date AND bmr_kilocalories > 1500
+        ORDER BY date DESC LIMIT 1
+      `;
+      baseBmr = Number(bmrRows[0]?.bmr_kilocalories) || 0;
+    } catch {}
+    if (baseBmr === 0) {
+      baseBmr = Math.round((Number(profileRows[0]?.tdee_estimate) || 2600) * 0.75);
+    }
 
     // Effective calories: actual if completed, predicted if pending
     const effectiveRunCal = runEnabled
@@ -271,19 +291,26 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal - (Number(plan.deficit_used) || 0));
+    dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal - (Number(plan.deficit_used) || defaultDeficit));
 
-    // Recompute macros to match adjusted target
-    dayTargets.protein = Math.round(weightKg * 2.2);
-    dayTargets.fat = Math.round(weightKg * 0.8);
-    dayTargets.carbs = Math.round(Math.max(0, (dayTargets.calories - dayTargets.protein * 4 - dayTargets.fat * 9) / 4));
+    // If manual_override, use stored target instead of computed
+    if (manualOverride && Number(plan.target_calories) > 0) {
+      dayTargets.calories = Number(plan.target_calories);
+    }
 
-    // If no run, shift 10% of carb calories to fat
-    if (!runEnabled && dayTargets.carbs > 0) {
-      const carbShift = Math.round(dayTargets.carbs * 0.1);
-      const fatEquiv = Math.round((carbShift * 4) / 9);
-      dayTargets.carbs -= carbShift;
-      dayTargets.fat += fatEquiv;
+    // Recompute macros to match adjusted target (skip if manual override)
+    if (!manualOverride) {
+      dayTargets.protein = Math.round(weightKg * 2.2);
+      dayTargets.fat = Math.round(weightKg * 0.8);
+      dayTargets.carbs = Math.round(Math.max(0, (dayTargets.calories - dayTargets.protein * 4 - dayTargets.fat * 9) / 4));
+
+      // If no run, shift 10% of carb calories to fat
+      if (!runEnabled && dayTargets.carbs > 0) {
+        const carbShift = Math.round(dayTargets.carbs * 0.1);
+        const fatEquiv = Math.round((carbShift * 4) / 9);
+        dayTargets.carbs -= carbShift;
+        dayTargets.fat += fatEquiv;
+      }
     }
 
     // ── Alcohol offset: reduce food macro targets by drink calories ──
@@ -343,7 +370,7 @@ export async function GET(req: NextRequest) {
       gymBreakdown: gymBreakdownFinal,
       selectedWorkouts,
       drinkCalories,
-      deficit: Number(plan.deficit_used) || 0,
+      deficit: Number(plan.deficit_used) || defaultDeficit,
       totalBurn: Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal),
       targetIntake: dayTargets.calories,
       adjustedTargets: {
@@ -359,7 +386,7 @@ export async function GET(req: NextRequest) {
   // ── 7-day rolling trend ──
   const trendRows = await sql`
     SELECT
-      date,
+      date::text AS date,
       target_calories,
       actual_calories,
       status
