@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
   const sql = getDb();
   const date =
     req.nextUrl.searchParams.get("date") ??
-    new Date().toISOString().slice(0, 10);
+    new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
   const [planRows, mealRows, drinkRows] = await Promise.all([
     sql`SELECT * FROM nutrition_day WHERE date = ${date}`,
@@ -243,7 +243,7 @@ export async function GET(req: NextRequest) {
     // Recompute step calories from scratch using weight-based formula
     const calPerStep = 0.0005 * weightKg;
     const isClosed = plan?.status === "closed";
-    const isPast = date < new Date().toISOString().slice(0, 10);
+    const isPast = date < new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
     const stepsForCalc = (isClosed || isPast) && actualSteps !== null ? actualSteps : expectedSteps;
     const rawStepCalories = Math.round(stepsForCalc * calPerStep);
 

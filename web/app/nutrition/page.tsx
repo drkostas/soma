@@ -138,7 +138,17 @@ async function getNutritionDay(date: string) {
   const rows = await sql`
     SELECT * FROM nutrition_day WHERE date = ${date}
   `;
-  return rows[0] ?? null;
+  if (rows[0]) return rows[0];
+
+  // Auto-create minimal row so meals can be logged
+  try {
+    await sql`
+      INSERT INTO nutrition_day (date, status)
+      VALUES (${date}, 'active')
+      ON CONFLICT (date) DO NOTHING
+    `;
+  } catch {}
+  return null;
 }
 
 async function getMeals(date: string) {
@@ -208,7 +218,7 @@ async function getSleepDetail(date: string) {
 
 export default async function NutritionPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const params = await searchParams;
-  const today = params.date || new Date().toISOString().slice(0, 10);
+  const today = params.date || new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
   // Check if onboarding is needed (no nutrition_profile)
   const bootstrap = await safeQuery(() => getBootstrap(), undefined);
