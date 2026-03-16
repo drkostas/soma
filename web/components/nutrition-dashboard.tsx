@@ -126,16 +126,22 @@ function MacroBar({
   target: number;
   color: string;
 }) {
-  const pct = target > 0 ? Math.min(100, (current / target) * 100) : 0;
+  const overflow = target > 0 && current > target;
+  const noTarget = target <= 0 && current > 0;
+  const pct = target > 0 ? Math.min(100, (current / target) * 100) : (current > 0 ? 100 : 0);
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs text-muted-foreground">
         <span>{label}</span>
-        <span>
+        <span className={overflow || noTarget ? "text-amber-500 font-medium" : ""}>
           {Math.round(current)}/{Math.round(target)}g
+          {(overflow || noTarget) && " ⚡"}
         </span>
       </div>
-      <Progress value={pct} className={`h-2 ${color}`} />
+      <Progress
+        value={pct}
+        className={`h-2 ${color} ${overflow || noTarget ? "ring-2 ring-amber-500/60 ring-offset-1 ring-offset-background rounded-full" : ""}`}
+      />
     </div>
   );
 }
