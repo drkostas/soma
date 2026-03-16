@@ -32,6 +32,7 @@ interface ActivitySelectorProps {
   runStepEstimate: number;
   onActivityChanged: () => void;
   disabled?: boolean;
+  disabledReason?: string;
 }
 
 export function ActivitySelector({
@@ -45,6 +46,7 @@ export function ActivitySelector({
   runStepEstimate,
   onActivityChanged,
   disabled,
+  disabledReason,
 }: ActivitySelectorProps) {
   const [runEnabled, setRunEnabled] = useState(initialRunEnabled);
   const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>(initialSelectedWorkouts);
@@ -225,7 +227,7 @@ export function ActivitySelector({
         </CardContent>
       </Card>
       {disabled && (
-        <div className="text-[10px] text-amber-500 mt-1">Target locked — offset plan</div>
+        <div className="text-[10px] text-amber-500 mt-1">{disabledReason || "Activities finalized"}</div>
       )}
     </div>
   );
