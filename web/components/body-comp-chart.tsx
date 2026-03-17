@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ReferenceLine, ComposedChart,
+  ReferenceLine, ComposedChart, Area,
 } from "recharts";
 
 interface BodyCompData {
   profile: {
     currentWeight: number;
+    latestActualWeight: number;
+    latestActualBf?: number;
     currentBf: number;
     targetWeight: number;
     targetBf: number;
@@ -17,9 +19,11 @@ interface BodyCompData {
     deficit: number;
     ffm: number;
     fatToLose: number;
+    weeklyRate: number;
     daysRemaining: number;
     requiredDeficit: number;
     onTrack: boolean;
+    targetDatePassed: boolean;
     realisticDate: string;
   };
   weights: { date: string; weight: number; smoothed: number; bf: number }[];
@@ -72,14 +76,20 @@ export function BodyCompChart() {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  const statusColor = profile.onTrack ? "text-green-500" : "text-amber-500";
   const fmtDate = (d: string) => {
     const s = String(d).slice(0, 10);
     return new Date(s + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
-  const statusText = profile.onTrack
-    ? `On track \u00b7 ${fmtDate(profile.targetDate)}`
-    : `Behind \u00b7 realistic: ${fmtDate(profile.realisticDate)}`;
+
+  const statusColor = profile.targetDatePassed
+    ? "text-rose-500"
+    : profile.onTrack ? "text-green-500" : "text-amber-500";
+
+  const statusText = profile.targetDatePassed
+    ? "Target date passed \u2014 adjust goal"
+    : profile.onTrack
+      ? `On track \u00b7 ${fmtDate(profile.targetDate)} (${profile.daysRemaining}d)`
+      : `Behind \u00b7 ${fmtDate(profile.realisticDate)} at current pace`;
 
   return (
     <div className="space-y-4">
@@ -88,24 +98,31 @@ export function BodyCompChart() {
         <CardContent className="py-4">
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold tabular-nums">{profile.currentWeight}kg</div>
-              <div className="text-xs text-muted-foreground">&rarr; {profile.targetWeight}kg goal</div>
+              <div className="text-2xl font-bold tabular-nums">{profile.latestActualWeight}kg</div>
+              <div className="text-[10px] text-muted-foreground">avg {profile.currentWeight}kg &middot; &rarr; {profile.targetWeight}kg</div>
             </div>
             <div>
-              <div className="text-2xl font-bold tabular-nums">{profile.currentBf}%</div>
-              <div className="text-xs text-muted-foreground">&rarr; {profile.targetBf}% BF</div>
+              <div className="text-2xl font-bold tabular-nums">{profile.latestActualBf || profile.currentBf}%</div>
+              <div className="text-[10px] text-muted-foreground">&rarr; {profile.targetBf}% BF</div>
             </div>
           </div>
-          <div className="flex items-center justify-center gap-3 mt-3 text-xs">
-            <span className="text-muted-foreground">{profile.deficit} cal/day deficit</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-xs">
+            <span className="text-muted-foreground">{profile.deficit} kcal/day deficit</span>
             <span className="text-muted-foreground">&middot;</span>
             <span className="text-muted-foreground">{profile.fatToLose}kg to lose</span>
             <span className="text-muted-foreground">&middot;</span>
+            <span className="text-muted-foreground">{profile.weeklyRate}kg/week</span>
+            <span className="text-muted-foreground">&middot;</span>
             <span className={`font-medium ${statusColor}`}>{statusText}</span>
           </div>
-          {!profile.onTrack && (
+          {profile.targetDatePassed && (
+            <div className="text-[10px] text-center text-rose-500 mt-1">
+              Consider extending your target date or adjusting your goal
+            </div>
+          )}
+          {!profile.onTrack && !profile.targetDatePassed && (
             <div className="text-[10px] text-center text-amber-500 mt-1">
-              Need {profile.requiredDeficit} cal/day deficit to hit {fmtDate(profile.targetDate)}
+              Need {profile.requiredDeficit} kcal/day deficit to hit {fmtDate(profile.targetDate)}
             </div>
           )}
         </CardContent>
@@ -115,26 +132,32 @@ export function BodyCompChart() {
       <Card>
         <CardContent className="py-4">
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Weight Trajectory</div>
-          <div className="h-64">
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b82f6]" />actual</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />smoothed</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6] opacity-50" style={{borderTop: "2px dashed #3b82f6"}} />projected</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
+          </div>
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
                 <XAxis
                   dataKey="date"
                   tickFormatter={formatDate}
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  interval="preserveStartEnd"
-                  tickCount={6}
+                  tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
+                  interval={Math.max(1, Math.floor(chartData.length / 7))}
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
                   domain={[Math.floor(profile.targetWeight - 2), Math.ceil(profile.currentWeight + 2)]}
                   tickCount={6}
+                  tickFormatter={(v: number) => `${v}kg`}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
+                    backgroundColor: "rgba(10,10,12,0.95)",
+                    border: "1px solid rgba(255,255,255,0.15)",
                     borderRadius: "8px",
                     fontSize: "12px",
                   }}
@@ -148,10 +171,11 @@ export function BodyCompChart() {
                     return [`${value} kg`, labels[name] || name];
                   }}
                 />
-                <ReferenceLine y={profile.targetWeight} stroke="hsl(var(--primary))" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetWeight}kg`, position: "right", fontSize: 10, fill: "hsl(var(--primary))" }} />
-                <Line type="monotone" dataKey="actual" stroke="hsl(var(--primary))" dot={{ r: 2, fill: "hsl(var(--primary))" }} strokeWidth={0} connectNulls={false} />
-                <Line type="monotone" dataKey="smoothed" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} connectNulls={false} />
-                <Line type="monotone" dataKey="projected" stroke="hsl(var(--primary))" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={false} opacity={0.5} />
+                <ReferenceLine y={profile.targetWeight} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetWeight}kg`, position: "right", fontSize: 10, fill: "#22c55e" }} />
+                <Area type="monotone" dataKey="projected" stroke="none" fill="#3b82f6" fillOpacity={0.08} connectNulls={false} />
+                <Line type="monotone" dataKey="actual" stroke="#3b82f6" dot={{ r: 2, fill: "#3b82f6" }} strokeWidth={0} connectNulls={false} />
+                <Line type="monotone" dataKey="smoothed" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={false} opacity={0.5} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -162,27 +186,31 @@ export function BodyCompChart() {
       <Card>
         <CardContent className="py-4">
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Body Fat % Trajectory</div>
-          <div className="h-48">
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f97316]" />actual</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316] opacity-50" style={{borderTop: "2px dashed #f97316"}} />projected</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
+          </div>
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
                 <XAxis
                   dataKey="date"
                   tickFormatter={formatDate}
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  interval="preserveStartEnd"
-                  tickCount={6}
+                  tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
+                  interval={Math.max(1, Math.floor(chartData.length / 7))}
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
                   domain={[Math.floor(profile.targetBf - 2), Math.ceil(profile.currentBf + 2)]}
                   tickCount={5}
                   tickFormatter={(v: number) => `${v}%`}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
+                    backgroundColor: "rgba(10,10,12,0.95)",
+                    border: "1px solid rgba(255,255,255,0.15)",
                     borderRadius: "8px",
                     fontSize: "12px",
                   }}
@@ -195,7 +223,7 @@ export function BodyCompChart() {
                     return [`${value}%`, labels[name] || name];
                   }}
                 />
-                <ReferenceLine y={profile.targetBf} stroke="#f97316" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#f97316" }} />
+                <ReferenceLine y={profile.targetBf} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#22c55e" }} />
                 <Line type="monotone" dataKey="bf" stroke="#f97316" strokeWidth={2} dot={{ r: 2, fill: "#f97316" }} connectNulls={false} />
                 <Line type="monotone" dataKey="projBf" stroke="#f97316" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={false} opacity={0.5} />
               </ComposedChart>
