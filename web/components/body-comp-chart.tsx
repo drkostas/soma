@@ -89,8 +89,8 @@ export function BodyCompChart() {
     const firstProj = projection[0];
     const overlap = chartData.find((d: any) => d.date === lastActual.date);
     if (overlap && firstProj) {
-      overlap.projected = firstProj.weight;
-      overlap.projBf = firstProj.bf;
+      overlap.projected = overlap.smoothed || firstProj.weight; // start projection from smoothed weight
+      overlap.projBf = overlap.bf || firstProj.bf; // start BF projection from actual BF
     }
   }
 
@@ -319,13 +319,12 @@ export function BodyCompChart() {
                           fontSize: "12px",
                         }}>
                           <div style={{ fontWeight: "bold", marginBottom: 4 }}>{formatDate(String(label))}{!day.closed ? " (in progress)" : ""}</div>
-                          <div style={{ color: "rgba(255,255,255,0.6)" }}>Burned: {day.burned.toLocaleString()} kcal</div>
                           <div style={{ color: "rgba(255,255,255,0.6)" }}>Eaten: {day.consumed.toLocaleString()} kcal</div>
                           <div style={{ color: isDeficit ? "#22c55e" : "#ef4444", fontWeight: "bold" }}>
                             {isDeficit ? "Deficit" : "Surplus"}: {Math.abs(day.daily).toLocaleString()} kcal
                           </div>
-                          <div style={{ color: "#3b82f6", fontSize: "11px", marginTop: 2 }}>
-                            Cumulative: {Math.abs(day.cumulative).toLocaleString()} kcal {day.cumulative <= 0 ? "(deficit)" : "(surplus)"}
+                          <div style={{ color: "#3b82f6", fontSize: "11px", marginTop: 2, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 3 }}>
+                            Running total: {Math.abs(day.cumulative).toLocaleString()} kcal {day.cumulative <= 0 ? "deficit" : "surplus"}
                           </div>
                         </div>
                       );
