@@ -141,6 +141,22 @@ export async function GET() {
     });
   }
 
+  // Compute calorie-predicted weight from cumulative deficit
+  const firstDeficitDate = deficitTrend.length > 0 ? deficitTrend[0].date : null;
+  let startWeightForPrediction = currentWeight;
+  if (firstDeficitDate && weights.length > 0) {
+    // Find weight closest to the first tracked day
+    const match = weights.find(w => w.date <= firstDeficitDate);
+    if (match) startWeightForPrediction = match.smoothed;
+    else startWeightForPrediction = weights[0].smoothed;
+  }
+
+  const calPredicted: { date: string; weight: number; closed: boolean }[] = deficitTrend.map(dt => ({
+    date: dt.date,
+    weight: Math.round((startWeightForPrediction - dt.actual / 7700) * 10) / 10,
+    closed: dt.closed,
+  }));
+
   // On track assessment
   const onTrack = !targetDatePassed && requiredDeficit <= deficit * 1.1; // within 10% of current deficit
   const realisticDate = (() => {
@@ -171,7 +187,6 @@ export async function GET() {
     },
     weights,
     projection,
-    deficitTrend,
-    goalDeficit,
+    calPredicted,
   });
 }
