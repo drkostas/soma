@@ -205,7 +205,7 @@ export function NutritionDashboard({
       const res = await fetch("/api/nutrition/rebalance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, changedSlot }),
+        body: JSON.stringify({ date, changedSlot, lockedSlots: Array.from(lockedSlots) }),
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -229,6 +229,17 @@ export function NutritionDashboard({
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  // Locked slots (won't be rebalanced)
+  const [lockedSlots, setLockedSlots] = useState<Set<string>>(new Set());
+  const handleLockToggle = useCallback((slot: string) => {
+    setLockedSlots(prev => {
+      const next = new Set(prev);
+      if (next.has(slot)) next.delete(slot);
+      else next.add(slot);
+      return next;
+    });
+  }, []);
 
   // Live preview totals from compose view
   const [previewTotals, setPreviewTotals] = useState<Record<string, { calories: number; protein: number; carbs: number; fat: number; fiber: number }>>({});
@@ -615,11 +626,20 @@ export function NutritionDashboard({
                                     <span className="text-muted-foreground/50 text-[9px] ml-0.5">({d.offsetTarget})</span>
                                   )}
                                 </span>
-                                <span className="tabular-nums text-right">{d.closed ? d.actual : "\u2013"}</span>
+                                <span className={`tabular-nums text-right ${!d.closed && d.actual > 0 ? "italic text-muted-foreground" : ""}`}>
+                                  {d.closed ? d.actual : d.actual > 0 ? `~${d.actual}` : "\u2013"}
+                                </span>
                                 <span className={`tabular-nums text-right ${
-                                  d.delta == null ? "text-muted-foreground" : d.delta < 0 ? "text-green-500" : d.delta > 0 ? "text-amber-500" : ""
-                                }`}>
-                                  {d.delta != null ? (d.delta > 0 ? `+${d.delta}` : d.delta) : "\u2013"}
+                                  d.delta == null && !(d.actual > 0) ? "text-muted-foreground"
+                                  : (d.delta ?? (d.actual > 0 ? d.actual - d.target : null)) != null
+                                    ? ((d.delta ?? d.actual - d.target) < 0 ? "text-green-500" : "text-amber-500")
+                                    : "text-muted-foreground"
+                                } ${!d.closed && d.actual > 0 ? "italic" : ""}`}>
+                                  {d.delta != null
+                                    ? (d.delta > 0 ? `+${d.delta}` : d.delta)
+                                    : d.actual > 0
+                                      ? `~${d.actual - d.target > 0 ? "+" : ""}${d.actual - d.target}`
+                                      : "\u2013"}
                                 </span>
                               </React.Fragment>
                             );
@@ -799,6 +819,8 @@ export function NutritionDashboard({
             onMealLogged={(slot?: string) => handleMealChanged(slot)}
             onSlotSkipped={refreshData}
             onTotalsPreview={handleTotalsPreview}
+            locked={lockedSlots.has(slot)}
+            onLockToggle={handleLockToggle}
           />
         ))}
 

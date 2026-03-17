@@ -101,6 +101,8 @@ interface MealCardProps {
   onMealLogged: (changedSlot?: string) => void;
   onSlotSkipped?: () => void;
   onTotalsPreview?: (slot: string, totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number } | null) => void;
+  locked?: boolean;
+  onLockToggle?: (slot: string) => void;
 }
 
 // Read pre-computed macro totals from the preset JSONB blob.
@@ -138,6 +140,8 @@ export function MealCard({
   onMealLogged,
   onSlotSkipped,
   onTotalsPreview,
+  locked,
+  onLockToggle,
 }: MealCardProps) {
   const [expanded, setExpanded] = useState(meals.length > 0);
   const [showPicker, setShowPicker] = useState(false);
@@ -458,6 +462,15 @@ export function MealCard({
           {meals.length > 0 && (
             <span className="text-xs text-muted-foreground">
               ({meals.length})
+            </span>
+          )}
+          {meals.length > 0 && onLockToggle && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onLockToggle(slot); }}
+              className={`cursor-pointer text-[10px] ${locked ? "text-amber-500" : "text-muted-foreground/30 hover:text-muted-foreground"}`}
+              title={locked ? "Locked — won't be rebalanced" : "Click to lock"}
+            >
+              {locked ? "🔒" : "🔓"}
             </span>
           )}
         </div>

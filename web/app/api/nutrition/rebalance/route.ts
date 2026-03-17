@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
-  const { date, changedSlot } = await req.json();
+  const { date, changedSlot, lockedSlots = [] } = await req.json();
+  const lockedSet = new Set<string>(lockedSlots);
   const sql = getDb();
 
   // 1. Get day target
@@ -56,9 +57,12 @@ export async function POST(req: NextRequest) {
 
   const adjustable: AdjItem[] = [];
   for (const meal of mealRows) {
-    const mealSlotOrder = SLOT_ORDER[meal.meal_slot as string] ?? 99;
+    const mealSlot = meal.meal_slot as string;
+    const mealSlotOrder = SLOT_ORDER[mealSlot] ?? 99;
     // Skip the changed slot AND all slots before it (already eaten)
     if (mealSlotOrder <= changedSlotOrder) continue;
+    // Skip locked slots
+    if (lockedSet.has(mealSlot)) continue;
     const items = meal.items as any[];
     if (!items) continue;
     items.forEach((item: any, idx: number) => {
