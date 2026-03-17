@@ -20,6 +20,7 @@ export async function GET() {
     ? profile.target_date.toISOString().slice(0, 10)
     : String(profile.target_date).slice(0, 10);
   const deficit = Number(profile.daily_deficit) || 800;
+  const goalDeficit = deficit;
   const ffm = Number(profile.estimated_ffm_kg) || 60.6;
 
   // Process weight data with 7-day EMA smoothing
@@ -86,6 +87,60 @@ export async function GET() {
     projWeight = Math.max(ffm * 1.05, projWeight - dailyWeightLoss);
   }
 
+  // Cumulative deficit data
+  const deficitRows = await sql`
+    SELECT date::text AS date, target_calories, actual_calories, deficit_used, status, manual_override
+    FROM nutrition_day
+    WHERE actual_calories > 0 OR status = 'active'
+    ORDER BY date
+  `;
+
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const todayMealRows = await sql`
+    SELECT COALESCE(SUM(calories), 0) AS total FROM meal_log WHERE date = ${todayStr}
+  `;
+  const todayDrinkRows = await sql`
+    SELECT COALESCE(SUM(calories), 0) AS total FROM drink_log WHERE date = ${todayStr}
+  `;
+  const todayConsumed = Number(todayMealRows[0]?.total || 0) + Number(todayDrinkRows[0]?.total || 0);
+
+  let cumulativeActual = 0;
+  let cumulativeExpected = 0;
+  const deficitTrend: { date: string; actual: number; expected: number; closed: boolean }[] = [];
+
+  for (const r of deficitRows) {
+    const dateStr = String(r.date).slice(0, 10);
+    const isClosed = r.status === "closed";
+    const isToday = dateStr === todayStr;
+
+    // Expected: goalDeficit per day
+    cumulativeExpected += goalDeficit;
+
+    // Actual deficit: estimated burn - consumed
+    const storedTarget = Number(r.target_calories) || 0;
+    const defUsed = Number(r.deficit_used) || goalDeficit;
+    const estimatedBurn = storedTarget + defUsed;
+
+    let consumed: number;
+    if (isClosed) {
+      consumed = Number(r.actual_calories) || 0;
+    } else if (isToday) {
+      consumed = todayConsumed;
+    } else {
+      continue; // skip open non-today days
+    }
+
+    const dailyDeficit = estimatedBurn - consumed;
+    cumulativeActual += dailyDeficit;
+
+    deficitTrend.push({
+      date: dateStr,
+      actual: Math.round(cumulativeActual),
+      expected: Math.round(cumulativeExpected),
+      closed: isClosed,
+    });
+  }
+
   // On track assessment
   const onTrack = !targetDatePassed && requiredDeficit <= deficit * 1.1; // within 10% of current deficit
   const realisticDate = (() => {
@@ -116,5 +171,7 @@ export async function GET() {
     },
     weights,
     projection,
+    deficitTrend,
+    goalDeficit,
   });
 }
