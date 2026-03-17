@@ -144,14 +144,15 @@ export async function GET() {
   }
 
   // Daily deficit data for bar chart
+  // Convention: negative = deficit (good, bars go DOWN), positive = surplus (bad, bars go UP)
   const dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean }[] = [];
   let prevCumulative = 0;
   for (const dt of deficitTrend) {
-    const daily = dt.actual - prevCumulative;
+    const dailyDeficit = dt.actual - prevCumulative; // positive = deficit
     dailyDeficits.push({
       date: dt.date,
-      daily: Math.round(daily),
-      cumulative: dt.actual,
+      daily: Math.round(-dailyDeficit), // flip: deficit goes down, surplus goes up
+      cumulative: Math.round(-dt.actual), // flip cumulative too
       closed: dt.closed,
     });
     prevCumulative = dt.actual;
