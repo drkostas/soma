@@ -680,10 +680,22 @@ export function MealCard({
                       key={p.id}
                       variant="outline"
                       size="sm"
-                      className="text-xs h-7"
+                      className="text-xs h-7 pr-1.5 gap-1"
                       onClick={() => handleSelectPreset(p)}
                     >
                       {p.name}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Delete "${p.name}"?`)) {
+                            fetch(`/api/nutrition/presets?id=${p.id}`, { method: "DELETE" })
+                              .then(() => onMealLogged(slot));
+                          }
+                        }}
+                        className="ml-auto p-1 text-muted-foreground/50 hover:text-rose-500"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
                     </Button>
                   ))
                 ) : (
