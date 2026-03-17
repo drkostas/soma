@@ -143,6 +143,20 @@ export async function GET() {
     });
   }
 
+  // Daily deficit data for bar chart
+  const dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean }[] = [];
+  let prevCumulative = 0;
+  for (const dt of deficitTrend) {
+    const daily = dt.actual - prevCumulative;
+    dailyDeficits.push({
+      date: dt.date,
+      daily: Math.round(daily),
+      cumulative: dt.actual,
+      closed: dt.closed,
+    });
+    prevCumulative = dt.actual;
+  }
+
   // Compute calorie-predicted weight from cumulative deficit
   const firstDeficitDate = deficitTrend.length > 0 ? deficitTrend[0].date : null;
   let startWeightForPrediction = currentWeight;
@@ -201,5 +215,7 @@ export async function GET() {
     weights,
     projection,
     calPredicted,
+    dailyDeficits,
+    goalDeficit,
   });
 }
