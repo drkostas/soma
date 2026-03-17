@@ -120,7 +120,10 @@ def _count_consecutive_poor_nights(cur, today: date, threshold: float = 50.0) ->
 
 def generate_today() -> None:
     """Generate and store today's nutrition plan."""
-    today = date.today()
+    # Use Eastern time to avoid generating tomorrow's plan early (UTC is 5h ahead)
+    from zoneinfo import ZoneInfo
+    from datetime import datetime as dt
+    today = dt.now(ZoneInfo("America/New_York")).date()
 
     with get_connection() as conn:
         # Auto-close yesterday first
