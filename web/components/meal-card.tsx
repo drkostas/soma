@@ -100,6 +100,7 @@ interface MealCardProps {
   ingredients?: any[];
   onMealLogged: (changedSlot?: string) => void;
   onSlotSkipped?: () => void;
+  onTotalsPreview?: (slot: string, totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number } | null) => void;
 }
 
 // Read pre-computed macro totals from the preset JSONB blob.
@@ -136,6 +137,7 @@ export function MealCard({
   ingredients,
   onMealLogged,
   onSlotSkipped,
+  onTotalsPreview,
 }: MealCardProps) {
   const [expanded, setExpanded] = useState(meals.length > 0);
   const [showPicker, setShowPicker] = useState(false);
@@ -360,7 +362,10 @@ export function MealCard({
   };
 
   const handleSavePreset = async () => {
-    if (!savePresetName.trim() || !lastComposedItems) return;
+    if (!savePresetName.trim() || !lastComposedItems) {
+      console.warn("Save preset skipped: name empty or no items", { name: savePresetName, hasItems: !!lastComposedItems });
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/nutrition/presets", {
@@ -373,11 +378,17 @@ export function MealCard({
           totals: lastComposedTotals,
         }),
       });
-      if (!res.ok) return; // keep prompt open on failure
+      if (!res.ok) {
+        console.error("Save preset failed:", res.status, await res.text());
+        return;
+      }
       setShowSavePrompt(false);
       setSavePresetName("");
       setLastComposedItems(null);
       setLastComposedTotals(null);
+      onMealLogged(slot); // refresh to show the new preset in the picker
+    } catch (err) {
+      console.error("Save preset error:", err);
     } finally {
       setSaving(false);
     }
@@ -432,6 +443,7 @@ export function MealCard({
     setSelectedIngredients(new Set());
     setShowCompose(false);
     setEditingMealId(null);
+    onTotalsPreview?.(slot, null); // clear live preview
   };
 
   return (
@@ -780,6 +792,7 @@ export function MealCard({
               onCancel={handleComposeCancel}
               onEditIngredients={handleEditIngredients}
               logging={logging}
+              onTotalsChange={onTotalsPreview ? (t) => onTotalsPreview(slot, t) : undefined}
             />
           )}
 

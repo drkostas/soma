@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/number-input";
@@ -25,6 +25,7 @@ interface ComposeMealViewProps {
   onCancel: () => void;
   onEditIngredients?: () => void;
   logging?: boolean;
+  onTotalsChange?: (totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number }) => void;
 }
 
 export function ComposeMealView({
@@ -35,6 +36,7 @@ export function ComposeMealView({
   onCancel,
   onEditIngredients,
   logging = false,
+  onTotalsChange,
 }: ComposeMealViewProps) {
   const [portions, setPortions] = useState(initialPortions);
   // Track which ingredients are in "cooked" display mode (key = ingredient_id)
@@ -77,6 +79,12 @@ export function ComposeMealView({
   };
 
   const totals = useMemo(() => sumPortionMacros(portions), [portions]);
+
+  // Emit totals to parent for live budget preview
+  useEffect(() => {
+    onTotalsChange?.(totals);
+  }, [totals, onTotalsChange]);
+
   const fitsBudget = budget != null && totals.calories <= (budget.calories ?? Infinity) * 1.05;
   const totalGrams = useMemo(() => portions.reduce((s, p) => s + p.grams, 0), [portions]);
   const volumeScore = totals.calories > 0 ? totalGrams / totals.calories : 0;
