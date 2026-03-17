@@ -24,7 +24,7 @@ export async function GET() {
   const ffm = Number(profile.estimated_ffm_kg) || 60.6;
 
   // Process weight data with 7-day EMA smoothing
-  const weights: { date: string; weight: number; smoothed: number; bf: number }[] = [];
+  const weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[] = [];
   let ema = 0;
   const alpha = 2 / (7 + 1); // 7-day EMA
 
