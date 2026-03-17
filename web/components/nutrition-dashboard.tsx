@@ -230,19 +230,42 @@ export function NutritionDashboard({
     refreshData();
   }, [refreshData]);
 
-  // Compute consumed totals
+  // Live preview totals from compose view
+  const [previewTotals, setPreviewTotals] = useState<Record<string, { calories: number; protein: number; carbs: number; fat: number; fiber: number }>>({});
+
+  const handleTotalsPreview = useCallback((slot: string, totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number } | null) => {
+    setPreviewTotals(prev => {
+      if (totals === null) {
+        const next = { ...prev };
+        delete next[slot];
+        return next;
+      }
+      return { ...prev, [slot]: totals };
+    });
+  }, []);
+
+  // Sum preview totals from any active compose views
+  const previewCal = Object.values(previewTotals).reduce((s, t) => s + t.calories, 0);
+  const previewProtein = Object.values(previewTotals).reduce((s, t) => s + t.protein, 0);
+  const previewCarbs = Object.values(previewTotals).reduce((s, t) => s + t.carbs, 0);
+  const previewFat = Object.values(previewTotals).reduce((s, t) => s + t.fat, 0);
+  const previewFiber = Object.values(previewTotals).reduce((s, t) => s + t.fiber, 0);
+
+  // Compute consumed totals (logged meals + live preview)
   const consumedCal =
     meals.reduce((s, m) => s + Number(m.calories || 0), 0) +
-    drinks.reduce((s, d) => s + Number(d.calories || 0), 0);
+    drinks.reduce((s, d) => s + Number(d.calories || 0), 0) +
+    previewCal;
   const consumedProtein = meals.reduce(
     (s, m) => s + Number(m.protein || 0),
     0
-  );
+  ) + previewProtein;
   const consumedCarbs =
     meals.reduce((s, m) => s + Number(m.carbs || 0), 0) +
-    drinks.reduce((s, d) => s + Number(d.carbs || 0), 0);
-  const consumedFat = meals.reduce((s, m) => s + Number(m.fat || 0), 0);
-  const consumedFiber = meals.reduce((s, m) => s + Number(m.fiber || 0), 0);
+    drinks.reduce((s, d) => s + Number(d.carbs || 0), 0) +
+    previewCarbs;
+  const consumedFat = meals.reduce((s, m) => s + Number(m.fat || 0), 0) + previewFat;
+  const consumedFiber = meals.reduce((s, m) => s + Number(m.fiber || 0), 0) + previewFiber;
 
   // Use breakdown-adjusted targets (computed by plan API accounting for run/gym toggles)
   // Fall back to raw plan values for initial render before breakdown loads
@@ -267,12 +290,20 @@ export function NutritionDashboard({
 
   // Unlock manual override handler
   const handleUnlock = async () => {
-    await fetch("/api/nutrition/activity-select", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, manual_override: false }),
-    });
-    await refreshData();
+    try {
+      const res = await fetch("/api/nutrition/activity-select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, manual_override: false }),
+      });
+      if (!res.ok) {
+        console.error("Unlock failed:", res.status);
+        return;
+      }
+      await refreshData();
+    } catch (err) {
+      console.error("Unlock error:", err);
+    }
   };
 
   // Close day handler
@@ -752,6 +783,7 @@ export function NutritionDashboard({
             disabled={isClosed}
             onMealLogged={(slot?: string) => handleMealChanged(slot)}
             onSlotSkipped={refreshData}
+            onTotalsPreview={handleTotalsPreview}
           />
         ))}
 
