@@ -305,20 +305,30 @@ export function BodyCompChart() {
                     tickFormatter={(v: number) => v >= 1000 || v <= -1000 ? `${Math.round(v / 1000)}k` : `${v}`}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(10,10,12,0.95)",
-                      border: "1px solid rgba(255,255,255,0.15)",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                    labelFormatter={(label: any) => formatDate(String(label))}
-                    formatter={(value: any, name: any) => {
-                      const v = Number(value);
-                      const labels: Record<string, string> = {
-                        daily: v > 0 ? "Surplus" : "Deficit",
-                        cumulative: "Cumulative",
-                      };
-                      return [`${Math.abs(v).toLocaleString()} kcal ${v > 0 ? "(surplus)" : "(deficit)"}`, labels[name] || name];
+                    content={({ active, payload, label }: any) => {
+                      if (!active || !payload?.length) return null;
+                      const day = dailyDeficits.find(d => d.date === label);
+                      if (!day) return null;
+                      const isDeficit = day.daily <= 0;
+                      return (
+                        <div style={{
+                          backgroundColor: "rgba(10,10,12,0.95)",
+                          border: "1px solid rgba(255,255,255,0.15)",
+                          borderRadius: "8px",
+                          padding: "8px 12px",
+                          fontSize: "12px",
+                        }}>
+                          <div style={{ fontWeight: "bold", marginBottom: 4 }}>{formatDate(String(label))}{!day.closed ? " (in progress)" : ""}</div>
+                          <div style={{ color: "rgba(255,255,255,0.6)" }}>Burned: {day.burned.toLocaleString()} kcal</div>
+                          <div style={{ color: "rgba(255,255,255,0.6)" }}>Eaten: {day.consumed.toLocaleString()} kcal</div>
+                          <div style={{ color: isDeficit ? "#22c55e" : "#ef4444", fontWeight: "bold" }}>
+                            {isDeficit ? "Deficit" : "Surplus"}: {Math.abs(day.daily).toLocaleString()} kcal
+                          </div>
+                          <div style={{ color: "#3b82f6", fontSize: "11px", marginTop: 2 }}>
+                            Cumulative: {Math.abs(day.cumulative).toLocaleString()} kcal {day.cumulative <= 0 ? "(deficit)" : "(surplus)"}
+                          </div>
+                        </div>
+                      );
                     }}
                   />
                   <ReferenceLine y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />

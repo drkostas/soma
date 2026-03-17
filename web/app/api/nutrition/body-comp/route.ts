@@ -143,17 +143,33 @@ export async function GET() {
     });
   }
 
-  // Daily deficit data for bar chart
+  // Daily deficit data for bar chart with full day details
   // Convention: negative = deficit (good, bars go DOWN), positive = surplus (bad, bars go UP)
-  const dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean }[] = [];
+  const dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean; burned: number; consumed: number }[] = [];
   let prevCumulative = 0;
-  for (const dt of deficitTrend) {
+  for (let i = 0; i < deficitTrend.length; i++) {
+    const dt = deficitTrend[i];
     const dailyDeficit = dt.actual - prevCumulative; // positive = deficit
+
+    // Get burn and consumed for this day from deficitRows
+    const row = deficitRows[i];
+    const storedTarget = Number(row?.target_calories) || 0;
+    const defUsed = Number(row?.deficit_used) || goalDeficit;
+    const estimatedBurn = storedTarget + defUsed;
+    const dateStr = String(row?.date).slice(0, 10);
+    const isClosed = row?.status === "closed";
+    const isToday = dateStr === todayStr;
+    let consumed = 0;
+    if (isClosed) consumed = Number(row?.actual_calories) || 0;
+    else if (isToday) consumed = todayConsumed;
+
     dailyDeficits.push({
       date: dt.date,
-      daily: Math.round(-dailyDeficit), // flip: deficit goes down, surplus goes up
-      cumulative: Math.round(-dt.actual), // flip cumulative too
+      daily: Math.round(-dailyDeficit),
+      cumulative: Math.round(-dt.actual),
       closed: dt.closed,
+      burned: Math.round(estimatedBurn),
+      consumed: Math.round(consumed),
     });
     prevCumulative = dt.actual;
   }
