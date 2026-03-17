@@ -220,6 +220,7 @@ export function ComposeMealView({
           { label: "P", current: totals.protein, max: budget?.protein || 0, color: "bg-blue-500", suffix: "g" },
           { label: "C", current: totals.carbs, max: budget?.carbs || 0, color: "bg-amber-500", suffix: "g" },
           { label: "F", current: totals.fat, max: budget?.fat || 0, color: "bg-rose-500", suffix: "g" },
+          { label: "Fi", current: totals.fiber, max: budget?.fiber || 0, color: "bg-green-500", suffix: "g" },
         ].map(({ label, current, max, color, suffix }) => (
           <div key={label} className="flex items-center gap-2 text-xs">
             <span className="w-8 text-muted-foreground text-right">{label}</span>
