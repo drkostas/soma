@@ -147,17 +147,18 @@ export function BodyCompChart() {
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />smoothed</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6] opacity-50" style={{borderTop: "2px dashed #3b82f6"}} />projected</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #a855f7"}} />cal-predicted</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #06b6d4"}} />from cal</span>
           </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+              <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
                 <XAxis
                   dataKey="date"
                   tickFormatter={formatDate}
                   tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
-                  interval={Math.max(1, Math.floor(chartData.length / 7))}
+                  interval={Math.max(1, Math.floor(chartData.length / 6))}
+                  angle={0}
                 />
                 <YAxis
                   tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
@@ -172,8 +173,8 @@ export function BodyCompChart() {
                     borderRadius: "8px",
                     fontSize: "12px",
                   }}
-                  labelFormatter={formatDate}
-                  formatter={(value: number, name: string) => {
+                  labelFormatter={(label: any) => formatDate(String(label))}
+                  formatter={(value: any, name: any) => {
                     const labels: Record<string, string> = {
                       actual: "Weigh-in",
                       smoothed: "Smoothed",
@@ -184,17 +185,17 @@ export function BodyCompChart() {
                   }}
                 />
                 <ReferenceLine y={profile.targetWeight} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetWeight}kg`, position: "right", fontSize: 10, fill: "#22c55e" }} />
-                <Area type="monotone" dataKey="projected" stroke="none" fill="#3b82f6" fillOpacity={0.08} connectNulls={false} />
+                <Area type="monotone" dataKey="projected" stroke="none" fill="#3b82f6" fillOpacity={0.05} connectNulls={false} tooltipType="none" />
                 <Line type="monotone" dataKey="actual" stroke="#3b82f6" dot={{ r: 2, fill: "#3b82f6" }} strokeWidth={0} connectNulls={false} />
                 <Line type="monotone" dataKey="smoothed" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={false} />
-                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={false} opacity={0.5} />
-                <Line type="monotone" dataKey="calPredicted" stroke="#a855f7" strokeWidth={1.5} strokeDasharray="4 4" dot={(props: any) => {
+                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={false} opacity={0.6} />
+                <Line type="monotone" dataKey="calPredicted" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="4 4" dot={(props: any) => {
                   const { cx, cy, payload } = props;
                   if (payload.calPredicted == null) return <></>;
                   if (!payload.calPredictedClosed) {
-                    return <circle cx={cx} cy={cy} r={3} fill="none" stroke="#a855f7" strokeWidth={1.5} strokeDasharray="2 2" />;
+                    return <circle cx={cx} cy={cy} r={3} fill="none" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="2 2" />;
                   }
-                  return <circle cx={cx} cy={cy} r={2} fill="#a855f7" />;
+                  return <circle cx={cx} cy={cy} r={2} fill="#06b6d4" />;
                 }} connectNulls={false} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -213,13 +214,14 @@ export function BodyCompChart() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+              <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
                 <XAxis
                   dataKey="date"
                   tickFormatter={formatDate}
                   tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
-                  interval={Math.max(1, Math.floor(chartData.length / 7))}
+                  interval={Math.max(1, Math.floor(chartData.length / 6))}
+                  angle={0}
                 />
                 <YAxis
                   tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
@@ -234,8 +236,8 @@ export function BodyCompChart() {
                     borderRadius: "8px",
                     fontSize: "12px",
                   }}
-                  labelFormatter={formatDate}
-                  formatter={(value: number, name: string) => {
+                  labelFormatter={(label: any) => formatDate(String(label))}
+                  formatter={(value: any, name: any) => {
                     const labels: Record<string, string> = {
                       bf: "Estimated BF%",
                       projBf: "Projected BF%",
