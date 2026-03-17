@@ -6,6 +6,7 @@ Garmin's workout API payload and handles pushing + scheduling plan days.
 
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +23,14 @@ STEP_TYPE_MAP = {
 }
 
 DURATION_TYPE_MAP = {
-    "time":     {"conditionTypeId": 2, "conditionTypeKey": "time"},
-    "distance": {"conditionTypeId": 3, "conditionTypeKey": "distance"},
+    "time":       {"conditionTypeId": 2, "conditionTypeKey": "time"},
+    "distance":   {"conditionTypeId": 3, "conditionTypeKey": "distance"},
+    "lap_button": {"conditionTypeId": 1, "conditionTypeKey": "lap.button"},
 }
 
 TARGET_NO_TARGET = {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target"}
 TARGET_PACE_ZONE = {"workoutTargetTypeId": 6, "workoutTargetTypeKey": "pace.zone"}
+TARGET_HR_ZONE = {"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone"}
 
 SPORT_RUNNING = {"sportTypeId": 1, "sportTypeKey": "running"}
 
@@ -35,6 +38,13 @@ SPORT_RUNNING = {"sportTypeId": 1, "sportTypeKey": "running"}
 # ===============================
 # WORKOUT BUILDER
 # ===============================
+
+def _pace_sec_km_to_ms(pace_sec_per_km: float) -> float:
+    """Convert pace in sec/km to speed in m/s for Garmin API."""
+    if pace_sec_per_km <= 0:
+        return 0.0
+    return 1000.0 / pace_sec_per_km
+
 
 def _build_garmin_step(order: int, step: dict) -> dict:
     """Convert a single workout step to Garmin's ExecutableStepDTO format.
@@ -49,37 +59,117 @@ def _build_garmin_step(order: int, step: dict) -> dict:
     step_type = STEP_TYPE_MAP.get(step["step_type"], STEP_TYPE_MAP["interval"])
 
     duration_type = step.get("duration_type", "distance")
-    end_condition = DURATION_TYPE_MAP.get(duration_type, DURATION_TYPE_MAP["distance"])
+    if duration_type == "lap_button":
+        end_condition = DURATION_TYPE_MAP["lap_button"]
+        end_condition_value = None
+    else:
+        end_condition = DURATION_TYPE_MAP.get(duration_type, DURATION_TYPE_MAP["distance"])
+        end_condition_value = step.get("duration_value", 0)
 
-    # Duration value: meters for distance, seconds for time — passed as-is
-    end_condition_value = step.get("duration_value", 0)
-
-    # Target
+    # Target: convert sec/km to m/s for Garmin API
     target_type = step.get("target_type", "open")
     if target_type == "pace" and step.get("target_pace_min") is not None:
         target = TARGET_PACE_ZONE.copy()
         pace_min = step["target_pace_min"]  # sec/km (faster = lower number)
         pace_max = step["target_pace_max"]  # sec/km (slower = higher number)
-        # Garmin: targetValueOne = SLOWER pace (higher), targetValueTwo = FASTER pace (lower)
-        # Both in milliseconds per km
-        target_value_one = pace_max * 1000  # slower pace
-        target_value_two = pace_min * 1000  # faster pace
+        # Garmin: targetValueOne = SLOWER speed (m/s), targetValueTwo = FASTER speed (m/s)
+        target_value_one = _pace_sec_km_to_ms(pace_max)  # slower pace → lower m/s
+        target_value_two = _pace_sec_km_to_ms(pace_min)  # faster pace → higher m/s
+    elif target_type == "hr" and step.get("hr_zone") is not None:
+        # HR zone as primary target (used for recovery jogs)
+        target = TARGET_HR_ZONE.copy()
+        target_value_one = None
+        target_value_two = None
     else:
         target = TARGET_NO_TARGET.copy()
         target_value_one = 0
         target_value_two = 0
 
-    return {
+    result = {
         "type": "ExecutableStepDTO",
         "stepOrder": order,
         "stepType": step_type,
         "endCondition": end_condition,
-        "endConditionValue": end_condition_value,
         "targetType": target,
         "targetValueOne": target_value_one,
         "targetValueTwo": target_value_two,
         "description": step.get("description", ""),
     }
+    if end_condition_value is not None:
+        result["endConditionValue"] = end_condition_value
+
+    # HR zone handling: primary (for recovery jogs) or secondary (for pace-targeted steps)
+    hr_zone = step.get("hr_zone")
+    if hr_zone is not None and target_type == "hr":
+        # HR is the primary target — set zone on primary (already set above)
+        result["zoneNumber"] = hr_zone
+    elif hr_zone is not None:
+        # HR as secondary target (pace is primary)
+        result["secondaryTargetType"] = TARGET_HR_ZONE.copy()
+        result["secondaryTargetValueOne"] = None
+        result["secondaryTargetValueTwo"] = None
+        result["secondaryZoneNumber"] = hr_zone
+
+    return result
+
+
+def _detect_repeat_groups(steps: list[dict]) -> list[dict]:
+    """Detect repeated stride+recovery patterns and wrap in RepeatGroupDTO.
+
+    Looks for consecutive pairs of (interval + recovery) where the interval
+    descriptions match a "N/M" pattern (e.g., "Stride 1/6", "Stride 2/6").
+    Wraps them in a Garmin repeat group.
+    """
+    if len(steps) < 4:
+        return steps
+
+    result = []
+    i = 0
+    while i < len(steps):
+        # Look for stride/rep pattern: interval + recovery repeating
+        rep_pattern = re.compile(r"(\d+)/(\d+)")
+        step = steps[i]
+        desc = step.get("description", "")
+        match = rep_pattern.search(desc)
+
+        if (match and step["step_type"] == "interval"
+                and int(match.group(1)) == 1):  # starts at 1/N
+            total_reps = int(match.group(2))
+            # Collect the interval+recovery pair
+            pair_steps = []
+            expected_idx = 1
+            j = i
+            while j < len(steps) and expected_idx <= total_reps:
+                s = steps[j]
+                s_desc = s.get("description", "")
+                s_match = rep_pattern.search(s_desc)
+                if s.get("step_type") == "interval" and s_match and int(s_match.group(1)) == expected_idx:
+                    if expected_idx == 1:
+                        pair_steps.append(s)
+                    j += 1
+                    # Check for recovery after (except after last rep)
+                    if j < len(steps) and steps[j].get("step_type") in ("recovery", "rest"):
+                        if expected_idx == 1:
+                            pair_steps.append(steps[j])
+                        j += 1
+                    expected_idx += 1
+                else:
+                    break
+
+            if expected_idx > total_reps and len(pair_steps) >= 1:
+                # Successfully found all reps — create repeat group
+                result.append({
+                    "type": "repeat",
+                    "iterations": total_reps,
+                    "steps": pair_steps,
+                })
+                i = j
+                continue
+
+        result.append(step)
+        i += 1
+
+    return result
 
 
 def steps_to_garmin_workout(name: str, steps: list[dict], description: str = "") -> dict:
@@ -93,9 +183,29 @@ def steps_to_garmin_workout(name: str, steps: list[dict], description: str = "")
     Returns:
         Garmin workout API payload dict ready for upload_workout().
     """
+    # Detect repeating patterns and group them
+    grouped = _detect_repeat_groups(steps)
+
     garmin_steps = []
-    for i, step in enumerate(steps):
-        garmin_steps.append(_build_garmin_step(i + 1, step))
+    order = 1
+    for item in grouped:
+        if item.get("type") == "repeat":
+            # Build RepeatGroupDTO
+            inner_steps = []
+            inner_order = 1
+            for inner in item["steps"]:
+                inner_steps.append(_build_garmin_step(inner_order, inner))
+                inner_order += 1
+            garmin_steps.append({
+                "type": "RepeatGroupDTO",
+                "stepOrder": order,
+                "numberOfIterations": item["iterations"],
+                "smartRepeat": False,
+                "workoutSteps": inner_steps,
+            })
+        else:
+            garmin_steps.append(_build_garmin_step(order, item))
+        order += 1
 
     payload = {
         "workoutName": name,
@@ -120,8 +230,8 @@ def steps_to_garmin_workout(name: str, steps: list[dict], description: str = "")
 def push_plan_to_garmin(conn, client, plan_id: int) -> int:
     """Push all pending workout days from a training plan to Garmin Connect.
 
-    For each training_plan_day where plan_id matches and garmin_push_status = 'none'
-    and workout_steps is not None:
+    For each training_plan_day where plan_id matches and garmin_push_status
+    is 'none' or 'pending' and workout_steps is not None:
       1. Build Garmin workout JSON from workout_steps
       2. Upload via client.upload_workout(payload)
       3. Schedule on target date via garth.post
@@ -142,12 +252,13 @@ def push_plan_to_garmin(conn, client, plan_id: int) -> int:
             SELECT id, day_date, run_title, workout_steps
             FROM training_plan_day
             WHERE plan_id = %s
-              AND garmin_push_status = 'none'
+              AND garmin_push_status IN ('none', 'pending')
               AND workout_steps IS NOT NULL
             ORDER BY day_date
         """, (plan_id,))
         rows = cur.fetchall()
 
+    logger.info("Found %d pending workouts to push for plan %d", len(rows), plan_id)
     pushed = 0
     for day_id, day_date, run_title, workout_steps_raw in rows:
         # Parse workout_steps if needed

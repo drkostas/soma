@@ -1040,12 +1040,23 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
                 cur.execute("SELECT id FROM training_plan WHERE status = 'active' LIMIT 1")
                 row = cur.fetchone()
             if row:
+                # Check how many are pending
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM training_plan_day WHERE plan_id = %s "
+                        "AND garmin_push_status IN ('none','pending') AND workout_steps IS NOT NULL",
+                        (row[0],)
+                    )
+                    pending = cur.fetchone()[0]
+                print(f"  Found {pending} pending workouts for plan {row[0]}")
                 tp_pushed = push_plan_to_garmin(conn, client, row[0])
                 print(f"  Pushed: {tp_pushed} training plan workouts")
             else:
                 print(f"  No active training plan found")
     except Exception as e:
         print(f"  Training plan push error (non-fatal): {e}")
+        import traceback
+        traceback.print_exc()
 
     # --- Log completion ---
     total = total_raw + total_activities
