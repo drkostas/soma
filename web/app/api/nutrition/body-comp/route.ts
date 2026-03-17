@@ -71,12 +71,14 @@ export async function GET() {
   let projWeight = weights.length > 0 ? weights[weights.length - 1].smoothed : currentWeight;
   const dailyWeightLoss = (deficit * 1) / 7700; // kg per day at current deficit
   const projEnd = new Date(targetDate);
-  projEnd.setDate(projEnd.getDate() + 14); // extend 2 weeks past target
+  projEnd.setDate(projEnd.getDate() + 7); // small buffer past target
 
   for (let d = new Date(projStart); d <= projEnd; d.setDate(d.getDate() + 1)) {
     const dateStr = d.toISOString().slice(0, 10);
+    // Clamp at target weight
+    if (projWeight <= targetWeight) projWeight = targetWeight;
     const projFat = Math.max(0, projWeight - ffm);
-    const projBf = (projFat / projWeight) * 100;
+    const projBf = Math.max(targetBf, (projFat / projWeight) * 100);
     projection.push({
       date: dateStr,
       weight: Math.round(projWeight * 10) / 10,
@@ -84,7 +86,7 @@ export async function GET() {
       weightLow: Math.round((projWeight - 1) * 10) / 10,
       bf: Math.round(projBf * 10) / 10,
     });
-    projWeight = Math.max(ffm * 1.05, projWeight - dailyWeightLoss);
+    projWeight = Math.max(targetWeight, projWeight - dailyWeightLoss);
   }
 
   // Cumulative deficit data
