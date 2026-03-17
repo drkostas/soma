@@ -74,3 +74,10 @@ def get_garmin_credentials() -> tuple[str, str]:
     if db_creds and db_creds.get("email") and db_creds.get("password"):
         return db_creds["email"], db_creds["password"]
     return GARMIN_EMAIL, GARMIN_PASSWORD
+
+
+def today_nyc():
+    """Return today's date in America/New_York timezone."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/New_York")).date()

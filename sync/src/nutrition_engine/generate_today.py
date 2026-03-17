@@ -15,6 +15,7 @@ import json
 import logging
 from datetime import date, timedelta
 
+from config import today_nyc
 from db import get_connection
 from nutrition_engine.close_yesterday import close_yesterday
 from nutrition_engine.daily_plan import (
@@ -120,10 +121,7 @@ def _count_consecutive_poor_nights(cur, today: date, threshold: float = 50.0) ->
 
 def generate_today() -> None:
     """Generate and store today's nutrition plan."""
-    # Use Eastern time to avoid generating tomorrow's plan early (UTC is 5h ahead)
-    from zoneinfo import ZoneInfo
-    from datetime import datetime as dt
-    today = dt.now(ZoneInfo("America/New_York")).date()
+    today = today_nyc()
 
     with get_connection() as conn:
         # Auto-close yesterday first

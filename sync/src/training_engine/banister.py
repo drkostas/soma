@@ -27,6 +27,7 @@ import math
 from dataclasses import dataclass
 from typing import List, Tuple
 
+from config import today_nyc
 from training_engine.vdot import vdot_from_race
 
 
@@ -122,17 +123,21 @@ def fit_banister(
     daily_loads: list[tuple[int, float]],
     anchors: list[dict],
     max_iterations: int = 1000,
+    recency_halflife_days: float = 365,
 ) -> BanisterParams:
     """Fit Banister model parameters using differential evolution.
 
-    Minimizes sum of squared errors between predicted and observed VDOT
-    at anchor points. If fewer than 2 anchors are available, returns
-    sensible defaults (tau1=42, tau2=7).
+    Minimizes time-weighted sum of squared errors between predicted and
+    observed VDOT at anchor points. Recent anchors matter exponentially
+    more than old ones (halflife controls the decay rate).
+
+    If fewer than 2 anchors are available, returns sensible defaults.
 
     Args:
         daily_loads: List of (day_index, load_value) tuples.
         anchors: List of dicts with 'day_index' and 'vdot' keys.
         max_iterations: Maximum iterations for differential evolution.
+        recency_halflife_days: Halflife for anchor time-weighting (days).
 
     Returns:
         Fitted BanisterParams.
@@ -148,22 +153,34 @@ def fit_banister(
 
     from scipy.optimize import differential_evolution
 
+    # Compute recency weights: w(i) = exp(-ln(2) * age_days / halflife)
+    max_day = max(a["day_index"] for a in anchors)
+    ln2 = math.log(2)
+    weights = []
+    for a in anchors:
+        age_days = max_day - a["day_index"]
+        weights.append(math.exp(-ln2 * age_days / recency_halflife_days))
+
     # Bounds: p0, k1, k2, tau1, tau2
+    # tau1 must be > tau2 (fitness decays slower than fatigue)
     bounds = [
-        (35, 55),       # p0: baseline VDOT
+        (30, 55),       # p0: baseline VDOT
         (0.001, 5),     # k1: fitness gain
         (0.001, 10),    # k2: fatigue gain
-        (20, 80),       # tau1: fitness decay (days)
-        (3, 20),        # tau2: fatigue decay (days)
+        (30, 80),       # tau1: fitness decay (days) — raised minimum
+        (3, 15),        # tau2: fatigue decay (days) — lowered maximum
     ]
 
     def objective(x):
+        # Enforce tau1 > tau2 + 10 via penalty
+        if x[3] <= x[4] + 10:
+            return 1e10
         p = BanisterParams(p0=x[0], k1=x[1], k2=x[2], tau1=x[3], tau2=x[4])
-        sse = 0.0
-        for anchor in anchors:
+        wsse = 0.0
+        for i, anchor in enumerate(anchors):
             predicted = banister_predict(p, daily_loads, anchor["day_index"])
-            sse += (predicted - anchor["vdot"]) ** 2
-        return sse
+            wsse += weights[i] * (predicted - anchor["vdot"]) ** 2
+        return wsse
 
     result = differential_evolution(
         objective,
@@ -296,10 +313,20 @@ def fit_from_db(conn, estimated_hrmax: float = 190) -> BanisterParams:
     anchors = load_anchors_from_db(conn, estimated_hrmax=estimated_hrmax)
     daily_loads, min_date = _load_daily_loads_from_db(conn)
 
+    # Filter anchors to last 2 years — old peak performances shouldn't
+    # dominate current fitness estimation
+    from datetime import date as date_type, timedelta as td
+    cutoff_date = today_nyc() - td(days=730)
+    recent_anchors = [
+        a for a in anchors
+        if date_type.fromisoformat(str(a["date"])[:10]) >= cutoff_date
+    ]
+    # Fall back to all anchors if too few recent ones
+    if len(recent_anchors) >= 2:
+        anchors = recent_anchors
+
     # Convert anchor dates to day indices relative to the load series
     if min_date and anchors:
-        from datetime import date as date_type
-
         min_d = date_type.fromisoformat(min_date)
         anchor_inputs = []
         for a in anchors:
@@ -312,12 +339,18 @@ def fit_from_db(conn, estimated_hrmax: float = 190) -> BanisterParams:
     # Fit
     params = fit_banister(daily_loads, anchor_inputs)
 
-    # Store
+    # Compute current-day predicted VDOT (full model with all historical loads)
+    today_idx = (today_nyc() - date_type.fromisoformat(min_date)).days if min_date else 0
+    current_vdot = banister_predict(params, daily_loads, today_idx) if daily_loads else params.p0
+
+    # Store (convert numpy floats to Python floats for psycopg2)
     with conn.cursor() as cur:
         cur.execute("""
-            INSERT INTO banister_params (p0, k1, k2, tau1, tau2, n_anchors, fitted_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (params.p0, params.k1, params.k2, params.tau1, params.tau2, len(anchor_inputs)))
+            INSERT INTO banister_params (p0, k1, k2, tau1, tau2, n_anchors, current_vdot, fitted_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (float(params.p0), float(params.k1), float(params.k2),
+              float(params.tau1), float(params.tau2), len(anchor_inputs),
+              float(current_vdot)))
     conn.commit()
 
     return params

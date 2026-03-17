@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""
+Standalone training engine runner.
+Usage: cd sync && PYTHONPATH=src python3 -m training_engine.run_engine
+"""
+import logging
+from datetime import date, timedelta
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+
+def run_full_engine():
+    import psycopg2
+    from config import DATABASE_URL, today_nyc
+    from training_engine.runner import run_training_engine, _compute_hevy_loads
+    from training_engine.load_stream import backfill_load_from_history, compute_and_store_pmc
+    from training_engine.readiness_stream import compute_daily_readiness
+    from training_engine.fitness_stream import update_fitness_trajectory
+
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.autocommit = False
+    today = today_nyc()
+
+    # 1. Backfill loads
+    logger.info("=== Step 1: Backfill activity loads ===")
+    try:
+        loads = backfill_load_from_history(conn)
+        logger.info("Activity loads: %d inserted", len(loads))
+    except Exception as e:
+        logger.error("Load backfill failed: %s", e)
+        conn.rollback()
+
+    try:
+        _compute_hevy_loads(conn)
+        logger.info("Hevy strength loads computed")
+    except Exception as e:
+        logger.error("Hevy loads failed: %s", e)
+        conn.rollback()
+
+    # 2. PMC
+    logger.info("=== Step 2: Compute PMC ===")
+    try:
+        pmc = compute_and_store_pmc(conn)
+        logger.info("PMC: %d days computed", len(pmc))
+        if pmc:
+            last = pmc[-1]
+            logger.info("Latest PMC: CTL=%.1f ATL=%.1f TSB=%.1f", last["ctl"], last["atl"], last["tsb"])
+    except Exception as e:
+        logger.error("PMC failed: %s", e)
+        conn.rollback()
+
+    # 3. Readiness for last 30 days
+    logger.info("=== Step 3: Compute readiness (last 30 days) ===")
+    readiness_count = 0
+    for i in range(30):
+        target = today - timedelta(days=i)
+        try:
+            result = compute_daily_readiness(conn, target)
+            if result and result.get("traffic_light"):
+                readiness_count += 1
+                if i == 0:
+                    logger.info("Today: light=%s, composite=%.2f, flags=%s",
+                                result["traffic_light"], result["composite_score"], result.get("flags", []))
+        except Exception as e:
+            conn.rollback()
+            if i == 0:
+                logger.error("Readiness failed for %s: %s", target, e)
+    logger.info("Readiness computed for %d days", readiness_count)
+
+    # 4. Fitness trajectory for last 90 days (weekly samples)
+    logger.info("=== Step 4: Compute fitness trajectory ===")
+    fitness_count = 0
+    for i in range(0, 90, 7):
+        target = today - timedelta(days=i)
+        try:
+            result = update_fitness_trajectory(conn, target)
+            if result:
+                fitness_count += 1
+                if i == 0:
+                    logger.info("Today: VO2max=%s, EF=%s, decoupling=%s%%",
+                                result.get("vo2max"), result.get("efficiency_factor"),
+                                result.get("decoupling_pct"))
+        except Exception as e:
+            conn.rollback()
+            if i == 0:
+                logger.error("Fitness failed for %s: %s", target, e)
+    logger.info("Fitness trajectory computed for %d dates", fitness_count)
+
+    # 5. Run merge for today
+    logger.info("=== Step 5: Merge ===")
+    try:
+        run_training_engine(conn)
+    except Exception as e:
+        logger.error("Merge failed: %s", e)
+        conn.rollback()
+
+    conn.commit()
+    conn.close()
+    logger.info("=== Done ===")
+
+
+if __name__ == "__main__":
+    run_full_engine()

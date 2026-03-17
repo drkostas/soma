@@ -16,7 +16,7 @@ from router import execute_routes
 from strava_client import StravaClient
 from strava_sync import sync_recent_activities, sync_activity_details as strava_sync_activity_details
 from db import get_connection, log_sync, update_sync_log, get_platform_credentials, upsert_platform_credentials, get_sync_rules, log_activity_sync
-from config import get_hevy_api_key
+from config import get_hevy_api_key, today_nyc
 
 # A full day of Garmin daily HR data has ~700-720 points (midnight to midnight).
 # Anything below this threshold is considered incomplete / needs re-sync.
@@ -32,7 +32,7 @@ def _get_stale_dates(max_lookback: int = 14) -> list[date]:
 
     Today is always included (day isn't over yet).
     """
-    today = date.today()
+    today = today_nyc()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -741,7 +741,7 @@ def run_pipeline(days: int | None = None):
     successfully within the last hour — avoids redundant work after a
     manual "Sync Now".
     """
-    today = date.today()
+    today = today_nyc()
 
     triggered_by = os.environ.get("TRIGGERED_BY", "manual")
     if triggered_by == "schedule":

@@ -12,14 +12,14 @@ import logging
 import json
 from datetime import date, datetime, timedelta, timezone
 
+from config import today_nyc
+
 logger = logging.getLogger(__name__)
 
 
 def close_yesterday(conn) -> None:
     """Close all unclosed past nutrition days with reconciled actuals."""
-    # Use Eastern time to avoid closing today's day early (UTC is 5h ahead)
-    from zoneinfo import ZoneInfo
-    today = datetime.now(ZoneInfo("America/New_York")).date()
+    today = today_nyc()
 
     with conn.cursor() as cur:
         # Find ALL unclosed past days (not just yesterday)
@@ -106,7 +106,7 @@ def close_yesterday(conn) -> None:
             "actual_gym_calories": actual_gym_cal,
             "actual_gym_details": gym_details,
             "unmatched_workouts": [w for w in selected if w not in gym_details],
-            "reconciled_at": date.today().isoformat(),
+            "reconciled_at": today.isoformat(),
         }
         existing_plan["reconciled"] = reconciled
 

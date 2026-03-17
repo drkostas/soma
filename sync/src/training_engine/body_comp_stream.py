@@ -8,6 +8,8 @@ Research:
 """
 
 from datetime import date, timedelta
+
+from config import today_nyc
 from training_engine.vdot import adjust_vdot_for_weight, time_from_vdot
 
 # Standard half-marathon distance in meters
@@ -59,7 +61,7 @@ def update_body_comp(conn, target_date: date = None,
     Returns dict with smoothed weight and adjusted VDOT, or None if no data.
     """
     if target_date is None:
-        target_date = date.today()
+        target_date = today_nyc()
 
     start_date = target_date - timedelta(days=29)
 
