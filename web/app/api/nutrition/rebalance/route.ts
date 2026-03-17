@@ -35,7 +35,13 @@ export async function POST(req: NextRequest) {
     };
   }
 
-  // 5. Collect adjustable items from meals NOT in changedSlot
+  // 5. Collect adjustable items — ONLY from meals AFTER the changed slot
+  // Never modify already-eaten meals (slots before the changed one)
+  const SLOT_ORDER: Record<string, number> = {
+    breakfast: 0, lunch: 1, during_workout: 2, dinner: 3, pre_sleep: 4,
+  };
+  const changedSlotOrder = changedSlot ? (SLOT_ORDER[changedSlot] ?? 99) : -1;
+
   type AdjItem = {
     mealId: number;
     slot: string;
@@ -50,7 +56,9 @@ export async function POST(req: NextRequest) {
 
   const adjustable: AdjItem[] = [];
   for (const meal of mealRows) {
-    if (changedSlot && meal.meal_slot === changedSlot) continue;
+    const mealSlotOrder = SLOT_ORDER[meal.meal_slot as string] ?? 99;
+    // Skip the changed slot AND all slots before it (already eaten)
+    if (mealSlotOrder <= changedSlotOrder) continue;
     const items = meal.items as any[];
     if (!items) continue;
     items.forEach((item: any, idx: number) => {
