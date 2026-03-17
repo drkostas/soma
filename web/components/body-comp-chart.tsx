@@ -301,14 +301,7 @@ export function BodyCompChart() {
                     interval={Math.max(0, Math.floor(dailyDeficits.length / 6))}
                   />
                   <YAxis
-                    yAxisId="daily"
                     tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
-                    tickFormatter={(v: number) => v >= 1000 || v <= -1000 ? `${Math.round(v / 1000)}k` : `${v}`}
-                  />
-                  <YAxis
-                    yAxisId="cumulative"
-                    orientation="right"
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }}
                     tickFormatter={(v: number) => v >= 1000 || v <= -1000 ? `${Math.round(v / 1000)}k` : `${v}`}
                   />
                   <Tooltip
@@ -328,10 +321,10 @@ export function BodyCompChart() {
                       return [`${Math.abs(v).toLocaleString()} kcal ${v > 0 ? "(surplus)" : "(deficit)"}`, labels[name] || name];
                     }}
                   />
-                  <ReferenceLine yAxisId="daily" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
-                  <ReferenceLine yAxisId="daily" y={-goalDeficit} stroke="rgba(255,255,255,0.2)" strokeDasharray="6 3" label={{ value: `-${goalDeficit}`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.3)" }} />
-                  <Line yAxisId="cumulative" type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={true} />
-                  <Bar yAxisId="daily" dataKey="daily" radius={[4, 4, 0, 0]}>
+                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
+                  <ReferenceLine y={-goalDeficit} stroke="rgba(255,255,255,0.2)" strokeDasharray="6 3" label={{ value: `-${goalDeficit}`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.3)" }} />
+                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={true} />
+                  <Bar dataKey="daily" radius={[4, 4, 0, 0]}>
                     {dailyDeficits.map((entry, index) => (
                       <Cell key={index} fill={entry.daily <= 0 ? "#22c55e" : "#ef4444"} opacity={entry.closed ? 0.8 : 0.4} />
                     ))}
