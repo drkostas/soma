@@ -36,12 +36,16 @@ export async function GET() {
     // Estimate BF% from weight assuming lean mass stays constant
     const fatKg = Math.max(0, w - ffm);
     const bf = (fatKg / w) * 100;
+    // Smoothed BF% from smoothed weight
+    const smoothedFat = Math.max(0, ema - ffm);
+    const smoothedBf = (smoothedFat / ema) * 100;
 
     weights.push({
       date: String(row.date),
       weight: Math.round(w * 10) / 10,
       smoothed: Math.round(ema * 10) / 10,
       bf: Math.round(bf * 10) / 10,
+      smoothedBf: Math.round(smoothedBf * 10) / 10,
     });
   }
 

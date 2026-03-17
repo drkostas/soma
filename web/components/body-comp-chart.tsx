@@ -29,7 +29,7 @@ interface BodyCompData {
     closedDeficitDays: number;
     totalActualDeficit: number;
   };
-  weights: { date: string; weight: number; smoothed: number; bf: number }[];
+  weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[];
   projection: { date: string; weight: number; bf: number }[];
   calPredicted: { date: string; weight: number; closed: boolean }[];
   dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean }[];
@@ -64,7 +64,7 @@ export function BodyCompChart() {
 
   for (const w of recentWeights) {
     dateSet.add(w.date);
-    chartData.push({ date: w.date, actual: w.weight, smoothed: w.smoothed, bf: w.bf });
+    chartData.push({ date: w.date, actual: w.weight, smoothed: w.smoothed, bf: w.bf, smoothedBf: w.smoothedBf });
   }
   for (const p of projection) {
     if (dateSet.has(p.date)) {
@@ -90,7 +90,7 @@ export function BodyCompChart() {
     const overlap = chartData.find((d: any) => d.date === lastActual.date);
     if (overlap && firstProj) {
       overlap.projected = overlap.smoothed || firstProj.weight; // start projection from smoothed weight
-      overlap.projBf = overlap.bf || firstProj.bf; // start BF projection from actual BF
+      overlap.projBf = overlap.smoothedBf || overlap.bf || firstProj.bf; // start BF projection from smoothed BF
     }
   }
 
@@ -234,6 +234,7 @@ export function BodyCompChart() {
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Body Fat % Trajectory</div>
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f97316]" />actual</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />smoothed</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316] opacity-50" style={{borderTop: "2px dashed #f97316"}} />projected</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
           </div>
@@ -264,14 +265,16 @@ export function BodyCompChart() {
                   labelFormatter={(label: any) => formatDate(String(label))}
                   formatter={(value: any, name: any) => {
                     const labels: Record<string, string> = {
-                      bf: "Estimated BF%",
-                      projBf: "Projected BF%",
+                      bf: "BF% (weigh-in)",
+                      smoothedBf: "BF% (smoothed)",
+                      projBf: "BF% (projected)",
                     };
                     return [`${value}%`, labels[name] || name];
                   }}
                 />
                 <ReferenceLine y={profile.targetBf} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#22c55e" }} />
-                <Line type="monotone" dataKey="bf" stroke="#f97316" strokeWidth={2} dot={{ r: 3, fill: "#f97316" }} connectNulls={true} />
+                <Line type="monotone" dataKey="bf" stroke="#f97316" dot={{ r: 3, fill: "#f97316" }} strokeWidth={0} connectNulls={false} />
+                <Line type="monotone" dataKey="smoothedBf" stroke="#f97316" strokeWidth={2} dot={false} connectNulls={true} />
                 <Line type="monotone" dataKey="projBf" stroke="#f97316" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls={true} opacity={0.8} />
               </ComposedChart>
             </ResponsiveContainer>
