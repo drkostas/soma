@@ -145,8 +145,8 @@ export async function GET() {
   const firstDeficitDate = deficitTrend.length > 0 ? deficitTrend[0].date : null;
   let startWeightForPrediction = currentWeight;
   if (firstDeficitDate && weights.length > 0) {
-    // Find weight closest to the first tracked day
-    const match = weights.find(w => w.date <= firstDeficitDate);
+    // Find the LAST weight on or before the first deficit date (closest, not oldest)
+    const match = weights.findLast(w => w.date <= firstDeficitDate);
     if (match) startWeightForPrediction = match.smoothed;
     else startWeightForPrediction = weights[0].smoothed;
   }
