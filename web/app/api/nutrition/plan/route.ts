@@ -455,7 +455,7 @@ export async function GET(req: NextRequest) {
         date: r.date,
         target: goalTarget, // primary: what you'd eat at goal deficit
         offsetTarget: isManual ? storedTarget : null, // secondary: offset plan target (if manual)
-        actual: Number(r.actual_calories) || 0,
+        actual: isCurrentDay ? consumed.calories : (Number(r.actual_calories) || 0),
         closed: r.status === "closed",
         manual: isManual,
         delta:
