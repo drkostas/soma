@@ -49,6 +49,8 @@ export async function GET() {
   const currentWeight = latest?.smoothed || Number(profile.weight_kg);
   const currentFat = Math.max(0, currentWeight - ffm);
   const latestBf = latest?.bf || currentBf;
+  const latestActualWeight = latest?.weight || Number(profile.weight_kg);
+  const latestActualBf = latest?.bf || currentBf;
 
   // Target calculations
   const targetWeight = Math.round((ffm / (1 - targetBf / 100)) * 10) / 10;
@@ -56,13 +58,17 @@ export async function GET() {
   const totalDeficitNeeded = fatToLose * 7700;
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const daysRemaining = Math.max(1, Math.round((new Date(targetDate).getTime() - new Date(today).getTime()) / 86400000));
-  const requiredDeficit = Math.round(totalDeficitNeeded / daysRemaining);
+  const weeksRemaining = Math.max(1, daysRemaining / 7);
+  const weeklyRate = Math.round((fatToLose / weeksRemaining) * 10) / 10;
+  const targetDatePassed = new Date(targetDate) < new Date(today);
+  const requiredDeficit = targetDatePassed ? 0 : Math.round(totalDeficitNeeded / daysRemaining);
 
-  // Project weight from today to target date
-  const projection: { date: string; weight: number; bf: number }[] = [];
-  let projWeight = currentWeight;
+  // Project weight from last data point to target date
+  const projection: { date: string; weight: number; weightHigh: number; weightLow: number; bf: number }[] = [];
+  const lastDataDate = weights.length > 0 ? weights[weights.length - 1].date : today;
+  const projStart = new Date(lastDataDate);
+  let projWeight = weights.length > 0 ? weights[weights.length - 1].smoothed : currentWeight;
   const dailyWeightLoss = (deficit * 1) / 7700; // kg per day at current deficit
-  const projStart = new Date(today);
   const projEnd = new Date(targetDate);
   projEnd.setDate(projEnd.getDate() + 14); // extend 2 weeks past target
 
@@ -73,13 +79,15 @@ export async function GET() {
     projection.push({
       date: dateStr,
       weight: Math.round(projWeight * 10) / 10,
+      weightHigh: Math.round((projWeight + 1) * 10) / 10,
+      weightLow: Math.round((projWeight - 1) * 10) / 10,
       bf: Math.round(projBf * 10) / 10,
     });
     projWeight = Math.max(ffm * 1.05, projWeight - dailyWeightLoss);
   }
 
   // On track assessment
-  const onTrack = requiredDeficit <= deficit * 1.1; // within 10% of current deficit
+  const onTrack = !targetDatePassed && requiredDeficit <= deficit * 1.1; // within 10% of current deficit
   const realisticDate = (() => {
     const days = totalDeficitNeeded / deficit;
     const d = new Date(today);
@@ -91,13 +99,17 @@ export async function GET() {
     profile: {
       currentWeight,
       currentBf: latestBf,
+      latestActualWeight,
+      latestActualBf,
       targetWeight,
       targetBf,
       targetDate,
+      targetDatePassed,
       deficit,
       ffm,
       fatToLose: Math.round(fatToLose * 10) / 10,
       daysRemaining,
+      weeklyRate,
       requiredDeficit,
       onTrack,
       realisticDate,
