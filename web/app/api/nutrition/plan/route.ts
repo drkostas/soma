@@ -267,6 +267,11 @@ export async function GET(req: NextRequest) {
       adjustedStepCalories = Math.round(netSteps * calPerStep);
     }
 
+    // Predicted step calories (always from expectedSteps, with run dedup)
+    const predictedStepCalories = runEnabled && runDistanceKm > 0
+      ? Math.round(Math.max(3000, expectedSteps - runStepEstimate) * calPerStep)
+      : Math.round(expectedSteps * calPerStep);
+
     // Compute run calories — use plan value, or estimate from distance × weight
     let baseRunCal = Number(plan.exercise_calories) || 0;
     if (baseRunCal === 0 && runDistanceKm > 0) {
@@ -294,16 +299,16 @@ export async function GET(req: NextRequest) {
       : 0;
 
     let effectiveGymCal = 0;
-    const gymBreakdownFinal: { title: string; calories: number; actual: boolean }[] = [];
+    const gymBreakdownFinal: { title: string; calories: number; predicted: number; actual: boolean }[] = [];
     for (const workout of selectedWorkouts) {
+      const predictedEntry = gymBreakdown.find((g: any) => g.title === workout);
+      const predCal = predictedEntry?.calories ?? 0;
       if (actualGymByTitle[workout] !== undefined) {
         effectiveGymCal += actualGymByTitle[workout];
-        gymBreakdownFinal.push({ title: workout, calories: actualGymByTitle[workout], actual: true });
+        gymBreakdownFinal.push({ title: workout, calories: actualGymByTitle[workout], predicted: predCal, actual: true });
       } else {
-        const predicted = gymBreakdown.find((g: any) => g.title === workout);
-        const predCal = predicted?.calories ?? 0;
         effectiveGymCal += predCal;
-        gymBreakdownFinal.push({ title: workout, calories: predCal, actual: false });
+        gymBreakdownFinal.push({ title: workout, calories: predCal, predicted: predCal, actual: false });
       }
     }
 
@@ -382,6 +387,7 @@ export async function GET(req: NextRequest) {
     breakdown = {
       bmr: Math.round(baseBmr),
       stepCalories: adjustedStepCalories,
+      stepCaloriesPredicted: predictedStepCalories,
       stepCaloriesRaw: rawStepCalories,
       stepGoal,
       expectedSteps,

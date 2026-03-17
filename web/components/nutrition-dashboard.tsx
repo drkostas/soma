@@ -493,7 +493,12 @@ export function NutritionDashboard({
                             <span className="text-[10px]"> excl. ~{breakdown.runStepEstimate} run steps</span>
                           )}
                         </span>
-                        <span className="tabular-nums text-right text-green-500">+{breakdown.stepCalories}</span>
+                        <span className="tabular-nums text-right text-green-500">
+                          +{breakdown.stepCalories}
+                          {breakdown.stepCaloriesPredicted !== undefined && breakdown.stepCalories !== breakdown.stepCaloriesPredicted && (
+                            <span className="text-muted-foreground/50 text-[9px] ml-1">(~{breakdown.stepCaloriesPredicted})</span>
+                          )}
+                        </span>
 
                         {breakdown.runCalories > 0 && (
                           <>
@@ -503,7 +508,12 @@ export function NutritionDashboard({
                                 {breakdown.runActual ? "actual" : "predicted"}
                               </span>
                             </span>
-                            <span className="tabular-nums text-right text-green-500">+{breakdown.runCalories}</span>
+                            <span className="tabular-nums text-right text-green-500">
+                              +{breakdown.runCalories}
+                              {breakdown.runActual && breakdown.runPredicted > 0 && breakdown.runCalories !== breakdown.runPredicted && (
+                                <span className="text-muted-foreground/50 text-[9px] ml-1">(~{breakdown.runPredicted})</span>
+                              )}
+                            </span>
                           </>
                         )}
 
@@ -516,7 +526,12 @@ export function NutritionDashboard({
                                   {w.actual ? "actual" : "predicted"}
                                 </span>
                               </span>
-                              <span className="tabular-nums text-right text-green-500">+{w.calories}</span>
+                              <span className="tabular-nums text-right text-green-500">
+                                +{w.calories}
+                                {w.actual && w.predicted > 0 && w.calories !== w.predicted && (
+                                  <span className="text-muted-foreground/50 text-[9px] ml-1">(~{w.predicted})</span>
+                                )}
+                              </span>
                             </React.Fragment>
                           ))
                         ) : breakdown.gymCalories > 0 ? (
