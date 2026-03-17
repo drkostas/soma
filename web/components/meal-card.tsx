@@ -350,6 +350,8 @@ export function MealCard({
         setSelectedIngredients(new Set());
         setShowCompose(false);
         onMealLogged(slot);
+        // Pre-populate save prompt with auto-generated name
+        setSavePresetName(autoMealName(items));
         setShowSavePrompt(true);
       }
     } finally {
