@@ -16,7 +16,9 @@ export async function GET() {
 
   const currentBf = Number(profile.estimated_bf_pct) || 23.5;
   const targetBf = Number(profile.target_bf_pct) || 15;
-  const targetDate = String(profile.target_date);
+  const targetDate = profile.target_date instanceof Date
+    ? profile.target_date.toISOString().slice(0, 10)
+    : String(profile.target_date).slice(0, 10);
   const deficit = Number(profile.daily_deficit) || 800;
   const ffm = Number(profile.estimated_ffm_kg) || 60.6;
 
