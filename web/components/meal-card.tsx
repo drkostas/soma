@@ -471,10 +471,10 @@ export function MealCard({
           {meals.length > 0 && onLockToggle && (
             <span
               onClick={(e) => { e.stopPropagation(); onLockToggle(slot); }}
-              className={`cursor-pointer text-[10px] ${locked ? "text-amber-500" : "text-muted-foreground/30 hover:text-muted-foreground"}`}
+              className={`cursor-pointer text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors ${locked ? "bg-amber-500 text-black" : "bg-transparent border border-muted-foreground/20 text-muted-foreground/40 hover:text-muted-foreground"}`}
               title={locked ? "Locked — won't be rebalanced" : "Click to lock"}
             >
-              {locked ? "🔒" : "🔓"}
+              {locked ? "fixed" : "flex"}
             </span>
           )}
         </div>
@@ -740,10 +740,10 @@ export function MealCard({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setProportionsLocked(!proportionsLocked)}
-                    className={`text-[10px] px-2 py-0.5 rounded-md ${proportionsLocked ? "bg-amber-500/20 text-amber-500" : "bg-muted text-muted-foreground"}`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors ${proportionsLocked ? "bg-amber-500 text-black" : "bg-transparent border border-muted-foreground/30 text-muted-foreground"}`}
                     title={proportionsLocked ? "Proportions locked — scaling together" : "Proportions unlocked — adjust independently"}
                   >
-                    {proportionsLocked ? "🔒 Locked" : "🔓 Unlocked"}
+                    {proportionsLocked ? "Linked" : "Free"}
                   </button>
                   <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCancel}>
                     <X className="h-3.5 w-3.5" />
