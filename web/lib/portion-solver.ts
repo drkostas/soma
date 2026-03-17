@@ -169,7 +169,7 @@ export function solvePortions(
     portions[ing.id] = Math.round(clamp(gramsForCal, lo, hi));
   }
 
-  // Step 2: Check if total exceeds calorie budget, scale down if needed
+  // Step 2: Check ALL macro constraints, scale down to fit the tightest one
   const totalMacros = () => {
     let cal = 0, p = 0, c = 0, f = 0;
     for (const ing of scalable) {
@@ -181,14 +181,47 @@ export function solvePortions(
 
   let t = totalMacros();
 
-  // Scale down proportionally if over calorie budget
-  if (t.cal > remCal && t.cal > 0) {
-    const scale = remCal / t.cal;
+  // Find the tightest constraint — the macro that overflows the most
+  const constraintScales: number[] = [];
+  if (t.cal > 0 && t.cal > remCal) constraintScales.push(remCal / t.cal);
+  if (t.p > 0 && t.p > remP) constraintScales.push(remP / t.p);
+  if (t.f > 0 && t.f > remF) constraintScales.push(remF / t.f);
+  // Don't constrain carbs — they're the "fill" macro
+
+  if (constraintScales.length > 0) {
+    const scale = Math.min(...constraintScales); // tightest constraint
     for (const ing of scalable) {
       const [lo] = BOUNDS[ing.category] ?? [10, 300];
       portions[ing.id] = Math.max(lo, Math.round(portions[ing.id] * scale));
     }
     t = totalMacros();
+  }
+
+  // Per-macro targeted scaling: if protein or fat still over, reduce the top contributors
+  for (let iter = 0; iter < 3; iter++) {
+    t = totalMacros();
+    // Check protein
+    if (t.p > remP * 1.05) {
+      const proteinIngs = scalable.filter(i => i.protein_per_100g > 5).sort((a, b) => b.protein_per_100g - a.protein_per_100g);
+      for (const ing of proteinIngs) {
+        const m = macrosAt(ing, portions[ing.id]);
+        const excess = t.p - remP;
+        const reduceGrams = Math.round((excess / ing.protein_per_100g) * 100 / proteinIngs.length);
+        const [lo] = BOUNDS[ing.category] ?? [10, 300];
+        portions[ing.id] = Math.max(lo, portions[ing.id] - reduceGrams);
+      }
+    }
+    // Check fat
+    t = totalMacros();
+    if (t.f > remF * 1.05) {
+      const fatIngs = scalable.filter(i => i.fat_per_100g > 3).sort((a, b) => b.fat_per_100g - a.fat_per_100g);
+      for (const ing of fatIngs) {
+        const excess = t.f - remF;
+        const reduceGrams = Math.round((excess / ing.fat_per_100g) * 100 / fatIngs.length);
+        const [lo] = BOUNDS[ing.category] ?? [10, 300];
+        portions[ing.id] = Math.max(lo, portions[ing.id] - reduceGrams);
+      }
+    }
   }
 
   // Step 3: Fine-tune — try to shift grams to better hit protein target
