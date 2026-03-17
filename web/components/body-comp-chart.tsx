@@ -32,7 +32,7 @@ interface BodyCompData {
   weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[];
   projection: { date: string; weight: number; bf: number }[];
   calPredicted: { date: string; weight: number; closed: boolean }[];
-  dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean }[];
+  dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean; burned: number; consumed: number }[];
   goalDeficit: number;
 }
 
