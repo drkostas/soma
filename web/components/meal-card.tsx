@@ -186,6 +186,9 @@ export function MealCard({
   const slotLabel = SLOT_LABELS[slot] || slot;
   const slotIcon = SLOT_ICONS[slot] || "";
   const totalCal = meals.reduce((s, m) => s + Number(m.calories || 0), 0);
+  const totalProtein = meals.reduce((s, m) => s + Number(m.protein || 0), 0);
+  const totalCarbs = meals.reduce((s, m) => s + Number(m.carbs || 0), 0);
+  const totalFat = meals.reduce((s, m) => s + Number(m.fat || 0), 0);
 
   // Filter presets for this slot
   const slotTags = SLOT_TAG_MAP[slot] || [];
@@ -480,6 +483,11 @@ export function MealCard({
               {Math.round(totalCal)} kcal
             </span>
           )}
+          {slotBudget && totalCal > 0 && (
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              / {Math.round(slotBudget.calories)}
+            </span>
+          )}
           {expanded ? (
             <ChevronUp className="h-4 w-4 text-muted-foreground" />
           ) : (
@@ -487,6 +495,14 @@ export function MealCard({
           )}
         </div>
       </button>
+
+      {expanded && meals.length > 0 && slotBudget && (
+        <div className="px-4 pb-2 text-[10px] text-muted-foreground tabular-nums">
+          {Math.round(totalProtein)}P / {Math.round(slotBudget.protein || 0)}
+          {" · "}{Math.round(totalCarbs)}C / {Math.round(slotBudget.carbs || 0)}
+          {" · "}{Math.round(totalFat)}F / {Math.round(slotBudget.fat || 0)}
+        </div>
+      )}
 
       {expanded && (
         <CardContent className="pt-0 space-y-2">
