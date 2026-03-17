@@ -12,6 +12,9 @@ import {
   rawToCooked,
   cookedToRaw,
   hasRawCookedToggle,
+  isCountBased,
+  countToGrams,
+  gramsToCount,
 } from "@/lib/portion-solver";
 
 interface ComposeMealViewProps {
@@ -133,15 +136,27 @@ export function ComposeMealView({
             <div key={p.ingredient_id} className="text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate flex-1 min-w-0">{ing?.name ?? p.ingredient_id}</span>
-                <NumberInput
-                  value={Math.round(displayGrams)}
-                  onChange={(v) => handlePortionChange(p.ingredient_id, v)}
-                  min={0}
-                  max={500}
-                  step={p.increment}
-                  suffix="g"
-                  className="w-36 shrink-0"
-                />
+                {ing && isCountBased(ing) ? (
+                  <NumberInput
+                    value={gramsToCount(ing, p.grams)}
+                    onChange={(v) => handlePortionChange(p.ingredient_id, countToGrams(ing, v))}
+                    min={0}
+                    max={20}
+                    step={1}
+                    suffix={ing.unit || "pcs"}
+                    className="w-36 shrink-0"
+                  />
+                ) : (
+                  <NumberInput
+                    value={Math.round(displayGrams)}
+                    onChange={(v) => handlePortionChange(p.ingredient_id, v)}
+                    min={0}
+                    max={500}
+                    step={p.increment}
+                    suffix="g"
+                    className="w-36 shrink-0"
+                  />
+                )}
               </div>
               {canToggle && (
                 <button
