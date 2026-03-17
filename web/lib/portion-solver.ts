@@ -14,6 +14,23 @@ export interface Ingredient {
   category: string;
   is_raw?: boolean;
   raw_to_cooked_ratio?: number | null;
+  unit?: string; // 'g' (default), 'egg', 'gel', etc.
+  grams_per_unit?: number | null; // grams per 1 unit (e.g., 50 for eggs)
+}
+
+/** Check if an ingredient uses count-based units instead of grams */
+export function isCountBased(ing: Ingredient): boolean {
+  return !!ing.unit && ing.unit !== "g" && !!ing.grams_per_unit;
+}
+
+/** Convert count to grams */
+export function countToGrams(ing: Ingredient, count: number): number {
+  return count * (ing.grams_per_unit || 100);
+}
+
+/** Convert grams to count */
+export function gramsToCount(ing: Ingredient, grams: number): number {
+  return Math.round(grams / (ing.grams_per_unit || 100));
 }
 
 export interface MacroTarget {
