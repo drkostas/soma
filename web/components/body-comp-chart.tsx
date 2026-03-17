@@ -73,9 +73,13 @@ export function BodyCompChart() {
   };
 
   const statusColor = profile.onTrack ? "text-green-500" : "text-amber-500";
+  const fmtDate = (d: string) => {
+    const s = String(d).slice(0, 10);
+    return new Date(s + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
   const statusText = profile.onTrack
-    ? `On track \u00b7 ${new Date(profile.targetDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-    : `Behind \u00b7 realistic: ${new Date(profile.realisticDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    ? `On track \u00b7 ${fmtDate(profile.targetDate)}`
+    : `Behind \u00b7 realistic: ${fmtDate(profile.realisticDate)}`;
 
   return (
     <div className="space-y-4">
@@ -101,7 +105,7 @@ export function BodyCompChart() {
           </div>
           {!profile.onTrack && (
             <div className="text-[10px] text-center text-amber-500 mt-1">
-              Need {profile.requiredDeficit} cal/day deficit to hit {new Date(profile.targetDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              Need {profile.requiredDeficit} cal/day deficit to hit {fmtDate(profile.targetDate)}
             </div>
           )}
         </CardContent>
