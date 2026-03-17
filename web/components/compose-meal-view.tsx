@@ -42,6 +42,7 @@ export function ComposeMealView({
   onTotalsChange,
 }: ComposeMealViewProps) {
   const [portions, setPortions] = useState(initialPortions);
+  const [maxYolks, setMaxYolks] = useState(1);
   // Track which ingredients are in "cooked" display mode (key = ingredient_id)
   const [cookedMode, setCookedMode] = useState<Set<string>>(new Set());
 
@@ -87,6 +88,18 @@ export function ComposeMealView({
   useEffect(() => {
     onTotalsChange?.(totals);
   }, [totals, onTotalsChange]);
+
+  // Clamp whole egg grams when maxYolks changes
+  useEffect(() => {
+    const wholeEgg = portions.find(p => p.ingredient_id === "eggs_whole");
+    if (wholeEgg) {
+      const ing = ingMap.get("eggs_whole");
+      const maxGrams = (ing?.grams_per_unit || 50) * maxYolks;
+      if (wholeEgg.grams > maxGrams) {
+        handlePortionChange("eggs_whole", maxGrams);
+      }
+    }
+  }, [maxYolks]);
 
   const totalGrams = useMemo(() => portions.reduce((s, p) => s + p.grams, 0), [portions]);
   const volumeScore = totals.calories > 0 ? totalGrams / totals.calories : 0;
@@ -174,6 +187,24 @@ export function ComposeMealView({
           );
         })}
       </div>
+
+      {/* Max yolks config */}
+      {portions.some(p => p.ingredient_id === "eggs_whole") && (
+        <div className="flex items-center justify-between text-xs bg-muted/50 rounded-md px-3 py-2">
+          <span className="text-muted-foreground">Max yolks per day</span>
+          <div className="flex items-center gap-2">
+            {[1, 2, 3].map(n => (
+              <button
+                key={n}
+                onClick={() => setMaxYolks(n)}
+                className={`w-7 h-7 rounded-md text-xs font-medium ${maxYolks === n ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Macro progress bars */}
       <div className="space-y-1.5 border-t pt-2">
