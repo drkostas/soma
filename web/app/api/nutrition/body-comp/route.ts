@@ -159,6 +159,14 @@ export async function GET() {
     closed: dt.closed,
   }));
 
+  // Deficit performance stats
+  const closedDeficitEntries = deficitTrend.filter(d => d.closed);
+  const closedDeficitDays = closedDeficitEntries.length;
+  const totalActualDeficit = closedDeficitDays > 0
+    ? closedDeficitEntries[closedDeficitEntries.length - 1].actual  // last closed day's cumulative
+    : 0;
+  const avgActualDeficit = closedDeficitDays > 0 ? Math.round(totalActualDeficit / closedDeficitDays) : 0;
+
   // On track assessment
   const onTrack = !targetDatePassed && requiredDeficit <= deficit * 1.1; // within 10% of current deficit
   const realisticDate = (() => {
@@ -186,6 +194,9 @@ export async function GET() {
       requiredDeficit,
       onTrack,
       realisticDate,
+      avgActualDeficit,
+      closedDeficitDays,
+      totalActualDeficit: Math.round(totalActualDeficit),
     },
     weights,
     projection,
