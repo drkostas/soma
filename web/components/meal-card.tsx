@@ -147,6 +147,7 @@ export function MealCard({
   const [showPicker, setShowPicker] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
   const [multiplier, setMultiplier] = useState(1);
+  const [proportionsLocked, setProportionsLocked] = useState(true);
   const [logging, setLogging] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [skipping, setSkipping] = useState(false);
@@ -723,62 +724,89 @@ export function MealCard({
             </div>
           )}
 
-          {/* Selected preset: macro preview + multiplier + log */}
-          {!disabled && selectedPreset && (
+          {/* Selected preset: macro preview + proportions + log */}
+          {!disabled && selectedPreset && (() => {
+            // Parse preset items
+            const blob = selectedPreset.items;
+            const presetItems: { ingredient_id: string; grams: number }[] =
+              Array.isArray(blob) ? blob : blob?.items ?? [];
+
+            return (
             <div className="space-y-3 rounded-md border p-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">
                   {selectedPreset.name}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={handleCancel}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setProportionsLocked(!proportionsLocked)}
+                    className={`text-[10px] px-2 py-0.5 rounded-md ${proportionsLocked ? "bg-amber-500/20 text-amber-500" : "bg-muted text-muted-foreground"}`}
+                    title={proportionsLocked ? "Proportions locked — scaling together" : "Proportions unlocked — adjust independently"}
+                  >
+                    {proportionsLocked ? "🔒 Locked" : "🔓 Unlocked"}
+                  </button>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCancel}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Ingredients with portions */}
+              <div className="space-y-1">
+                {presetItems.map((item) => {
+                  const ing = (ingredients as Ingredient[])?.find(i => i.id === item.ingredient_id);
+                  const scaledGrams = Math.round(item.grams * multiplier);
+                  const m = ing ? computeItemMacros(ing, scaledGrams) : null;
+                  return (
+                    <div key={item.ingredient_id} className="flex items-center justify-between text-xs">
+                      <div className="flex-1 min-w-0">
+                        <span className="truncate">{ing?.name || item.ingredient_id}</span>
+                        {m && <span className="text-[10px] text-muted-foreground ml-1">{m.calories}kcal</span>}
+                      </div>
+                      <span className="tabular-nums text-muted-foreground">{scaledGrams}g</span>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Macro preview */}
               {previewMacros && (
                 <div className="grid grid-cols-4 gap-2 text-center text-xs">
                   <div>
-                    <div className="font-bold tabular-nums">
-                      {previewMacros.calories}
-                    </div>
+                    <div className="font-bold tabular-nums">{previewMacros.calories}</div>
                     <div className="text-muted-foreground">kcal</div>
                   </div>
                   <div>
-                    <div className="font-bold tabular-nums text-blue-500">
-                      {previewMacros.protein}g
-                    </div>
-                    <div className="text-muted-foreground">protein</div>
+                    <div className="font-bold tabular-nums text-blue-500">{previewMacros.protein}g</div>
+                    <div className="text-muted-foreground">P</div>
                   </div>
                   <div>
-                    <div className="font-bold tabular-nums text-amber-500">
-                      {previewMacros.carbs}g
-                    </div>
-                    <div className="text-muted-foreground">carbs</div>
+                    <div className="font-bold tabular-nums text-amber-500">{previewMacros.carbs}g</div>
+                    <div className="text-muted-foreground">C</div>
                   </div>
                   <div>
-                    <div className="font-bold tabular-nums text-rose-500">
-                      {previewMacros.fat}g
-                    </div>
-                    <div className="text-muted-foreground">fat</div>
+                    <div className="font-bold tabular-nums text-rose-500">{previewMacros.fat}g</div>
+                    <div className="text-muted-foreground">F</div>
                   </div>
                 </div>
               )}
 
-              {/* Multiplier slider */}
-              <NumberInput
-                value={multiplier}
-                onChange={setMultiplier}
-                min={0.5}
-                max={2.0}
-                step={0.05}
-                suffix="x"
-              />
+              {/* Scale slider (locked) or Customize button (unlocked) */}
+              {proportionsLocked ? (
+                <NumberInput
+                  value={multiplier}
+                  onChange={setMultiplier}
+                  min={0.5}
+                  max={2.0}
+                  step={0.05}
+                  suffix="x"
+                  label="Scale"
+                />
+              ) : (
+                <div className="text-[10px] text-muted-foreground text-center">
+                  Click &quot;Customize&quot; below to adjust individual portions
+                </div>
+              )}
 
               {/* Log + Customize + Cancel */}
               <div className="flex gap-2">
@@ -810,7 +838,8 @@ export function MealCard({
                 </Button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Ingredient picker (compose step 1) */}
           {!disabled && showCompose && !composedPortions && (
