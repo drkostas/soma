@@ -201,7 +201,7 @@ export function BodyCompChart() {
                 <Area type="monotone" dataKey="projected" stroke="none" fill="#3b82f6" fillOpacity={0.03} connectNulls={false} tooltipType="none" />
                 <Line type="monotone" dataKey="actual" stroke="#3b82f6" dot={{ r: 3, fill: "#3b82f6" }} strokeWidth={0} connectNulls={false} />
                 <Line type="monotone" dataKey="smoothed" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} />
-                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={true} opacity={0.6} />
+                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls={true} opacity={0.8} />
                 {showCalPredicted && <Line type="monotone" dataKey="calPredicted" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="4 4" dot={(props: any) => {
                   const { cx, cy, payload } = props;
                   if (payload.calPredicted == null) return <></>;
@@ -260,7 +260,7 @@ export function BodyCompChart() {
                 />
                 <ReferenceLine y={profile.targetBf} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#22c55e" }} />
                 <Line type="monotone" dataKey="bf" stroke="#f97316" strokeWidth={2} dot={{ r: 3, fill: "#f97316" }} connectNulls={true} />
-                <Line type="monotone" dataKey="projBf" stroke="#f97316" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={true} opacity={0.5} />
+                <Line type="monotone" dataKey="projBf" stroke="#f97316" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls={true} opacity={0.8} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
