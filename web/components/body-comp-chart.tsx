@@ -25,6 +25,9 @@ interface BodyCompData {
     onTrack: boolean;
     targetDatePassed: boolean;
     realisticDate: string;
+    avgActualDeficit: number;
+    closedDeficitDays: number;
+    totalActualDeficit: number;
   };
   weights: { date: string; weight: number; smoothed: number; bf: number }[];
   projection: { date: string; weight: number; bf: number }[];
@@ -130,7 +133,14 @@ export function BodyCompChart() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-xs">
-            <span className="text-muted-foreground">{profile.deficit} kcal/day deficit</span>
+            <span className="text-muted-foreground">
+              {profile.deficit} kcal/day target
+              {profile.closedDeficitDays > 0 && (
+                <span className={profile.avgActualDeficit >= profile.deficit * 0.9 ? "text-green-500" : "text-amber-500"}>
+                  {" · "}{profile.avgActualDeficit} actual ({profile.closedDeficitDays}d)
+                </span>
+              )}
+            </span>
             <span className="text-muted-foreground">&middot;</span>
             <span className="text-muted-foreground">{profile.fatToLose}kg to lose</span>
             <span className="text-muted-foreground">&middot;</span>
