@@ -27,7 +27,7 @@ export const runtime = "edge";
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const date = searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+  const date = searchParams.get("date") ?? new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: "Invalid date format. Use YYYY-MM-DD." }, { status: 400 });
@@ -133,7 +133,7 @@ export async function GET(request: Request) {
   const calibForceEqual = calib?.force_equal ?? false;
 
   // Fetch today's run type from the active training plan
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   let todayPlan: Record<string, unknown>[] = [];
   try {
     todayPlan = await sql`

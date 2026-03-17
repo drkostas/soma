@@ -6,6 +6,8 @@ import json
 import logging
 from datetime import date
 
+from config import today_nyc
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_PACE = 330  # ~5:30/km fallback
@@ -177,7 +179,7 @@ def run_training_engine(conn):
     from training_engine.body_comp_stream import update_body_comp
     from training_engine.merge import merge
 
-    today = date.today()
+    today = today_nyc()
 
     # 1. Compute loads for new activities
     try:

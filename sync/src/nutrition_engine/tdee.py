@@ -84,10 +84,10 @@ def compute_deficit_from_goal(
         - ``weekly_rate_pct``: Projected weekly weight-loss as % of body weight.
         - ``safety``: Traffic-light rating (``"green"``, ``"yellow"``, ``"red"``).
     """
-    from datetime import date as date_cls
+    from config import today_nyc
 
     if today is None:
-        today = date_cls.today()
+        today = today_nyc()
 
     # Fat-free mass stays constant; only fat mass changes
     ffm_kg = weight_kg * (1 - current_bf_pct / 100)

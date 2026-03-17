@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 
+from config import today_nyc
 from garmin_client import init_garmin, rate_limited_call
 from db import get_connection, upsert_raw_data, upsert_activity_raw, log_sync
 
@@ -24,7 +25,7 @@ DAILY_ENDPOINTS = {
     "training_readiness": lambda client, d: client.get_training_readiness(d),
     "training_status": lambda client, d: client.get_training_status(d),
     "max_metrics": lambda client, d: client.get_max_metrics(d),
-    "race_predictions": lambda client, d: client.get_race_predictions(d),
+    "race_predictions": lambda client, d: client.get_race_predictions(),
     "endurance_score": lambda client, d: client.get_endurance_score(d),
     "hill_score": lambda client, d: client.get_hill_score(d),
     "fitnessage_data": lambda client, d: client.get_fitnessage_data(d),
@@ -386,7 +387,7 @@ def push_pending_plans(client) -> int:
 def sync_recent(days: int = 7):
     """Sync the last N days of data."""
     client = init_garmin()
-    today = date.today()
+    today = today_nyc()
     total_records = 0
 
     with get_connection() as conn:

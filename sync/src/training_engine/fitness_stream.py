@@ -11,6 +11,7 @@ Research:
 import json
 from datetime import date, timedelta
 
+from config import today_nyc
 from training_engine.vdot import time_from_vdot
 
 # Standard half-marathon distance in meters
@@ -90,7 +91,7 @@ def update_fitness_trajectory(conn, target_date: date = None) -> dict | None:
     Returns the fitness dict or None if insufficient data.
     """
     if target_date is None:
-        target_date = date.today()
+        target_date = today_nyc()
 
     vo2max = None
     ef = None

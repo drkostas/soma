@@ -14,6 +14,7 @@ import sys
 import time
 from datetime import date, timedelta
 
+from config import today_nyc
 from db import (
     get_connection,
     upsert_raw_data,
@@ -70,7 +71,7 @@ class GarminBackfill:
 
     def __init__(self):
         self._shutdown = False
-        self.today = date.today()
+        self.today = today_nyc()
         self.start_year = GARMIN_START_YEAR
         self.client = None
 

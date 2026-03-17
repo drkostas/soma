@@ -150,7 +150,7 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
   let atl = pmc.atl;
   let projectedZ = readiness.compositeZ;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const results: ProjectedDay[] = [];
 
   // Track recent gym days for sequencing

@@ -27,7 +27,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent))
 
 from bpm_formula import hrr_to_bpm, latest_hr_from_garmin_data
-from config import DATABASE_URL
+from config import DATABASE_URL, today_nyc
 from garmin_client import init_garmin
 from shuffle import SessionState, interleaved_shuffle
 
@@ -347,7 +347,7 @@ def run_daemon(
                 source_refresh_counter = (source_refresh_counter + 1) % SOURCE_REFRESH_INTERVAL
 
             # 1. Poll Garmin HR
-            today = date.today().isoformat()
+            today = today_nyc().isoformat()
             hr_data = garmin.get_heart_rates(today)
             current_hr_result = latest_hr_from_garmin_data(hr_data, window_seconds=HR_WINDOW_SECONDS)
             if current_hr_result is not None:

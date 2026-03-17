@@ -365,7 +365,7 @@ export default async function TrainingPage() {
     getBanisterParams(),
   ]);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
   // Trajectory data (depends on raceInfo, banister params, and plan days)
   let trajectoryData: { date: string; optimal: number; actual: number | null; projectedVdot: number | null; ctl: number | null; readiness: number | null; weightEffect: number | null }[] = [];
