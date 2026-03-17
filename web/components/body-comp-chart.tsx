@@ -78,7 +78,20 @@ export function BodyCompChart() {
       dateSet.add(cp.date);
     }
   }
+  // Ensure projection connects to smoothed line: overlap first projection point with last actual
+  if (recentWeights.length > 0 && projection.length > 0) {
+    const lastActual = recentWeights[recentWeights.length - 1];
+    const firstProj = projection[0];
+    const overlap = chartData.find((d: any) => d.date === lastActual.date);
+    if (overlap && firstProj) {
+      overlap.projected = firstProj.weight;
+      overlap.projBf = firstProj.bf;
+    }
+  }
+
   chartData.sort((a, b) => a.date.localeCompare(b.date));
+
+  const showCalPredicted = (calPredicted?.length ?? 0) >= 7;
 
   // Format date for X axis
   const formatDate = (date: string) => {
@@ -147,7 +160,7 @@ export function BodyCompChart() {
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />smoothed</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6] opacity-50" style={{borderTop: "2px dashed #3b82f6"}} />projected</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #06b6d4"}} />from cal</span>
+            {showCalPredicted && <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #06b6d4"}} />from cal</span>}
           </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -185,18 +198,18 @@ export function BodyCompChart() {
                   }}
                 />
                 <ReferenceLine y={profile.targetWeight} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetWeight}kg`, position: "right", fontSize: 10, fill: "#22c55e" }} />
-                <Area type="monotone" dataKey="projected" stroke="none" fill="#3b82f6" fillOpacity={0.05} connectNulls={false} tooltipType="none" />
-                <Line type="monotone" dataKey="actual" stroke="#3b82f6" dot={{ r: 2, fill: "#3b82f6" }} strokeWidth={0} connectNulls={false} />
-                <Line type="monotone" dataKey="smoothed" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={false} />
-                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={false} opacity={0.6} />
-                <Line type="monotone" dataKey="calPredicted" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="4 4" dot={(props: any) => {
+                <Area type="monotone" dataKey="projected" stroke="none" fill="#3b82f6" fillOpacity={0.03} connectNulls={false} tooltipType="none" />
+                <Line type="monotone" dataKey="actual" stroke="#3b82f6" dot={{ r: 3, fill: "#3b82f6" }} strokeWidth={0} connectNulls={false} />
+                <Line type="monotone" dataKey="smoothed" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} />
+                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={true} opacity={0.6} />
+                {showCalPredicted && <Line type="monotone" dataKey="calPredicted" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="4 4" dot={(props: any) => {
                   const { cx, cy, payload } = props;
                   if (payload.calPredicted == null) return <></>;
                   if (!payload.calPredictedClosed) {
                     return <circle cx={cx} cy={cy} r={3} fill="none" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="2 2" />;
                   }
                   return <circle cx={cx} cy={cy} r={2} fill="#06b6d4" />;
-                }} connectNulls={false} />
+                }} connectNulls={false} />}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -246,8 +259,8 @@ export function BodyCompChart() {
                   }}
                 />
                 <ReferenceLine y={profile.targetBf} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#22c55e" }} />
-                <Line type="monotone" dataKey="bf" stroke="#f97316" strokeWidth={2} dot={{ r: 2, fill: "#f97316" }} connectNulls={false} />
-                <Line type="monotone" dataKey="projBf" stroke="#f97316" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={false} opacity={0.5} />
+                <Line type="monotone" dataKey="bf" stroke="#f97316" strokeWidth={2} dot={{ r: 3, fill: "#f97316" }} connectNulls={true} />
+                <Line type="monotone" dataKey="projBf" stroke="#f97316" strokeWidth={1.5} strokeDasharray="6 3" dot={false} connectNulls={true} opacity={0.5} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
