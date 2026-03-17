@@ -147,6 +147,13 @@ export function ComposeMealView({
           return (
             <div key={p.ingredient_id} className="text-sm">
               <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={() => setPortions(prev => prev.filter(pp => pp.ingredient_id !== p.ingredient_id))}
+                  className="text-muted-foreground/30 hover:text-rose-500 shrink-0"
+                  title="Remove ingredient"
+                >
+                  <X className="h-3 w-3" />
+                </button>
                 <span className="truncate flex-1 min-w-0">
                   {ing?.name ?? p.ingredient_id}
                   <span className="block text-[10px] text-muted-foreground">
