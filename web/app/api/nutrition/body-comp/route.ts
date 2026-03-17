@@ -129,7 +129,11 @@ export async function GET() {
     } else if (isToday) {
       consumed = todayConsumed;
     } else {
-      continue; // skip open non-today days
+      // Unclosed past day — compute consumed from meal_log + drink_log
+      const pastMeals = await sql`SELECT COALESCE(SUM(calories), 0) AS total FROM meal_log WHERE date = ${dateStr}`;
+      const pastDrinks = await sql`SELECT COALESCE(SUM(calories), 0) AS total FROM drink_log WHERE date = ${dateStr}`;
+      consumed = Number(pastMeals[0]?.total || 0) + Number(pastDrinks[0]?.total || 0);
+      if (consumed === 0) continue; // truly empty day, skip
     }
 
     const dailyDeficit = estimatedBurn - consumed;
