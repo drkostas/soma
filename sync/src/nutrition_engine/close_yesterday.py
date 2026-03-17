@@ -10,14 +10,16 @@ Replaces predicted values with actuals:
 
 import logging
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
 
 def close_yesterday(conn) -> None:
     """Close all unclosed past nutrition days with reconciled actuals."""
-    today = date.today()
+    # Use Eastern time to avoid closing today's day early (UTC is 5h ahead)
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("America/New_York")).date()
 
     with conn.cursor() as cur:
         # Find ALL unclosed past days (not just yesterday)
