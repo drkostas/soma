@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ReferenceLine, ComposedChart, Area,
+  ReferenceLine, ComposedChart, Area, Bar, Cell,
 } from "recharts";
 
 interface BodyCompData {
@@ -32,6 +32,8 @@ interface BodyCompData {
   weights: { date: string; weight: number; smoothed: number; bf: number }[];
   projection: { date: string; weight: number; bf: number }[];
   calPredicted: { date: string; weight: number; closed: boolean }[];
+  dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean }[];
+  goalDeficit: number;
 }
 
 export function BodyCompChart() {
@@ -48,7 +50,7 @@ export function BodyCompChart() {
   if (loading) return <div className="text-center text-muted-foreground py-8 animate-pulse">Loading trajectory...</div>;
   if (!data) return <div className="text-center text-muted-foreground py-8">No data available</div>;
 
-  const { profile, weights, projection, calPredicted } = data;
+  const { profile, weights, projection, calPredicted, dailyDeficits, goalDeficit } = data;
 
   // Merge weights and projection into one dataset for the chart
   // Only show weights from last 3 months
@@ -276,6 +278,62 @@ export function BodyCompChart() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Daily deficit chart */}
+      {dailyDeficits && dailyDeficits.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Daily Deficit</div>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#22c55e]" />deficit</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#ef4444]" />surplus</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />cumulative</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.3)"}} />goal ({goalDeficit}/day)</span>
+            </div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={dailyDeficits} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(label: any) => formatDate(String(label))}
+                    tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
+                    interval={Math.max(0, Math.floor(dailyDeficits.length / 6))}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
+                    tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(10,10,12,0.95)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                    }}
+                    labelFormatter={(label: any) => formatDate(String(label))}
+                    formatter={(value: any, name: any) => {
+                      const labels: Record<string, string> = {
+                        daily: "Daily deficit",
+                        cumulative: "Cumulative",
+                      };
+                      return [`${Number(value).toLocaleString()} kcal`, labels[name] || name];
+                    }}
+                  />
+                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
+                  <ReferenceLine y={goalDeficit} stroke="rgba(255,255,255,0.2)" strokeDasharray="6 3" label={{ value: `${goalDeficit}`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.3)" }} />
+                  <Bar dataKey="daily" radius={[4, 4, 0, 0]}>
+                    {dailyDeficits.map((entry, index) => (
+                      <Cell key={index} fill={entry.daily >= 0 ? "#22c55e" : "#ef4444"} opacity={entry.closed ? 0.8 : 0.4} />
+                    ))}
+                  </Bar>
+                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2, fill: "#3b82f6" }} connectNulls={true} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
     </div>
   );
