@@ -28,6 +28,8 @@ interface BodyCompData {
   };
   weights: { date: string; weight: number; smoothed: number; bf: number }[];
   projection: { date: string; weight: number; bf: number }[];
+  deficitTrend: { date: string; actual: number; expected: number; closed: boolean }[];
+  goalDeficit: number;
 }
 
 export function BodyCompChart() {
@@ -44,7 +46,7 @@ export function BodyCompChart() {
   if (loading) return <div className="text-center text-muted-foreground py-8 animate-pulse">Loading trajectory...</div>;
   if (!data) return <div className="text-center text-muted-foreground py-8">No data available</div>;
 
-  const { profile, weights, projection } = data;
+  const { profile, weights, projection, deficitTrend, goalDeficit } = data;
 
   // Merge weights and projection into one dataset for the chart
   // Only show weights from last 3 months
@@ -231,6 +233,60 @@ export function BodyCompChart() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Cumulative deficit chart */}
+      {deficitTrend && deficitTrend.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Cumulative Deficit</div>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#22c55e]" />actual</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.3)"}} />expected ({goalDeficit}/day)</span>
+            </div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={deficitTrend} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={formatDate}
+                    tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
+                    interval={Math.max(1, Math.floor(deficitTrend.length / 7))}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
+                    tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(10,10,12,0.95)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                    }}
+                    labelFormatter={formatDate}
+                    formatter={(value: number, name: string) => {
+                      const labels: Record<string, string> = {
+                        actual: "Actual deficit",
+                        expected: "Expected deficit",
+                      };
+                      return [`${value.toLocaleString()} kcal`, labels[name] || name];
+                    }}
+                  />
+                  <Line type="monotone" dataKey="expected" stroke="rgba(255,255,255,0.3)" strokeWidth={1.5} strokeDasharray="6 3" dot={false} />
+                  <Area type="monotone" dataKey="actual" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    if (!payload.closed) {
+                      return <circle cx={cx} cy={cy} r={3} fill="none" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="2 2" />;
+                    }
+                    return <circle cx={cx} cy={cy} r={2} fill="#22c55e" />;
+                  }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
