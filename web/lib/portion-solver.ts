@@ -227,6 +227,15 @@ export function solvePortions(
     }
   }
 
+  // Constraint: max 1 whole egg (with yolk) per day — clamp to 1 unit
+  const wholeEgg = scalable.find(i => i.id === "eggs_whole");
+  if (wholeEgg && wholeEgg.grams_per_unit) {
+    const maxGrams = wholeEgg.grams_per_unit; // 1 egg = 50g
+    if (portions[wholeEgg.id] > maxGrams) {
+      portions[wholeEgg.id] = maxGrams;
+    }
+  }
+
   // Final calorie check — scale down again if over
   t = totalMacros();
   if (t.cal > remCal * 1.02 && t.cal > 0) {
