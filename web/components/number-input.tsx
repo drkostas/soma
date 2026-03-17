@@ -121,7 +121,7 @@ export function NumberInput({
           type="range"
           min={min}
           max={max}
-          step={step}
+          step={1}
           value={value}
           onChange={handleSlider}
           className={cn(
