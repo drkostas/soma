@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getDb } from "@/lib/db";
 import { NutritionDashboard } from "@/components/nutrition-dashboard";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
+import { BodyCompChart } from "@/components/body-comp-chart";
 
 export const metadata: Metadata = { title: "Nutrition" };
 export const revalidate = 60;
@@ -216,9 +217,10 @@ async function getSleepDetail(date: string) {
   return rows[0] ?? null;
 }
 
-export default async function NutritionPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+export default async function NutritionPage({ searchParams }: { searchParams: Promise<{ date?: string; view?: string }> }) {
   const params = await searchParams;
   const today = params.date || new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const view = params.view || "day";
 
   // Check if onboarding is needed (no nutrition_profile)
   const bootstrap = await safeQuery(() => getBootstrap(), undefined);
@@ -228,6 +230,37 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
       <div className="max-w-lg mx-auto px-4 py-6">
         <NutritionOnboarding bootstrap={bootstrap} />
       </div>
+    );
+  }
+
+  // Tab switcher (rendered for both views)
+  const tabBar = (
+    <div className="max-w-lg mx-auto px-4 pt-4 lg:max-w-5xl">
+      <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+        <a
+          href={`/nutrition?date=${today}`}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${view === "day" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Day
+        </a>
+        <a
+          href="/nutrition?view=trajectory"
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${view === "trajectory" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Trajectory
+        </a>
+      </div>
+    </div>
+  );
+
+  if (view === "trajectory") {
+    return (
+      <>
+        {tabBar}
+        <div className="max-w-lg mx-auto px-4 py-6 lg:max-w-3xl">
+          <BodyCompChart />
+        </div>
+      </>
     );
   }
 
@@ -245,18 +278,21 @@ export default async function NutritionPage({ searchParams }: { searchParams: Pr
     ]);
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 lg:max-w-5xl">
-      <NutritionDashboard
-        date={today}
-        plan={plan}
-        meals={meals}
-        drinks={drinks}
-        presets={presets}
-        ingredients={ingredients}
-        training={training}
-        health={health}
-        sleep={sleep}
-      />
-    </div>
+    <>
+      {tabBar}
+      <div className="max-w-lg mx-auto px-4 py-6 lg:max-w-5xl">
+        <NutritionDashboard
+          date={today}
+          plan={plan}
+          meals={meals}
+          drinks={drinks}
+          presets={presets}
+          ingredients={ingredients}
+          training={training}
+          health={health}
+          sleep={sleep}
+        />
+      </div>
+    </>
   );
 }
