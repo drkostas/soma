@@ -5,10 +5,10 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Ingredient } from "@/lib/portion-solver";
 
-const CATEGORY_ORDER = ["protein", "carbs", "vegetable", "fat", "dairy", "fruit", "sauce", "supplement"];
+const CATEGORY_ORDER = ["protein", "carbs", "grain", "vegetable", "fat", "dairy", "fruit", "sauce", "supplement"];
 
 const CATEGORY_LABELS: Record<string, string> = {
-  protein: "Protein", carbs: "Carbs", vegetable: "Vegetable", fat: "Fat",
+  protein: "Protein", carbs: "Carbs", grain: "Grain", vegetable: "Vegetable", fat: "Fat",
   dairy: "Dairy", fruit: "Fruit", sauce: "Sauce", supplement: "Supplement",
 };
 
