@@ -285,8 +285,8 @@ export function BodyCompChart() {
           <CardContent className="py-4">
             <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Daily Deficit</div>
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#22c55e]" />deficit</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#ef4444]" />surplus</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#ef4444]" />surplus ↑</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#22c55e]" />deficit ↓</span>
               <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />cumulative</span>
               <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.3)"}} />goal ({goalDeficit}/day)</span>
             </div>
@@ -301,8 +301,15 @@ export function BodyCompChart() {
                     interval={Math.max(0, Math.floor(dailyDeficits.length / 6))}
                   />
                   <YAxis
+                    yAxisId="daily"
                     tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
-                    tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
+                    tickFormatter={(v: number) => v >= 1000 || v <= -1000 ? `${Math.round(v / 1000)}k` : `${v}`}
+                  />
+                  <YAxis
+                    yAxisId="cumulative"
+                    orientation="right"
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }}
+                    tickFormatter={(v: number) => v >= 1000 || v <= -1000 ? `${Math.round(v / 1000)}k` : `${v}`}
                   />
                   <Tooltip
                     contentStyle={{
@@ -313,21 +320,22 @@ export function BodyCompChart() {
                     }}
                     labelFormatter={(label: any) => formatDate(String(label))}
                     formatter={(value: any, name: any) => {
+                      const v = Number(value);
                       const labels: Record<string, string> = {
-                        daily: "Daily deficit",
+                        daily: v > 0 ? "Surplus" : "Deficit",
                         cumulative: "Cumulative",
                       };
-                      return [`${Number(value).toLocaleString()} kcal`, labels[name] || name];
+                      return [`${Math.abs(v).toLocaleString()} kcal ${v > 0 ? "(surplus)" : "(deficit)"}`, labels[name] || name];
                     }}
                   />
-                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
-                  <ReferenceLine y={goalDeficit} stroke="rgba(255,255,255,0.2)" strokeDasharray="6 3" label={{ value: `${goalDeficit}`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.3)" }} />
-                  <Bar dataKey="daily" radius={[4, 4, 0, 0]}>
+                  <ReferenceLine yAxisId="daily" y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
+                  <ReferenceLine yAxisId="daily" y={-goalDeficit} stroke="rgba(255,255,255,0.2)" strokeDasharray="6 3" label={{ value: `-${goalDeficit}`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.3)" }} />
+                  <Bar yAxisId="daily" dataKey="daily" radius={[4, 4, 0, 0]}>
                     {dailyDeficits.map((entry, index) => (
-                      <Cell key={index} fill={entry.daily >= 0 ? "#22c55e" : "#ef4444"} opacity={entry.closed ? 0.8 : 0.4} />
+                      <Cell key={index} fill={entry.daily <= 0 ? "#22c55e" : "#ef4444"} opacity={entry.closed ? 0.8 : 0.4} />
                     ))}
                   </Bar>
-                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2, fill: "#3b82f6" }} connectNulls={true} />
+                  <Line yAxisId="cumulative" type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={true} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
