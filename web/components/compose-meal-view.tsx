@@ -88,7 +88,6 @@ export function ComposeMealView({
     onTotalsChange?.(totals);
   }, [totals, onTotalsChange]);
 
-  const fitsBudget = budget != null && totals.calories <= (budget.calories ?? Infinity) * 1.05;
   const totalGrams = useMemo(() => portions.reduce((s, p) => s + p.grams, 0), [portions]);
   const volumeScore = totals.calories > 0 ? totalGrams / totals.calories : 0;
 
@@ -135,7 +134,12 @@ export function ComposeMealView({
           return (
             <div key={p.ingredient_id} className="text-sm">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate flex-1 min-w-0">{ing?.name ?? p.ingredient_id}</span>
+                <span className="truncate flex-1 min-w-0">
+                  {ing?.name ?? p.ingredient_id}
+                  <span className="block text-[10px] text-muted-foreground">
+                    {p.calories}kcal · {p.protein}P · {p.carbs}C · {p.fat}F
+                  </span>
+                </span>
                 {ing && isCountBased(ing) ? (
                   <NumberInput
                     value={gramsToCount(ing, p.grams)}
@@ -171,18 +175,28 @@ export function ComposeMealView({
         })}
       </div>
 
-      <div className="grid grid-cols-4 gap-2 text-center text-xs border-t pt-2">
-        <div><div className="font-bold tabular-nums">{totals.calories}</div><div className="text-muted-foreground">kcal</div></div>
-        <div><div className="font-bold tabular-nums text-blue-500">{totals.protein}g</div><div className="text-muted-foreground">protein</div></div>
-        <div><div className="font-bold tabular-nums text-amber-500">{totals.carbs}g</div><div className="text-muted-foreground">carbs</div></div>
-        <div><div className="font-bold tabular-nums text-rose-500">{totals.fat}g</div><div className="text-muted-foreground">fat</div></div>
+      {/* Macro progress bars */}
+      <div className="space-y-1.5 border-t pt-2">
+        {[
+          { label: "kcal", current: totals.calories, max: budget?.calories || 0, color: "bg-primary" },
+          { label: "P", current: totals.protein, max: budget?.protein || 0, color: "bg-blue-500", suffix: "g" },
+          { label: "C", current: totals.carbs, max: budget?.carbs || 0, color: "bg-amber-500", suffix: "g" },
+          { label: "F", current: totals.fat, max: budget?.fat || 0, color: "bg-rose-500", suffix: "g" },
+        ].map(({ label, current, max, color, suffix }) => (
+          <div key={label} className="flex items-center gap-2 text-xs">
+            <span className="w-8 text-muted-foreground text-right">{label}</span>
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${max > 0 && current > max ? "bg-amber-500" : color}`}
+                style={{ width: `${max > 0 ? Math.min(100, (current / max) * 100) : 0}%` }}
+              />
+            </div>
+            <span className={`w-20 text-right tabular-nums ${max > 0 && current > max ? "text-amber-500" : ""}`}>
+              {Math.round(current)}{suffix || ""} / {Math.round(max)}{suffix || ""}
+            </span>
+          </div>
+        ))}
       </div>
-
-      {budget && (
-        <div className={`text-xs text-center ${fitsBudget ? "text-green-600" : "text-amber-600"}`}>
-          {fitsBudget ? "Fits slot budget" : `${totals.calories - Math.round(budget.calories)} kcal over budget`}
-        </div>
-      )}
 
       {/* Volume score */}
       {totals.calories > 0 && (
