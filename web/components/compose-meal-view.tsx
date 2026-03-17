@@ -189,9 +189,9 @@ export function ComposeMealView({
         <div className={`text-xs text-center ${
           volumeScore >= 1.5 ? "text-green-600" : volumeScore >= 0.8 ? "text-muted-foreground" : "text-amber-600"
         }`}>
-          {volumeScore >= 1.5 ? "High volume meal \u2014 great for satiety"
-           : volumeScore >= 0.8 ? `${totalGrams}g total \u2014 moderate volume`
-           : "Low volume \u2014 consider adding vegetables for fullness"}
+          {volumeScore >= 1.5 ? "High volume \u2014 great for satiety"
+           : volumeScore >= 0.8 ? `${totalGrams}g total`
+           : `${totalGrams}g total \u2014 low volume`}
         </div>
       )}
 

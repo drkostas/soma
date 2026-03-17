@@ -94,71 +94,152 @@ export function solvePortions(
   ingredients: Ingredient[],
   target: MacroTarget,
 ): PortionResult[] {
-  const proteins = ingredients.filter((i) => i.category === "protein");
-  const carbSources = ingredients.filter((i) => ["carbs", "fruit"].includes(i.category));
-  const fatSources = ingredients.filter((i) => ["fat", "dairy"].includes(i.category));
+  /**
+   * Simultaneous constraint solver:
+   * 1. Assign initial portions based on each ingredient's primary role
+   * 2. Compute total macros
+   * 3. If any macro exceeds budget, scale ALL portions down proportionally
+   * 4. Then iteratively shift grams from over-budget macros to under-budget ones
+   */
+
   const vegs = ingredients.filter((i) => i.category === "vegetable");
   const sauces = ingredients.filter((i) => i.category === "sauce");
   const supplements = ingredients.filter((i) => i.category === "supplement");
+  const scalable = ingredients.filter((i) =>
+    !["vegetable", "sauce", "supplement"].includes(i.category)
+  );
 
   const portions: Record<string, number> = {};
-  const remaining = { ...target };
 
-  // Step 1: Protein sources → hit protein target
-  if (proteins.length > 0 && remaining.protein > 0) {
-    const perSource = remaining.protein / proteins.length;
-    for (const ing of proteins) {
-      if (ing.protein_per_100g <= 0) continue;
-      const [lo, hi] = BOUNDS.protein;
-      const grams = clamp((perSource / ing.protein_per_100g) * 100, lo, hi);
-      portions[ing.id] = Math.round(grams);
-      const m = macrosAt(ing, grams);
-      remaining.protein -= m.protein;
-      remaining.carbs -= m.carbs;
-      remaining.fat -= m.fat;
-      remaining.calories -= m.calories;
-    }
-  }
-
-  // Step 2: Carb sources → hit remaining carb target
-  if (carbSources.length > 0 && remaining.carbs > 0) {
-    const perSource = remaining.carbs / carbSources.length;
-    for (const ing of carbSources) {
-      if (ing.carbs_per_100g <= 0) continue;
-      const [lo, hi] = BOUNDS[ing.category] ?? BOUNDS.carbs;
-      const grams = clamp((perSource / ing.carbs_per_100g) * 100, lo, hi);
-      portions[ing.id] = Math.round(grams);
-      const m = macrosAt(ing, grams);
-      remaining.fat -= m.fat;
-      remaining.calories -= m.calories;
-    }
-  }
-
-  // Step 3: Fat sources → hit remaining fat target
-  if (fatSources.length > 0 && remaining.fat > 0) {
-    const perSource = remaining.fat / fatSources.length;
-    for (const ing of fatSources) {
-      if (ing.fat_per_100g <= 0) continue;
-      const [lo, hi] = BOUNDS[ing.category] ?? BOUNDS.fat;
-      const grams = clamp((perSource / ing.fat_per_100g) * 100, lo, hi);
-      portions[ing.id] = Math.round(grams);
-    }
-  }
-
-  // Step 4: Vegetables → standard 120g
+  // Fixed portions: veggies, sauces, supplements (not optimized)
   for (const ing of vegs) { portions[ing.id] = 120; }
-
-  // Step 5: Sauces → standard 50g
   for (const ing of sauces) { portions[ing.id] = 50; }
-
-  // Step 6: Supplements → 1 serving
   for (const ing of supplements) {
     portions[ing.id] = ing.id === "protein_powder_whey" ? 30 : 35;
   }
 
-  // Build results with computed macros
+  // Compute calories used by fixed ingredients
+  let fixedCal = 0, fixedP = 0, fixedC = 0, fixedF = 0;
+  for (const ing of [...vegs, ...sauces, ...supplements]) {
+    const m = macrosAt(ing, portions[ing.id]);
+    fixedCal += m.calories;
+    fixedP += m.protein;
+    fixedC += m.carbs;
+    fixedF += m.fat;
+  }
+
+  // Remaining budget for scalable ingredients
+  const remCal = Math.max(0, target.calories - fixedCal);
+  const remP = Math.max(0, target.protein - fixedP);
+  const remC = Math.max(0, target.carbs - fixedC);
+  const remF = Math.max(0, target.fat - fixedF);
+
+  if (scalable.length === 0 || remCal <= 0) {
+    // Nothing to optimize — just use fixed
+    return ingredients.map((ing) => {
+      const grams = portions[ing.id] ?? 50;
+      const m = macrosAt(ing, grams);
+      return {
+        ingredient_id: ing.id, grams,
+        increment: INCREMENTS[ing.category] ?? 10,
+        calories: Math.round(m.calories),
+        protein: Math.round(m.protein * 10) / 10,
+        carbs: Math.round(m.carbs * 10) / 10,
+        fat: Math.round(m.fat * 10) / 10,
+        fiber: Math.round(m.fiber * 10) / 10,
+      };
+    });
+  }
+
+  // Step 1: Assign initial portions — each ingredient gets a calorie share
+  // proportional to its "role weight" (protein sources get more if protein target is high)
+  const roleWeight = (ing: Ingredient): number => {
+    const pShare = ing.protein_per_100g > 0 ? (remP * 4) : 0; // cal from protein this ing can help with
+    const cShare = ing.carbs_per_100g > 0 ? (remC * 4) : 0;
+    const fShare = ing.fat_per_100g > 0 ? (remF * 9) : 0;
+    return pShare + cShare + fShare || ing.calories_per_100g;
+  };
+
+  const totalRoleWeight = scalable.reduce((s, ing) => s + roleWeight(ing), 0) || 1;
+
+  for (const ing of scalable) {
+    const calShare = remCal * (roleWeight(ing) / totalRoleWeight);
+    const gramsForCal = ing.calories_per_100g > 0 ? (calShare / ing.calories_per_100g) * 100 : 50;
+    const [lo, hi] = BOUNDS[ing.category] ?? [10, 300];
+    portions[ing.id] = Math.round(clamp(gramsForCal, lo, hi));
+  }
+
+  // Step 2: Check if total exceeds calorie budget, scale down if needed
+  const totalMacros = () => {
+    let cal = 0, p = 0, c = 0, f = 0;
+    for (const ing of scalable) {
+      const m = macrosAt(ing, portions[ing.id]);
+      cal += m.calories; p += m.protein; c += m.carbs; f += m.fat;
+    }
+    return { cal, p, c, f };
+  };
+
+  let t = totalMacros();
+
+  // Scale down proportionally if over calorie budget
+  if (t.cal > remCal && t.cal > 0) {
+    const scale = remCal / t.cal;
+    for (const ing of scalable) {
+      const [lo] = BOUNDS[ing.category] ?? [10, 300];
+      portions[ing.id] = Math.max(lo, Math.round(portions[ing.id] * scale));
+    }
+    t = totalMacros();
+  }
+
+  // Step 3: Fine-tune — try to shift grams to better hit protein target
+  // If protein is underfilled, increase protein sources slightly at expense of carb/fat sources
+  for (let iter = 0; iter < 5; iter++) {
+    t = totalMacros();
+    const proteinGap = remP - t.p;
+    if (proteinGap <= 1) break; // close enough
+
+    // Find a protein source to increase
+    const proteinIngs = scalable.filter(i => i.category === "protein" && i.protein_per_100g > 5);
+    const carbFatIngs = scalable.filter(i => ["carbs", "fruit", "fat", "dairy"].includes(i.category));
+
+    if (proteinIngs.length === 0 || carbFatIngs.length === 0) break;
+
+    // Increase protein source by 10g, decrease a carb/fat source by equivalent calories
+    for (const pIng of proteinIngs) {
+      const addGrams = 10;
+      const addCal = macrosAt(pIng, addGrams).calories;
+      const [, pHi] = BOUNDS[pIng.category] ?? [10, 300];
+      if (portions[pIng.id] + addGrams > pHi) continue;
+
+      // Find a carb/fat source to shrink
+      for (const cfIng of carbFatIngs) {
+        const shrinkGrams = cfIng.calories_per_100g > 0
+          ? Math.round((addCal / cfIng.calories_per_100g) * 100)
+          : 0;
+        const [cfLo] = BOUNDS[cfIng.category] ?? [10, 300];
+        if (portions[cfIng.id] - shrinkGrams < cfLo) continue;
+
+        portions[pIng.id] += addGrams;
+        portions[cfIng.id] -= shrinkGrams;
+        break;
+      }
+      break; // one shift per iteration
+    }
+  }
+
+  // Final calorie check — scale down again if over
+  t = totalMacros();
+  if (t.cal > remCal * 1.02 && t.cal > 0) {
+    const scale = remCal / t.cal;
+    for (const ing of scalable) {
+      const [lo] = BOUNDS[ing.category] ?? [10, 300];
+      portions[ing.id] = Math.max(lo, Math.round(portions[ing.id] * scale));
+    }
+  }
+
+  // Build results
   return ingredients.map((ing) => {
-    const grams = portions[ing.id] ?? 100;
+    const grams = portions[ing.id] ?? 50;
     const m = macrosAt(ing, grams);
     return {
       ingredient_id: ing.id,
