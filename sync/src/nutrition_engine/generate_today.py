@@ -250,7 +250,11 @@ def generate_today() -> None:
         logger.info("TDEE breakdown: BMR=%.0f + steps=%.0f + exercise=%.0f = %.0f",
                      base_tdee, step_cal, exercise_cal, base_tdee + step_cal + exercise_cal)
 
-        # 8. Compute deficit: goal-based (if target_bf_pct + target_date) or profile
+        # 8. Compute deficit: always use profile daily_deficit as authoritative
+        # Goal-based computation is informational only (logged for tracking)
+        deficit = float(profile_deficit) if profile_deficit else DEFAULT_DEFICIT
+        logger.info("Using profile deficit: %.0f", deficit)
+
         deficit_info = None
         if (profile_target_bf_pct is not None and profile_target_date is not None
                 and estimated_bf_pct is not None):
@@ -261,15 +265,14 @@ def generate_today() -> None:
                 target_date=profile_target_date,
                 today=today,
             )
-            deficit = deficit_info["daily_deficit"]
             logger.info(
-                "Goal-based deficit: %d kcal/day (%.1fkg fat to lose in %.1f weeks, safety=%s)",
-                deficit, deficit_info["fat_to_lose_kg"],
+                "Goal-based deficit info: %d kcal/day (%.1fkg fat to lose in %.1f weeks, safety=%s)",
+                deficit_info["daily_deficit"], deficit_info["fat_to_lose_kg"],
                 deficit_info["timeline_weeks"], deficit_info["safety"],
             )
-        else:
-            deficit = float(profile_deficit) if profile_deficit else DEFAULT_DEFICIT
-            logger.info("Using profile deficit: %.0f", deficit)
+            if deficit_info["daily_deficit"] != deficit:
+                logger.info("Note: goal-based (%d) differs from profile (%d) — using profile",
+                            deficit_info["daily_deficit"], deficit)
 
         # 9. Sleep quality + adjustment
         sleep_score, sleep_hours = _get_sleep_score(cur, today)
