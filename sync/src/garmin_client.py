@@ -18,17 +18,70 @@ from config import GARMINTOKENS, get_garmin_credentials
 API_CALL_DELAY = 1.0
 
 
+def _load_tokens_from_db():
+    """Load cached Garmin OAuth tokens from the database."""
+    try:
+        from db import get_connection
+        import json
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT credentials FROM platform_credentials WHERE platform = 'garmin_tokens' LIMIT 1")
+                row = cur.fetchone()
+                if row and row[0]:
+                    tokens = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+                    # Write tokens to filesystem so garth can load them
+                    GARMINTOKENS.mkdir(parents=True, exist_ok=True)
+                    for filename, data in tokens.items():
+                        (GARMINTOKENS / filename).write_text(json.dumps(data) if isinstance(data, dict) else data)
+                    return True
+    except Exception as e:
+        print(f"Could not load tokens from DB: {e}")
+    return False
+
+
+def _save_tokens_to_db():
+    """Save Garmin OAuth tokens to the database for persistence across CI runs."""
+    try:
+        from db import get_connection
+        import json
+        tokens = {}
+        for f in GARMINTOKENS.iterdir():
+            if f.is_file():
+                try:
+                    tokens[f.name] = json.loads(f.read_text())
+                except json.JSONDecodeError:
+                    tokens[f.name] = f.read_text()
+        if tokens:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO platform_credentials (platform, credentials, status)
+                        VALUES ('garmin_tokens', %s, 'active')
+                        ON CONFLICT (platform) DO UPDATE SET credentials = EXCLUDED.credentials, updated_at = NOW()
+                    """, (json.dumps(tokens),))
+                conn.commit()
+    except Exception as e:
+        print(f"Could not save tokens to DB: {e}")
+
+
 def init_garmin() -> Garmin:
     """Initialize Garmin client, reusing cached tokens when possible."""
-    # Attempt 1: Load from cached tokens
+    # Attempt 1: Load from DB-cached tokens (survives CI ephemeral runners)
+    _load_tokens_from_db()
+
+    # Attempt 2: Load from filesystem cached tokens
     try:
         client = Garmin()
         client.login(str(GARMINTOKENS))
+        # Save back to DB in case they were refreshed
+        GARMINTOKENS.mkdir(parents=True, exist_ok=True)
+        client.garth.dump(str(GARMINTOKENS))
+        _save_tokens_to_db()
         return client
     except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError):
         pass
 
-    # Attempt 2: Fresh login with credentials
+    # Attempt 3: Fresh login with credentials
     email, password = get_garmin_credentials()
     if not email or not password:
         raise RuntimeError(
@@ -45,9 +98,10 @@ def init_garmin() -> Garmin:
         if saved is not None:
             os.environ["GARMINTOKENS"] = saved
 
-    # Persist tokens
+    # Persist tokens to filesystem and DB
     GARMINTOKENS.mkdir(parents=True, exist_ok=True)
     client.garth.dump(str(GARMINTOKENS))
+    _save_tokens_to_db()
 
     return client
 
