@@ -45,7 +45,7 @@ CARB_TARGETS_G_PER_KG: dict[str, float] = {
     "gym_and_run": 4.0,
 }
 
-MAX_DEFICIT: int = 500
+MAX_DEFICIT: int = 1200  # Safety cap — profile can set up to 1200, above risks metabolic adaptation
 REDS_FLOOR: int = 25  # kcal per kg FFM
 
 # Energy density of body fat (kcal per kg)
@@ -66,7 +66,7 @@ def compute_deficit_from_goal(
     """Compute daily caloric deficit needed to reach a body-fat % goal.
 
     Uses a constant fat-free mass (FFM) assumption: only fat mass changes.
-    Caps the deficit at :data:`MAX_DEFICIT` (500 kcal/day) and assigns a
+    Caps the deficit at :data:`MAX_DEFICIT` (1200 kcal/day) and assigns a
     traffic-light safety rating based on weekly weight-loss rate.
 
     Args:
