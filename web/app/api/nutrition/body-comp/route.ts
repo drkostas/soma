@@ -93,13 +93,25 @@ export async function GET() {
     projWeight = Math.max(targetWeight, projWeight - dailyWeightLoss);
   }
 
-  // Cumulative deficit data
+  // Cumulative deficit data — use Garmin actual burn when available
   const deficitRows = await sql`
-    SELECT date::text AS date, target_calories, actual_calories, deficit_used, status, manual_override
-    FROM nutrition_day
-    WHERE actual_calories > 0 OR status = 'active'
-    ORDER BY date
+    SELECT n.date::text AS date, n.target_calories, n.actual_calories, n.deficit_used, n.status, n.manual_override,
+           h.total_kilocalories AS garmin_burn
+    FROM nutrition_day n
+    LEFT JOIN daily_health_summary h ON h.date = n.date
+    WHERE n.actual_calories > 0 OR n.status = 'active'
+    ORDER BY n.date
   `;
+
+  // Get Hevy gym calories per day (not included in Garmin total)
+  const gymCalRows = await sql`
+    SELECT workout_date::text AS date, COALESCE(SUM(calories), 0) AS gym_cal
+    FROM workout_enrichment
+    WHERE workout_date >= (SELECT MIN(date) FROM nutrition_day)
+    GROUP BY workout_date
+  `;
+  const gymCalByDate: Record<string, number> = {};
+  for (const r of gymCalRows) gymCalByDate[String(r.date).slice(0, 10)] = Number(r.gym_cal) || 0;
 
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const todayMealRows = await sql`
@@ -122,10 +134,18 @@ export async function GET() {
     // Expected: goalDeficit per day
     cumulativeExpected += goalDeficit;
 
-    // Actual deficit: estimated burn - consumed
+    // Actual burn: prefer Garmin total_kilocalories + Hevy gym (real data)
+    // Fall back to estimate (target + deficit_used) when Garmin data is missing/stale
+    const garminBurn = Number(r.garmin_burn) || 0;
+    const gymCal = gymCalByDate[dateStr] || 0;
     const storedTarget = Number(r.target_calories) || 0;
     const defUsed = Number(r.deficit_used) || goalDeficit;
     const estimatedBurn = storedTarget + defUsed;
+    // Use Garmin burn if it looks complete (BMR > 1500 implies full day)
+    const actualBurn = garminBurn > 1500 ? garminBurn + gymCal : estimatedBurn;
+
+    // Skip empty future days with no real data (target=0 produces fake deficits)
+    if (storedTarget === 0 && !isToday && !isClosed) continue;
 
     let consumed: number;
     if (isClosed) {
@@ -140,7 +160,7 @@ export async function GET() {
       if (consumed === 0) continue; // truly empty day, skip
     }
 
-    const dailyDeficit = estimatedBurn - consumed;
+    const dailyDeficit = actualBurn - consumed;
     cumulativeActual += dailyDeficit;
 
     deficitTrend.push({
@@ -161,10 +181,13 @@ export async function GET() {
 
     // Get burn and consumed for this day from deficitRows
     const row = deficitRows[i];
-    const storedTarget = Number(row?.target_calories) || 0;
-    const defUsed = Number(row?.deficit_used) || goalDeficit;
-    const estimatedBurn = storedTarget + defUsed;
     const dateStr = String(row?.date).slice(0, 10);
+    const garminBurnDay = Number(row?.garmin_burn) || 0;
+    const gymCalDay = gymCalByDate[dateStr] || 0;
+    const storedTargetDay = Number(row?.target_calories) || 0;
+    const defUsedDay = Number(row?.deficit_used) || goalDeficit;
+    const estBurn = storedTargetDay + defUsedDay;
+    const dayBurn = garminBurnDay > 1500 ? garminBurnDay + gymCalDay : estBurn;
     const isClosed = row?.status === "closed";
     const isToday = dateStr === todayStr;
     let consumed = 0;
@@ -176,7 +199,7 @@ export async function GET() {
       daily: Math.round(-dailyDeficit),
       cumulative: Math.round(-dt.actual),
       closed: dt.closed,
-      burned: Math.round(estimatedBurn),
+      burned: Math.round(dayBurn),
       consumed: Math.round(consumed),
     });
     prevCumulative = dt.actual;
