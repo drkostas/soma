@@ -449,8 +449,10 @@ export async function GET(req: NextRequest) {
       const isManual = r.manual_override === true;
       const deficitUsed = Number(r.deficit_used) || goalDeficit;
       // Estimate burn = target + deficit_used, then compute goal target at 800/day
-      const estimatedBurn = storedTarget + deficitUsed;
-      const goalTarget = Math.round(estimatedBurn - goalDeficit);
+      // If storedTarget is 0/NULL, the day has no plan data — skip goal computation
+      const hasValidPlan = storedTarget > 0 || (isCurrentDay && breakdown);
+      const estimatedBurn = hasValidPlan ? storedTarget + deficitUsed : 0;
+      const goalTarget = hasValidPlan ? Math.round(estimatedBurn - goalDeficit) : 0;
       return {
         date: r.date,
         target: goalTarget, // primary: what you'd eat at goal deficit
