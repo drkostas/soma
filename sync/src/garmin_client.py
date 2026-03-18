@@ -78,12 +78,13 @@ def init_garmin() -> Garmin:
             oauth2 = json.loads(oauth2_path.read_text())
             expires_at = oauth2.get("expires_at", 0)
             if datetime.fromtimestamp(expires_at) > datetime.now():
-                # Token still valid — load without re-auth
+                # Token still valid — use login() which loads tokens AND resolves display_name
                 client = Garmin()
-                client.garth.load(str(GARMINTOKENS))
-                # Verify it works with a simple API call
-                client.get_full_name()
-                print("Using cached OAuth2 token (still valid)")
+                client.login(str(GARMINTOKENS))
+                print(f"Using cached OAuth2 token (valid, display_name={client.display_name})")
+                # Save refreshed tokens back
+                client.garth.dump(str(GARMINTOKENS))
+                _save_tokens_to_db()
                 return client
     except Exception as e:
         print(f"Cached token shortcut failed: {e}")
