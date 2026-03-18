@@ -169,18 +169,21 @@ export async function GET(req: NextRequest) {
 
     // ── Check for actual completed activities today ──
     let actualRunCalories: number | null = null;
+    let actualRunDistKm = 0;
     let actualGymByTitle: Record<string, number> = {};
 
     try {
       // Actual run calories from Garmin (summary endpoint, running type)
       const runActualRows = await sql`
-        SELECT COALESCE(SUM((raw_json->>'calories')::float), 0) AS total_cal
+        SELECT COALESCE(SUM((raw_json->>'calories')::float), 0) AS total_cal,
+               COALESCE(SUM((raw_json->>'distance')::float), 0) AS total_dist
         FROM garmin_activity_raw
         WHERE endpoint_name = 'summary'
           AND raw_json->'activityType'->>'typeKey' = 'running'
           AND (raw_json->>'startTimeLocal')::date = ${date}::date
       `;
       const runCal2 = Number(runActualRows[0]?.total_cal) || 0;
+      const actualRunDistKm = Math.round((Number(runActualRows[0]?.total_dist) || 0) / 1000 * 10) / 10;
       if (runCal2 > 0) actualRunCalories = Math.round(runCal2);
 
       // Actual gym calories from workout_enrichment for today
@@ -396,6 +399,7 @@ export async function GET(req: NextRequest) {
       runStepEstimate,
       runCalories: effectiveRunCal,
       runActual: actualRunCalories !== null,
+      runActualDistKm: actualRunDistKm,
       runPredicted: runCal,
       runEnabled,
       runDistanceKm,

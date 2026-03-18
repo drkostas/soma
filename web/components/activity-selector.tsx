@@ -127,7 +127,7 @@ export function ActivitySelector({
     [runEnabled, selectedWorkouts, steps, saveSelections],
   );
 
-  const hasRun = training && training.target_distance_km && training.target_distance_km > 0;
+  const hasRun = !!(training && training.target_distance_km && training.target_distance_km > 0);
 
   return (
     <div className={disabled ? "opacity-50 pointer-events-none" : ""}>

@@ -62,10 +62,11 @@ export async function GET() {
   const fatToLose = Math.max(0, currentFat - (targetWeight * targetBf / 100));
   const totalDeficitNeeded = fatToLose * 7700;
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-  const daysRemaining = Math.max(1, Math.round((new Date(targetDate).getTime() - new Date(today).getTime()) / 86400000));
+  // Use T12:00 to avoid timezone-related off-by-one when parsing date strings
+  const daysRemaining = Math.max(1, Math.round((new Date(targetDate + "T12:00").getTime() - new Date(today + "T12:00").getTime()) / 86400000));
   const weeksRemaining = Math.max(1, daysRemaining / 7);
   const weeklyRate = Math.round((fatToLose / weeksRemaining) * 10) / 10;
-  const targetDatePassed = new Date(targetDate) < new Date(today);
+  const targetDatePassed = targetDate < today;
   const requiredDeficit = targetDatePassed ? 0 : Math.round(totalDeficitNeeded / daysRemaining);
 
   // Project weight from last data point to target date
@@ -212,7 +213,7 @@ export async function GET() {
     // Find the LAST weight on or before the first deficit date (closest, not oldest)
     const match = weights.findLast(w => w.date <= firstDeficitDate);
     if (match) startWeightForPrediction = match.smoothed;
-    else startWeightForPrediction = weights[0].smoothed;
+    else if (weights[0]) startWeightForPrediction = weights[0].smoothed;
   }
 
   const calPredicted: { date: string; weight: number; closed: boolean }[] = deficitTrend.map(dt => ({

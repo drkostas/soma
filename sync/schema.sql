@@ -571,6 +571,7 @@ CREATE TABLE IF NOT EXISTS nutrition_day (
     run_enabled         BOOLEAN DEFAULT TRUE,
     selected_workouts   TEXT[] DEFAULT '{}',
     expected_steps      INTEGER,
+    manual_override     BOOLEAN DEFAULT FALSE,
     actual_calories     REAL DEFAULT 0,
     actual_protein      REAL DEFAULT 0,
     actual_carbs        REAL DEFAULT 0,

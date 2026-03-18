@@ -213,7 +213,11 @@ export function BodyCompChart() {
                 <Area type="monotone" dataKey="projected" stroke="none" fill="#3b82f6" fillOpacity={0.03} connectNulls={false} tooltipType="none" />
                 <Line type="monotone" dataKey="actual" stroke="#3b82f6" dot={{ r: 3, fill: "#3b82f6" }} strokeWidth={0} connectNulls={false} />
                 <Line type="monotone" dataKey="smoothed" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} />
-                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls={true} opacity={0.8} />
+                <Line type="monotone" dataKey="projected" stroke="#3b82f6" strokeWidth={2.5} strokeDasharray="8 4" dot={(props: any) => {
+                  const { cx, cy, index, payload } = props;
+                  if (payload.projected == null || index % 14 !== 0) return <></>;
+                  return <circle cx={cx} cy={cy} r={3} fill="#3b82f6" opacity={0.6} />;
+                }} connectNulls={true} />
                 {showCalPredicted && <Line type="monotone" dataKey="calPredicted" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="4 4" dot={(props: any) => {
                   const { cx, cy, payload } = props;
                   if (payload.calPredicted == null) return <></>;
@@ -275,7 +279,11 @@ export function BodyCompChart() {
                 <ReferenceLine y={profile.targetBf} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#22c55e" }} />
                 <Line type="monotone" dataKey="bf" stroke="#f97316" dot={{ r: 3, fill: "#f97316" }} strokeWidth={0} connectNulls={false} />
                 <Line type="monotone" dataKey="smoothedBf" stroke="#f97316" strokeWidth={2} dot={false} connectNulls={true} />
-                <Line type="monotone" dataKey="projBf" stroke="#f97316" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls={true} opacity={0.8} />
+                <Line type="monotone" dataKey="projBf" stroke="#f97316" strokeWidth={2.5} strokeDasharray="8 4" dot={(props: any) => {
+                  const { cx, cy, index, payload } = props;
+                  if (payload.projBf == null || index % 14 !== 0) return <></>;
+                  return <circle cx={cx} cy={cy} r={3} fill="#f97316" opacity={0.6} />;
+                }} connectNulls={true} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -322,6 +330,7 @@ export function BodyCompChart() {
                           fontSize: "12px",
                         }}>
                           <div style={{ fontWeight: "bold", marginBottom: 4 }}>{formatDate(String(label))}{!day.closed ? " (in progress)" : ""}</div>
+                          <div style={{ color: "rgba(255,255,255,0.6)" }}>Burned: {day.burned.toLocaleString()} kcal</div>
                           <div style={{ color: "rgba(255,255,255,0.6)" }}>Eaten: {day.consumed.toLocaleString()} kcal</div>
                           <div style={{ color: isDeficit ? "#22c55e" : "#ef4444", fontWeight: "bold" }}>
                             {isDeficit ? "Deficit" : "Surplus"}: {Math.abs(day.daily).toLocaleString()} kcal

@@ -230,16 +230,23 @@ export function NutritionDashboard({
     refreshData();
   }, [refreshData]);
 
-  // Locked slots (won't be rebalanced)
-  const [lockedSlots, setLockedSlots] = useState<Set<string>>(new Set());
+  // Locked slots (won't be rebalanced) — persisted in localStorage per date
+  const [lockedSlots, setLockedSlots] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = localStorage.getItem(`locked-slots-${date}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
   const handleLockToggle = useCallback((slot: string) => {
     setLockedSlots(prev => {
       const next = new Set(prev);
       if (next.has(slot)) next.delete(slot);
       else next.add(slot);
+      try { localStorage.setItem(`locked-slots-${date}`, JSON.stringify([...next])); } catch {}
       return next;
     });
-  }, []);
+  }, [date]);
 
   // Live preview totals from compose view
   const [previewTotals, setPreviewTotals] = useState<Record<string, { calories: number; protein: number; carbs: number; fat: number; fiber: number }>>({});
@@ -342,7 +349,7 @@ export function NutritionDashboard({
   return (
     <div className="space-y-4 lg:grid lg:grid-cols-[420px_1fr] lg:gap-8 lg:space-y-0 lg:max-w-5xl lg:mx-auto">
       {/* ── LEFT COLUMN: summary & controls (sticky on desktop) ── */}
-      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:scrollbar-none">
         {/* Date header with navigation */}
         <div className="flex items-center justify-between">
           <a href={`/nutrition?date=${(() => { const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })()}`}>
@@ -514,7 +521,7 @@ export function NutritionDashboard({
                         {breakdown.runCalories > 0 && (
                           <>
                             <span className="text-muted-foreground">
-                              Run ({breakdown.runDistanceKm}km)
+                              Run ({breakdown.runActual && breakdown.runActualDistKm ? breakdown.runActualDistKm : breakdown.runDistanceKm}km)
                               <span className={`ml-1 text-[9px] ${breakdown.runActual ? "text-green-500" : "text-amber-500"}`}>
                                 {breakdown.runActual ? "actual" : "predicted"}
                               </span>
@@ -707,7 +714,7 @@ export function NutritionDashboard({
               <span className="font-medium text-foreground">
                 {training.run_title || training.gym_workout || training.run_type}
               </span>
-              {training.target_distance_km && (
+              {Number(training.target_distance_km) > 0 && (
                 <span>({Number(training.target_distance_km).toFixed(1)}km)</span>
               )}
               {training.load_level && (

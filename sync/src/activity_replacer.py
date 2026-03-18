@@ -264,7 +264,8 @@ def _find_recent_garmin_activity(garmin_client, workout: dict) -> int | None:
     if not hevy_start:
         return None
 
-    target_dt = datetime.fromisoformat(hevy_start).replace(tzinfo=None)
+    parsed = datetime.fromisoformat(hevy_start)
+    target_dt = parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo else parsed
 
     try:
         activities = rate_limited_call(garmin_client.get_activities, 0, 5)
@@ -789,7 +790,8 @@ def _populate_garmin_ids():
         hw = w["hevy_workout"]
         start = hw.get("start_time", "")
         if start:
-            hevy_dts[w["hevy_id"]] = datetime.fromisoformat(start).replace(tzinfo=None)
+            parsed = datetime.fromisoformat(start)
+            hevy_dts[w["hevy_id"]] = parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo else parsed
 
     # Build garmin (datetime, activity_id) list from DB
     garmin_activities: list[tuple[datetime, int]] = []

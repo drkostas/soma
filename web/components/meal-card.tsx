@@ -15,8 +15,19 @@ import { type Ingredient, type PortionResult, solvePortions, computeItemMacros }
 /** Generate a readable name from meal items, e.g. "Salmon, Broccoli & Yogurt" */
 function autoMealName(items: any[]): string {
   if (!items || items.length === 0) return "Custom meal";
-  // Sort by calories desc, pick top 3
-  const sorted = [...items].sort((a, b) => (b.calories || 0) - (a.calories || 0));
+  // Sort by food type priority (solids first, supplements last), then by calories
+  const namePriority = (id: string) => {
+    const s = (id || "").toLowerCase();
+    if (/whey|protein_powder|creatine|supplement|flax/.test(s)) return 3;
+    if (/milk|water|juice|yogurt/.test(s)) return 2;
+    return 1;
+  };
+  const sorted = [...items].sort((a, b) => {
+    const pa = namePriority(a.ingredient_id || a.name || "");
+    const pb = namePriority(b.ingredient_id || b.name || "");
+    if (pa !== pb) return pa - pb;
+    return (b.calories || 0) - (a.calories || 0);
+  });
   const top = sorted.slice(0, 3);
   const names = top.map((item) => {
     // Use name field if present, otherwise prettify ingredient_id
@@ -159,6 +170,7 @@ export function MealCard({
   const [lastComposedItems, setLastComposedItems] = useState<any[] | null>(null);
   const [lastComposedTotals, setLastComposedTotals] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
   const [editingMealId, setEditingMealId] = useState<number | null>(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -359,6 +371,7 @@ export function MealCard({
         setComposedPortions(null);
         setSelectedIngredients(new Set());
         setShowCompose(false);
+        onTotalsPreview?.(slot, null); // clear live preview before refresh
         onMealLogged(slot);
         // Pre-populate save prompt with auto-generated name
         setSavePresetName(autoMealName(items));
@@ -375,6 +388,7 @@ export function MealCard({
       return;
     }
     setSaving(true);
+    setSaveError(null);
     try {
       const res = await fetch("/api/nutrition/presets", {
         method: "POST",
@@ -387,7 +401,8 @@ export function MealCard({
         }),
       });
       if (!res.ok) {
-        console.error("Save preset failed:", res.status, await res.text());
+        const msg = await res.text().catch(() => "Unknown error");
+        setSaveError(`Save failed: ${msg}`);
         return;
       }
       setShowSavePrompt(false);
@@ -396,7 +411,7 @@ export function MealCard({
       setLastComposedTotals(null);
       onMealLogged(slot); // refresh to show the new preset in the picker
     } catch (err) {
-      console.error("Save preset error:", err);
+      setSaveError("Network error — could not save");
     } finally {
       setSaving(false);
     }
@@ -534,7 +549,7 @@ export function MealCard({
                       {Math.round(meal.calories)} kcal &middot;{" "}
                       {Math.round(meal.protein)}P &middot;{" "}
                       {Math.round(meal.carbs)}C &middot; {Math.round(meal.fat)}F
-                      {!disabled && <span className="text-[9px] ml-1.5 text-muted-foreground/60">20+ min</span>}
+                      {!disabled && itemsList.some(i => { const ig = ingLookup.get(i.ingredient_id ?? ""); return ig?.is_raw && ig?.raw_to_cooked_ratio && ig.raw_to_cooked_ratio > 1; }) && <span className="text-[9px] ml-1.5 text-muted-foreground/60">20+ min</span>}
                     </div>
                   </div>
                   {!disabled && (
@@ -677,12 +692,13 @@ export function MealCard({
               <div className="flex flex-wrap gap-1.5">
                 {filteredPresets.length > 0 ? (
                   filteredPresets.map((p) => (
-                    <Button
+                    <div
                       key={p.id}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7 pr-1.5 gap-1"
+                      role="button"
+                      tabIndex={0}
+                      className="inline-flex items-center rounded-md border px-3 h-7 text-xs gap-1 pr-1.5 cursor-pointer hover:bg-accent"
                       onClick={() => handleSelectPreset(p)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleSelectPreset(p); }}
                     >
                       {p.name}
                       <button
@@ -697,7 +713,7 @@ export function MealCard({
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
-                    </Button>
+                    </div>
                   ))
                 ) : (
                   <span className="text-xs text-muted-foreground">
@@ -880,6 +896,7 @@ export function MealCard({
                 className="w-full rounded-md border px-2 py-1.5 text-sm bg-background"
                 autoFocus
               />
+              {saveError && <div className="text-xs text-red-500">{saveError}</div>}
               <div className="flex gap-2">
                 <Button variant="ghost" size="sm" className="flex-1" onClick={handleDismissSave}>
                   Skip

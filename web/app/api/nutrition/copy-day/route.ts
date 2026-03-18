@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ copied: 0, message: "No meals found for source date" });
   }
 
+  // Clear existing meals on target date to prevent duplicates
+  await sql`DELETE FROM meal_log WHERE date = ${to_date}`;
+
   let copied = 0;
   for (const m of sourceMeals) {
     await sql`

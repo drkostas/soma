@@ -22,10 +22,14 @@ interface IngredientPickerProps {
 
 export function IngredientPicker({ ingredients, selected, onToggle, onDone, onCancel }: IngredientPickerProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
 
-  // Group ingredients by category
+  // Filter by search, then group by category
+  const filtered = search.trim()
+    ? ingredients.filter((ing) => ing.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : ingredients;
   const grouped = new Map<string, Ingredient[]>();
-  for (const ing of ingredients) {
+  for (const ing of filtered) {
     const cat = ing.category;
     if (!grouped.has(cat)) grouped.set(cat, []);
     grouped.get(cat)!.push(ing);
@@ -49,6 +53,19 @@ export function IngredientPicker({ ingredients, selected, onToggle, onDone, onCa
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      <input
+        type="text"
+        placeholder="Search ingredients..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full rounded-md border px-2 py-1.5 text-sm bg-background"
+        autoFocus
+      />
+
+      {filtered.length === 0 && search.trim() && (
+        <div className="text-xs text-muted-foreground text-center py-2">No ingredients match &ldquo;{search}&rdquo;</div>
+      )}
 
       {CATEGORY_ORDER.filter((cat) => grouped.has(cat)).map((cat) => (
         <div key={cat}>
