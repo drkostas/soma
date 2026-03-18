@@ -28,6 +28,12 @@ export async function POST(req: NextRequest) {
   // Handle manual_override toggle
   if (body.manual_override !== undefined) {
     await sql`UPDATE nutrition_day SET manual_override = ${body.manual_override} WHERE date = ${date}`;
+    // When unlocking, reset stale offset values so the plan API recomputes correctly
+    if (body.manual_override === false) {
+      const profRows = await sql`SELECT daily_deficit FROM nutrition_profile WHERE id = 1`;
+      const defaultDeficit = profRows[0]?.daily_deficit != null ? Number(profRows[0].daily_deficit) : 800;
+      await sql`UPDATE nutrition_day SET target_calories = NULL, deficit_used = ${defaultDeficit} WHERE date = ${date}`;
+    }
   }
 
   // Handle activity selection updates (only if fields provided)
