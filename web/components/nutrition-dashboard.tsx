@@ -455,7 +455,7 @@ export function NutritionDashboard({
                   ) : (
                     <>
                       {breakdown.bmr} BMR
-                      {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} steps`}
+                      {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} step cal`}
                       {breakdown.runCalories > 0 && ` + ${breakdown.runCalories} run${breakdown.runActual ? " \u2713" : " ~"}`}
                       {breakdown.gymBreakdown && breakdown.gymBreakdown.length > 0
                         ? breakdown.gymBreakdown.map((w: any) => ` + ${w.calories} ${w.title}${w.actual ? " \u2713" : " ~"}`).join("")
