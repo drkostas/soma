@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   // Build a PG-compatible tags literal: '{breakfast}' or '{}'
   const tagsLiteral = slot ? `{${slot}}` : "{}";
   const mealSlot = slot || null;
-  const presetId = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_${Date.now()}`;
+  const presetId = `preset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const itemsJson = JSON.stringify(itemsBlob);
 
   try {

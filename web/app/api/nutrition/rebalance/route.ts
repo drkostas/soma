@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
     const maxCutGrams = item.grams - minGrams;
     const maxCutCal = maxCutGrams * item.calPerGram;
     const cutCal = Math.min(calToRemove, maxCutCal);
+    if (!item.calPerGram || item.calPerGram <= 0) continue;
     const cutGrams = Math.round(cutCal / item.calPerGram);
     if (cutGrams < 3) continue;
 

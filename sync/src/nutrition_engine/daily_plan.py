@@ -183,9 +183,9 @@ def generate_daily_plan(
 
 # Default per-slot distribution fractions
 SLOT_DISTRIBUTION = {
-    "breakfast":  {"kcal": 0.25, "protein": 0.25, "carbs": 0.25, "fat": 0.25, "fiber": 0.20},
-    "lunch":      {"kcal": 0.30, "protein": 0.25, "carbs": 0.30, "fat": 0.30, "fiber": 0.30},
-    "dinner":     {"kcal": 0.35, "protein": 0.32, "carbs": 0.35, "fat": 0.35, "fiber": 0.35},
+    "breakfast":  {"kcal": 0.28, "protein": 0.25, "carbs": 0.28, "fat": 0.28, "fiber": 0.20},
+    "lunch":      {"kcal": 0.25, "protein": 0.25, "carbs": 0.25, "fat": 0.25, "fiber": 0.30},
+    "dinner":     {"kcal": 0.37, "protein": 0.32, "carbs": 0.37, "fat": 0.37, "fiber": 0.35},
     "pre_sleep":  {"kcal": 0.10, "protein": 0.18, "carbs": 0.10, "fat": 0.10, "fiber": 0.15},
 }
 

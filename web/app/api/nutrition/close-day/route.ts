@@ -11,6 +11,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "date is required" }, { status: 400 });
   }
 
+  // Idempotency: don't re-close an already closed day
+  const existing = await sql`SELECT status FROM nutrition_day WHERE date = ${date}`;
+  if (existing[0]?.status === "closed") {
+    return NextResponse.json({ status: "already_closed", message: "Day is already closed" });
+  }
+
   // Sum meal totals
   const mealTotals = await sql`
     SELECT
@@ -152,7 +158,8 @@ export async function POST(req: NextRequest) {
         )
       );
       const rawDeficit = (fatToLose * 7700) / daysLeft;
-      const cappedDeficit = Math.min(rawDeficit, 500);
+      const currentDeficit = Number(profile[0].daily_deficit) || 800;
+      const cappedDeficit = Math.min(rawDeficit, currentDeficit);
 
       // Derive updated BF% from new weight (FFM unchanged)
       const newBfPct = Math.round(((newWeightKg - ffm) / newWeightKg) * 1000) / 10;

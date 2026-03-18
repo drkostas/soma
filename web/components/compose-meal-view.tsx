@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/number-input";
@@ -85,9 +85,11 @@ export function ComposeMealView({
   const totals = useMemo(() => sumPortionMacros(portions), [portions]);
 
   // Emit totals to parent for live budget preview
+  const onTotalsRef = useRef(onTotalsChange);
+  onTotalsRef.current = onTotalsChange;
   useEffect(() => {
-    onTotalsChange?.(totals);
-  }, [totals, onTotalsChange]);
+    onTotalsRef.current?.(totals);
+  }, [totals]);
 
   // Clamp whole egg grams when maxYolks changes
   useEffect(() => {
