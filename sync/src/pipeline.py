@@ -24,17 +24,18 @@ _MIN_COMPLETE_HR_POINTS = 650
 
 
 def _get_stale_dates(max_lookback: int = 14) -> list[date]:
-    """Find dates that need re-syncing due to incomplete daily HR data.
+    """Find dates that need re-syncing due to incomplete data.
 
-    Walks backwards from yesterday looking for the most recent date with
-    complete HR data (650+ points). Returns all dates from the first
-    incomplete one through today.
-
+    Checks both HR data completeness AND health summary completeness.
     Today is always included (day isn't over yet).
     """
     today = today_nyc()
+    stale_dates = set()
+    stale_dates.add(today)  # always sync today
+
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Check 1: HR data completeness (original logic)
             cur.execute(
                 """
                 SELECT date,
@@ -50,14 +51,34 @@ def _get_stale_dates(max_lookback: int = 14) -> list[date]:
                 """,
                 (max_lookback,),
             )
-            # Walk backwards from yesterday — find first complete day
+            found_complete = False
             for row in cur.fetchall():
-                if row[1] >= _MIN_COMPLETE_HR_POINTS:
-                    # This day is complete. Sync from the next day to today.
+                if row[1] >= _MIN_COMPLETE_HR_POINTS and not found_complete:
+                    found_complete = True
+                    # Include all days from this complete one to today
                     days_back = (today - row[0]).days
-                    return [today - timedelta(days=i) for i in range(days_back)]
-            # No complete day found in the lookback window
-            return [today - timedelta(days=i) for i in range(max_lookback)]
+                    for i in range(days_back):
+                        stale_dates.add(today - timedelta(days=i))
+                    break
+
+            if not found_complete:
+                for i in range(max_lookback):
+                    stale_dates.add(today - timedelta(days=i))
+
+            # Check 2: Health summary with suspiciously low values (partial sync)
+            cur.execute(
+                """
+                SELECT date FROM daily_health_summary
+                WHERE date >= CURRENT_DATE - 7
+                  AND date < CURRENT_DATE
+                  AND (bmr_kilocalories < 1500 OR total_steps < 1000)
+                """,
+            )
+            for row in cur.fetchall():
+                stale_dates.add(row[0])
+                print(f"  Flagging {row[0]} for re-sync (partial health summary)")
+
+    return sorted(stale_dates, reverse=True)
 
 
 def _sync_strava():
