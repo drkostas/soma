@@ -69,7 +69,26 @@ def init_garmin() -> Garmin:
     # Attempt 1: Load from DB-cached tokens (survives CI ephemeral runners)
     _load_tokens_from_db()
 
-    # Attempt 2: Load from filesystem cached tokens
+    # Attempt 2: Try to use cached tokens WITHOUT re-auth if OAuth2 token is still valid
+    try:
+        import json
+        from datetime import datetime
+        oauth2_path = GARMINTOKENS / "oauth2_token.json"
+        if oauth2_path.exists():
+            oauth2 = json.loads(oauth2_path.read_text())
+            expires_at = oauth2.get("expires_at", 0)
+            if datetime.fromtimestamp(expires_at) > datetime.now():
+                # Token still valid — load without re-auth
+                client = Garmin()
+                client.garth.load(str(GARMINTOKENS))
+                # Verify it works with a simple API call
+                client.get_full_name()
+                print("Using cached OAuth2 token (still valid)")
+                return client
+    except Exception as e:
+        print(f"Cached token shortcut failed: {e}")
+
+    # Attempt 3: Load from filesystem cached tokens (triggers token exchange)
     try:
         client = Garmin()
         client.login(str(GARMINTOKENS))
