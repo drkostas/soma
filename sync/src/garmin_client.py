@@ -55,9 +55,9 @@ def _save_tokens_to_db():
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        INSERT INTO platform_credentials (platform, credentials, status)
-                        VALUES ('garmin_tokens', %s, 'active')
-                        ON CONFLICT (platform) DO UPDATE SET credentials = EXCLUDED.credentials, updated_at = NOW()
+                        INSERT INTO platform_credentials (platform, auth_type, credentials, status)
+                        VALUES ('garmin_tokens', 'oauth', %s, 'active')
+                        ON CONFLICT (platform) DO UPDATE SET credentials = EXCLUDED.credentials
                     """, (json.dumps(tokens),))
                 conn.commit()
     except Exception as e:
