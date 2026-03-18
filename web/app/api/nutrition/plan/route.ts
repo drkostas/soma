@@ -415,6 +415,28 @@ export async function GET(req: NextRequest) {
         fiber: dayTargets.fiber,
       },
     };
+
+    // ── Write-back: sync computed values to DB so stored matches dynamic ──
+    // Only for current day, non-manual days, when values differ
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    if (date === todayStr && !manualOverride && breakdown) {
+      const computedTarget = dayTargets.calories;
+      const storedTarget = Number(plan.target_calories) || 0;
+      if (Math.abs(computedTarget - storedTarget) > 10 || !plan.target_calories) {
+        try {
+          await sql`
+            UPDATE nutrition_day SET
+              target_calories = ${computedTarget},
+              target_protein = ${dayTargets.protein},
+              target_carbs = ${dayTargets.carbs},
+              target_fat = ${dayTargets.fat},
+              deficit_used = ${effectiveDeficit},
+              tdee_used = ${Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal)}
+            WHERE date = ${date} AND manual_override = FALSE
+          `;
+        } catch {}
+      }
+    }
   }
 
   // ── 7-day rolling trend ──
