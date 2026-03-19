@@ -783,14 +783,14 @@ export function NutritionDashboard({
         />
 
         <div className="hidden lg:block">
-          <PrepSummary meals={meals} desktop />
+          <PrepSummary meals={meals} ingredients={ingredients} desktop />
         </div>
       </div>
 
       {/* ── RIGHT COLUMN: meals, drinks, close day ── */}
       <div className="space-y-4">
         <div className="lg:hidden">
-          <PrepSummary meals={meals} />
+          <PrepSummary meals={meals} ingredients={ingredients} />
         </div>
 
         {/* Quick actions */}
