@@ -173,6 +173,7 @@ export function MealCard({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
   const [editingMealId, setEditingMealId] = useState<number | null>(null);
+  const [editingMealMacros, setEditingMealMacros] = useState<{ calories: number; protein: number; carbs: number; fat: number; fiber: number } | null>(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickName, setQuickName] = useState("");
   const [quickCal, setQuickCal] = useState("");
@@ -467,6 +468,7 @@ export function MealCard({
     setSelectedIngredients(new Set());
     setShowCompose(false);
     setEditingMealId(null);
+    setEditingMealMacros(null);
     onTotalsPreview?.(slot, null); // clear live preview
   };
 
@@ -895,7 +897,21 @@ export function MealCard({
               onCancel={handleComposeCancel}
               onEditIngredients={handleEditIngredients}
               logging={logging}
-              onTotalsChange={onTotalsPreview ? (t) => onTotalsPreview(slot, t) : undefined}
+              onTotalsChange={onTotalsPreview ? (t) => {
+                // When editing, send delta (preview - original) to avoid double-counting
+                // The original meal is already in consumed totals from the meals array
+                if (editingMealMacros) {
+                  onTotalsPreview(slot, {
+                    calories: t.calories - editingMealMacros.calories,
+                    protein: t.protein - editingMealMacros.protein,
+                    carbs: t.carbs - editingMealMacros.carbs,
+                    fat: t.fat - editingMealMacros.fat,
+                    fiber: t.fiber - editingMealMacros.fiber,
+                  });
+                } else {
+                  onTotalsPreview(slot, t);
+                }
+              } : undefined}
             />
             );
           })()}
@@ -956,6 +972,14 @@ export function MealCard({
                 })
                 .filter((p): p is PortionResult => p !== null);
               setComposedPortions(portions);
+              // Store original macros for delta preview
+              setEditingMealMacros({
+                calories: Number(detailMeal.calories) || 0,
+                protein: Number(detailMeal.protein) || 0,
+                carbs: Number(detailMeal.carbs) || 0,
+                fat: Number(detailMeal.fat) || 0,
+                fiber: Number(detailMeal.fiber) || 0,
+              });
               // Mark the old meal for deletion on successful save
               setEditingMealId(detailMeal.id);
               setDetailMeal(null);
