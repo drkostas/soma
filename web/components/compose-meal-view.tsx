@@ -223,20 +223,28 @@ export function ComposeMealView({
           { label: "C", current: totals.carbs, max: budget?.carbs || 0, color: "bg-amber-500", suffix: "g" },
           { label: "F", current: totals.fat, max: budget?.fat || 0, color: "bg-rose-500", suffix: "g" },
           { label: "Fi", current: totals.fiber, max: budget?.fiber || 0, color: "bg-green-500", suffix: "g" },
-        ].map(({ label, current, max, color, suffix }) => (
-          <div key={label} className="flex items-center gap-2 text-xs">
-            <span className="w-8 text-muted-foreground text-right">{label}</span>
-            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${max > 0 && current > max ? "bg-amber-500" : color}`}
-                style={{ width: `${max > 0 ? Math.min(100, (current / max) * 100) : 0}%` }}
-              />
+        ].map(({ label, current, max, color, suffix }) => {
+          const barMax = Math.max(max * 1.3, current * 1.05, max + 1);
+          const fillPct = barMax > 0 ? Math.min(100, (current / barMax) * 100) : 0;
+          const goalPct = barMax > 0 ? Math.min(100, (max / barMax) * 100) : 0;
+          const over = max > 0 && current > max;
+          return (
+            <div key={label} className="flex items-center gap-2 text-xs">
+              <span className="w-8 text-muted-foreground text-right">{label}</span>
+              <div className="relative flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div className="absolute right-0 top-0 h-full bg-muted-foreground/10" style={{ width: `${100 - goalPct}%` }} />
+                <div
+                  className={`absolute left-0 top-0 h-full rounded-full transition-all ${over ? "bg-amber-500" : color}`}
+                  style={{ width: `${fillPct}%` }}
+                />
+                {max > 0 && <div className="absolute top-0 h-full w-[2px] bg-foreground/50" style={{ left: `${goalPct}%` }} />}
+              </div>
+              <span className={`w-20 text-right tabular-nums ${over ? "text-amber-500" : ""}`}>
+                {Math.round(current)}{suffix || ""} / {Math.round(max)}{suffix || ""}
+              </span>
             </div>
-            <span className={`w-20 text-right tabular-nums ${max > 0 && current > max ? "text-amber-500" : ""}`}>
-              {Math.round(current)}{suffix || ""} / {Math.round(max)}{suffix || ""}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Volume score */}

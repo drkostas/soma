@@ -244,7 +244,7 @@ export async function GET(req: NextRequest) {
     } catch {}
 
     // Recompute step calories from scratch using weight-based formula
-    const calPerStep = 0.0005 * weightKg;
+    const calPerStep = 0.000423 * weightKg; // conservative: ~-50 kcal/day vs Garmin
     const isClosed = plan?.status === "closed";
     const isPast = date < new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
     const stepsForCalc = (isClosed || isPast) && actualSteps !== null ? actualSteps : expectedSteps;
@@ -315,10 +315,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Use profile deficit unless manual_override (then use stored deficit_used)
+    // Use sleep-adjusted deficit from plan JSON if available, otherwise profile default
+    // The sync engine sets plan->deficit_used based on sleep quality (0 for severe, halved for moderate)
+    const planJsonDeficit = plan?.plan ? Number((plan.plan as any).deficit_used) : null;
     const effectiveDeficit = manualOverride
       ? (plan.deficit_used != null ? Number(plan.deficit_used) : defaultDeficit)
-      : defaultDeficit;
+      : (planJsonDeficit != null ? planJsonDeficit : defaultDeficit);
     dayTargets.calories = Math.round(baseBmr + adjustedStepCalories + effectiveRunCal + effectiveGymCal - effectiveDeficit);
 
     // If manual_override, use stored target instead of computed
@@ -465,57 +467,40 @@ export async function GET(req: NextRequest) {
     goalDeficit = profRows[0]?.daily_deficit != null ? Number(profRows[0].daily_deficit) : 800;
   } catch {}
 
+  // Compute burn per day from stored plan data (consistent with budget card model)
+  const computeBurn = (r: Record<string, unknown>, isCurrentDay: boolean) => {
+    if (isCurrentDay && breakdown) return Number((breakdown as any).totalBurn) || 0;
+    // Reconstruct from stored values: burn = target + deficit
+    const target = Number(r.target_calories) || 0;
+    const defUsed = Number(r.deficit_used) || goalDeficit;
+    return target + defUsed;
+  };
+
   const trend7d = {
     goalDeficit,
     days: trendRows.map((r: Record<string, unknown>) => {
       const isCurrentDay = String(r.date) === date;
-      const storedTarget = isCurrentDay && breakdown
-        ? Number((breakdown as any).targetIntake)
-        : Number(r.target_calories) || 0;
-      const isManual = r.manual_override === true;
-      const deficitUsed = Number(r.deficit_used) || goalDeficit;
-      // Estimate burn = target + deficit_used, then compute goal target at 800/day
-      // If storedTarget is 0/NULL, the day has no plan data — skip goal computation
-      const hasValidPlan = storedTarget > 0 || (isCurrentDay && breakdown);
-      const estimatedBurn = hasValidPlan ? storedTarget + deficitUsed : 0;
-      const goalTarget = hasValidPlan ? Math.round(estimatedBurn - goalDeficit) : 0;
+      const ate = isCurrentDay ? consumed.calories : (Number(r.actual_calories) || 0);
+      const burn = Math.round(computeBurn(r, isCurrentDay));
+      const deficit = ate - burn; // negative = deficit (good), positive = surplus (bad)
       return {
         date: r.date,
-        target: goalTarget, // primary: what you'd eat at goal deficit
-        offsetTarget: isManual ? storedTarget : null, // secondary: offset plan target (if manual)
-        actual: isCurrentDay ? consumed.calories : (Number(r.actual_calories) || 0),
+        ate,
+        burn,
+        deficit,
         closed: r.status === "closed",
-        manual: isManual,
-        delta:
-          r.status === "closed"
-            ? (Number(r.actual_calories) || 0) - goalTarget
-            : null,
+        isToday: isCurrentDay,
       };
     }),
-    totalDelta: trendRows
-      .filter((r: Record<string, unknown>) => r.status === "closed")
-      .reduce(
-        (sum: number, r: Record<string, unknown>) => {
-          const target = Number(r.target_calories) || 0;
-          const defUsed = Number(r.deficit_used) || goalDeficit;
-          const burn = target + defUsed;
-          const goalTgt = burn - goalDeficit;
-          return sum + ((Number(r.actual_calories) || 0) - goalTgt);
-        },
-        0,
-      ),
-    closedDays: trendRows.filter((r: Record<string, unknown>) => r.status === "closed").length,
-    // Goal-based tracking: how much ACTUAL deficit vs the 800/day goal
-    // For closed days: deficit = burn - actual_eaten. We approximate burn as target + deficit_used
-    goalTotalDeficit: trendRows
+    // Cumulative deficit: sum of (ate - burn) for closed days only
+    totalDeficit: trendRows
       .filter((r: Record<string, unknown>) => r.status === "closed")
       .reduce((sum: number, r: Record<string, unknown>) => {
-        const actual = Number(r.actual_calories) || 0;
-        const target = Number(r.target_calories) || 0;
-        const deficitUsed = Number(r.deficit_used) || goalDeficit;
-        const estimatedBurn = target + deficitUsed;
-        return sum + (estimatedBurn - actual);
+        const ate = Number(r.actual_calories) || 0;
+        const burn = Math.round(computeBurn(r, false));
+        return sum + (ate - burn);
       }, 0),
+    closedDays: trendRows.filter((r: Record<string, unknown>) => r.status === "closed").length,
     goalExpectedDeficit: trendRows
       .filter((r: Record<string, unknown>) => r.status === "closed")
       .length * goalDeficit,
