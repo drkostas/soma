@@ -104,16 +104,6 @@ export async function GET() {
     ORDER BY n.date
   `;
 
-  // Get Hevy gym calories per day (not included in Garmin total)
-  const gymCalRows = await sql`
-    SELECT workout_date::text AS date, COALESCE(SUM(calories), 0) AS gym_cal
-    FROM workout_enrichment
-    WHERE workout_date >= (SELECT MIN(date) FROM nutrition_day)
-    GROUP BY workout_date
-  `;
-  const gymCalByDate: Record<string, number> = {};
-  for (const r of gymCalRows) gymCalByDate[String(r.date).slice(0, 10)] = Number(r.gym_cal) || 0;
-
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const todayMealRows = await sql`
     SELECT COALESCE(SUM(calories), 0) AS total FROM meal_log WHERE date = ${todayStr}
