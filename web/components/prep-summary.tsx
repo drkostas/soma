@@ -25,8 +25,14 @@ const SLOT_LABELS: Record<string, string> = {
   during_workout: "workout",
 };
 
-export function PrepSummary({ meals, desktop }: { meals: Meal[]; desktop?: boolean }) {
+export function PrepSummary({ meals, ingredients, desktop }: { meals: Meal[]; ingredients?: any[]; desktop?: boolean }) {
   const [expanded, setExpanded] = useState(false);
+
+  const ingLookup = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const ing of (ingredients || [])) m.set(ing.id, ing);
+    return m;
+  }, [ingredients]);
 
   const prepItems = useMemo(() => {
     // Group items by ingredient_id across all meals
@@ -37,28 +43,27 @@ export function PrepSummary({ meals, desktop }: { meals: Meal[]; desktop?: boole
       for (const item of meal.items) {
         const id = item.ingredient_id;
         if (!id) continue;
-        // Use raw grams (the actual grams field is always raw weight)
         const grams = Number(item.grams) || 0;
         if (grams <= 0) continue;
 
         if (!groups[id]) {
-          // Prettify name from ingredient_id
-          const name = (item.name || id)
+          const ing = ingLookup.get(id);
+          const name = ing?.name || (item.name || id)
             .replace(/_raw$/, "")
             .replace(/_(dry|whole)$/i, "")
             .replace(/_\d+pct$/i, "")
             .replace(/_/g, " ")
             .replace(/\b\w/g, (c: string) => c.toUpperCase())
             .trim();
-          groups[id] = { name, isRaw: !!item.is_raw, meals: [] };
+          groups[id] = { name, isRaw: !!(ing?.is_raw), meals: [] };
         }
         groups[id].meals.push({ slot: meal.meal_slot, grams });
       }
     }
 
-    // Filter to cookable ingredients (is_raw) in 2+ DIFFERENT meals
+    // Filter to cookable ingredients (is_raw)
     return Object.entries(groups)
-      .filter(([, g]) => g.isRaw && g.meals.length >= 2)
+      .filter(([, g]) => g.isRaw)
       .map(([id, g]): PrepItem => ({
         ingredientId: id,
         name: g.name,
