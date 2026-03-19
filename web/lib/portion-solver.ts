@@ -38,6 +38,7 @@ export interface MacroTarget {
   protein: number;
   carbs: number;
   fat: number;
+  fiber?: number;
 }
 
 export interface PortionResult {
@@ -119,13 +120,14 @@ export function solvePortions(
   }
 
   // Compute calories used by fixed ingredients
-  let fixedCal = 0, fixedP = 0, fixedC = 0, fixedF = 0;
+  let fixedCal = 0, fixedP = 0, fixedC = 0, fixedF = 0, fixedFi = 0;
   for (const ing of [...vegs, ...sauces, ...supplements]) {
     const m = macrosAt(ing, portions[ing.id]);
     fixedCal += m.calories;
     fixedP += m.protein;
     fixedC += m.carbs;
     fixedF += m.fat;
+    fixedFi += m.fiber;
   }
 
   // Remaining budget for scalable ingredients
@@ -133,6 +135,7 @@ export function solvePortions(
   const remP = Math.max(0, target.protein - fixedP);
   const remC = Math.max(0, target.carbs - fixedC);
   const remF = Math.max(0, target.fat - fixedF);
+  const remFi = Math.max(0, (target.fiber || 40) - fixedFi);
 
   if (scalable.length === 0 || remCal <= 0) {
     // Nothing to optimize — just use fixed
@@ -171,12 +174,12 @@ export function solvePortions(
 
   // Step 2: Check ALL macro constraints, scale down to fit the tightest one
   const totalMacros = () => {
-    let cal = 0, p = 0, c = 0, f = 0;
+    let cal = 0, p = 0, c = 0, f = 0, fi = 0;
     for (const ing of scalable) {
       const m = macrosAt(ing, portions[ing.id]);
-      cal += m.calories; p += m.protein; c += m.carbs; f += m.fat;
+      cal += m.calories; p += m.protein; c += m.carbs; f += m.fat; fi += m.fiber;
     }
-    return { cal, p, c, f };
+    return { cal, p, c, f, fi };
   };
 
   let t = totalMacros();
@@ -186,6 +189,7 @@ export function solvePortions(
   if (t.cal > 0 && t.cal > remCal) constraintScales.push(remCal / t.cal);
   if (t.p > 0 && t.p > remP) constraintScales.push(remP / t.p);
   if (t.f > 0 && t.f > remF) constraintScales.push(remF / t.f);
+  if (t.fi > 0 && t.fi > remFi) constraintScales.push(remFi / t.fi);
   // Don't constrain carbs — they're the "fill" macro
 
   if (constraintScales.length > 0) {

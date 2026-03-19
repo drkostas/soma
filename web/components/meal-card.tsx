@@ -337,8 +337,9 @@ export function MealCard({
           protein: Number(slotBudget.protein) || 40,
           carbs: Number(slotBudget.carbs) || 50,
           fat: Number(slotBudget.fat) || 20,
+          fiber: Number(slotBudget.fiber) || 10,
         }
-      : { calories: 500, protein: 40, carbs: 50, fat: 20 };
+      : { calories: 500, protein: 40, carbs: 50, fat: 20, fiber: 10 };
     const portions = solvePortions(selected, budget);
     setComposedPortions(portions);
   };
@@ -870,15 +871,20 @@ export function MealCard({
 
           {/* Compose meal view (compose step 2) */}
           {!disabled && composedPortions && (() => {
-            // When editing, add the editing meal's macros back to the budget
-            // since that meal will be replaced
-            const editMeal = editingMealId ? meals.find(m => m.id === editingMealId) : null;
-            const composeBudget = slotBudget && editMeal ? {
-              calories: Number(slotBudget.calories) + Number(editMeal.calories || 0),
-              protein: Number(slotBudget.protein) + Number(editMeal.protein || 0),
-              carbs: Number(slotBudget.carbs) + Number(editMeal.carbs || 0),
-              fat: Number(slotBudget.fat) + Number(editMeal.fat || 0),
-              fiber: Number(slotBudget.fiber || 0) + Number(editMeal.fiber || 0),
+            // When editing, budget = slot total - other meals in this slot (gives room for this meal)
+            // When composing new, budget = slot total as-is
+            const otherMeals = editingMealId ? meals.filter(m => m.id !== editingMealId) : [];
+            const otherCal = otherMeals.reduce((s, m) => s + Number(m.calories || 0), 0);
+            const otherP = otherMeals.reduce((s, m) => s + Number(m.protein || 0), 0);
+            const otherC = otherMeals.reduce((s, m) => s + Number(m.carbs || 0), 0);
+            const otherF = otherMeals.reduce((s, m) => s + Number(m.fat || 0), 0);
+            const otherFi = otherMeals.reduce((s, m) => s + Number(m.fiber || 0), 0);
+            const composeBudget = slotBudget ? {
+              calories: Math.max(0, Number(slotBudget.calories) - otherCal),
+              protein: Math.max(0, Number(slotBudget.protein) - otherP),
+              carbs: Math.max(0, Number(slotBudget.carbs) - otherC),
+              fat: Math.max(0, Number(slotBudget.fat) - otherF),
+              fiber: Math.max(0, Number(slotBudget.fiber || 0) - otherFi),
             } : slotBudget;
             return (
             <ComposeMealView
