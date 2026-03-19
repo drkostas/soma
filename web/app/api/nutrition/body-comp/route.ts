@@ -94,10 +94,22 @@ export async function GET() {
     projWeight = Math.max(targetWeight, projWeight - dailyWeightLoss);
   }
 
-  // Cumulative deficit data — use Garmin actual burn when available
+  // Burn breakdown per day — stacked bar data
   const deficitRows = await sql`
-    SELECT n.date::text AS date, n.target_calories, n.actual_calories, n.deficit_used, n.status, n.manual_override,
-           h.total_kilocalories AS garmin_burn
+    SELECT n.date::text AS date, n.target_calories, n.actual_calories, n.deficit_used, n.status,
+           h.total_kilocalories AS garmin_burn, h.bmr_kilocalories AS bmr, h.total_steps,
+           COALESCE((SELECT SUM((raw_json->>'calories')::float) FROM garmin_activity_raw
+             WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'running'
+             AND (raw_json->>'startTimeLocal')::date = n.date), 0) AS run_cal,
+           COALESCE((SELECT SUM((raw_json->>'distance')::float) FROM garmin_activity_raw
+             WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'running'
+             AND (raw_json->>'startTimeLocal')::date = n.date), 0) AS run_dist,
+           COALESCE((SELECT SUM((raw_json->>'calories')::float) FROM garmin_activity_raw
+             WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'strength_training'
+             AND (raw_json->>'startTimeLocal')::date = n.date), 0) AS gym_cal,
+           (SELECT raw_json->>'activityName' FROM garmin_activity_raw
+             WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'strength_training'
+             AND (raw_json->>'startTimeLocal')::date = n.date LIMIT 1) AS gym_title
     FROM nutrition_day n
     LEFT JOIN daily_health_summary h ON h.date = n.date
     WHERE n.actual_calories > 0 OR n.status = 'active'
@@ -113,111 +125,91 @@ export async function GET() {
   `;
   const todayConsumed = Number(todayMealRows[0]?.total || 0) + Number(todayDrinkRows[0]?.total || 0);
 
-  let cumulativeActual = 0;
-  let cumulativeExpected = 0;
-  const deficitTrend: { date: string; actual: number; expected: number; closed: boolean }[] = [];
+  let cumulativeDeficit = 0;
+  const dailyDeficits: {
+    date: string; bmr: number; dailyActivity: number; runCal: number; runDistKm: number;
+    gymCal: number; gymTitle: string; totalBurn: number; consumed: number;
+    deficit: number; cumulative: number; goalPace: number; closed: boolean; isToday: boolean;
+  }[] = [];
 
-  for (const r of deficitRows) {
+  for (let i = 0; i < deficitRows.length; i++) {
+    const r = deficitRows[i] as Record<string, unknown>;
     const dateStr = String(r.date).slice(0, 10);
     const isClosed = r.status === "closed";
     const isToday = dateStr === todayStr;
-
-    // Expected: goalDeficit per day
-    cumulativeExpected += goalDeficit;
-
-    // Actual burn: prefer Garmin total_kilocalories (already includes uploaded Hevy workouts)
-    // Fall back to estimate (target + deficit_used) when Garmin data is missing/stale
-    const garminBurn = Number(r.garmin_burn) || 0;
     const storedTarget = Number(r.target_calories) || 0;
-    const defUsed = Number(r.deficit_used) || goalDeficit;
-    const estimatedBurn = storedTarget + defUsed;
-    // Use Garmin burn if it looks complete (BMR > 1500 implies full day)
-    // Note: Garmin total already includes gym (FIT files uploaded by sync)
-    const actualBurn = garminBurn > 1500 ? garminBurn : estimatedBurn;
 
-    // Skip empty future days with no real data (target=0 produces fake deficits)
     if (storedTarget === 0 && !isToday && !isClosed) continue;
 
+    // Burn breakdown
+    const garminTotal = Number(r.garmin_burn) || 0;
+    const defUsed = Number(r.deficit_used) || goalDeficit;
+    const totalBurn = garminTotal > 1500 ? garminTotal : storedTarget + defUsed;
+    const bmr = Number(r.bmr) || 0;
+    const runCal = Math.round(Number(r.run_cal) || 0);
+    const gymCal = Math.round(Number(r.gym_cal) || 0);
+    const dailyActivity = Math.max(0, Math.round(totalBurn - bmr - runCal - gymCal));
+    const runDistKm = Math.round((Number(r.run_dist) || 0) / 1000 * 10) / 10;
+    const gymTitle = String(r.gym_title || "");
+
+    // Consumed
     let consumed: number;
     if (isClosed) {
       consumed = Number(r.actual_calories) || 0;
     } else if (isToday) {
       consumed = todayConsumed;
     } else {
-      // Unclosed past day — compute consumed from meal_log + drink_log
       const pastMeals = await sql`SELECT COALESCE(SUM(calories), 0) AS total FROM meal_log WHERE date = ${dateStr}`;
       const pastDrinks = await sql`SELECT COALESCE(SUM(calories), 0) AS total FROM drink_log WHERE date = ${dateStr}`;
       consumed = Number(pastMeals[0]?.total || 0) + Number(pastDrinks[0]?.total || 0);
-      if (consumed === 0) continue; // truly empty day, skip
+      if (consumed === 0) continue;
     }
 
-    const dailyDeficit = actualBurn - consumed;
-    cumulativeActual += dailyDeficit;
-
-    deficitTrend.push({
-      date: dateStr,
-      actual: Math.round(cumulativeActual),
-      expected: Math.round(cumulativeExpected),
-      closed: isClosed,
-    });
-  }
-
-  // Daily deficit data for bar chart with full day details
-  // Convention: negative = deficit (good, bars go DOWN), positive = surplus (bad, bars go UP)
-  const dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean; burned: number; consumed: number }[] = [];
-  let prevCumulative = 0;
-  for (let i = 0; i < deficitTrend.length; i++) {
-    const dt = deficitTrend[i];
-    const dailyDeficit = dt.actual - prevCumulative; // positive = deficit
-
-    // Get burn and consumed for this day from deficitRows
-    const row = deficitRows[i];
-    const dateStr = String(row?.date).slice(0, 10);
-    const garminBurnDay = Number(row?.garmin_burn) || 0;
-    const storedTargetDay = Number(row?.target_calories) || 0;
-    const defUsedDay = Number(row?.deficit_used) || goalDeficit;
-    const estBurn = storedTargetDay + defUsedDay;
-    const dayBurn = garminBurnDay > 1500 ? garminBurnDay : estBurn;
-    const isClosed = row?.status === "closed";
-    const isToday = dateStr === todayStr;
-    let consumed = 0;
-    if (isClosed) consumed = Number(row?.actual_calories) || 0;
-    else if (isToday) consumed = todayConsumed;
+    const deficit = consumed - totalBurn; // negative = deficit (good)
+    cumulativeDeficit += deficit;
 
     dailyDeficits.push({
-      date: dt.date,
-      daily: Math.round(-dailyDeficit),
-      cumulative: Math.round(-dt.actual),
-      closed: dt.closed,
-      burned: Math.round(dayBurn),
+      date: dateStr,
+      bmr: Math.round(bmr),
+      dailyActivity,
+      runCal,
+      runDistKm,
+      gymCal,
+      gymTitle,
+      totalBurn: Math.round(totalBurn),
       consumed: Math.round(consumed),
+      deficit: Math.round(deficit),
+      cumulative: Math.round(cumulativeDeficit),
+      goalPace: -goalDeficit * dailyDeficits.length, // will fix after push
+      closed: isClosed,
+      isToday,
     });
-    prevCumulative = dt.actual;
+    // Fix goalPace for this entry (index-based)
+    dailyDeficits[dailyDeficits.length - 1].goalPace = -(goalDeficit * dailyDeficits.length);
   }
 
+  // Deficit stats from dailyDeficits
+  const closedEntries = dailyDeficits.filter(d => d.closed);
+  const totalActualDeficit = closedEntries.length > 0
+    ? closedEntries.reduce((s, d) => s + d.deficit, 0)
+    : 0;
+  const closedDeficitDays = closedEntries.length;
+  const avgActualDeficit = closedDeficitDays > 0 ? Math.round(-totalActualDeficit / closedDeficitDays) : 0;
+
   // Compute calorie-predicted weight from cumulative deficit
-  const firstDeficitDate = deficitTrend.length > 0 ? deficitTrend[0].date : null;
+  const firstDeficitDate = dailyDeficits.length > 0 ? dailyDeficits[0].date : null;
   let startWeightForPrediction = currentWeight;
   if (firstDeficitDate && weights.length > 0) {
-    // Find the LAST weight on or before the first deficit date (closest, not oldest)
     const match = weights.findLast(w => w.date <= firstDeficitDate);
     if (match) startWeightForPrediction = match.smoothed;
     else if (weights[0]) startWeightForPrediction = weights[0].smoothed;
   }
 
-  const calPredicted: { date: string; weight: number; closed: boolean }[] = deficitTrend.map(dt => ({
-    date: dt.date,
-    weight: Math.round((startWeightForPrediction - dt.actual / 7700) * 10) / 10,
-    closed: dt.closed,
+  const calPredicted: { date: string; weight: number; closed: boolean }[] = dailyDeficits.map(d => ({
+    date: d.date,
+    weight: Math.round((startWeightForPrediction + d.cumulative / 7700) * 10) / 10, // cumulative is negative for deficit
+    closed: d.closed,
   }));
-
-  // Deficit performance stats
-  const closedDeficitEntries = deficitTrend.filter(d => d.closed);
-  const closedDeficitDays = closedDeficitEntries.length;
-  const totalActualDeficit = closedDeficitDays > 0
-    ? closedDeficitEntries[closedDeficitEntries.length - 1].actual  // last closed day's cumulative
-    : 0;
-  const avgActualDeficit = closedDeficitDays > 0 ? Math.round(totalActualDeficit / closedDeficitDays) : 0;
 
   // On track assessment
   const onTrack = !targetDatePassed && requiredDeficit <= deficit * 1.1; // within 10% of current deficit
@@ -248,7 +240,7 @@ export async function GET() {
       realisticDate,
       avgActualDeficit,
       closedDeficitDays,
-      totalActualDeficit: Math.round(totalActualDeficit),
+      totalActualDeficit: Math.round(-totalActualDeficit), // positive = total deficit achieved
     },
     weights,
     projection,
