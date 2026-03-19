@@ -34,7 +34,7 @@ _DEFAULT_PACE_BY_ZONE: dict[int, float] = {
 }
 
 # Step calorie estimation
-STEP_KCAL_PER_STEP_PER_KG: float = 0.0005  # 10k steps × 80kg = 400 kcal
+STEP_KCAL_PER_STEP_PER_KG: float = 0.000423  # conservative: ~-50 kcal/day vs Garmin
 
 CARB_TARGETS_G_PER_KG: dict[str, float] = {
     "rest": 3.0,

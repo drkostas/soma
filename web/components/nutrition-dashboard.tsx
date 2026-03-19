@@ -127,22 +127,35 @@ function MacroBar({
   target: number;
   color: string;
 }) {
+  // Bar extends to 130% of target (or current if over), goal marker at target
+  const maxVal = Math.max(target * 1.3, current * 1.05, target + 1);
+  const fillPct = maxVal > 0 ? Math.min(100, (current / maxVal) * 100) : 0;
+  const goalPct = maxVal > 0 ? Math.min(100, (target / maxVal) * 100) : 0;
   const overflow = target > 0 && current > target;
-  const noTarget = target <= 0 && current > 0;
-  const pct = target > 0 ? Math.min(100, (current / target) * 100) : (current > 0 ? 100 : 0);
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       <div className="flex justify-between text-xs lg:text-sm text-muted-foreground">
         <span>{label}</span>
-        <span className={overflow || noTarget ? "text-amber-500 font-medium" : ""}>
+        <span className={overflow ? "text-amber-500 font-medium" : ""}>
           {Math.round(current)}/{Math.round(target)}g
-          {(overflow || noTarget) && " ⚡"}
         </span>
       </div>
-      <Progress
-        value={pct}
-        className={`h-2 ${color} ${overflow || noTarget ? "ring-2 ring-amber-500/60 ring-offset-1 ring-offset-background rounded-full" : ""}`}
-      />
+      <div className="relative h-2 rounded-full overflow-hidden bg-muted">
+        {/* Buffer zone past goal */}
+        <div className="absolute right-0 top-0 h-full bg-muted-foreground/10" style={{ width: `${100 - goalPct}%` }} />
+        {/* Fill */}
+        <div
+          className={`absolute left-0 top-0 h-full rounded-full transition-all ${overflow ? "bg-amber-500" : color}`}
+          style={{ width: `${fillPct}%` }}
+        />
+        {/* Goal marker */}
+        {target > 0 && (
+          <div
+            className="absolute top-0 h-full w-[2px] bg-foreground/50"
+            style={{ left: `${goalPct}%` }}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -154,7 +167,7 @@ export function NutritionDashboard({
   plan: initialPlan,
   meals: initialMeals,
   drinks: initialDrinks,
-  presets,
+  presets: initialPresets,
   ingredients,
   training,
   health,
@@ -163,6 +176,7 @@ export function NutritionDashboard({
   const [plan, setPlan] = useState(initialPlan);
   const [meals, setMeals] = useState<Meal[]>(initialMeals);
   const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
+  const [presets, setPresets] = useState(initialPresets);
   const [closing, setClosing] = useState(false);
   const [copying, setCopying] = useState(false);
   // workoutEnabled removed — activity toggles now flow through API via ActivitySelector
@@ -181,22 +195,30 @@ export function NutritionDashboard({
 
   const refreshData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/nutrition/plan?date=${date}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.plan) setPlan(data.plan);
-      if (data.meals) setMeals(data.meals);
-      if (data.drinks) setDrinks(data.drinks);
-      setRunEnabled(data.runEnabled ?? true);
-      setSelectedWorkouts(data.selectedWorkouts ?? []);
-      setGymCalories(data.gymCalories ?? 0);
-      setSkippedSlots(data.skippedSlots ?? []);
-      if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
-      if (data.breakdown) setBreakdown(data.breakdown);
-      if (data.trend7d) setTrend7d(data.trend7d);
+      const [planRes, presetsRes] = await Promise.all([
+        fetch(`/api/nutrition/plan?date=${date}`),
+        fetch("/api/nutrition/presets"),
+      ]);
+      if (planRes.ok) {
+        const data = await planRes.json();
+        if (data.plan) setPlan(data.plan);
+        if (data.meals) setMeals(data.meals);
+        if (data.drinks) setDrinks(data.drinks);
+        setRunEnabled(data.runEnabled ?? true);
+        setSelectedWorkouts(data.selectedWorkouts ?? []);
+        setGymCalories(data.gymCalories ?? 0);
+        setSkippedSlots(data.skippedSlots ?? []);
+        if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
+        if (data.breakdown) setBreakdown(data.breakdown);
+        if (data.trend7d) setTrend7d(data.trend7d);
+      }
+      if (presetsRes.ok) {
+        const presetsData = await presetsRes.json();
+        if (presetsData.presets) setPresets(presetsData.presets);
+      }
       setDataReady(true);
     } catch {
-      setDataReady(true); // still mark ready on error
+      setDataReady(true);
     }
   }, [date]);
 
@@ -435,54 +457,64 @@ export function NutritionDashboard({
                       {remainingCal < 0 ? `+${Math.abs(Math.round(remainingCal))}` : Math.round(remainingCal)}
                     </div>
                     <div className="text-xs lg:text-sm text-muted-foreground">
-                      {remainingCal < 0 ? "calories over budget" : "calories remaining"}
+                      {remainingCal < 0 ? "over goal" : "to goal"}
                     </div>
                   </>
                 )}
               </div>
-              {dataReady && (
-                <>
-                  <Progress value={Math.min(100, (consumedCal / targetCal) * 100)} className="h-3" />
-                  <div className="text-xs text-center text-muted-foreground">
-                    {Math.round(consumedCal)} / {Math.round(targetCal)} kcal
-                  </div>
-                </>
-              )}
 
-              {/* One-line equation summary — only after dynamic data loads */}
-              {dataReady && breakdown && (
-                <div className="text-[10px] lg:text-xs text-muted-foreground text-center">
-                  {breakdown.manualOverride ? (
-                    <>
-                      Manual target: {breakdown.targetIntake} kcal
-                      {breakdown.deficit > 0 && (
-                        <span className="text-muted-foreground/60"> (deficit: {breakdown.deficit})</span>
+              {/* Burn-based bar with goal marker */}
+              {dataReady && breakdown && (() => {
+                const totalBurn = breakdown.totalBurn || 0;
+                const goalIntake = breakdown.targetIntake || 0;
+                const deficit = breakdown.deficit || 0;
+                const eatPct = totalBurn > 0 ? Math.min(100, (consumedCal / totalBurn) * 100) : 0;
+                const goalPct = totalBurn > 0 ? Math.min(100, (goalIntake / totalBurn) * 100) : 0;
+                const currentDeficit = consumedCal - totalBurn;
+                return (
+                  <div className="space-y-1">
+                    {/* Bar with 3 hover zones */}
+                    <div className="relative h-3 rounded-full overflow-hidden bg-muted">
+                      {/* Zone 3: Deficit buffer (right of goal) */}
+                      <div
+                        className="absolute right-0 top-0 h-full bg-muted-foreground/15"
+                        style={{ width: `${100 - goalPct}%` }}
+                        title={`Deficit goal: −${deficit} kcal\nTotal burn: ${totalBurn} kcal`}
+                      />
+                      {/* Zone 2: Room to goal (between eaten and goal) — transparent hover target */}
+                      {eatPct < goalPct && (
+                        <div
+                          className="absolute top-0 h-full"
+                          style={{ left: `${eatPct}%`, width: `${goalPct - eatPct}%` }}
+                          title={`${Math.round(goalIntake - consumedCal)} kcal to goal\nGoal: eat ≤ ${goalIntake} kcal`}
+                        />
                       )}
-                    </>
-                  ) : (
-                    <>
-                      {breakdown.bmr} BMR
-                      {breakdown.stepCalories > 0 && ` + ${breakdown.stepCalories} step cal`}
-                      {breakdown.runCalories > 0 && ` + ${breakdown.runCalories} run${breakdown.runActual ? " \u2713" : " ~"}`}
-                      {breakdown.gymBreakdown && breakdown.gymBreakdown.length > 0
-                        ? breakdown.gymBreakdown.map((w: any) => ` + ${w.calories} ${w.title}${w.actual ? " \u2713" : " ~"}`).join("")
-                        : breakdown.gymCalories > 0 ? ` + ${breakdown.gymCalories} gym` : ""}
-                      {breakdown.deficit > 0 && ` \u2212 ${breakdown.deficit} deficit`}
-                      {breakdown.drinkCalories > 0 && ` \u2212 ${breakdown.drinkCalories} drinks`}
-                      {` = ${breakdown.targetIntake}`}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* 7-day trend summary (always visible) */}
-              {trend7d && trend7d.closedDays > 0 && (
-                <div className="text-xs text-center font-medium">
-                  <span className={trend7d.goalTotalDeficit >= trend7d.goalExpectedDeficit ? "text-green-500" : "text-amber-500"}>
-                    Deficit: {Math.round(trend7d.goalTotalDeficit)} / {trend7d.goalExpectedDeficit} kcal ({trend7d.closedDays}d)
-                  </span>
-                </div>
-              )}
+                      {/* Zone 1: Eaten fill */}
+                      <div
+                        className={`absolute left-0 top-0 h-full rounded-full transition-all ${consumedCal > goalIntake ? "bg-amber-500" : "bg-primary"}`}
+                        style={{ width: `${eatPct}%` }}
+                        title={`Eaten: ${Math.round(consumedCal)} kcal`}
+                      />
+                      {/* Goal marker line */}
+                      <div
+                        className="absolute top-0 h-full w-[2px] bg-foreground/60"
+                        style={{ left: `${goalPct}%` }}
+                        title={`Goal: eat ≤ ${goalIntake} kcal${deficit > 0 ? ` (−${deficit} deficit)` : " (maintenance)"}`}
+                      />
+                    </div>
+                    {/* Labels under bar */}
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>{Math.round(consumedCal)} eaten</span>
+                      <span>{goalIntake} goal{deficit > 0 && <span className="text-muted-foreground/50"> (&minus;{deficit})</span>}</span>
+                      <span>{totalBurn} burn</span>
+                    </div>
+                    {/* Current deficit */}
+                    <div className="text-xs text-center">
+                      <span className={currentDeficit < 0 ? "text-green-500" : "text-rose-500"}>{currentDeficit > 0 ? "+" : ""}{Math.round(currentDeficit)} current deficit</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Expand/collapse toggle — hidden on desktop (details always shown) */}
               <button
@@ -562,20 +594,7 @@ export function NutritionDashboard({
                         ) : null}
 
                         <span className="text-muted-foreground font-medium border-t pt-1">Total burn</span>
-                        <span className="tabular-nums text-right font-medium border-t pt-1">{breakdown.totalBurn}</span>
-
-                        <span className="text-muted-foreground">Deficit goal</span>
-                        <span className="tabular-nums text-right text-rose-500">&minus;{breakdown.deficit}</span>
-
-                        {breakdown.drinkCalories > 0 && (
-                          <>
-                            <span className="text-muted-foreground">Drinks (alcohol)</span>
-                            <span className="tabular-nums text-right text-rose-500">&minus;{breakdown.drinkCalories}</span>
-                          </>
-                        )}
-
-                        <span className="font-medium border-t pt-1">Target intake</span>
-                        <span className="tabular-nums text-right font-bold border-t pt-1">{breakdown.targetIntake}</span>
+                        <span className="tabular-nums text-right font-bold border-t pt-1">{breakdown.totalBurn}</span>
                       </div>
                     </div>
 
@@ -613,57 +632,54 @@ export function NutritionDashboard({
                     {/* 7-day trend table */}
                     {trend7d && trend7d.days.length > 0 && (
                       <div className="space-y-1">
-                        <div className="text-[10px] lg:text-xs font-medium text-muted-foreground uppercase tracking-wider">7-Day Trend</div>
-                        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] lg:text-xs font-medium text-muted-foreground uppercase tracking-wider">7-Day Trend</div>
+                          <div className="text-[9px] text-muted-foreground/60">goal: &minus;{trend7d.goalDeficit}/day</div>
+                        </div>
+                        <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5 text-xs">
                           <span className="text-muted-foreground text-[10px]">Date</span>
-                          <span className="text-muted-foreground text-[10px] text-right">Target</span>
-                          <span className="text-muted-foreground text-[10px] text-right">Actual</span>
-                          <span className="text-muted-foreground text-[10px] text-right">+/&minus;</span>
+                          <span className="text-muted-foreground text-[10px] text-right hidden sm:block">Ate / Burn</span>
+                          <span className="text-muted-foreground text-[10px] text-right">Deficit / Goal</span>
                           {trend7d.days.map((d: any) => {
                             const dayLabel = new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+                            const deficitColor = d.deficit <= -trend7d.goalDeficit ? "text-green-500"
+                              : d.deficit < 0 ? "text-amber-500"
+                              : d.deficit > 0 ? "text-rose-500" : "text-muted-foreground";
+                            const isInProgress = d.isToday && !d.closed;
                             return (
                               <React.Fragment key={d.date}>
                                 <span>
                                   {dayLabel}
-                                  {d.manual && <span className="text-amber-500 text-[9px] ml-0.5">*</span>}
+                                  <span className="block sm:hidden text-[9px] text-muted-foreground/60">
+                                    ate {isInProgress ? `(${d.ate})` : d.ate} · burn {d.burn}
+                                  </span>
                                 </span>
-                                <span className="tabular-nums text-right">
-                                  {d.target || "\u2013"}
-                                  {d.offsetTarget != null && (
-                                    <span className="text-muted-foreground/50 text-[9px] ml-0.5">({d.offsetTarget})</span>
-                                  )}
+                                <span className={`tabular-nums text-right hidden sm:block ${isInProgress ? "text-muted-foreground" : ""}`}>
+                                  {isInProgress ? `(${d.ate})` : d.ate || "\u2013"} / {d.burn || "\u2013"}
                                 </span>
-                                <span className={`tabular-nums text-right ${!d.closed && d.actual > 0 ? "italic text-muted-foreground" : ""}`}>
-                                  {d.closed ? d.actual : d.actual > 0 ? `~${d.actual}` : "\u2013"}
-                                </span>
-                                <span className={`tabular-nums text-right ${
-                                  d.delta == null && !(d.actual > 0) ? "text-muted-foreground"
-                                  : (d.delta ?? (d.actual > 0 ? d.actual - d.target : null)) != null
-                                    ? ((d.delta ?? d.actual - d.target) < 0 ? "text-green-500" : "text-amber-500")
-                                    : "text-muted-foreground"
-                                } ${!d.closed && d.actual > 0 ? "italic" : ""}`}>
-                                  {d.delta != null
-                                    ? (d.delta > 0 ? `+${d.delta}` : d.delta)
-                                    : d.actual > 0
-                                      ? `~${d.actual - d.target > 0 ? "+" : ""}${d.actual - d.target}`
-                                      : "\u2013"}
+                                <span className={`tabular-nums text-right font-medium ${isInProgress ? "text-muted-foreground" : deficitColor}`}>
+                                  {isInProgress
+                                    ? `(${d.deficit > 0 ? "+" : ""}${d.deficit})`
+                                    : d.ate > 0 ? `${d.deficit > 0 ? "+" : ""}${d.deficit}` : "\u2013"
+                                  } / &minus;{trend7d.goalDeficit}
                                 </span>
                               </React.Fragment>
                             );
                           })}
                           {/* Total */}
-                          {trend7d.closedDays > 0 && (
-                            <React.Fragment key="trend-total">
-                              <span className="font-medium border-t pt-1">Total ({trend7d.closedDays}d)</span>
-                              <span className="border-t pt-1" />
-                              <span className="border-t pt-1" />
-                              <span className={`tabular-nums text-right font-bold border-t pt-1 ${
-                                trend7d.totalDelta < 0 ? "text-green-500" : trend7d.totalDelta > 0 ? "text-amber-500" : ""
-                              }`}>
-                                {trend7d.totalDelta > 0 ? `+${trend7d.totalDelta}` : trend7d.totalDelta}
-                              </span>
-                            </React.Fragment>
-                          )}
+                          {trend7d.closedDays > 0 && (() => {
+                            const total = trend7d.totalDeficit; // negative = deficit
+                            const goal = -(trend7d.closedDays * trend7d.goalDeficit); // negative target
+                            return (
+                              <React.Fragment key="trend-total">
+                                <span className="font-medium border-t pt-1">Total ({trend7d.closedDays}d)</span>
+                                <span className="border-t pt-1 hidden sm:block" />
+                                <span className={`tabular-nums text-right font-bold border-t pt-1 ${total <= goal ? "text-green-500" : "text-amber-500"}`}>
+                                  {total > 0 ? "+" : ""}{Math.round(total)} / {goal}
+                                </span>
+                              </React.Fragment>
+                            );
+                          })()}
                         </div>
                         {trend7d.days.some((d: any) => d.manual) && (
                           <div className="text-[9px] text-muted-foreground/60">* offset target in parentheses · +/− vs {trend7d.goalDeficit}/day goal</div>

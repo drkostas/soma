@@ -869,18 +869,30 @@ export function MealCard({
           )}
 
           {/* Compose meal view (compose step 2) */}
-          {!disabled && composedPortions && (
+          {!disabled && composedPortions && (() => {
+            // When editing, add the editing meal's macros back to the budget
+            // since that meal will be replaced
+            const editMeal = editingMealId ? meals.find(m => m.id === editingMealId) : null;
+            const composeBudget = slotBudget && editMeal ? {
+              calories: Number(slotBudget.calories) + Number(editMeal.calories || 0),
+              protein: Number(slotBudget.protein) + Number(editMeal.protein || 0),
+              carbs: Number(slotBudget.carbs) + Number(editMeal.carbs || 0),
+              fat: Number(slotBudget.fat) + Number(editMeal.fat || 0),
+              fiber: Number(slotBudget.fiber || 0) + Number(editMeal.fiber || 0),
+            } : slotBudget;
+            return (
             <ComposeMealView
               portions={composedPortions}
               ingredients={(ingredients ?? []) as Ingredient[]}
-              budget={slotBudget ?? null}
+              budget={composeBudget ?? null}
               onLog={handleComposeLog}
               onCancel={handleComposeCancel}
               onEditIngredients={handleEditIngredients}
               logging={logging}
               onTotalsChange={onTotalsPreview ? (t) => onTotalsPreview(slot, t) : undefined}
             />
-          )}
+            );
+          })()}
 
           {/* Save as preset prompt */}
           {showSavePrompt && (

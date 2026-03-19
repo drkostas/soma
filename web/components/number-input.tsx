@@ -41,7 +41,7 @@ export function NumberInput({
   const commit = (raw: string) => {
     const parsed = parseFloat(raw);
     if (!isNaN(parsed)) {
-      onChange(clamp(snapToStep(parsed, step, min), min, max));
+      onChange(clamp(Math.round(parsed), min, max));
     }
     setEditing(false);
   };
@@ -55,7 +55,7 @@ export function NumberInput({
 
   const handleSlider = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value);
-    onChange(clamp(snapToStep(v, step, min), min, max));
+    onChange(clamp(Math.round(v), min, max));
   };
 
   const nudge = (dir: 1 | -1) => {
