@@ -32,7 +32,11 @@ interface BodyCompData {
   weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[];
   projection: { date: string; weight: number; bf: number }[];
   calPredicted: { date: string; weight: number; closed: boolean }[];
-  dailyDeficits: { date: string; daily: number; cumulative: number; closed: boolean; burned: number; consumed: number }[];
+  dailyDeficits: {
+    date: string; bmr: number; dailyActivity: number; runCal: number; runDistKm: number;
+    gymCal: number; gymTitle: string; totalBurn: number; consumed: number;
+    deficit: number; cumulative: number; goalPace: number; closed: boolean; isToday: boolean;
+  }[];
   goalDeficit: number;
 }
 
@@ -290,76 +294,147 @@ export function BodyCompChart() {
         </CardContent>
       </Card>
 
-      {/* Daily deficit chart */}
+      {/* Burn vs Eaten chart */}
       {dailyDeficits && dailyDeficits.length > 0 && (() => {
-        // Add goal pace line to chart data
-        const chartDeficits = dailyDeficits.map((d, i) => ({
+        // Add goal line per day (burn - 800) and eaten dot color
+        const chartData = dailyDeficits.map(d => ({
           ...d,
-          goalPace: -(goalDeficit * (i + 1)), // cumulative goal: -800, -1600, -2400...
+          goalLine: Math.max(0, d.totalBurn - goalDeficit),
+          eatenDot: d.consumed, // separate key for scatter overlay
         }));
         return (
         <Card>
           <CardContent className="py-4">
-            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Daily Deficit</div>
-            <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#ef4444]" />surplus ↑</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#22c55e]" />deficit ↓</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />actual</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />goal pace</span>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Burn vs Eaten</div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground mb-2">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#64748b]" />BMR</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#14b8a6]" />activity</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#22c55e]" />run</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#f97316]" />gym</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-white" />eaten</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.4)"}} />goal</span>
             </div>
-            <div className="h-64">
+            <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartDeficits} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
                   <XAxis
                     dataKey="date"
                     tickFormatter={(label: any) => formatDate(String(label))}
-                    tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
+                    tick={{ fontSize: 11, fill: "rgba(255,255,255,0.6)" }}
                     interval={Math.max(0, Math.floor(dailyDeficits.length / 6))}
                   />
                   <YAxis
-                    tick={{ fontSize: 12, fill: "rgba(255,255,255,0.6)" }}
-                    tickFormatter={(v: number) => v >= 1000 || v <= -1000 ? `${Math.round(v / 1000)}k` : `${v}`}
+                    tick={{ fontSize: 11, fill: "rgba(255,255,255,0.6)" }}
+                    tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
+                    domain={[0, 'auto']}
                   />
                   <Tooltip
                     content={({ active, payload, label }: any) => {
                       if (!active || !payload?.length) return null;
-                      const day = chartDeficits.find(d => d.date === label);
+                      const day = chartData.find(d => d.date === label);
                       if (!day) return null;
-                      const isDeficit = day.daily <= 0;
+                      const isDeficit = day.deficit < 0;
+                      const beatGoal = day.deficit <= -goalDeficit;
+                      const dayLabel = new Date(String(label) + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
                       return (
                         <div style={{
                           backgroundColor: "rgba(10,10,12,0.95)",
                           border: "1px solid rgba(255,255,255,0.15)",
                           borderRadius: "8px",
-                          padding: "8px 12px",
+                          padding: "10px 14px",
                           fontSize: "12px",
+                          minWidth: 220,
                         }}>
-                          <div style={{ fontWeight: "bold", marginBottom: 4 }}>{formatDate(String(label))}{!day.closed ? " (in progress)" : ""}</div>
-                          <div style={{ color: "rgba(255,255,255,0.6)" }}>Burned: {day.burned.toLocaleString()} kcal</div>
-                          <div style={{ color: "rgba(255,255,255,0.6)" }}>Eaten: {day.consumed.toLocaleString()} kcal</div>
-                          <div style={{ color: isDeficit ? "#22c55e" : "#ef4444", fontWeight: "bold" }}>
-                            {isDeficit ? "Deficit" : "Surplus"}: {Math.abs(day.daily).toLocaleString()} kcal
+                          <div style={{ fontWeight: "bold", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+                            <span>{dayLabel}</span>
+                            <span style={{ fontSize: 10, opacity: 0.5 }}>{day.isToday ? "IN PROGRESS" : day.closed ? "CLOSED" : "OPEN"}</span>
                           </div>
-                          <div style={{ fontSize: "11px", marginTop: 2, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 3 }}>
-                            <div style={{ color: "#3b82f6" }}>Actual: {Math.abs(day.cumulative).toLocaleString()} kcal {day.cumulative <= 0 ? "deficit" : "surplus"}</div>
-                            <div style={{ color: "#22c55e" }}>Goal: {Math.abs(day.goalPace).toLocaleString()} kcal deficit</div>
+                          <div style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: 4, marginBottom: 4 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span style={{ fontWeight: 600 }}>BURNED</span>
+                              <span style={{ fontWeight: 600 }}>{day.totalBurn.toLocaleString()}</span>
+                            </div>
+                            <div style={{ color: "#64748b", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                              <span>BMR</span><span>{day.bmr.toLocaleString()}</span>
+                            </div>
+                            <div style={{ color: "#14b8a6", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                              <span>Daily activity</span><span>+{day.dailyActivity.toLocaleString()}</span>
+                            </div>
+                            {day.runCal > 0 && (
+                              <div style={{ color: "#22c55e", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                                <span>Run ({day.runDistKm}km)</span><span>+{day.runCal.toLocaleString()}</span>
+                              </div>
+                            )}
+                            {day.gymCal > 0 && (
+                              <div style={{ color: "#f97316", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                                <span>Gym{day.gymTitle ? ` (${day.gymTitle})` : ""}</span><span>+{day.gymCal.toLocaleString()}</span>
+                              </div>
+                            )}
                           </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: 4, marginBottom: 4 }}>
+                            <span style={{ fontWeight: 600 }}>EATEN</span>
+                            <span style={{ fontWeight: 600 }}>{day.consumed.toLocaleString()}</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold" }}>
+                            <span>DEFICIT</span>
+                            <span style={{ color: isDeficit ? "#22c55e" : "#ef4444" }}>
+                              {day.deficit > 0 ? "+" : ""}{day.deficit.toLocaleString()} / &minus;{goalDeficit}
+                            </span>
+                          </div>
+                          {day.closed && (
+                            <div style={{ fontSize: 10, marginTop: 2, color: beatGoal ? "#22c55e" : "#f59e0b" }}>
+                              {beatGoal
+                                ? `✓ beat goal by ${Math.abs(day.deficit + goalDeficit).toLocaleString()}`
+                                : isDeficit
+                                  ? `${(goalDeficit + day.deficit).toLocaleString()} short of goal`
+                                  : `surplus day`}
+                            </div>
+                          )}
                         </div>
                       );
                     }}
                   />
-                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
-                  <ReferenceLine y={-goalDeficit} stroke="rgba(255,255,255,0.2)" strokeDasharray="6 3" label={{ value: `-${goalDeficit}`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.3)" }} />
-                  <Line type="monotone" dataKey="goalPace" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls={true} />
-                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={true} />
-                  <Bar dataKey="daily" radius={[4, 4, 0, 0]}>
-                    {chartDeficits.map((entry, index) => (
-                      <Cell key={index} fill={entry.daily <= 0 ? "#22c55e" : "#ef4444"} opacity={entry.closed ? 0.8 : 0.4} />
-                    ))}
-                  </Bar>
+                  {/* Stacked burn bars */}
+                  <Bar dataKey="bmr" stackId="burn" fill="#64748b" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="dailyActivity" stackId="burn" fill="#14b8a6" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="runCal" stackId="burn" fill="#22c55e" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="gymCal" stackId="burn" fill="#f97316" radius={[4, 4, 0, 0]} />
+                  {/* Goal line (burn - 800) */}
+                  <Line type="stepAfter" dataKey="goalLine" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls={true} />
+                  {/* Eaten dots */}
+                  <Line type="monotone" dataKey="eatenDot" stroke="none" strokeWidth={0} dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    if (payload.eatenDot == null || payload.eatenDot === 0) return <></>;
+                    const deficit = payload.deficit;
+                    const fill = deficit <= -goalDeficit ? "#22c55e" : deficit < 0 ? "#f59e0b" : "#ef4444";
+                    return <circle cx={cx} cy={cy} r={5} fill={fill} stroke="rgba(0,0,0,0.5)" strokeWidth={1.5} />;
+                  }} connectNulls={false} />
                 </ComposedChart>
               </ResponsiveContainer>
+            </div>
+            {/* Cumulative deficit mini chart */}
+            <div className="mt-3 pt-3 border-t border-border/30">
+              <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-1">
+                <span>Cumulative deficit</span>
+                <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />actual</span>
+                <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />goal pace</span>
+              </div>
+              <div className="h-24">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={chartData} margin={{ top: 2, right: 5, left: 5, bottom: 2 }}>
+                    <XAxis dataKey="date" hide />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                      tickFormatter={(v: number) => v <= -1000 ? `${Math.round(v / 1000)}k` : `${v}`}
+                      width={35}
+                    />
+                    <Line type="monotone" dataKey="goalPace" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls={true} />
+                    <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2, fill: "#3b82f6" }} connectNulls={true} />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </CardContent>
         </Card>
