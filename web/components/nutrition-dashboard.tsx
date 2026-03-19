@@ -694,14 +694,14 @@ export function NutritionDashboard({
               {dataReady ? (
                 <div className="grid gap-2 pt-1">
                   <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
-                    color="[&>[data-slot=progress-indicator]]:bg-blue-500" />
+                    color="bg-blue-500" />
                   <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
-                    color="[&>[data-slot=progress-indicator]]:bg-amber-500" />
+                    color="bg-amber-500" />
                   <MacroBar label="Fat" current={consumedFat} target={targetFat}
-                    color="[&>[data-slot=progress-indicator]]:bg-rose-500" />
+                    color="bg-rose-500" />
                   {targetFiber > 0 && (
                     <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
-                      color="[&>[data-slot=progress-indicator]]:bg-green-500" />
+                      color="bg-green-500" />
                   )}
                 </div>
               ) : (
