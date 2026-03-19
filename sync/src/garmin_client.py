@@ -98,7 +98,12 @@ def init_garmin() -> Garmin:
         client.garth.dump(str(GARMINTOKENS))
         _save_tokens_to_db()
         return client
-    except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError):
+    except GarminConnectTooManyRequestsError:
+        raise RuntimeError(
+            "Garmin rate limited (429) — skipping this sync. Will retry next scheduled run."
+        )
+    except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError) as e:
+        print(f"Token login failed: {e}")
         pass
 
     # Attempt 3: Fresh login with credentials
