@@ -291,19 +291,25 @@ export function BodyCompChart() {
       </Card>
 
       {/* Daily deficit chart */}
-      {dailyDeficits && dailyDeficits.length > 0 && (
+      {dailyDeficits && dailyDeficits.length > 0 && (() => {
+        // Add goal pace line to chart data
+        const chartDeficits = dailyDeficits.map((d, i) => ({
+          ...d,
+          goalPace: -(goalDeficit * (i + 1)), // cumulative goal: -800, -1600, -2400...
+        }));
+        return (
         <Card>
           <CardContent className="py-4">
             <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Daily Deficit</div>
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#ef4444]" />surplus ↑</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#22c55e]" />deficit ↓</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />cumulative</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.3)"}} />goal ({goalDeficit}/day)</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />actual</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />goal pace</span>
             </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={dailyDeficits} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                <ComposedChart data={chartDeficits} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
                   <XAxis
                     dataKey="date"
@@ -318,7 +324,7 @@ export function BodyCompChart() {
                   <Tooltip
                     content={({ active, payload, label }: any) => {
                       if (!active || !payload?.length) return null;
-                      const day = dailyDeficits.find(d => d.date === label);
+                      const day = chartDeficits.find(d => d.date === label);
                       if (!day) return null;
                       const isDeficit = day.daily <= 0;
                       return (
@@ -335,8 +341,9 @@ export function BodyCompChart() {
                           <div style={{ color: isDeficit ? "#22c55e" : "#ef4444", fontWeight: "bold" }}>
                             {isDeficit ? "Deficit" : "Surplus"}: {Math.abs(day.daily).toLocaleString()} kcal
                           </div>
-                          <div style={{ color: "#3b82f6", fontSize: "11px", marginTop: 2, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 3 }}>
-                            Running total: {Math.abs(day.cumulative).toLocaleString()} kcal {day.cumulative <= 0 ? "deficit" : "surplus"}
+                          <div style={{ fontSize: "11px", marginTop: 2, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 3 }}>
+                            <div style={{ color: "#3b82f6" }}>Actual: {Math.abs(day.cumulative).toLocaleString()} kcal {day.cumulative <= 0 ? "deficit" : "surplus"}</div>
+                            <div style={{ color: "#22c55e" }}>Goal: {Math.abs(day.goalPace).toLocaleString()} kcal deficit</div>
                           </div>
                         </div>
                       );
@@ -344,9 +351,10 @@ export function BodyCompChart() {
                   />
                   <ReferenceLine y={0} stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
                   <ReferenceLine y={-goalDeficit} stroke="rgba(255,255,255,0.2)" strokeDasharray="6 3" label={{ value: `-${goalDeficit}`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.3)" }} />
+                  <Line type="monotone" dataKey="goalPace" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls={true} />
                   <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={true} />
                   <Bar dataKey="daily" radius={[4, 4, 0, 0]}>
-                    {dailyDeficits.map((entry, index) => (
+                    {chartDeficits.map((entry, index) => (
                       <Cell key={index} fill={entry.daily <= 0 ? "#22c55e" : "#ef4444"} opacity={entry.closed ? 0.8 : 0.4} />
                     ))}
                   </Bar>
@@ -355,7 +363,8 @@ export function BodyCompChart() {
             </div>
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
 
     </div>
   );
