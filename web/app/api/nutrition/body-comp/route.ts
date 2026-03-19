@@ -135,15 +135,15 @@ export async function GET() {
     // Expected: goalDeficit per day
     cumulativeExpected += goalDeficit;
 
-    // Actual burn: prefer Garmin total_kilocalories + Hevy gym (real data)
+    // Actual burn: prefer Garmin total_kilocalories (already includes uploaded Hevy workouts)
     // Fall back to estimate (target + deficit_used) when Garmin data is missing/stale
     const garminBurn = Number(r.garmin_burn) || 0;
-    const gymCal = gymCalByDate[dateStr] || 0;
     const storedTarget = Number(r.target_calories) || 0;
     const defUsed = Number(r.deficit_used) || goalDeficit;
     const estimatedBurn = storedTarget + defUsed;
     // Use Garmin burn if it looks complete (BMR > 1500 implies full day)
-    const actualBurn = garminBurn > 1500 ? garminBurn + gymCal : estimatedBurn;
+    // Note: Garmin total already includes gym (FIT files uploaded by sync)
+    const actualBurn = garminBurn > 1500 ? garminBurn : estimatedBurn;
 
     // Skip empty future days with no real data (target=0 produces fake deficits)
     if (storedTarget === 0 && !isToday && !isClosed) continue;
@@ -184,11 +184,10 @@ export async function GET() {
     const row = deficitRows[i];
     const dateStr = String(row?.date).slice(0, 10);
     const garminBurnDay = Number(row?.garmin_burn) || 0;
-    const gymCalDay = gymCalByDate[dateStr] || 0;
     const storedTargetDay = Number(row?.target_calories) || 0;
     const defUsedDay = Number(row?.deficit_used) || goalDeficit;
     const estBurn = storedTargetDay + defUsedDay;
-    const dayBurn = garminBurnDay > 1500 ? garminBurnDay + gymCalDay : estBurn;
+    const dayBurn = garminBurnDay > 1500 ? garminBurnDay : estBurn;
     const isClosed = row?.status === "closed";
     const isToday = dateStr === todayStr;
     let consumed = 0;
