@@ -116,8 +116,9 @@ export async function GET() {
     const a = (sumY - b * sumX) / n; // weight at day 0 (last data point)
     trendSlope = b;
 
-    // Project forward from last data point, anchored to last actual weight
-    const anchorWeight = trendWeights[trendWeights.length - 1].weight;
+    // Anchor to last smoothed value so prediction connects to the smoothed line,
+    // but use the raw regression slope (captures actual trend, not EMA lag)
+    const anchorWeight = trendWeights[trendWeights.length - 1].smoothed;
     const projEndDate = new Date(targetDate + "T12:00");
     projEndDate.setDate(projEndDate.getDate() + 7);
     const totalProjDays = Math.round((projEndDate.getTime() - lastDate.getTime()) / 86400000);
