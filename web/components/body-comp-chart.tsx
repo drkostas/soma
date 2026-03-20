@@ -25,12 +25,15 @@ interface BodyCompData {
     onTrack: boolean;
     targetDatePassed: boolean;
     realisticDate: string;
+    trendTargetDate: string | null;
+    trendSlope: number;
     avgActualDeficit: number;
     closedDeficitDays: number;
     totalActualDeficit: number;
   };
   weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[];
   projection: { date: string; weight: number; bf: number }[];
+  trendPrediction: { date: string; weight: number; weightHigh: number; weightLow: number; bf: number }[];
   calPredicted: { date: string; weight: number; closed: boolean }[];
   dailyDeficits: {
     date: string; bmr: number; dailyActivity: number; runCal: number; runDistKm: number;
@@ -54,7 +57,7 @@ export function BodyCompChart() {
   if (loading) return <div className="text-center text-muted-foreground py-8 animate-pulse">Loading trajectory...</div>;
   if (!data) return <div className="text-center text-muted-foreground py-8">No data available</div>;
 
-  const { profile, weights, projection, calPredicted, dailyDeficits, goalDeficit } = data;
+  const { profile, weights, projection, trendPrediction, calPredicted, dailyDeficits, goalDeficit } = data;
 
   // Merge weights and projection into one dataset for the chart
   // Only show weights from last 3 months
@@ -85,6 +88,21 @@ export function BodyCompChart() {
     } else {
       chartData.push({ date: cp.date, calPredicted: cp.weight, calPredictedClosed: cp.closed });
       dateSet.add(cp.date);
+    }
+  }
+  // Merge trend prediction (data-driven) into chart data
+  if (trendPrediction) {
+    for (const tp of trendPrediction) {
+      const existing = chartData.find((d: any) => d.date === tp.date);
+      if (existing) {
+        existing.trendWeight = tp.weight;
+        existing.trendHigh = tp.weightHigh;
+        existing.trendLow = tp.weightLow;
+        existing.trendBf = tp.bf;
+      } else {
+        chartData.push({ date: tp.date, trendWeight: tp.weight, trendHigh: tp.weightHigh, trendLow: tp.weightLow, trendBf: tp.bf });
+        dateSet.add(tp.date);
+      }
     }
   }
   // Ensure projection connects to smoothed line: overlap first projection point with last actual
@@ -150,7 +168,15 @@ export function BodyCompChart() {
             <span className="text-muted-foreground">&middot;</span>
             <span className="text-muted-foreground">{profile.fatToLose}kg to lose</span>
             <span className="text-muted-foreground">&middot;</span>
-            <span className="text-muted-foreground">{profile.weeklyRate}kg/week</span>
+            <span className="text-muted-foreground">{profile.weeklyRate}kg/wk goal</span>
+            {profile.trendSlope !== 0 && (
+              <>
+                <span className="text-muted-foreground">&middot;</span>
+                <span className={Math.abs(profile.trendSlope) >= profile.weeklyRate * 0.8 ? "text-green-500" : "text-amber-500"}>
+                  {Math.abs(profile.trendSlope)}kg/wk actual
+                </span>
+              </>
+            )}
             <span className="text-muted-foreground">&middot;</span>
             <span className={`font-medium ${statusColor}`}>{statusText}</span>
           </div>
@@ -174,9 +200,9 @@ export function BodyCompChart() {
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b82f6]" />actual</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />smoothed</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6] opacity-50" style={{borderTop: "2px dashed #3b82f6"}} />projected</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6] opacity-50" style={{borderTop: "2px dashed #3b82f6"}} />goal pace</span>
+            {trendPrediction?.length > 0 && <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />trend</span>}
             <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
-            {showCalPredicted && <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #06b6d4"}} />from cal</span>}
           </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -207,9 +233,11 @@ export function BodyCompChart() {
                     const labels: Record<string, string> = {
                       actual: "Weigh-in",
                       smoothed: "Smoothed",
-                      projected: "Projected",
+                      projected: "Goal pace",
+                      trendWeight: "Trend",
                       calPredicted: "From calories",
                     };
+                    if (name === "trendHigh" || name === "trendLow") return [null, null];
                     return [`${value} kg`, labels[name] || name];
                   }}
                 />
@@ -222,6 +250,14 @@ export function BodyCompChart() {
                   if (payload.projected == null || index % 14 !== 0) return <></>;
                   return <circle cx={cx} cy={cy} r={3} fill="#3b82f6" opacity={0.6} />;
                 }} connectNulls={true} />
+                {/* Trend prediction confidence band + line */}
+                {trendPrediction?.length > 0 && (
+                  <>
+                    <Area type="monotone" dataKey="trendHigh" stroke="none" fill="#f97316" fillOpacity={0.08} connectNulls={true} tooltipType="none" />
+                    <Area type="monotone" dataKey="trendLow" stroke="none" fill="rgba(10,10,12,1)" fillOpacity={1} connectNulls={true} tooltipType="none" />
+                    <Line type="monotone" dataKey="trendWeight" stroke="#f97316" strokeWidth={2} dot={false} connectNulls={true} />
+                  </>
+                )}
                 {showCalPredicted && <Line type="monotone" dataKey="calPredicted" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="4 4" dot={(props: any) => {
                   const { cx, cy, payload } = props;
                   if (payload.calPredicted == null) return <></>;

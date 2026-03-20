@@ -94,6 +94,73 @@ export async function GET() {
     projWeight = Math.max(targetWeight, projWeight - dailyWeightLoss);
   }
 
+  // Linear regression on recent smoothed weights → data-driven prediction
+  const trendPrediction: { date: string; weight: number; weightHigh: number; weightLow: number; bf: number }[] = [];
+  const recentDays = 21; // fit on last 21 days of data
+  const recentWeights = weights.slice(-recentDays);
+  if (recentWeights.length >= 5) {
+    // Convert dates to day numbers (0, 1, 2, ...)
+    const firstDate = new Date(recentWeights[0].date + "T12:00");
+    const xs = recentWeights.map(w => (new Date(w.date + "T12:00").getTime() - firstDate.getTime()) / 86400000);
+    const ys = recentWeights.map(w => w.smoothed);
+    const n = xs.length;
+
+    // Linear regression: y = a + b*x
+    const sumX = xs.reduce((s, x) => s + x, 0);
+    const sumY = ys.reduce((s, y) => s + y, 0);
+    const sumXY = xs.reduce((s, x, i) => s + x * ys[i], 0);
+    const sumX2 = xs.reduce((s, x) => s + x * x, 0);
+    const b = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX) || 0; // slope (kg/day)
+    const a = (sumY - b * sumX) / n; // intercept
+
+    // Residual standard error for confidence band
+    const residuals = xs.map((x, i) => ys[i] - (a + b * x));
+    const sse = residuals.reduce((s, r) => s + r * r, 0);
+    const se = Math.sqrt(sse / Math.max(1, n - 2));
+    const meanX = sumX / n;
+    const ssX = xs.reduce((s, x) => s + (x - meanX) ** 2, 0) || 1;
+
+    // Project from last data point to target date
+    const lastDayNum = xs[xs.length - 1];
+    const projEndDate = new Date(targetDate);
+    projEndDate.setDate(projEndDate.getDate() + 7);
+    const totalProjDays = Math.round((projEndDate.getTime() - firstDate.getTime()) / 86400000);
+
+    for (let dayNum = Math.round(lastDayNum); dayNum <= totalProjDays; dayNum++) {
+      const d = new Date(firstDate);
+      d.setDate(d.getDate() + dayNum);
+      const dateStr = d.toISOString().slice(0, 10);
+      const predicted = a + b * dayNum;
+      // Prediction interval widens with distance from mean
+      const leverage = 1 + 1 / n + (dayNum - meanX) ** 2 / ssX;
+      const interval = 1.96 * se * Math.sqrt(leverage); // 95% CI
+      const predWeight = Math.max(targetWeight, Math.round(predicted * 10) / 10);
+      const predFat = Math.max(0, predWeight - ffm);
+      const predBf = Math.max(targetBf, (predFat / predWeight) * 100);
+      trendPrediction.push({
+        date: dateStr,
+        weight: predWeight,
+        weightHigh: Math.round((predicted + interval) * 10) / 10,
+        weightLow: Math.round(Math.max(targetWeight, predicted - interval) * 10) / 10,
+        bf: Math.round(predBf * 10) / 10,
+      });
+    }
+  }
+
+  // Compute data-driven target date (when trend line hits target weight)
+  const trendTargetDate = trendPrediction.find(p => p.weight <= targetWeight)?.date || null;
+  const trendSlope = recentWeights.length >= 5 ? (() => {
+    const firstDate = new Date(recentWeights[0].date + "T12:00");
+    const xs = recentWeights.map(w => (new Date(w.date + "T12:00").getTime() - firstDate.getTime()) / 86400000);
+    const ys = recentWeights.map(w => w.smoothed);
+    const n = xs.length;
+    const sumX = xs.reduce((s, x) => s + x, 0);
+    const sumY = ys.reduce((s, y) => s + y, 0);
+    const sumXY = xs.reduce((s, x, i) => s + x * ys[i], 0);
+    const sumX2 = xs.reduce((s, x) => s + x * x, 0);
+    return (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX) || 0;
+  })() : 0;
+
   // Burn breakdown per day — stacked bar data
   const deficitRows = await sql`
     SELECT n.date::text AS date, n.target_calories, n.actual_calories, n.deficit_used, n.status,
@@ -238,12 +305,15 @@ export async function GET() {
       requiredDeficit,
       onTrack,
       realisticDate,
+      trendTargetDate,
+      trendSlope: Math.round(trendSlope * 7 * 100) / 100, // kg/week from regression
       avgActualDeficit,
       closedDeficitDays,
       totalActualDeficit: Math.round(-totalActualDeficit), // positive = total deficit achieved
     },
     weights,
     projection,
+    trendPrediction,
     calPredicted,
     dailyDeficits,
     goalDeficit,
