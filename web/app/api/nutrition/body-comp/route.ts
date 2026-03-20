@@ -116,7 +116,8 @@ export async function GET() {
     const a = (sumY - b * sumX) / n; // weight at day 0 (last data point)
     trendSlope = b;
 
-    // Project forward from last data point, weekly samples
+    // Project forward from last data point, anchored to last smoothed weight
+    const anchorWeight = trendWeights[trendWeights.length - 1].smoothed;
     const projEndDate = new Date(targetDate + "T12:00");
     projEndDate.setDate(projEndDate.getDate() + 7);
     const totalProjDays = Math.round((projEndDate.getTime() - lastDate.getTime()) / 86400000);
@@ -124,7 +125,7 @@ export async function GET() {
     for (let dayNum = 0; dayNum <= totalProjDays; dayNum += 7) {
       const d = new Date(lastDate);
       d.setDate(d.getDate() + dayNum);
-      const predicted = a + b * dayNum;
+      const predicted = anchorWeight + b * dayNum; // anchored to actual smoothed, using regression slope
       const predWeight = Math.round(predicted * 10) / 10;
       const predFat = Math.max(0, predWeight - ffm);
       const predBf = Math.round((predFat / Math.max(predWeight, 1)) * 1000) / 10;
