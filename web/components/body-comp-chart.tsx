@@ -172,8 +172,8 @@ export function BodyCompChart() {
             {profile.trendSlope !== 0 && (
               <>
                 <span className="text-muted-foreground">&middot;</span>
-                <span className={Math.abs(profile.trendSlope) >= profile.weeklyRate * 0.8 ? "text-green-500" : "text-amber-500"}>
-                  {Math.abs(profile.trendSlope)}kg/wk actual
+                <span className={profile.trendSlope < 0 && Math.abs(profile.trendSlope) >= profile.weeklyRate * 0.8 ? "text-green-500" : "text-amber-500"}>
+                  {profile.trendSlope < 0 ? `${Math.abs(profile.trendSlope)}kg/wk losing` : `+${profile.trendSlope}kg/wk gaining`}
                 </span>
               </>
             )}
@@ -250,12 +250,12 @@ export function BodyCompChart() {
                   if (payload.projected == null || index % 14 !== 0) return <></>;
                   return <circle cx={cx} cy={cy} r={3} fill="#3b82f6" opacity={0.6} />;
                 }} connectNulls={true} />
-                {/* Trend prediction confidence band + line */}
+                {/* Trend prediction line */}
                 {trendPrediction?.length > 0 && (
                   <>
-                    <Area type="monotone" dataKey="trendHigh" stroke="none" fill="#f97316" fillOpacity={0.08} connectNulls={true} tooltipType="none" />
-                    <Area type="monotone" dataKey="trendLow" stroke="none" fill="rgba(10,10,12,1)" fillOpacity={1} connectNulls={true} tooltipType="none" />
-                    <Line type="monotone" dataKey="trendWeight" stroke="#f97316" strokeWidth={2} dot={false} connectNulls={true} />
+                    <Line type="monotone" dataKey="trendHigh" stroke="#f97316" strokeWidth={1} strokeDasharray="3 3" opacity={0.3} dot={false} connectNulls isAnimationActive={false} tooltipType="none" />
+                    <Line type="monotone" dataKey="trendLow" stroke="#f97316" strokeWidth={1} strokeDasharray="3 3" opacity={0.3} dot={false} connectNulls isAnimationActive={false} tooltipType="none" />
+                    <Line type="monotone" dataKey="trendWeight" stroke="#f97316" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
                   </>
                 )}
                 {showCalPredicted && <Line type="monotone" dataKey="calPredicted" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="4 4" dot={(props: any) => {
@@ -279,7 +279,8 @@ export function BodyCompChart() {
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f97316]" />actual</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />smoothed</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316] opacity-50" style={{borderTop: "2px dashed #f97316"}} />projected</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316] opacity-50" style={{borderTop: "2px dashed #f97316"}} />goal pace</span>
+            {trendPrediction?.length > 0 && <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#ec4899]" />trend</span>}
             <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
           </div>
           <div className="h-64">
@@ -324,6 +325,9 @@ export function BodyCompChart() {
                   if (payload.projBf == null || index % 14 !== 0) return <></>;
                   return <circle cx={cx} cy={cy} r={3} fill="#f97316" opacity={0.6} />;
                 }} connectNulls={true} />
+                {trendPrediction?.length > 0 && (
+                  <Line type="monotone" dataKey="trendBf" stroke="#ec4899" strokeWidth={2} dot={false} connectNulls={true} />
+                )}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -343,7 +347,7 @@ export function BodyCompChart() {
           <CardContent className="py-4">
             <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Burn vs Eaten</div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground mb-2">
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#64748b]" />BMR</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#94a3b8]" />BMR</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#14b8a6]" />activity</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#22c55e]" />run</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#f97316]" />gym</span>
@@ -391,7 +395,7 @@ export function BodyCompChart() {
                               <span style={{ fontWeight: 600 }}>BURNED</span>
                               <span style={{ fontWeight: 600 }}>{day.totalBurn.toLocaleString()}</span>
                             </div>
-                            <div style={{ color: "#64748b", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                            <div style={{ color: "#94a3b8", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
                               <span>BMR</span><span>{day.bmr.toLocaleString()}</span>
                             </div>
                             <div style={{ color: "#14b8a6", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
@@ -432,7 +436,7 @@ export function BodyCompChart() {
                     }}
                   />
                   {/* Stacked burn bars */}
-                  <Bar dataKey="bmr" stackId="burn" fill="#64748b" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="bmr" stackId="burn" fill="#94a3b8" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="dailyActivity" stackId="burn" fill="#14b8a6" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="runCal" stackId="burn" fill="#22c55e" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="gymCal" stackId="burn" fill="#f97316" radius={[4, 4, 0, 0]} />
