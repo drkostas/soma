@@ -95,23 +95,30 @@ export async function GET() {
   }
 
   // Linear regression on recent smoothed weights → data-driven prediction
+  // Use last 21 CALENDAR days of data (not last 21 entries)
   const trendPrediction: { date: string; weight: number; weightHigh: number; weightLow: number; bf: number }[] = [];
-  const recentDays = 21; // fit on last 21 days of data
-  const recentWeights = weights.slice(-recentDays);
-  if (recentWeights.length >= 5) {
-    // Convert dates to day numbers (0, 1, 2, ...)
-    const firstDate = new Date(recentWeights[0].date + "T12:00");
-    const xs = recentWeights.map(w => (new Date(w.date + "T12:00").getTime() - firstDate.getTime()) / 86400000);
+  const cutoffDate = new Date(today + "T12:00");
+  cutoffDate.setDate(cutoffDate.getDate() - 21);
+  const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+  const recentWeights = weights.filter(w => w.date >= cutoffStr);
+  let trendSlope = 0;
+
+  if (recentWeights.length >= 3) {
+    // Day numbers relative to the LAST data point (so last point = day 0)
+    const lastDate = new Date(recentWeights[recentWeights.length - 1].date + "T12:00");
+    const xs = recentWeights.map(w => (new Date(w.date + "T12:00").getTime() - lastDate.getTime()) / 86400000);
     const ys = recentWeights.map(w => w.smoothed);
     const n = xs.length;
 
-    // Linear regression: y = a + b*x
+    // Linear regression: y = a + b*x (where x=0 is the last data point)
     const sumX = xs.reduce((s, x) => s + x, 0);
     const sumY = ys.reduce((s, y) => s + y, 0);
     const sumXY = xs.reduce((s, x, i) => s + x * ys[i], 0);
     const sumX2 = xs.reduce((s, x) => s + x * x, 0);
-    const b = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX) || 0; // slope (kg/day)
-    const a = (sumY - b * sumX) / n; // intercept
+    const denom = n * sumX2 - sumX * sumX;
+    const b = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0; // slope (kg/day)
+    const a = (sumY - b * sumX) / n; // intercept = predicted weight at last data point
+    trendSlope = b;
 
     // Residual standard error for confidence band
     const residuals = xs.map((x, i) => ys[i] - (a + b * x));
@@ -120,46 +127,32 @@ export async function GET() {
     const meanX = sumX / n;
     const ssX = xs.reduce((s, x) => s + (x - meanX) ** 2, 0) || 1;
 
-    // Project from last data point to target date
-    const lastDayNum = xs[xs.length - 1];
+    // Project forward from last data point
     const projEndDate = new Date(targetDate);
     projEndDate.setDate(projEndDate.getDate() + 7);
-    const totalProjDays = Math.round((projEndDate.getTime() - firstDate.getTime()) / 86400000);
+    const totalProjDays = Math.round((projEndDate.getTime() - lastDate.getTime()) / 86400000);
 
-    for (let dayNum = Math.round(lastDayNum); dayNum <= totalProjDays; dayNum++) {
-      const d = new Date(firstDate);
+    for (let dayNum = 0; dayNum <= totalProjDays; dayNum++) {
+      const d = new Date(lastDate);
       d.setDate(d.getDate() + dayNum);
       const dateStr = d.toISOString().slice(0, 10);
       const predicted = a + b * dayNum;
-      // Prediction interval widens with distance from mean
       const leverage = 1 + 1 / n + (dayNum - meanX) ** 2 / ssX;
-      const interval = 1.96 * se * Math.sqrt(leverage); // 95% CI
-      const predWeight = Math.max(targetWeight, Math.round(predicted * 10) / 10);
+      const interval = 1.96 * se * Math.sqrt(leverage);
+      const predWeight = Math.round(predicted * 10) / 10;
       const predFat = Math.max(0, predWeight - ffm);
-      const predBf = Math.max(targetBf, (predFat / predWeight) * 100);
+      const predBf = (predFat / predWeight) * 100;
       trendPrediction.push({
         date: dateStr,
         weight: predWeight,
         weightHigh: Math.round((predicted + interval) * 10) / 10,
-        weightLow: Math.round(Math.max(targetWeight, predicted - interval) * 10) / 10,
+        weightLow: Math.round((predicted - interval) * 10) / 10,
         bf: Math.round(predBf * 10) / 10,
       });
     }
   }
 
-  // Compute data-driven target date (when trend line hits target weight)
   const trendTargetDate = trendPrediction.find(p => p.weight <= targetWeight)?.date || null;
-  const trendSlope = recentWeights.length >= 5 ? (() => {
-    const firstDate = new Date(recentWeights[0].date + "T12:00");
-    const xs = recentWeights.map(w => (new Date(w.date + "T12:00").getTime() - firstDate.getTime()) / 86400000);
-    const ys = recentWeights.map(w => w.smoothed);
-    const n = xs.length;
-    const sumX = xs.reduce((s, x) => s + x, 0);
-    const sumY = ys.reduce((s, y) => s + y, 0);
-    const sumXY = xs.reduce((s, x, i) => s + x * ys[i], 0);
-    const sumX2 = xs.reduce((s, x) => s + x * x, 0);
-    return (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX) || 0;
-  })() : 0;
 
   // Burn breakdown per day — stacked bar data
   const deficitRows = await sql`
@@ -306,7 +299,7 @@ export async function GET() {
       onTrack,
       realisticDate,
       trendTargetDate,
-      trendSlope: Math.round(trendSlope * 7 * 100) / 100, // kg/week from regression
+      trendSlope: Math.round(trendSlope * 7 * 100) / 100, // kg/week (negative = losing)
       avgActualDeficit,
       closedDeficitDays,
       totalActualDeficit: Math.round(-totalActualDeficit), // positive = total deficit achieved
