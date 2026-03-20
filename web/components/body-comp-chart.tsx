@@ -85,13 +85,13 @@ export function BodyCompChart() {
     if (existing) { existing.trendWeight = tp.weight; existing.trendBf = tp.bf; }
     else { chartData.push({ date: tp.date, trendWeight: tp.weight, trendBf: tp.bf }); dateSet.add(tp.date); }
   }
-  // Connect trend to smoothed: overlap at last data point
+  // Connect trend to last actual weight (not smoothed — trend is based on raw data)
   if (recentWeights.length > 0 && trendPrediction?.length > 0) {
     const lastActual = recentWeights[recentWeights.length - 1];
     const overlap = chartData.find((d: any) => d.date === lastActual.date);
     if (overlap) {
-      overlap.trendWeight = overlap.smoothed;
-      overlap.trendBf = overlap.smoothedBf;
+      overlap.trendWeight = overlap.actual ?? overlap.smoothed;
+      overlap.trendBf = overlap.bf ?? overlap.smoothedBf;
     }
   }
 

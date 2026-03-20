@@ -75,7 +75,7 @@ export async function GET() {
   threeMonthsAgoDate.setMonth(threeMonthsAgoDate.getMonth() - 3);
   const recentWeightsForGoal = weights.filter(w => new Date(w.date) >= threeMonthsAgoDate);
   if (recentWeightsForGoal.length > 0) {
-    const startWeight = recentWeightsForGoal[0].smoothed;
+    const startWeight = recentWeightsForGoal[0].weight; // actual first weigh-in, not smoothed
     const startDate = new Date(recentWeightsForGoal[0].date + "T12:00");
     const endDate = new Date(targetDate + "T12:00");
     const totalDaysGoal = Math.max(1, (endDate.getTime() - startDate.getTime()) / 86400000);
@@ -105,7 +105,7 @@ export async function GET() {
   if (trendWeights.length >= 3) {
     const lastDate = new Date(trendWeights[trendWeights.length - 1].date + "T12:00");
     const xs = trendWeights.map(w => (new Date(w.date + "T12:00").getTime() - lastDate.getTime()) / 86400000);
-    const ys = trendWeights.map(w => w.smoothed);
+    const ys = trendWeights.map(w => w.weight); // raw weights, not smoothed — captures actual trend
     const n = xs.length;
     const sumX = xs.reduce((s, x) => s + x, 0);
     const sumY = ys.reduce((s, y) => s + y, 0);
@@ -116,8 +116,8 @@ export async function GET() {
     const a = (sumY - b * sumX) / n; // weight at day 0 (last data point)
     trendSlope = b;
 
-    // Project forward from last data point, anchored to last smoothed weight
-    const anchorWeight = trendWeights[trendWeights.length - 1].smoothed;
+    // Project forward from last data point, anchored to last actual weight
+    const anchorWeight = trendWeights[trendWeights.length - 1].weight;
     const projEndDate = new Date(targetDate + "T12:00");
     projEndDate.setDate(projEndDate.getDate() + 7);
     const totalProjDays = Math.round((projEndDate.getTime() - lastDate.getTime()) / 86400000);
