@@ -69,7 +69,7 @@ def init_garmin() -> Garmin:
     # Attempt 1: Load from DB-cached tokens (survives CI ephemeral runners)
     _load_tokens_from_db()
 
-    # Attempt 2: Try to use cached tokens WITHOUT re-auth if OAuth2 token is still valid
+    # Attempt 2: Use cached tokens if OAuth2 token has >1 hour remaining
     try:
         import json
         from datetime import datetime
@@ -77,15 +77,17 @@ def init_garmin() -> Garmin:
         if oauth2_path.exists():
             oauth2 = json.loads(oauth2_path.read_text())
             expires_at = oauth2.get("expires_at", 0)
-            if datetime.fromtimestamp(expires_at) > datetime.now():
-                # Token still valid — use login() which loads tokens AND resolves display_name
+            remaining_hours = (datetime.fromtimestamp(expires_at) - datetime.now()).total_seconds() / 3600
+            if remaining_hours > 1:
+                # Token has >1hr — safe to use without refresh
                 client = Garmin()
                 client.login(str(GARMINTOKENS))
-                print(f"Using cached OAuth2 token (valid, display_name={client.display_name})")
-                # Save refreshed tokens back
+                print(f"Using cached OAuth2 token ({remaining_hours:.1f}h remaining, display_name={client.display_name})")
                 client.garth.dump(str(GARMINTOKENS))
                 _save_tokens_to_db()
                 return client
+            else:
+                print(f"OAuth2 token expiring soon ({remaining_hours:.1f}h) — will try refresh")
     except Exception as e:
         print(f"Cached token shortcut failed: {e}")
 
@@ -99,9 +101,8 @@ def init_garmin() -> Garmin:
         _save_tokens_to_db()
         return client
     except GarminConnectTooManyRequestsError:
-        raise RuntimeError(
-            "Garmin rate limited (429) — skipping this sync. Will retry next scheduled run."
-        )
+        print("Garmin rate limited (429) on token exchange — trying fresh credentials...")
+        # Fall through to Attempt 4 (fresh credentials)
     except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError) as e:
         print(f"Token login failed: {e}")
         pass
@@ -119,6 +120,11 @@ def init_garmin() -> Garmin:
     try:
         client = Garmin(email=email, password=password)
         client.login()
+    except GarminConnectTooManyRequestsError:
+        raise RuntimeError(
+            "Garmin rate limited (429) on all auth attempts. "
+            "Wait for rate limit to clear or refresh tokens locally."
+        )
     finally:
         if saved is not None:
             os.environ["GARMINTOKENS"] = saved
