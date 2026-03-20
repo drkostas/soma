@@ -110,15 +110,32 @@ export function BodyCompChart() {
     return new Date(s + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  const statusColor = profile.targetDatePassed
-    ? "text-rose-500"
-    : profile.onTrack ? "text-green-500" : "text-amber-500";
+  // Trend-based "on track" assessment: compare actual rate to goal rate
+  const actualRate = Math.abs(profile.trendSlope || 0);
+  const goalRate = profile.weeklyRate;
+  const rateRatio = goalRate > 0 ? actualRate / goalRate : 0;
+  const trendOnTrack = profile.trendSlope < 0 && rateRatio >= 0.8; // losing at >=80% of goal rate
+  const trendBehind = profile.trendSlope < 0 && rateRatio >= 0.3 && rateRatio < 0.8;
+  // Predicted target date at current pace
+  const predictedWeeks = actualRate > 0 ? profile.fatToLose / actualRate : Infinity;
+  const predictedDate = actualRate > 0 ? (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + Math.round(predictedWeeks * 7));
+    return d.toISOString().slice(0, 10);
+  })() : null;
+
+  const statusColor = profile.targetDatePassed ? "text-rose-500"
+    : trendOnTrack ? "text-green-500"
+    : trendBehind ? "text-amber-500"
+    : "text-rose-500";
 
   const statusText = profile.targetDatePassed
     ? "Target date passed \u2014 adjust goal"
-    : profile.onTrack
-      ? `On track \u00b7 ${fmtDate(profile.targetDate)} (${profile.daysRemaining}d)`
-      : `Behind \u00b7 ${fmtDate(profile.realisticDate)} at current pace`;
+    : trendOnTrack
+      ? `On track \u00b7 goal ${fmtDate(profile.targetDate)} (${profile.daysRemaining}d)`
+      : predictedDate
+        ? `Behind pace \u00b7 goal ${fmtDate(profile.targetDate)} \u00b7 at current rate: ${fmtDate(predictedDate)}`
+        : `Behind pace \u00b7 goal ${fmtDate(profile.targetDate)} (${profile.daysRemaining}d)`;
 
   return (
     <div className="space-y-4">
@@ -137,10 +154,10 @@ export function BodyCompChart() {
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-xs">
             <span className="text-muted-foreground">
-              {profile.deficit} kcal/day target
+              deficit: {profile.deficit}/day goal
               {profile.closedDeficitDays > 0 && (
                 <span className={profile.avgActualDeficit >= profile.deficit * 0.9 ? "text-green-500" : "text-amber-500"}>
-                  {" · "}{profile.avgActualDeficit} actual ({profile.closedDeficitDays}d)
+                  {" · "}{profile.avgActualDeficit}/day avg ({profile.closedDeficitDays}d)
                 </span>
               )}
             </span>
