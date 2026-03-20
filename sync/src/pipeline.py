@@ -809,10 +809,17 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
 
     # --- Garmin daily + activities ---
     print("Authenticating with Garmin Connect...")
-    client = init_garmin()
-    print("Authenticated successfully.\n")
+    client = None
+    try:
+        client = init_garmin()
+        print("Authenticated successfully.\n")
+    except RuntimeError as e:
+        print(f"\n⚠️  Garmin auth failed: {e}")
+        print("Continuing with DB-only tasks (generate_today, close_yesterday)...\n")
 
     for idx, sync_date in enumerate(dates_to_sync):
+      if not client:
+        break
         date_str = sync_date.isoformat()
         print(f"[{idx+1}/{len(dates_to_sync)}] {date_str}")
 
@@ -885,12 +892,15 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
         print(f"  Nutrition plan error (non-fatal): {e}")
 
     # --- Upload enriched workouts to Garmin ---
-    print(f"\nUploading enriched workouts to Garmin...")
-    try:
-        upload_count = _upload_enriched_to_garmin(garmin_client=client)
-        print(f"  Uploaded: {upload_count} workouts to Garmin")
-    except Exception as e:
-        print(f"  Garmin upload error (non-fatal): {e}")
+    if client:
+        print(f"\nUploading enriched workouts to Garmin...")
+        try:
+            upload_count = _upload_enriched_to_garmin(garmin_client=client)
+            print(f"  Uploaded: {upload_count} workouts to Garmin")
+        except Exception as e:
+            print(f"  Garmin upload error (non-fatal): {e}")
+    else:
+        print(f"\nSkipping Garmin upload (no auth)")
 
     # --- Route enriched workouts to destinations ---
     print(f"\nRouting enriched workouts...")
