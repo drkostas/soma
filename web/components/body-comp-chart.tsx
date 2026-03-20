@@ -242,7 +242,7 @@ export function BodyCompChart() {
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f97316]" />actual</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />smoothed</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #f97316"}} />predicted</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />goal</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#eab308]" />goal</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
           </div>
           <div className="h-64">
@@ -279,9 +279,9 @@ export function BodyCompChart() {
                     return [`${value}%`, labels[name] || name];
                   }}
                 />
-                <ReferenceLine y={profile.targetBf} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#22c55e" }} />
-                {/* Goal line BF% */}
-                <Line type="linear" dataKey="goalBf" stroke="#f97316" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                <ReferenceLine y={profile.targetBf} stroke="#22c55e" strokeDasharray="5 5" opacity={0.7} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#22c55e" }} />
+                {/* Goal line BF% — yellow to distinguish from smoothed orange */}
+                <Line type="linear" dataKey="goalBf" stroke="#eab308" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
                 {/* Actual BF% dots */}
                 <Line type="monotone" dataKey="bf" stroke="#f97316" dot={{ r: 3, fill: "#f97316" }} strokeWidth={0} connectNulls={false} />
                 {/* Smoothed BF% */}
@@ -309,9 +309,9 @@ export function BodyCompChart() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground mb-2">
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#94a3b8]" />BMR</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#14b8a6]" />activity</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#22c55e]" />run</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#3b82f6]" />run</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#f97316]" />gym</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-white" />eaten</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#22c55e]" />eaten</span>
               <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.4)"}} />goal</span>
             </div>
             <div className="h-72">
@@ -362,7 +362,7 @@ export function BodyCompChart() {
                               <span>Daily activity</span><span>+{day.dailyActivity.toLocaleString()}</span>
                             </div>
                             {day.runCal > 0 && (
-                              <div style={{ color: "#22c55e", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                              <div style={{ color: "#3b82f6", display: "flex", justifyContent: "space-between", fontSize: 11 }}>
                                 <span>Run ({day.runDistKm}km)</span><span>+{day.runCal.toLocaleString()}</span>
                               </div>
                             )}
@@ -398,10 +398,10 @@ export function BodyCompChart() {
                   {/* Stacked burn bars */}
                   <Bar dataKey="bmr" stackId="burn" fill="#94a3b8" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="dailyActivity" stackId="burn" fill="#14b8a6" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="runCal" stackId="burn" fill="#22c55e" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="runCal" stackId="burn" fill="#3b82f6" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="gymCal" stackId="burn" fill="#f97316" radius={[4, 4, 0, 0]} />
                   {/* Goal line (burn - 800) */}
-                  <Line type="stepAfter" dataKey="goalLine" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls={true} />
+                  <Line type="stepAfter" dataKey="goalLine" stroke="rgba(255,255,255,0.6)" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={true} />
                   {/* Eaten dots */}
                   <Line type="monotone" dataKey="eatenDot" stroke="none" strokeWidth={0} dot={(props: any) => {
                     const { cx, cy, payload } = props;
@@ -426,8 +426,9 @@ export function BodyCompChart() {
                     <XAxis dataKey="date" hide />
                     <YAxis
                       tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
-                      tickFormatter={(v: number) => v <= -1000 ? `${Math.round(v / 1000)}k` : `${v}`}
+                      tickFormatter={(v: number) => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
                       width={35}
+                      domain={[(dataMin: number) => Math.min(dataMin, -1000), 500]}
                     />
                     <Line type="monotone" dataKey="goalPace" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls={true} />
                     <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2, fill: "#3b82f6" }} connectNulls={true} />
