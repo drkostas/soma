@@ -23,20 +23,18 @@ export async function GET() {
   const goalDeficit = deficit;
   const ffm = Number(profile.estimated_ffm_kg) || 60.6;
 
-  // Process weight data with 7-day EMA smoothing
+  // Process weight data with 5-day EMA smoothing + pull-forward to last actual
   const weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[] = [];
   let ema = 0;
-  const alpha = 2 / (7 + 1); // 7-day EMA
+  const alpha = 2 / (5 + 1); // 5-day EMA (more responsive than 7-day)
 
   for (const row of weightRows) {
     const w = Number(row.weight_kg);
     if (ema === 0) ema = w;
     else ema = alpha * w + (1 - alpha) * ema;
 
-    // Estimate BF% from weight assuming lean mass stays constant
     const fatKg = Math.max(0, w - ffm);
     const bf = (fatKg / w) * 100;
-    // Smoothed BF% from smoothed weight
     const smoothedFat = Math.max(0, ema - ffm);
     const smoothedBf = (smoothedFat / ema) * 100;
 
@@ -47,6 +45,20 @@ export async function GET() {
       bf: Math.round(bf * 10) / 10,
       smoothedBf: Math.round(smoothedBf * 10) / 10,
     });
+  }
+
+  // Pull-forward: blend last 5 smoothed points toward actual values
+  // so the smoothed line converges to the last dot
+  const pullN = Math.min(5, weights.length);
+  for (let i = 0; i < pullN; i++) {
+    const idx = weights.length - pullN + i;
+    const blend = (i + 1) / pullN; // 0.2, 0.4, 0.6, 0.8, 1.0
+    const w = weights[idx];
+    const blendedWeight = w.smoothed * (1 - blend) + w.weight * blend;
+    const blendedFat = Math.max(0, blendedWeight - ffm);
+    const blendedBf = (blendedFat / blendedWeight) * 100;
+    w.smoothed = Math.round(blendedWeight * 10) / 10;
+    w.smoothedBf = Math.round(blendedBf * 10) / 10;
   }
 
   // Current state (latest smoothed)
@@ -69,68 +81,84 @@ export async function GET() {
   const targetDatePassed = targetDate < today;
   const requiredDeficit = targetDatePassed ? 0 : Math.round(totalDeficitNeeded / daysRemaining);
 
-  // Goal line: straight from first RECENT weigh-in to target weight/date
+  // Goal line: starts from first nutrition tracking day, loses at deficit/7700 kg/day
   const goalLine: { date: string; weight: number; bf: number }[] = [];
-  const threeMonthsAgoDate = new Date();
-  threeMonthsAgoDate.setMonth(threeMonthsAgoDate.getMonth() - 3);
-  const recentWeightsForGoal = weights.filter(w => new Date(w.date) >= threeMonthsAgoDate);
-  if (recentWeightsForGoal.length > 0) {
-    const startWeight = recentWeightsForGoal[0].weight; // actual first weigh-in, not smoothed
-    const startDate = new Date(recentWeightsForGoal[0].date + "T12:00");
-    const endDate = new Date(targetDate + "T12:00");
-    const totalDaysGoal = Math.max(1, (endDate.getTime() - startDate.getTime()) / 86400000);
-    const dailyDrop = (startWeight - targetWeight) / totalDaysGoal;
-    // Sample weekly to keep data sparse
-    for (let dayNum = 0; dayNum <= totalDaysGoal + 7; dayNum += 7) {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + dayNum);
-      const w = Math.max(targetWeight, Math.round((startWeight - dailyDrop * dayNum) * 10) / 10);
-      const fat = Math.max(0, w - ffm);
-      const bf = Math.max(targetBf, Math.round((fat / w) * 1000) / 10);
-      goalLine.push({ date: d.toISOString().slice(0, 10), weight: w, bf });
-    }
-    // Always include the exact target date
-    goalLine.push({ date: targetDate, weight: targetWeight, bf: targetBf });
+  const firstNutritionDay = await sql`SELECT MIN(date)::text AS d FROM nutrition_day`;
+  const dietStartDate = firstNutritionDay[0]?.d || today;
+  // Find the weight closest to diet start date
+  const dietStartWeight = weights.find(w => w.date >= dietStartDate)?.weight
+    || weights[weights.length - 1]?.weight || currentWeight;
+  if (dietStartWeight > targetWeight) {
+    const startDate = new Date(dietStartDate + "T12:00");
+    const dailyLossKg = deficit / 7700;
+    const daysToTarget = dailyLossKg > 0 ? Math.ceil((dietStartWeight - targetWeight) / dailyLossKg) : 365;
+    const goalEndDate = new Date(startDate);
+    goalEndDate.setDate(goalEndDate.getDate() + daysToTarget);
+    const startBfVal = Math.round(((Math.max(0, dietStartWeight - ffm)) / dietStartWeight) * 1000) / 10;
+    goalLine.push(
+      { date: dietStartDate, weight: Math.round(dietStartWeight * 10) / 10, bf: startBfVal },
+      { date: goalEndDate.toISOString().slice(0, 10), weight: targetWeight, bf: targetBf },
+    );
   }
 
-  // Trend prediction: linear regression on all smoothed weights, project from last point
+  // Trend prediction: constrained polynomial (degree 2) on raw weights
+  // Captures mild curvature but can't extrapolate wildly
   const trendPrediction: { date: string; weight: number; bf: number }[] = [];
   let trendSlope = 0;
+  let trendC2Raw = 0; // unclamped c2 for client slider
+  let trendAnchor = 0;
+  let trendLastDate = "";
   let trendTargetDate: string | null = null;
 
-  // Use recent weights only (last 30 calendar days) for trend regression
   const trendCutoff = new Date(today + "T12:00");
   trendCutoff.setDate(trendCutoff.getDate() - 30);
   const trendWeights = weights.filter(w => new Date(w.date) >= trendCutoff);
   if (trendWeights.length >= 3) {
     const lastDate = new Date(trendWeights[trendWeights.length - 1].date + "T12:00");
     const xs = trendWeights.map(w => (new Date(w.date + "T12:00").getTime() - lastDate.getTime()) / 86400000);
-    const ys = trendWeights.map(w => w.weight); // raw weights, not smoothed — captures actual trend
+    const ys = trendWeights.map(w => w.weight);
     const n = xs.length;
-    const sumX = xs.reduce((s, x) => s + x, 0);
-    const sumY = ys.reduce((s, y) => s + y, 0);
-    const sumXY = xs.reduce((s, x, i) => s + x * ys[i], 0);
-    const sumX2 = xs.reduce((s, x) => s + x * x, 0);
-    const denom = n * sumX2 - sumX * sumX;
-    const b = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
-    const a = (sumY - b * sumX) / n; // weight at day 0 (last data point)
-    trendSlope = b;
 
-    // Anchor to last smoothed value so prediction connects to the smoothed line,
-    // but use the raw regression slope (captures actual trend, not EMA lag)
+    // Linear regression first (fallback + slope reference)
+    const Sx = xs.reduce((s, x) => s + x, 0);
+    const Sy = ys.reduce((s, y) => s + y, 0);
+    const Sxy = xs.reduce((s, x, i) => s + x * ys[i], 0);
+    const Sx2 = xs.reduce((s, x) => s + x * x, 0);
+    const linDenom = n * Sx2 - Sx * Sx;
+    const linB = linDenom !== 0 ? (n * Sxy - Sx * Sy) / linDenom : 0;
+    trendSlope = linB;
+
+    // Polynomial degree 2: y = c0 + c1*x + c2*x²
+    let c2 = 0;
+    if (n >= 4) {
+      const Sx3 = xs.reduce((s, x) => s + x ** 3, 0);
+      const Sx4 = xs.reduce((s, x) => s + x ** 4, 0);
+      const Sx2y = xs.reduce((s, x, i) => s + x * x * ys[i], 0);
+      const D = n * (Sx2 * Sx4 - Sx3 * Sx3) - Sx * (Sx * Sx4 - Sx3 * Sx2) + Sx2 * (Sx * Sx3 - Sx2 * Sx2);
+      if (Math.abs(D) > 1e-10) {
+        c2 = (n * (Sx2 * Sx2y - Sx3 * Sxy) - Sx * (Sx * Sx2y - Sxy * Sx2) + Sy * (Sx * Sx3 - Sx2 * Sx2)) / D;
+      }
+      // Constrain c2: max ±2kg deviation over 100 days → |c2| < 2/10000 = 0.0002
+      c2 = Math.max(-0.0002, Math.min(0.0002, c2));
+    }
+
     const anchorWeight = trendWeights[trendWeights.length - 1].smoothed;
-    const projEndDate = new Date(targetDate + "T12:00");
-    projEndDate.setDate(projEndDate.getDate() + 7);
-    const totalProjDays = Math.round((projEndDate.getTime() - lastDate.getTime()) / 86400000);
+    trendAnchor = anchorWeight;
+    trendC2Raw = c2;
+    trendLastDate = lastDate.toISOString().slice(0, 10);
+    const maxProjDays = 365;
 
-    for (let dayNum = 0; dayNum <= totalProjDays; dayNum += 7) {
+    for (let dayNum = 0; dayNum <= maxProjDays; dayNum += 7) {
       const d = new Date(lastDate);
       d.setDate(d.getDate() + dayNum);
-      const predicted = anchorWeight + b * dayNum; // anchored to actual smoothed, using regression slope
+      // Polynomial: anchor + linear slope * x + mild curvature * x²
+      const predicted = anchorWeight + linB * dayNum + c2 * dayNum * dayNum;
       const predWeight = Math.round(predicted * 10) / 10;
       const predFat = Math.max(0, predWeight - ffm);
       const predBf = Math.round((predFat / Math.max(predWeight, 1)) * 1000) / 10;
       trendPrediction.push({ date: d.toISOString().slice(0, 10), weight: predWeight, bf: predBf });
+      // Stop once we hit target weight
+      if (predWeight <= targetWeight) break;
     }
     trendTargetDate = trendPrediction.find(p => p.weight <= targetWeight)?.date || null;
   }
@@ -280,6 +308,10 @@ export async function GET() {
       onTrack,
       realisticDate,
       trendTargetDate,
+      trendAnchor,
+      trendLinB: trendSlope,
+      trendC2Raw,
+      trendLastDate,
       trendSlope: Math.round(trendSlope * 7 * 100) / 100, // kg/week (negative = losing)
       avgActualDeficit,
       closedDeficitDays,

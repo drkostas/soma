@@ -27,6 +27,10 @@ interface BodyCompData {
     realisticDate: string;
     trendTargetDate: string | null;
     trendSlope: number;
+    trendAnchor: number;
+    trendLinB: number;
+    trendC2Raw: number;
+    trendLastDate: string;
     avgActualDeficit: number;
     closedDeficitDays: number;
     totalActualDeficit: number;
@@ -46,6 +50,7 @@ interface BodyCompData {
 export function BodyCompChart() {
   const [data, setData] = useState<BodyCompData | null>(null);
   const [loading, setLoading] = useState(true);
+  const curvature = 50; // fixed default curvature
 
   useEffect(() => {
     fetch("/api/nutrition/body-comp")
@@ -79,23 +84,73 @@ export function BodyCompChart() {
     if (existing) { existing.goalWeight = g.weight; existing.goalBf = g.bf; }
     else { chartData.push({ date: g.date, goalWeight: g.weight, goalBf: g.bf }); dateSet.add(g.date); }
   }
-  // Trend prediction: regression from last data point
-  for (const tp of (trendPrediction || [])) {
-    const existing = chartData.find((d: any) => d.date === tp.date);
-    if (existing) { existing.trendWeight = tp.weight; existing.trendBf = tp.bf; }
-    else { chartData.push({ date: tp.date, trendWeight: tp.weight, trendBf: tp.bf }); dateSet.add(tp.date); }
-  }
-  // Connect trend to smoothed line (prediction anchored to smoothed, uses raw slope)
-  if (recentWeights.length > 0 && trendPrediction?.length > 0) {
-    const lastActual = recentWeights[recentWeights.length - 1];
-    const overlap = chartData.find((d: any) => d.date === lastActual.date);
-    if (overlap) {
-      overlap.trendWeight = overlap.smoothed;
-      overlap.trendBf = overlap.smoothedBf;
+  // Trend prediction: recompute client-side using curvature slider
+  const curveScale = curvature / 50; // 0 = no curve (straight), 1 = default, 2 = max curve
+  const { trendAnchor: anchor, trendLinB: linB, trendC2Raw: c2Raw, trendLastDate: lastDateStr } = profile;
+  const effectiveC2 = (c2Raw || 0) * curveScale;
+  if (anchor && linB && lastDateStr) {
+    const lastDateMs = new Date(lastDateStr + "T12:00").getTime();
+    for (let dayNum = 0; dayNum <= 365; dayNum += 7) {
+      const d = new Date(lastDateMs + dayNum * 86400000);
+      const dateStr = d.toISOString().slice(0, 10);
+      const predicted = anchor + linB * dayNum + effectiveC2 * dayNum * dayNum;
+      const predWeight = Math.round(predicted * 10) / 10;
+      if (predWeight <= profile.targetWeight) {
+        // Add final point at target and stop
+        const existing = chartData.find((dd: any) => dd.date === dateStr);
+        if (existing) { existing.trendWeight = profile.targetWeight; existing.trendBf = profile.targetBf; }
+        else { chartData.push({ date: dateStr, trendWeight: profile.targetWeight, trendBf: profile.targetBf }); dateSet.add(dateStr); }
+        break;
+      }
+      const predFat = Math.max(0, predWeight - profile.ffm);
+      const predBf = Math.round((predFat / Math.max(predWeight, 1)) * 1000) / 10;
+      const existing = chartData.find((dd: any) => dd.date === dateStr);
+      if (existing) { existing.trendWeight = predWeight; existing.trendBf = predBf; }
+      else { chartData.push({ date: dateStr, trendWeight: predWeight, trendBf: predBf }); dateSet.add(dateStr); }
+    }
+    // Connect to smoothed at anchor point
+    if (recentWeights.length > 0) {
+      const lastActual = recentWeights[recentWeights.length - 1];
+      const overlap = chartData.find((dd: any) => dd.date === lastActual.date);
+      if (overlap) { overlap.trendWeight = overlap.smoothed; overlap.trendBf = overlap.smoothedBf; }
     }
   }
 
   chartData.sort((a, b) => a.date.localeCompare(b.date));
+
+  // Interpolation helpers for tooltips — compute goal/prediction at any date
+  const goalStart = goalLine?.[0];
+  const goalEnd = goalLine?.[1];
+  const interpolateGoal = (dateStr: string): number | null => {
+    if (!goalStart || !goalEnd) return null;
+    const t = (new Date(dateStr + "T12:00").getTime() - new Date(goalStart.date + "T12:00").getTime())
+      / (new Date(goalEnd.date + "T12:00").getTime() - new Date(goalStart.date + "T12:00").getTime());
+    if (t < 0 || t > 1) return null;
+    return Math.round((goalStart.weight + (goalEnd.weight - goalStart.weight) * t) * 10) / 10;
+  };
+  const interpolateGoalBf = (dateStr: string): number | null => {
+    if (!goalStart || !goalEnd) return null;
+    const t = (new Date(dateStr + "T12:00").getTime() - new Date(goalStart.date + "T12:00").getTime())
+      / (new Date(goalEnd.date + "T12:00").getTime() - new Date(goalStart.date + "T12:00").getTime());
+    if (t < 0 || t > 1) return null;
+    return Math.round((goalStart.bf + (goalEnd.bf - goalStart.bf) * t) * 10) / 10;
+  };
+  const { trendAnchor: tAnchor, trendLinB: tLinB, trendC2Raw: tC2, trendLastDate: tLastDate } = profile;
+  const cScale = curvature / 50;
+  const effC2 = (tC2 || 0) * cScale;
+  const interpolatePrediction = (dateStr: string): number | null => {
+    if (!tAnchor || !tLinB || !tLastDate) return null;
+    const days = (new Date(dateStr + "T12:00").getTime() - new Date(tLastDate + "T12:00").getTime()) / 86400000;
+    if (days < 0) return null;
+    const val = tAnchor + tLinB * days + effC2 * days * days;
+    return val <= profile.targetWeight ? null : Math.round(val * 10) / 10;
+  };
+  const interpolatePredBf = (dateStr: string): number | null => {
+    const w = interpolatePrediction(dateStr);
+    if (w == null) return null;
+    const fat = Math.max(0, w - profile.ffm);
+    return Math.round((fat / w) * 1000) / 10;
+  };
 
   const showCalPredicted = (calPredicted?.length ?? 0) >= 7;
 
@@ -198,7 +253,7 @@ export function BodyCompChart() {
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />smoothed</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #3b82f6"}} />predicted</span>
             <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />goal</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.5)"}} />target</span>
           </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -218,25 +273,31 @@ export function BodyCompChart() {
                   tickFormatter={(v: number) => `${v}kg`}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "rgba(10,10,12,0.95)",
-                    border: "1px solid rgba(255,255,255,0.15)",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                  labelFormatter={(label: any) => formatDate(String(label))}
-                  formatter={(value: any, name: any) => {
-                    const labels: Record<string, string> = {
-                      actual: "Weigh-in",
-                      smoothed: "Smoothed",
-                      trendWeight: "Predicted",
-                      goalWeight: "Goal path",
-                    };
-                    if (!labels[name as string]) return [null, null];
-                    return [`${value} kg`, labels[name as string]];
+                  content={({ active, label }: any) => {
+                    if (!active) return null;
+                    const point = chartData.find((d: any) => d.date === label);
+                    if (!point) return null;
+                    const goal = point.goalWeight ?? interpolateGoal(String(label));
+                    const pred = point.trendWeight ?? interpolatePrediction(String(label));
+                    return (
+                      <div style={{ backgroundColor: "rgba(10,10,12,0.95)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "8px 12px", fontSize: "12px" }}>
+                        <div style={{ fontWeight: "bold", marginBottom: 4 }}>{formatDate(String(label))}</div>
+                        {point.actual != null && <div style={{ color: "#3b82f6" }}>Weigh-in: {point.actual} kg</div>}
+                        {point.smoothed != null && <div style={{ color: "#3b82f6" }}>Smoothed: {point.smoothed} kg</div>}
+                        {pred != null && <div style={{ color: "#3b82f6", opacity: point.trendWeight != null ? 1 : 0.7 }}>Predicted: {pred} kg</div>}
+                        {goal != null && <div style={{ color: "#f97316", opacity: point.goalWeight != null ? 1 : 0.7 }}>Goal: {goal} kg</div>}
+                        {pred != null && goal != null && (
+                          <div style={{ color: pred <= goal ? "#22c55e" : "#f59e0b", fontSize: 11, marginTop: 2, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 3 }}>
+                            {pred <= goal
+                              ? `${(goal - pred).toFixed(1)}kg ahead of goal`
+                              : `${(pred - goal).toFixed(1)}kg behind goal`}
+                          </div>
+                        )}
+                      </div>
+                    );
                   }}
                 />
-                <ReferenceLine y={profile.targetWeight} stroke="#22c55e" strokeDasharray="5 5" opacity={0.5} label={{ value: `${profile.targetWeight}kg`, position: "right", fontSize: 10, fill: "#22c55e" }} />
+                <ReferenceLine y={profile.targetWeight} stroke="rgba(255,255,255,0.5)" strokeDasharray="5 5" label={{ value: `${profile.targetWeight}kg`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.5)" }} />
                 {/* Goal line: orange straight from first weigh-in to target */}
                 <Line type="linear" dataKey="goalWeight" stroke="#f97316" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
                 {/* Actual weigh-in dots */}
@@ -244,7 +305,7 @@ export function BodyCompChart() {
                 {/* Smoothed line */}
                 <Line type="monotone" dataKey="smoothed" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} />
                 {/* Predicted trend: blue dashed from last data point */}
-                <Line type="linear" dataKey="trendWeight" stroke="#3b82f6" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls isAnimationActive={false} />
+                <Line type="monotone" dataKey="trendWeight" stroke="#3b82f6" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -256,11 +317,11 @@ export function BodyCompChart() {
         <CardContent className="py-4">
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Body Fat % Trajectory</div>
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f97316]" />actual</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />smoothed</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #f97316"}} />predicted</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#eab308]" />goal</span>
-            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />target</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b82f6]" />actual</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />smoothed</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #3b82f6"}} />predicted</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />goal</span>
+            <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.5)"}} />target</span>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -280,31 +341,32 @@ export function BodyCompChart() {
                   tickFormatter={(v: number) => `${v}%`}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "rgba(10,10,12,0.95)",
-                    border: "1px solid rgba(255,255,255,0.15)",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                  labelFormatter={(label: any) => formatDate(String(label))}
-                  formatter={(value: any, name: any) => {
-                    const labels: Record<string, string> = {
-                      bf: "BF% (weigh-in)",
-                      smoothedBf: "BF% (smoothed)",
-                      projBf: "BF% (projected)",
-                    };
-                    return [`${value}%`, labels[name] || name];
+                  content={({ active, label }: any) => {
+                    if (!active) return null;
+                    const point = chartData.find((d: any) => d.date === label);
+                    if (!point) return null;
+                    const goal = point.goalBf ?? interpolateGoalBf(String(label));
+                    const pred = point.trendBf ?? interpolatePredBf(String(label));
+                    return (
+                      <div style={{ backgroundColor: "rgba(10,10,12,0.95)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "8px 12px", fontSize: "12px" }}>
+                        <div style={{ fontWeight: "bold", marginBottom: 4 }}>{formatDate(String(label))}</div>
+                        {point.bf != null && <div style={{ color: "#3b82f6" }}>BF%: {point.bf}%</div>}
+                        {point.smoothedBf != null && <div style={{ color: "#3b82f6" }}>Smoothed: {point.smoothedBf}%</div>}
+                        {pred != null && <div style={{ color: "#3b82f6", opacity: 0.7 }}>Predicted: {pred}%</div>}
+                        {goal != null && <div style={{ color: "#f97316", opacity: 0.7 }}>Goal: {goal}%</div>}
+                      </div>
+                    );
                   }}
                 />
-                <ReferenceLine y={profile.targetBf} stroke="#22c55e" strokeDasharray="5 5" opacity={0.7} label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "#22c55e" }} />
-                {/* Goal line BF% — yellow to distinguish from smoothed orange */}
-                <Line type="linear" dataKey="goalBf" stroke="#eab308" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                <ReferenceLine y={profile.targetBf} stroke="rgba(255,255,255,0.5)" strokeDasharray="5 5" label={{ value: `${profile.targetBf}%`, position: "right", fontSize: 10, fill: "rgba(255,255,255,0.5)" }} />
+                {/* Goal line BF% */}
+                <Line type="linear" dataKey="goalBf" stroke="#f97316" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
                 {/* Actual BF% dots */}
-                <Line type="monotone" dataKey="bf" stroke="#f97316" dot={{ r: 3, fill: "#f97316" }} strokeWidth={0} connectNulls={false} />
+                <Line type="monotone" dataKey="bf" stroke="#3b82f6" dot={{ r: 3, fill: "#3b82f6" }} strokeWidth={0} connectNulls={false} />
                 {/* Smoothed BF% */}
-                <Line type="monotone" dataKey="smoothedBf" stroke="#f97316" strokeWidth={2} dot={false} connectNulls={true} />
+                <Line type="monotone" dataKey="smoothedBf" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} />
                 {/* Predicted BF% trend */}
-                <Line type="linear" dataKey="trendBf" stroke="#f97316" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls isAnimationActive={false} />
+                <Line type="monotone" dataKey="trendBf" stroke="#3b82f6" strokeWidth={2} strokeDasharray="8 4" dot={false} connectNulls isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -430,34 +492,93 @@ export function BodyCompChart() {
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
-            {/* Cumulative deficit mini chart */}
-            <div className="mt-3 pt-3 border-t border-border/30">
-              <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-1">
-                <span>Cumulative deficit</span>
-                <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />actual</span>
-                <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed #22c55e"}} />goal pace</span>
-              </div>
-              <div className="h-24">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: 2, right: 5, left: 5, bottom: 2 }}>
-                    <XAxis dataKey="date" hide />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
-                      tickFormatter={(v: number) => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
-                      width={35}
-                      domain={[(dataMin: number) => Math.min(dataMin, -1000), 500]}
-                    />
-                    <Line type="monotone" dataKey="goalPace" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls={true} />
-                    <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2, fill: "#3b82f6" }} connectNulls={true} />
-                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </CardContent>
         </Card>
         );
       })()}
+
+      {/* Cumulative Deficit Trajectory — full card, same X-axis range as weight chart */}
+      {dailyDeficits && dailyDeficits.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Cumulative Deficit</div>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />actual</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />goal pace (&minus;{goalDeficit}/day)</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-0.5" style={{borderTop: "2px dashed rgba(255,255,255,0.5)"}} />target deficit</span>
+            </div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={(() => {
+                  // Build cumulative data matching weight chart X-axis range
+                  const totalDeficitNeeded = -Math.round((profile.fatToLose || 5.5) * 7700);
+                  const deficitData: { date: string; cumulative: number | null; goalPace: number | null }[] = [];
+                  // Add actual deficit data points
+                  for (const d of dailyDeficits) {
+                    deficitData.push({ date: d.date, cumulative: d.cumulative, goalPace: null });
+                  }
+                  // Add goal pace line: daily samples so it renders as a smooth straight line
+                  if (goalStart && dailyDeficits.length > 0) {
+                    const startMs = new Date(goalStart.date + "T12:00").getTime();
+                    const lastDataMs = new Date(dailyDeficits[dailyDeficits.length - 1].date + "T12:00").getTime();
+                    const endMs = lastDataMs + 14 * 86400000;
+                    for (let ms = startMs; ms <= endMs; ms += 86400000) { // daily, not weekly
+                      const dateStr = new Date(ms).toISOString().slice(0, 10);
+                      const days = (ms - startMs) / 86400000;
+                      const existing = deficitData.find(dd => dd.date === dateStr);
+                      if (existing) existing.goalPace = Math.round(-goalDeficit * days);
+                      else deficitData.push({ date: dateStr, cumulative: null, goalPace: Math.round(-goalDeficit * days) });
+                    }
+                  }
+                  deficitData.sort((a, b) => a.date.localeCompare(b.date));
+                  return deficitData;
+                })()} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={formatDate}
+                    tick={{ fontSize: 11, fill: "rgba(255,255,255,0.6)" }}
+                    interval={Math.max(1, Math.floor(dailyDeficits.length / 6))}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "rgba(255,255,255,0.6)" }}
+                    tickFormatter={(v: number) => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
+                  />
+                  <Tooltip
+                    content={({ active, label }: any) => {
+                      if (!active) return null;
+                      const day = dailyDeficits.find(d => d.date === label);
+                      // Interpolate goal pace
+                      let goalPaceVal: number | null = null;
+                      if (goalStart) {
+                        const days = (new Date(String(label) + "T12:00").getTime() - new Date(goalStart.date + "T12:00").getTime()) / 86400000;
+                        if (days >= 0) goalPaceVal = Math.round(-goalDeficit * days);
+                      }
+                      return (
+                        <div style={{ backgroundColor: "rgba(10,10,12,0.95)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "8px 12px", fontSize: "12px" }}>
+                          <div style={{ fontWeight: "bold", marginBottom: 4 }}>{formatDate(String(label))}</div>
+                          {day && <div style={{ color: "#3b82f6" }}>Actual: {day.cumulative.toLocaleString()} kcal</div>}
+                          {goalPaceVal != null && <div style={{ color: "#f97316" }}>Goal pace: {goalPaceVal.toLocaleString()} kcal</div>}
+                          {day && goalPaceVal != null && (
+                            <div style={{ color: day.cumulative <= goalPaceVal ? "#22c55e" : "#f59e0b", fontSize: 11, marginTop: 2, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 3 }}>
+                              {day.cumulative <= goalPaceVal
+                                ? `${(goalPaceVal - day.cumulative).toLocaleString()} kcal ahead`
+                                : `${(day.cumulative - goalPaceVal).toLocaleString()} kcal behind`}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }}
+                  />
+                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
+                  <Line type="linear" dataKey="goalPace" stroke="#f97316" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={true} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
     </div>
   );
