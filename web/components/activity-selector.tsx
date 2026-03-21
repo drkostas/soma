@@ -54,7 +54,7 @@ export function ActivitySelector({
   const [steps, setSteps] = useState(initialExpectedSteps || stepGoal);
   const [routines, setRoutines] = useState<RoutineCalories[]>([]);
   const [saving, setSaving] = useState(false);
-  const minSteps = runEnabled ? runStepEstimate : 0;
+  const minSteps = 1000; // allow setting any reasonable step count
 
   // Sync steps from parent when expectedSteps prop changes (e.g., after refreshData)
   useEffect(() => {
@@ -96,11 +96,8 @@ export function ActivitySelector({
   const toggleRun = () => {
     const next = !runEnabled;
     setRunEnabled(next);
-    // When enabling run, ensure steps are at least the run step estimate
-    const newMinSteps = next ? runStepEstimate : 0;
-    const adjustedSteps = Math.max(steps, newMinSteps);
-    setSteps(adjustedSteps);
-    saveSelections(next, selectedWorkouts, adjustedSteps);
+    // Don't force steps up — user controls their own expected steps
+    saveSelections(next, selectedWorkouts, steps);
   };
 
   const toggleWorkout = (title: string) => {
