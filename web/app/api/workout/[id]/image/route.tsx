@@ -92,7 +92,7 @@ function formatStartTime(dateStr: string): string {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return "";
     const h = d.getHours(), m = d.getMinutes().toString().padStart(2, "0");
-    return `${h % 12 || 12}:${m} ${h >= 12 ? "PM" : "AM"}`;
+    return `${h.toString().padStart(2, "0")}:${m}`;
   } catch { return ""; }
 }
 function hexToRgba(hex: string, alpha: number): string {
@@ -144,13 +144,16 @@ function renderHrChartSvg(
   const segColors = ["#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444", "#06b6d4", "#eab308", "#ec4899"];
   let segSvg = "";
   let setOffset = 0;
+  const BAR_H = 6;
   for (let i = 0; i < exercises.length; i++) {
     const sets = exercises[i].sets?.length || 0;
     const x1 = PAD_LEFT + (setOffset / totalSets) * chartW;
     const x2 = PAD_LEFT + ((setOffset + sets) / totalSets) * chartW;
     const color = segColors[i % segColors.length];
-    segSvg += `<rect x="${x1.toFixed(1)}" y="${PAD_TOP}" width="${(x2 - x1).toFixed(1)}" height="${chartH}" fill="${color}" opacity="0.22"/>`;
-    if (i > 0) segSvg += `<line x1="${x1.toFixed(1)}" y1="${PAD_TOP}" x2="${x1.toFixed(1)}" y2="${bottomY}" stroke="#27272a" stroke-width="1"/>`;
+    // Colored exercise indicator bar at top
+    segSvg += `<rect x="${x1.toFixed(1)}" y="0" width="${(x2 - x1).toFixed(1)}" height="${BAR_H}" fill="${color}" rx="2"/>`;
+    // Dashed separator between exercises
+    if (i > 0) segSvg += `<line x1="${x1.toFixed(1)}" y1="${BAR_H}" x2="${x1.toFixed(1)}" y2="${bottomY}" stroke="#27272a" stroke-width="1" stroke-dasharray="4,3"/>`;
     setOffset += sets;
   }
 
@@ -160,12 +163,7 @@ function renderHrChartSvg(
     avgLine = `<line x1="${PAD_LEFT}" y1="${avgY.toFixed(1)}" x2="${(PAD_LEFT + chartW).toFixed(1)}" y2="${avgY.toFixed(1)}" stroke="#f43f5e" stroke-width="1" opacity="0.35"/>`;
   }
 
-  const realMax = Math.max(...samples);
-  const realMin = Math.min(...samples);
-  const minLabel = `<text x="6" y="${H - 6}" font-size="22" fill="#6b7280" font-family="sans-serif">${realMin} bpm</text>`;
-  const maxLabel = `<text x="6" y="${PAD_TOP - 4}" font-size="22" fill="#6b7280" font-family="sans-serif">${realMax} bpm</text>`;
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${segSvg}<path d="${areaPath}" fill="rgba(244,63,94,0.12)"/><path d="${linePath}" fill="none" stroke="#f43f5e" stroke-width="2.5"/>${avgLine}${minLabel}${maxLabel}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${segSvg}<path d="${areaPath}" fill="rgba(244,63,94,0.18)"/><path d="${linePath}" fill="none" stroke="#f43f5e" stroke-width="2"/>${avgLine}</svg>`;
 }
 
 function getExerciseSegments(exercises: any[]): { title: string; sets: number; color: string }[] {
@@ -199,8 +197,8 @@ function renderBodySvg(data: BodyPolygon[], muscleData: Record<MuscleGroup, { to
 
 // --- Constants ---
 const IMG_W = 1080;
-const IMG_H = 1920;
-const SIDE = 36;
+const IMG_H = 810; // 4:3 landscape
+const SIDE = 28;
 
 // --- Route Handler ---
 
@@ -268,6 +266,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ? (Array.isArray(enrichment.hr_samples) ? enrichment.hr_samples : [])
     : [];
   const hrChartSvg = hasRealHr ? renderHrChartSvg(hrSamples, durationS, exercises, enrichment?.avg_hr) : "";
+  const hrMinVal = hrSamples.length > 0 ? Math.min(...hrSamples) : null;
+  const hrMaxVal = hrSamples.length > 0 ? Math.max(...hrSamples) : null;
   const exerciseSegments = getExerciseSegments(exercises);
   const totalSets = exerciseSegments.reduce((sum, s) => sum + s.sets, 0);
   const hrImgWidth = IMG_W - SIDE * 2;
@@ -282,18 +282,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // Start time
   const startTimeFormatted = formatStartTime(startTime);
 
-  // ── Metric card component ──
   function MetricCard({ label, val, unit, color }: { label: string; val: string; unit: string; color: string }) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", backgroundColor: "#18181b", borderRadius: 16, padding: "18px 22px", flex: 1, gap: 6 }}>
-        <div style={{ display: "flex", fontSize: 20, color: "#71717a", textTransform: "uppercase" as const, letterSpacing: 1.5 }}>{label}</div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-          <span style={{ display: "flex", fontSize: 56, fontWeight: 800, color, lineHeight: 1 }}>{val}</span>
-          <span style={{ display: "flex", fontSize: 20, color: "#52525b", alignSelf: "flex-end", marginBottom: 4 }}>{unit}</span>
+      <div style={{ display: "flex", flexDirection: "column", backgroundColor: "#18181b", borderRadius: 12, padding: "10px 14px", flex: 1, gap: 3 }}>
+        <div style={{ display: "flex", fontSize: 14, color: "#71717a", textTransform: "uppercase" as const, letterSpacing: 1 }}>{label}</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+          <span style={{ display: "flex", fontSize: 36, fontWeight: 800, color, lineHeight: 1 }}>{val}</span>
+          <span style={{ display: "flex", fontSize: 14, color: "#52525b" }}>{unit}</span>
         </div>
       </div>
     );
   }
+
+  const hrImgWidthLandscape = 480;
+  const hrImgHeightLandscape = 140;
 
   return new ImageResponse(
     (
@@ -301,140 +303,165 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         display: "flex", flexDirection: "column",
         width: "100%", height: "100%",
         backgroundColor: "#09090b",
-        padding: `36px ${SIDE}px 32px`,
+        padding: `${SIDE}px`,
         fontFamily: "Inter, system-ui, sans-serif",
         color: "#fafafa",
-        gap: 16,
+        gap: 8,
       }}>
 
         {/* ── Header ── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div style={{ display: "flex", flexDirection: "column", flex: 1, paddingRight: 24 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <div style={{ display: "flex", width: 40, height: 6, backgroundColor: "#10b981", borderRadius: 3 }} />
-              <span style={{ display: "flex", fontSize: 32, fontWeight: 800, color: "#10b981", letterSpacing: 6 }}>SOMA</span>
-            </div>
-            <div style={{ display: "flex", fontSize: 52, fontWeight: 700, color: "#fafafa", lineHeight: 1.05 }}>{title}</div>
-            {startTimeFormatted && (
-              <div style={{ display: "flex", fontSize: 26, color: "#71717a", marginTop: 10 }}>{startTimeFormatted}</div>
-            )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", flex: 1 }}>
+            <div style={{ display: "flex", fontSize: 32, fontWeight: 700, color: "#fafafa", lineHeight: 1 }}>{title}</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, paddingTop: 10, flexShrink: 0 }}>
-            <div style={{ display: "flex", fontSize: 24, color: "#a1a1aa" }}>{formatDate(startTime)}</div>
-            {durationS > 0 && <div style={{ display: "flex", fontSize: 22, color: "#52525b" }}>{formatDuration(durationS)}</div>}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+            {startTimeFormatted && <span style={{ display: "flex", fontSize: 18, color: "#71717a" }}>{startTimeFormatted}</span>}
+            <span style={{ display: "flex", fontSize: 18, color: "#a1a1aa" }}>{formatDate(startTime)}</span>
+            {durationS > 0 && <span style={{ display: "flex", fontSize: 18, color: "#52525b" }}>{formatDuration(durationS)}</span>}
           </div>
         </div>
 
-        {/* ── Body silhouettes + Full body scan ── */}
-        <div style={{ display: "flex", gap: 28, alignItems: "stretch" }}>
-          {/* Bodies */}
-          <div style={{ display: "flex", gap: 20, flexShrink: 0 }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <span style={{ display: "flex", fontSize: 20, color: "#52525b", letterSpacing: 2 }}>FRONT</span>
-              <img width={300} height={600}
-                src={`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200">${anteriorPolygons}</svg>`)}`} />
+        {/* ── Two-column body ── */}
+        <div style={{ display: "flex", flex: 1, gap: 20 }}>
+
+          {/* LEFT: Bodies + Metrics */}
+          <div style={{ display: "flex", flexDirection: "column", width: 420, flexShrink: 0, gap: 8 }}>
+            {/* Silhouettes */}
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", alignItems: "center", flex: 1 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <span style={{ display: "flex", fontSize: 13, color: "#52525b", letterSpacing: 2 }}>FRONT</span>
+                <img width={180} height={380}
+                  src={`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200">${anteriorPolygons}</svg>`)}`} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <span style={{ display: "flex", fontSize: 13, color: "#52525b", letterSpacing: 2 }}>BACK</span>
+                <img width={164} height={380}
+                  src={`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 220">${posteriorPolygons}</svg>`)}`} />
+              </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <span style={{ display: "flex", fontSize: 20, color: "#52525b", letterSpacing: 2 }}>BACK</span>
-              <img width={273} height={600}
-                src={`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 220">${posteriorPolygons}</svg>`)}`} />
+            {/* 4 metrics 2×2 */}
+            <div style={{ display: "flex", gap: 6 }}>
+              <MetricCard label="Sets" val={String(workingSets)} unit="sets" color="#eab308" />
+              <MetricCard label="Volume" val={volumeDisplay} unit="" color="#3b82f6" />
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <MetricCard label="Calories" val={enrichment?.calories ? String(enrichment.calories) : "—"} unit="kcal" color="#f97316" />
+              <MetricCard label="Avg HR" val={enrichment?.avg_hr ? String(enrichment.avg_hr) : "—"} unit="bpm" color="#f43f5e" />
             </div>
           </div>
 
-          {/* Full muscle scan — all groups, active highlighted, inactive ghosted */}
-          <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "space-between" }}>
-            <div style={{ display: "flex", fontSize: 18, fontWeight: 600, color: "#52525b", letterSpacing: 3, textTransform: "uppercase" as const }}>
-              MUSCLES
+          {/* RIGHT: Muscles + HR + Exercises */}
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "space-around" }}>
+            {/* Muscle groups */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 5, backgroundColor: "#111113", borderRadius: 10, padding: "8px 10px" }}>
+              <div style={{ display: "flex", fontSize: 13, fontWeight: 600, color: "#52525b", letterSpacing: 2, textTransform: "uppercase" as const }}>MUSCLES</div>
+              {ALL_MUSCLE_GROUPS
+                .filter((mg) => muscleData[mg].total > 0)
+                .map((mg) => {
+                const pct = Math.round((muscleData[mg].total / maxVolume) * 100);
+                return (
+                  <div key={mg} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ display: "flex", width: 12, height: 12, borderRadius: 3, backgroundColor: MUSCLE_COLORS[mg].hex, flexShrink: 0 }} />
+                    <span style={{ display: "flex", fontSize: 16, color: "#d4d4d8", fontWeight: 600, flex: 1 }}>{MUSCLE_LABELS[mg]}</span>
+                    <div style={{ display: "flex", width: 100, height: 7, backgroundColor: "#1c1c1e", borderRadius: 4 }}>
+                      <div style={{ display: "flex", width: `${pct}%`, height: "100%", backgroundColor: MUSCLE_COLORS[mg].hex, borderRadius: 4, opacity: 0.85 }} />
+                    </div>
+                    <span style={{ display: "flex", fontSize: 14, color: "#71717a", width: 36, flexShrink: 0, justifyContent: "flex-end" }}>{pct}%</span>
+                  </div>
+                );
+              })}
             </div>
-            {ALL_MUSCLE_GROUPS.map((mg) => {
-              const pct = Math.round((muscleData[mg].total / maxVolume) * 100);
-              const isActive = pct > 0;
-              return (
-                <div key={mg} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ display: "flex", width: 14, height: 14, borderRadius: 4, backgroundColor: isActive ? MUSCLE_COLORS[mg].hex : "#27272a", flexShrink: 0 }} />
-                  <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ display: "flex", fontSize: 18, color: isActive ? "#d4d4d8" : "#3f3f46", fontWeight: isActive ? 600 : 400 }}>{MUSCLE_LABELS[mg]}</span>
-                      {isActive && <span style={{ display: "flex", fontSize: 18, color: "#71717a" }}>{pct}%</span>}
-                    </div>
-                    <div style={{ display: "flex", height: 6, backgroundColor: "#1c1c1e", borderRadius: 3, marginTop: 3 }}>
-                      {isActive && <div style={{ display: "flex", width: `${pct}%`, height: "100%", backgroundColor: MUSCLE_COLORS[mg].hex, borderRadius: 3, opacity: 0.85 }} />}
-                    </div>
+
+            {/* HR chart */}
+            {hrChartSvg && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, backgroundColor: "#111113", borderRadius: 10, padding: "8px 10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ display: "flex", fontSize: 14, fontWeight: 600, color: "#52525b", letterSpacing: 2, textTransform: "uppercase" as const }}>HEART RATE</span>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+                    {hrMinVal != null && (
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                        <span style={{ display: "flex", fontSize: 14, color: "#52525b" }}>min</span>
+                        <span style={{ display: "flex", fontSize: 14, fontWeight: 700, color: "#f43f5e" }}>{hrMinVal}</span>
+                      </div>
+                    )}
+                    {enrichment?.avg_hr && (
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                        <span style={{ display: "flex", fontSize: 14, color: "#3f3f46" }}>·</span>
+                        <span style={{ display: "flex", fontSize: 14, color: "#52525b" }}>avg</span>
+                        <span style={{ display: "flex", fontSize: 14, fontWeight: 700, color: "#f43f5e" }}>{enrichment.avg_hr}</span>
+                      </div>
+                    )}
+                    {hrMaxVal != null && (
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                        <span style={{ display: "flex", fontSize: 14, color: "#3f3f46" }}>·</span>
+                        <span style={{ display: "flex", fontSize: 14, color: "#52525b" }}>peak</span>
+                        <span style={{ display: "flex", fontSize: 14, fontWeight: 700, color: "#f43f5e" }}>{hrMaxVal}</span>
+                        <span style={{ display: "flex", fontSize: 14, color: "#52525b" }}>bpm</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── 4 metric cards 2×2 ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", gap: 14 }}>
-            <MetricCard label="Sets"    val={String(workingSets)} unit="sets" color="#eab308" />
-            <MetricCard label="Volume"  val={volumeDisplay}       unit=""     color="#3b82f6" />
-          </div>
-          <div style={{ display: "flex", gap: 14 }}>
-            <MetricCard label="Calories" val={enrichment?.calories ? String(enrichment.calories) : "—"} unit="kcal" color="#f97316" />
-            <MetricCard label="Avg HR"   val={enrichment?.avg_hr  ? String(enrichment.avg_hr)  : "—"} unit="bpm"  color="#f43f5e" />
-          </div>
-        </div>
-
-        {/* ── HR chart ── */}
-        {hrChartSvg && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", fontSize: 18, fontWeight: 600, color: "#52525b", letterSpacing: 3, textTransform: "uppercase" as const }}>
-              HEART RATE
-            </div>
-            <img width={hrImgWidth} height={hrImgHeight}
-              src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(hrChartSvg)}`}
-              style={{ borderRadius: 8 }} />
-            {/* Exercise labels */}
-            <div style={{ display: "flex", width: "100%" }}>
-              {exerciseSegments.map((seg, i) => (
-                <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: `${((seg.sets / totalSets) * 100).toFixed(1)}%`, gap: 4, overflow: "hidden" }}>
-                  <div style={{ display: "flex", width: 10, height: 10, borderRadius: 5, backgroundColor: seg.color }} />
-                  <div style={{ display: "flex", fontSize: 16, color: "#a1a1aa", textAlign: "center" as const, lineHeight: 1.2 }}>{seg.title}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Exercise list ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", fontSize: 18, fontWeight: 600, color: "#52525b", letterSpacing: 3, textTransform: "uppercase" as const }}>
-            EXERCISES
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            {displayExercises.map((ex: any, i: number) => {
-              const workSets = (ex.sets || []).filter((s: any) => s.type === "normal" && (s.weight_kg || 0) > 0);
-              const topSet = getTopSet(ex.sets || []);
-              const color = segColors[i % segColors.length];
-              return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, backgroundColor: "#111113", borderRadius: 14, padding: "10px 18px" }}>
-                  <div style={{ display: "flex", width: 12, height: 12, borderRadius: 6, backgroundColor: color, flexShrink: 0 }} />
-                  <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-                    <span style={{ display: "flex", fontSize: 26, fontWeight: 600, color: "#e4e4e7" }}>{ex.title || "Unknown"}</span>
-                    <span style={{ display: "flex", fontSize: 20, color: "#52525b" }}>{workSets.length} sets{topSet ? ` · ${Number(topSet.weight.toFixed(1))}kg × ${topSet.reps}` : ""}</span>
-                  </div>
-                </div>
-              );
-            })}
-            {hiddenCount > 0 && (
-              <div style={{ display: "flex", justifyContent: "center", padding: "8px", fontSize: 16, color: "#3f3f46" }}>
-                + {hiddenCount} more exercise{hiddenCount > 1 ? "s" : ""}
+                <img width={hrImgWidthLandscape} height={hrImgHeightLandscape}
+                  src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(hrChartSvg)}`}
+                  style={{ borderRadius: 8, width: "100%" }} />
+                {durationS > 0 && (() => {
+                  const durMin = durationS / 60;
+                  const timeInt = durMin <= 20 ? 5 : durMin <= 45 ? 10 : 15;
+                  const times: { type: "spacer" | "label"; value: number }[] = [];
+                  const ticks: number[] = [];
+                  for (let t = 0; t <= durMin; t += timeInt) ticks.push(t);
+                  for (let i = 0; i < ticks.length; i++) {
+                    if (i > 0) times.push({ type: "spacer", value: Math.round((ticks[i] - ticks[i - 1]) * 100) });
+                    times.push({ type: "label", value: ticks[i] });
+                  }
+                  const rem = durMin - ticks[ticks.length - 1];
+                  if (rem > 1) times.push({ type: "spacer", value: Math.round(rem * 100) });
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <div style={{ display: "flex", height: 1, backgroundColor: "#27272a" }} />
+                      <div style={{ display: "flex", alignItems: "center" }}>
+                        {times.map((item, i) =>
+                          item.type === "spacer"
+                            ? <div key={i} style={{ display: "flex", flexGrow: item.value }} />
+                            : <span key={i} style={{ display: "flex", fontSize: 10, color: "#52525b" }}>{item.value}</span>
+                        )}
+                        <span style={{ display: "flex", fontSize: 9, color: "#3f3f46", marginLeft: 3 }}>min</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
+
+            {/* Exercise list */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, backgroundColor: "#111113", borderRadius: 10, padding: "8px 10px" }}>
+              <div style={{ display: "flex", fontSize: 13, fontWeight: 600, color: "#52525b", letterSpacing: 2, textTransform: "uppercase" as const }}>EXERCISES</div>
+              {displayExercises.map((ex: any, i: number) => {
+                const workSets = (ex.sets || []).filter((s: any) => s.type === "normal" && (s.weight_kg || 0) > 0);
+                const topSet = getTopSet(ex.sets || []);
+                const color = segColors[i % segColors.length];
+                return (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
+                    <div style={{ display: "flex", width: 10, height: 10, borderRadius: 5, backgroundColor: color, flexShrink: 0 }} />
+                    <span style={{ display: "flex", fontSize: 17, fontWeight: 600, color: "#e4e4e7", flex: 1 }}>{ex.title || "Unknown"}</span>
+                    <span style={{ display: "flex", fontSize: 14, color: "#71717a" }}>{workSets.length} sets{topSet ? ` · ${Number(topSet.weight.toFixed(1))} kg × ${topSet.reps}` : ""}</span>
+                  </div>
+                );
+              })}
+              {hiddenCount > 0 && (
+                <div style={{ display: "flex", fontSize: 14, color: "#3f3f46" }}>+ {hiddenCount} more</div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* ── Footer ── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #1c1c1e", paddingTop: 16 }}>
-          <div style={{ display: "flex", fontSize: 18, color: "#3f3f46" }}>github.com/drkostas/soma</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", width: 24, height: 4, backgroundColor: "#10b981", borderRadius: 2 }} />
-            <span style={{ display: "flex", fontSize: 22, fontWeight: 800, color: "#10b981", letterSpacing: 5 }}>SOMA</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #1c1c1e", paddingTop: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", width: 20, height: 3, backgroundColor: "#10b981", borderRadius: 2 }} />
+            <span style={{ display: "flex", fontSize: 16, fontWeight: 800, color: "#10b981", letterSpacing: 4 }}>SOMA</span>
           </div>
+          <div style={{ display: "flex", fontSize: 13, color: "#3f3f46" }}>github.com/drkostas/soma</div>
         </div>
       </div>
     ),

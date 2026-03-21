@@ -25,7 +25,7 @@ function formatStartTime(dateStr: string): string {
     const d = new Date(normalized);
     if (isNaN(d.getTime())) return "";
     const h = d.getHours(), m = d.getMinutes().toString().padStart(2, "0");
-    return `${h % 12 || 12}:${m} ${h >= 12 ? "PM" : "AM"}`;
+    return `${h.toString().padStart(2, "0")}:${m}`;
   } catch { return ""; }
 }
 function formatPaceVal(v: number): string {
@@ -106,11 +106,11 @@ function renderRouteSvg(
   for (let i = 0; i < s.length - 1; i++) {
     const p1 = proj(s[i].lat, s[i].lng), p2 = proj(s[i + 1].lat, s[i + 1].lng);
     const c = speedToColor(s[i].speed);
-    glow  += `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="${c}" stroke-width="16" stroke-linecap="round" opacity="0.18"/>`;
-    lines += `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="${c}" stroke-width="6" stroke-linecap="round" opacity="0.95"/>`;
+    glow  += `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="${c}" stroke-width="5" stroke-linecap="round" opacity="0.15"/>`;
+    lines += `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="${c}" stroke-width="1.5" stroke-linecap="round" opacity="0.95"/>`;
   }
   const start = proj(s[0].lat, s[0].lng), end = proj(s[s.length - 1].lat, s[s.length - 1].lng);
-  const dots = `<circle cx="${start.x.toFixed(1)}" cy="${start.y.toFixed(1)}" r="11" fill="#22c55e" stroke="#09090b" stroke-width="3"/><circle cx="${end.x.toFixed(1)}" cy="${end.y.toFixed(1)}" r="11" fill="#ef4444" stroke="#09090b" stroke-width="3"/>`;
+  const dots = `<circle cx="${start.x.toFixed(1)}" cy="${start.y.toFixed(1)}" r="4" fill="#22c55e" stroke="#09090b" stroke-width="1.5"/><circle cx="${end.x.toFixed(1)}" cy="${end.y.toFixed(1)}" r="4" fill="#ef4444" stroke="#09090b" stroke-width="1.5"/>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${glow}${lines}${dots}</svg>`;
 }
 
@@ -120,11 +120,12 @@ function renderChartSvg(
   values: (number | null)[],
   color: string, W: number, H: number,
   invertY = false,
-  formatLabel?: (v: number) => string
+  formatLabel?: (v: number) => string,
+  totalDistKm?: number,
 ): string {
   const valid = values.filter((v): v is number => v != null && isFinite(v));
   if (valid.length < 2) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"/>`;
-  const PAD = { t: 22, b: 18, l: 4, r: 4 };
+  const PAD = { t: 18, b: 18, l: 4, r: 4 };
   const cW = W - PAD.l - PAD.r, cH = H - PAD.t - PAD.b;
   const step = Math.max(1, Math.floor(values.length / 200));
   const sampled = values.filter((_, i) => i % step === 0);
@@ -140,11 +141,19 @@ function renderChartSvg(
   const area = `${line} L${(PAD.l + cW).toFixed(1)},${(PAD.t + cH).toFixed(1)} L${PAD.l},${(PAD.t + cH).toFixed(1)} Z`;
   const rr = parseInt(color.slice(1, 3), 16), gg = parseInt(color.slice(3, 5), 16), bb = parseInt(color.slice(5, 7), 16);
   const fmt = formatLabel ?? ((v: number) => Math.round(v).toString());
-  // Top of chart shows: maxV (normal) or minV (invertY)
   const topVal = invertY ? minV : maxV;
   const botVal = invertY ? maxV : minV;
-  const labels = `<text x="${PAD.l + 4}" y="${PAD.t - 4}" font-size="14" fill="#4b5563" font-family="sans-serif">${fmt(topVal)}</text><text x="${PAD.l + 4}" y="${H - 3}" font-size="14" fill="#4b5563" font-family="sans-serif">${fmt(botVal)}</text>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="${area}" fill="rgba(${rr},${gg},${bb},0.18)"/><path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>${labels}</svg>`;
+  const yLabels = `<text x="${PAD.l + 4}" y="${PAD.t - 4}" font-size="12" fill="#4b5563" font-family="sans-serif">${fmt(topVal)}</text><text x="${PAD.l + 4}" y="${PAD.t + cH + 1}" font-size="12" fill="#4b5563" font-family="sans-serif">${fmt(botVal)}</text>`;
+  // X-axis km grid lines (subtle vertical references)
+  let xLabels = "";
+  if (totalDistKm && totalDistKm > 0) {
+    const kmInterval = totalDistKm <= 5 ? 1 : totalDistKm <= 15 ? 2 : 5;
+    for (let km = kmInterval; km < totalDistKm; km += kmInterval) {
+      const xPos = PAD.l + (km / totalDistKm) * cW;
+      xLabels += `<line x1="${xPos.toFixed(1)}" y1="${PAD.t}" x2="${xPos.toFixed(1)}" y2="${PAD.t + cH}" stroke="#1f1f23" stroke-width="1"/>`;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="${area}" fill="rgba(${rr},${gg},${bb},0.18)"/><path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>${yLabels}${xLabels}</svg>`;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -153,12 +162,14 @@ const ZONE_COLORS = ["#64748b", "#3b82f6", "#22c55e", "#f97316", "#ef4444"];
 const ZONE_LABELS = ["Z1 Warm Up", "Z2 Easy", "Z3 Aerobic", "Z4 Threshold", "Z5 Maximum"];
 
 const IMG_W = 1080;
-const IMG_H = 1920;
-const SIDE = 36;
-const MAP_W = IMG_W - SIDE * 2;
-const MAP_H = 600;
-const CHART_W = Math.floor((IMG_W - SIDE * 2 - 14) / 2);
-const CHART_H = 160;
+const IMG_H = 810; // 4:3 landscape
+const SIDE = 28;
+const LEFT_COL = 500; // map column width
+const RIGHT_COL = IMG_W - LEFT_COL - SIDE * 3; // data column
+const MAP_W = LEFT_COL;
+const MAP_H = 620; // fills most of left column
+const CHART_W = Math.floor((RIGHT_COL - 10) / 2);
+const CHART_H = 100;
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -265,10 +276,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const vignetteSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_W} ${MAP_H}"><defs><radialGradient id="vg" cx="50%" cy="50%" r="72%" gradientUnits="objectBoundingBox"><stop offset="45%" stop-color="#09090b" stop-opacity="0"/><stop offset="100%" stop-color="#09090b" stop-opacity="0.82"/></radialGradient></defs><rect width="${MAP_W}" height="${MAP_H}" fill="url(#vg)"/></svg>`;
 
   // ── Charts ──
-  const paceChart = renderChartSvg(tsPace, "#00e5ff", CHART_W, CHART_H, true,  formatPaceVal);
-  const hrChart   = renderChartSvg(tsHr,   "#f43f5e", CHART_W, CHART_H, false, (v) => Math.round(v).toString());
-  const elevChart = renderChartSvg(tsElev, "#4ade80", CHART_W, CHART_H, false, (v) => `${Math.round(v)}m`);
-  const cadChart  = renderChartSvg(tsCad,  "#a78bfa", CHART_W, CHART_H, false, (v) => Math.round(v).toString());
+  const distNum = distKm ? parseFloat(distKm) : undefined;
+  const paceChart = renderChartSvg(tsPace, "#00e5ff", CHART_W, CHART_H, true,  formatPaceVal, distNum);
+  const hrChart   = renderChartSvg(tsHr,   "#f43f5e", CHART_W, CHART_H, false, (v) => Math.round(v).toString(), distNum);
+  const elevChart = renderChartSvg(tsElev, "#4ade80", CHART_W, CHART_H, false, (v) => `${Math.round(v)}m`, distNum);
+  const cadChart  = renderChartSvg(tsCad,  "#a78bfa", CHART_W, CHART_H, false, (v) => Math.round(v).toString(), distNum);
+
+  // ── Peak values for chart labels ──
+  const validPace = tsPace.filter((v): v is number => v != null && isFinite(v) && v > 2 && v < 15);
+  const peakPace = validPace.length > 0 ? formatPaceVal(Math.min(...validPace)) : null;
+  const validElev = tsElev.filter((v): v is number => v != null && isFinite(v));
+  const peakElev = validElev.length > 0 ? Math.round(Math.max(...validElev)) : null;
+  const validCad = tsCad.filter((v): v is number => v != null && isFinite(v));
+  const peakCad = validCad.length > 0 ? Math.round(Math.max(...validCad) * 2) : null; // tsCad is /2 (per-foot), summary is total spm
 
   // ── Subtitle parts ──
   const subtitleParts: { text: string; color?: string }[] = [];
@@ -276,37 +296,64 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (teLabel)             subtitleParts.push({ text: teLabel, color: teColor });
   if (weatherStr)          subtitleParts.push({ text: weatherStr, color: "#71717a" });
 
-  // ── Secondary stats (with TE shown specially) ──
-  type StatItem = { l: string; v: string; sub?: string; c: string } | null;
-  const secondaryStats: StatItem[] = [
-    maxHr    ? { l: "Max HR",       v: `${maxHr} bpm`,   c: "#e11d48" } : null,
-    elevGain ? { l: "Elevation",    v: `+${elevGain}m`,  c: "#4ade80" } : null,
-    cadence  ? { l: "Cadence",      v: `${cadence} spm`, c: "#a78bfa" } : null,
-    vo2      ? { l: "VO2max",       v: vo2,              c: "#38bdf8" } : null,
-    te       ? { l: "Train. Effect", v: `${te} / 5.0`,   sub: teLabel ?? undefined, c: teColor } : null,
-  ];
-
   // ── Layout helpers ──
   function MetricCard({ label, val, unit, color }: { label: string; val: string; unit: string; color: string }) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", backgroundColor: "#18181b", borderRadius: 16, padding: "18px 22px", flex: 1, gap: 6 }}>
-        <div style={{ display: "flex", fontSize: 20, color: "#71717a", textTransform: "uppercase" as const, letterSpacing: 1.5 }}>{label}</div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-          <span style={{ display: "flex", fontSize: 56, fontWeight: 800, color, lineHeight: 1 }}>{val}</span>
-          <span style={{ display: "flex", fontSize: 22, color: "#52525b", alignSelf: "flex-end", marginBottom: 5 }}>{unit}</span>
+      <div style={{ display: "flex", flexDirection: "column", backgroundColor: "#18181b", borderRadius: 10, padding: "8px 12px", flex: 1, gap: 2 }}>
+        <div style={{ display: "flex", fontSize: 13, color: "#71717a", textTransform: "uppercase" as const, letterSpacing: 1 }}>{label}</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+          <span style={{ display: "flex", fontSize: 32, fontWeight: 800, color, lineHeight: 1 }}>{val}</span>
+          <span style={{ display: "flex", fontSize: 14, color: "#52525b" }}>{unit}</span>
         </div>
       </div>
     );
   }
 
-  function ChartCard({ svg, label, val, color }: { svg: string; label: string; val: string; color: string }) {
+  function ChartCard({ svg, label, avg, peak, color, totalDistKm, avgPrefix = "avg" }: {
+    svg: string; label: string; avg: string; peak?: string; color: string; totalDistKm?: number; avgPrefix?: string;
+  }) {
+    const axisItems: { type: "spacer" | "label"; value: number }[] = [];
+    if (totalDistKm && totalDistKm > 0) {
+      const kmInt = totalDistKm <= 5 ? 1 : totalDistKm <= 15 ? 2 : 5;
+      const kms: number[] = [];
+      for (let k = 0; k <= totalDistKm; k += kmInt) kms.push(k);
+      for (let i = 0; i < kms.length; i++) {
+        if (i > 0) axisItems.push({ type: "spacer", value: Math.round((kms[i] - kms[i - 1]) * 100) });
+        axisItems.push({ type: "label", value: kms[i] });
+      }
+      const remaining = totalDistKm - kms[kms.length - 1];
+      if (remaining > 0.3) axisItems.push({ type: "spacer", value: Math.round(remaining * 100) });
+    }
     return (
-      <div style={{ display: "flex", flexDirection: "column", backgroundColor: "#111113", borderRadius: 14, padding: "16px 18px", gap: 12, width: CHART_W }}>
+      <div style={{ display: "flex", flexDirection: "column", backgroundColor: "#111113", borderRadius: 10, padding: "8px 10px", gap: 4, width: CHART_W }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <span style={{ display: "flex", fontSize: 20, color: "#52525b", textTransform: "uppercase" as const, letterSpacing: 1.5 }}>{label}</span>
-          <span style={{ display: "flex", fontSize: 28, fontWeight: 700, color }}>{val}</span>
+          <span style={{ display: "flex", fontSize: 13, color: "#52525b", textTransform: "uppercase" as const, letterSpacing: 1 }}>{label}</span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+            <span style={{ display: "flex", fontSize: 13, color: "#52525b" }}>{avgPrefix}</span>
+            <span style={{ display: "flex", fontSize: 13, fontWeight: 700, color }}>{avg}</span>
+            {peak && (
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <span style={{ display: "flex", fontSize: 13, color: "#3f3f46" }}>·</span>
+                <span style={{ display: "flex", fontSize: 13, color: "#52525b" }}>peak</span>
+                <span style={{ display: "flex", fontSize: 13, fontWeight: 700, color }}>{peak}</span>
+              </div>
+            )}
+          </div>
         </div>
-        <img width={CHART_W} height={CHART_H} src={`data:image/svg+xml,${encodeURIComponent(svg)}`} style={{ borderRadius: 6, width: "100%" }} />
+        <img width={CHART_W} height={CHART_H} src={`data:image/svg+xml,${encodeURIComponent(svg)}`} style={{ borderRadius: 4, width: "100%" }} />
+        {axisItems.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <div style={{ display: "flex", height: 1, backgroundColor: "#27272a" }} />
+            <div style={{ display: "flex", alignItems: "center" }}>
+              {axisItems.map((item, i) =>
+                item.type === "spacer"
+                  ? <div key={i} style={{ display: "flex", flexGrow: item.value }} />
+                  : <span key={i} style={{ display: "flex", fontSize: 10, color: "#52525b" }}>{item.value}</span>
+              )}
+              <span style={{ display: "flex", fontSize: 9, color: "#3f3f46", marginLeft: 3 }}>km</span>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -317,137 +364,126 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         display: "flex", flexDirection: "column",
         width: "100%", height: "100%",
         backgroundColor: "#09090b",
-        padding: `36px ${SIDE}px 32px`,
+        padding: `${SIDE}px`,
         fontFamily: "Inter, system-ui, sans-serif",
         color: "#fafafa",
-        gap: 20,
+        gap: 10,
       }}>
 
-        {/* ── Header ── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div style={{ display: "flex", flexDirection: "column", flex: 1, paddingRight: 24 }}>
-            {/* SOMA brand */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <div style={{ display: "flex", width: 40, height: 6, backgroundColor: "#10b981", borderRadius: 3 }} />
-              <span style={{ display: "flex", fontSize: 32, fontWeight: 800, color: "#10b981", letterSpacing: 6 }}>SOMA</span>
-            </div>
-            {/* Activity title */}
-            <div style={{ display: "flex", fontSize: 52, fontWeight: 700, color: "#fafafa", lineHeight: 1.05 }}>{title}</div>
-            {/* Subtitle: time · TE category · weather */}
-            {subtitleParts.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" as const }}>
-                {subtitleParts.map((part, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {i > 0 && <span style={{ display: "flex", fontSize: 24, color: "#3f3f46" }}>·</span>}
-                    <span style={{ display: "flex", fontSize: 26, color: part.color ?? "#71717a", fontWeight: i === 1 && teLabel ? 600 : 400 }}>{part.text}</span>
-                  </div>
-                ))}
+        {/* ── Header (full width) ── */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", flex: 1 }}>
+            <div style={{ display: "flex", fontSize: 28, fontWeight: 700, color: "#fafafa", lineHeight: 1 }}>{title}</div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
+            <div style={{ display: "flex", fontSize: 16, color: "#a1a1aa" }}>{formatDate(startTime)}</div>
+            {duration && <div style={{ display: "flex", fontSize: 14, color: "#52525b" }}>{duration}</div>}
+          </div>
+        </div>
+
+        {/* ── Subtitle: time · TE · weather ── */}
+        {subtitleParts.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {subtitleParts.map((part, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {i > 0 && <span style={{ display: "flex", fontSize: 16, color: "#3f3f46" }}>·</span>}
+                <span style={{ display: "flex", fontSize: 16, color: part.color ?? "#71717a", fontWeight: i === 1 && teLabel ? 600 : 400 }}>{part.text}</span>
               </div>
-            )}
-          </div>
-          {/* Date */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, paddingTop: 10, flexShrink: 0 }}>
-            <div style={{ display: "flex", fontSize: 24, color: "#a1a1aa" }}>{formatDate(startTime)}</div>
-            {duration && <div style={{ display: "flex", fontSize: 22, color: "#52525b" }}>{duration}</div>}
-          </div>
-        </div>
-
-        {/* ── Map ── */}
-        <div style={{
-          display: "flex", position: "relative",
-          width: MAP_W, height: MAP_H,
-          backgroundColor: "#0d0d10", borderRadius: 18, overflow: "hidden",
-          border: "1px solid #1f1f23", flexShrink: 0,
-        }}>
-          {tilePlacements.map((t, i) => (
-            <img key={i} src={t.dataUri} width={256} height={256}
-              style={{ position: "absolute", left: t.left, top: t.top }} />
-          ))}
-          {routeSvg && (
-            <img src={`data:image/svg+xml,${encodeURIComponent(routeSvg)}`}
-              width={MAP_W} height={MAP_H}
-              style={{ position: "absolute", top: 0, left: 0, width: MAP_W, height: MAP_H }} />
-          )}
-          {/* Edge vignette */}
-          <img src={`data:image/svg+xml,${encodeURIComponent(vignetteSvg)}`}
-            width={MAP_W} height={MAP_H}
-            style={{ position: "absolute", top: 0, left: 0, width: MAP_W, height: MAP_H }} />
-          {/* Pace legend */}
-          <div style={{
-            display: "flex", position: "absolute", bottom: 14, left: 14,
-            alignItems: "center", gap: 8,
-            backgroundColor: "rgba(9,9,11,0.78)", borderRadius: 10, padding: "6px 12px",
-          }}>
-            <span style={{ display: "flex", fontSize: 16, color: "#ff1744", fontWeight: 600 }}>Fast</span>
-            <div style={{ display: "flex", width: 72, height: 6, borderRadius: 3, background: "linear-gradient(to right, #ff1744, #ffab00, #00e5ff)" }} />
-            <span style={{ display: "flex", fontSize: 16, color: "#00e5ff", fontWeight: 600 }}>Slow</span>
-          </div>
-        </div>
-
-        {/* ── 4 main metric cards ── */}
-        <div style={{ display: "flex", gap: 14 }}>
-          {distKm   && <MetricCard label="Distance" val={distKm}          unit="km"   color="#22c55e" />}
-          {pace     && <MetricCard label="Pace"      val={pace}            unit="/km"  color="#00e5ff" />}
-          {avgHr    && <MetricCard label="Avg HR"    val={String(avgHr)}   unit="bpm"  color="#f43f5e" />}
-          {calories && <MetricCard label="Calories"  val={String(calories)} unit="kcal" color="#f97316" />}
-        </div>
-
-        {/* ── 2×2 charts ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", gap: 14 }}>
-            <ChartCard svg={paceChart} label="Pace"       val={pace ?? "—"}                  color="#00e5ff" />
-            <ChartCard svg={hrChart}   label="Heart Rate" val={avgHr ? `${avgHr} bpm` : "—"} color="#f43f5e" />
-          </div>
-          <div style={{ display: "flex", gap: 14 }}>
-            <ChartCard svg={elevChart} label="Elevation" val={elevGain ? `+${elevGain}m` : "—"}    color="#4ade80" />
-            <ChartCard svg={cadChart}  label="Cadence"   val={cadence ? `${cadence} spm` : "—"} color="#a78bfa" />
-          </div>
-        </div>
-
-        {/* ── HR Zones ── */}
-        {hrZones.length > 0 && totalZoneSecs > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", fontSize: 20, fontWeight: 600, color: "#52525b", letterSpacing: 3, textTransform: "uppercase" as const }}>
-              HR ZONES
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {hrZones.map((z, i) => {
-                const pct = totalZoneSecs > 0 ? ((z.secsInZone || 0) / totalZoneSecs) * 100 : 0;
-                const m = Math.floor((z.secsInZone || 0) / 60), sec = Math.round((z.secsInZone || 0) % 60);
-                return (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ display: "flex", fontSize: 18, color: "#6b7280", width: 130, flexShrink: 0 }}>{ZONE_LABELS[i]}</div>
-                    <div style={{ display: "flex", flex: 1, height: 16, backgroundColor: "#1c1c1e", borderRadius: 8 }}>
-                      <div style={{ display: "flex", width: `${pct.toFixed(1)}%`, height: "100%", backgroundColor: ZONE_COLORS[i], borderRadius: 8 }} />
-                    </div>
-                    <div style={{ display: "flex", fontSize: 18, color: "#a1a1aa", width: 68, textAlign: "right" as const, flexShrink: 0 }}>{m > 0 ? `${m}m ${sec}s` : `${sec}s`}</div>
-                    <div style={{ display: "flex", fontSize: 18, color: "#52525b", width: 44, textAlign: "right" as const, flexShrink: 0 }}>{pct.toFixed(0)}%</div>
-                  </div>
-                );
-              })}
-            </div>
+            ))}
           </div>
         )}
 
-        {/* ── Secondary stats ── */}
-        <div style={{ display: "flex", gap: 0 }}>
-          {secondaryStats.filter(Boolean).map((m, i) => (
-            <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-              <span style={{ display: "flex", fontSize: 18, color: "#52525b", textTransform: "uppercase" as const, letterSpacing: 1 }}>{m!.l}</span>
-              <span style={{ display: "flex", fontSize: 32, fontWeight: 700, color: m!.c }}>{m!.v}</span>
-              {m!.sub && <span style={{ display: "flex", fontSize: 16, color: m!.c, opacity: 0.75 }}>{m!.sub}</span>}
+        {/* ── Two-column body ── */}
+        <div style={{ display: "flex", flex: 1, gap: SIDE }}>
+
+          {/* LEFT: Map */}
+          <div style={{
+            display: "flex", position: "relative",
+            width: LEFT_COL, height: MAP_H, flexShrink: 0,
+            backgroundColor: "#0d0d10", borderRadius: 14, overflow: "hidden",
+            border: "1px solid #1f1f23",
+          }}>
+            {tilePlacements.map((t, i) => (
+              <img key={i} src={t.dataUri} width={256} height={256}
+                style={{ position: "absolute", left: t.left, top: t.top }} />
+            ))}
+            {routeSvg && (
+              <img src={`data:image/svg+xml,${encodeURIComponent(routeSvg)}`}
+                width={MAP_W} height={MAP_H}
+                style={{ position: "absolute", top: 0, left: 0, width: MAP_W, height: MAP_H }} />
+            )}
+            <img src={`data:image/svg+xml,${encodeURIComponent(vignetteSvg)}`}
+              width={MAP_W} height={MAP_H}
+              style={{ position: "absolute", top: 0, left: 0, width: MAP_W, height: MAP_H }} />
+            {/* Pace legend */}
+            <div style={{
+              display: "flex", position: "absolute", bottom: 10, left: 10,
+              alignItems: "center", gap: 6,
+              backgroundColor: "rgba(9,9,11,0.78)", borderRadius: 8, padding: "4px 10px",
+            }}>
+              <span style={{ display: "flex", fontSize: 12, color: "#00e5ff", fontWeight: 600 }}>Slow</span>
+              <div style={{ display: "flex", width: 48, height: 4, borderRadius: 2, background: "linear-gradient(to right, #00e5ff, #ffab00, #ff1744)" }} />
+              <span style={{ display: "flex", fontSize: 12, color: "#ff1744", fontWeight: 600 }}>Fast</span>
             </div>
-          ))}
+          </div>
+
+          {/* RIGHT: Data */}
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "space-around" }}>
+
+            {/* 4 metrics in a 2×2 grid */}
+            <div style={{ display: "flex", gap: 8 }}>
+              {distKm && <MetricCard label="Distance" val={distKm} unit="km" color="#22c55e" />}
+              {pace && <MetricCard label="Pace" val={pace} unit="/km" color="#00e5ff" />}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {avgHr && <MetricCard label="Avg HR" val={String(avgHr)} unit="bpm" color="#f43f5e" />}
+              {calories && <MetricCard label="Calories" val={String(calories)} unit="kcal" color="#f97316" />}
+            </div>
+
+            {/* 2×2 charts */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <ChartCard svg={paceChart} label="Pace" avg={pace ?? "—"} peak={peakPace ?? undefined} color="#00e5ff" totalDistKm={distNum} />
+              <ChartCard svg={hrChart} label="HR" avg={avgHr ? `${avgHr}` : "—"} peak={maxHr ? `${maxHr}` : undefined} color="#f43f5e" totalDistKm={distNum} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <ChartCard svg={elevChart} label="Elev" avg={elevGain ? `+${elevGain}m` : "—"} peak={peakElev ? `${peakElev}m` : undefined} color="#4ade80" totalDistKm={distNum} avgPrefix="gain" />
+              <ChartCard svg={cadChart} label="Cadence" avg={cadence ? `${cadence}` : "—"} peak={peakCad ? `${peakCad}` : undefined} color="#a78bfa" totalDistKm={distNum} />
+            </div>
+
+            {/* HR Zones (compact — only non-zero) */}
+            {hrZones.length > 0 && totalZoneSecs > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 3, backgroundColor: "#111113", borderRadius: 10, padding: "8px 10px" }}>
+                <div style={{ display: "flex", fontSize: 12, fontWeight: 600, color: "#52525b", letterSpacing: 2, textTransform: "uppercase" as const }}>HR ZONES</div>
+                {hrZones.map((z, i) => {
+                  const secs = z.secsInZone || 0;
+                  if (secs === 0) return null;
+                  const pct = (secs / totalZoneSecs) * 100;
+                  const m = Math.floor(secs / 60);
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <div style={{ display: "flex", fontSize: 11, color: "#6b7280", width: 72, flexShrink: 0 }}>{ZONE_LABELS[i]}</div>
+                      <div style={{ display: "flex", flex: 1, height: 8, backgroundColor: "#1c1c1e", borderRadius: 4 }}>
+                        <div style={{ display: "flex", width: `${pct.toFixed(1)}%`, height: "100%", backgroundColor: ZONE_COLORS[i], borderRadius: 4 }} />
+                      </div>
+                      <div style={{ display: "flex", fontSize: 11, color: "#a1a1aa", width: 26, flexShrink: 0 }}>{m}m</div>
+                      <div style={{ display: "flex", fontSize: 11, color: "#52525b", width: 26, flexShrink: 0 }}>{pct.toFixed(0)}%</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+          </div>
         </div>
 
         {/* ── Footer ── */}
         {showBranding && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #1c1c1e", paddingTop: 16 }}>
-            <div style={{ display: "flex", fontSize: 18, color: "#3f3f46" }}>github.com/drkostas/soma</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ display: "flex", width: 24, height: 4, backgroundColor: "#10b981", borderRadius: 2 }} />
-              <span style={{ display: "flex", fontSize: 22, fontWeight: 800, color: "#10b981", letterSpacing: 5 }}>SOMA</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #1c1c1e", paddingTop: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", width: 20, height: 3, backgroundColor: "#10b981", borderRadius: 2 }} />
+              <span style={{ display: "flex", fontSize: 16, fontWeight: 800, color: "#10b981", letterSpacing: 4 }}>SOMA</span>
             </div>
+            <div style={{ display: "flex", fontSize: 13, color: "#3f3f46" }}>github.com/drkostas/soma</div>
           </div>
         )}
       </div>
