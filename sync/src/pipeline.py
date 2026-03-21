@@ -818,8 +818,8 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
         print("Continuing with DB-only tasks (generate_today, close_yesterday)...\n")
 
     for idx, sync_date in enumerate(dates_to_sync):
-      if not client:
-        break
+        if not client:
+            break
         date_str = sync_date.isoformat()
         print(f"[{idx+1}/{len(dates_to_sync)}] {date_str}")
 
