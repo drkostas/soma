@@ -1,8 +1,9 @@
 name: Sync Health Data
 
 on:
-  schedule:
-    - cron: '0 10,12,13,17,21,0,2,4 * * *'  # NYC: 5am 7am 8am noon 4pm 7pm 9pm 11pm
+  # schedule disabled temporarily — manual only until Garmin rate limits clear
+  # schedule:
+  #   - cron: '0 10,12,13,17,21,0,2,4 * * *'  # NYC: 5am 7am 8am noon 4pm 7pm 9pm 11pm
   workflow_dispatch: {}  # Manual trigger from GitHub UI
   repository_dispatch:
     types: [sync-trigger]  # Trigger from API route
