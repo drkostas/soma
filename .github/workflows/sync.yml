@@ -37,6 +37,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Refresh Garmin OAuth tokens via Vercel
+        env:
+          SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
+        run: |
+          echo "Refreshing Garmin tokens..."
+          RESP=$(curl -sf "${SOMA_WEB_URL}/api/sync/refresh-tokens" 2>&1) || true
+          echo "$RESP"
+
       - name: Install dependencies
         working-directory: sync
         run: pip install -e .
