@@ -11,6 +11,7 @@ export default auth((req) => {
   if (
     pathname.startsWith("/api/auth") ||
     pathname === "/login" ||
+    pathname === "/api/sync/refresh-tokens" ||
     pathname.match(/^\/api\/(workout|activity)\/[^/]+\/image$/)
   ) {
     return NextResponse.next();
