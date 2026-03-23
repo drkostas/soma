@@ -10,6 +10,7 @@ export default auth((req) => {
   // Always allow auth routes, login page, and image API (used by sync pipeline)
   if (
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/webhooks/") ||
     pathname === "/login" ||
     pathname === "/api/sync/refresh-tokens" ||
     pathname.match(/^\/api\/(workout|activity)\/[^/]+\/image$/)
