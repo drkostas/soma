@@ -153,13 +153,42 @@ async function fullLogin(email: string, password: string): Promise<{
     gauthHost: SSO_BASE,
   });
 
+  // Helper: fetch with cookie tracking (follows redirects, captures cookies from each hop)
+  async function ssoFetch(url: string, init?: RequestInit): Promise<{ resp: Response; body: string }> {
+    // Manual redirect loop to capture cookies at each hop
+    let currentUrl = url;
+    let resp: Response;
+    let hops = 0;
+    const mergedInit = { ...init, redirect: "manual" as const };
+    while (hops < 10) {
+      resp = await fetch(currentUrl, {
+        ...mergedInit,
+        headers: { ...mergedInit.headers as Record<string, string>, Cookie: jar.toString() },
+      });
+      jar.capture(resp);
+      if ([301, 302, 303, 307, 308].includes(resp.status)) {
+        const loc = resp.headers.get("location");
+        await resp.text(); // consume
+        if (!loc) break;
+        currentUrl = loc.startsWith("http") ? loc : new URL(loc, currentUrl).href;
+        // Switch to GET after redirect (except 307/308)
+        if ([301, 302, 303].includes(resp.status)) {
+          mergedInit.method = "GET";
+          delete mergedInit.body;
+        }
+        hops++;
+        continue;
+      }
+      break;
+    }
+    const body = await resp!.text();
+    return { resp: resp!, body };
+  }
+
   // Step 1: Initialize SSO session (set cookies)
-  const embedResp = await fetch(`${SSO_BASE}/embed?${embedParams}`, {
+  await ssoFetch(`${SSO_BASE}/embed?${embedParams}`, {
     headers: { "User-Agent": USER_AGENT },
-    redirect: "manual",
   });
-  jar.capture(embedResp);
-  await embedResp.text(); // consume body
 
   // Step 2: Get CSRF token from signin page
   const signinParams = new URLSearchParams({
@@ -172,27 +201,22 @@ async function fullLogin(email: string, password: string): Promise<{
     redirectAfterAccountCreationUrl: `${SSO_BASE}/embed`,
   });
 
-  const signinResp = await fetch(`${SSO_BASE}/signin?${signinParams}`, {
+  const { body: signinHtml } = await ssoFetch(`${SSO_BASE}/signin?${signinParams}`, {
     headers: {
       "User-Agent": USER_AGENT,
-      Cookie: jar.toString(),
       Referer: `${SSO_BASE}/embed?${embedParams}`,
     },
-    redirect: "manual",
   });
-  jar.capture(signinResp);
-  const signinHtml = await signinResp.text();
 
   const csrfMatch = signinHtml.match(/name="_csrf"\s+value="(.+?)"/);
   if (!csrfMatch) throw new Error("Could not extract CSRF token from signin page");
   const csrf = csrfMatch[1];
 
-  // Step 3: Submit credentials
-  const loginResp = await fetch(`${SSO_BASE}/signin?${signinParams}`, {
+  // Step 3: Submit credentials (follow redirects to capture ticket)
+  const { resp: loginResp, body: loginHtml } = await ssoFetch(`${SSO_BASE}/signin?${signinParams}`, {
     method: "POST",
     headers: {
       "User-Agent": USER_AGENT,
-      Cookie: jar.toString(),
       Referer: `${SSO_BASE}/signin?${signinParams}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
@@ -202,17 +226,14 @@ async function fullLogin(email: string, password: string): Promise<{
       embed: "true",
       _csrf: csrf,
     }).toString(),
-    redirect: "manual",
   });
-  jar.capture(loginResp);
-  const loginHtml = await loginResp.text();
 
   // Check for MFA (not supported — would need user interaction)
   if (loginHtml.includes("MFA") && !loginHtml.includes("ticket=")) {
     throw new Error("MFA required — cannot auto-login. Disable MFA or use a manual login.");
   }
 
-  // Step 4: Extract ticket
+  // Step 4: Extract ticket from response body
   const ticketMatch = loginHtml.match(/embed\?ticket=([^"&]+)/);
   if (!ticketMatch) {
     const title = loginHtml.match(/<title>(.*?)<\/title>/)?.[1] || "unknown";
