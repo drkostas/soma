@@ -111,12 +111,13 @@ class CookieJar {
 
 async function exchangeOAuth1ForOAuth2(
   oauth1: { oauth_token: string; oauth_token_secret: string; domain?: string },
+  consumerKey = "",
+  consumerSecret = "",
 ): Promise<Record<string, any>> {
   const domain = oauth1.domain || DOMAIN;
   const exchangeUrl = `https://connectapi.${domain}/oauth-service/oauth/exchange/user/2.0`;
 
-  // Use empty consumer key/secret for exchange (garth convention)
-  const authHeader = buildOAuth1Header("POST", exchangeUrl, "", "", oauth1.oauth_token, oauth1.oauth_token_secret);
+  const authHeader = buildOAuth1Header("POST", exchangeUrl, consumerKey, consumerSecret, oauth1.oauth_token, oauth1.oauth_token_secret);
 
   const resp = await fetch(exchangeUrl, {
     method: "POST",
@@ -288,8 +289,8 @@ async function fullLogin(email: string, password: string): Promise<{
     throw new Error("No OAuth1 token in preauth response");
   }
 
-  // Step 7: Exchange OAuth1 → OAuth2
-  const oauth2 = await exchangeOAuth1ForOAuth2(oauth1);
+  // Step 7: Exchange OAuth1 → OAuth2 (use real consumer credentials for fresh login)
+  const oauth2 = await exchangeOAuth1ForOAuth2(oauth1, consumerKey, consumerSecret);
 
   return { oauth1, oauth2 };
 }
