@@ -138,16 +138,11 @@ def generate_daily_plan(
         adjustment_reason, sleep_quality_score, training_day_type, is_refeed,
         protein_boost_g, fiber_boost_g).
     """
-    # Step 1: single-night sleep adjustment (returns dict)
-    sleep_result = adjust_deficit_for_sleep(deficit, sleep_quality_score, total_sleep_hours)
-
-    # Step 2: multi-day escalation
-    sleep_result = adjust_for_sleep_history(consecutive_poor_nights, sleep_result)
-
-    adjusted_deficit = sleep_result["deficit"]
-    adjustment_reason = sleep_result["reason"]
-    protein_boost = sleep_result["protein_boost_g"]
-    fiber_boost = sleep_result["fiber_boost_g"]
+    # Sleep adjustments disabled — user prefers consistent deficit regardless of sleep
+    adjusted_deficit = deficit
+    adjustment_reason = "normal"
+    protein_boost = 0
+    fiber_boost = 0
 
     macros = compute_macro_targets(
         tdee=tdee,
