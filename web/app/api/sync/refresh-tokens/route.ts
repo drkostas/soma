@@ -84,10 +84,21 @@ class CookieJar {
   private cookies: Record<string, string> = {};
 
   capture(resp: Response) {
-    for (const header of resp.headers.getSetCookie?.() ?? []) {
+    // getSetCookie() returns individual cookies; fall back to raw header parsing
+    let cookieHeaders: string[] = [];
+    if (typeof resp.headers.getSetCookie === "function") {
+      cookieHeaders = resp.headers.getSetCookie();
+    }
+    if (!cookieHeaders.length) {
+      const raw = resp.headers.get("set-cookie");
+      if (raw) cookieHeaders = raw.split(/,(?=\s*[A-Za-z_]+=)/);
+    }
+    for (const header of cookieHeaders) {
       const [kv] = header.split(";");
-      const [k, v] = kv.split("=");
-      if (k && v) this.cookies[k.trim()] = v.trim();
+      const eq = kv.indexOf("=");
+      if (eq > 0) {
+        this.cookies[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
+      }
     }
   }
 
@@ -204,10 +215,10 @@ async function fullLogin(email: string, password: string): Promise<{
   // Step 4: Extract ticket
   const ticketMatch = loginHtml.match(/embed\?ticket=([^"&]+)/);
   if (!ticketMatch) {
-    // Check for error
+    const title = loginHtml.match(/<title>(.*?)<\/title>/)?.[1] || "unknown";
     if (loginHtml.includes("locked")) throw new Error("Account locked by Garmin");
     if (loginHtml.includes("incorrect")) throw new Error("Invalid email/password");
-    throw new Error("Login failed — no ticket in response");
+    throw new Error(`Login failed — no ticket (title: ${title}, status: ${loginResp.status}, cookies: ${jar.toString().length}ch, html: ${loginHtml.length}ch)`);
   }
   const ticket = ticketMatch[1];
 
