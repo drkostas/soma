@@ -239,7 +239,12 @@ async function fullLogin(email: string, password: string): Promise<{
     const title = loginHtml.match(/<title>(.*?)<\/title>/)?.[1] || "unknown";
     if (loginHtml.includes("locked")) throw new Error("Account locked by Garmin");
     if (loginHtml.includes("incorrect")) throw new Error("Invalid email/password");
-    throw new Error(`Login failed — no ticket (title: ${title}, status: ${loginResp.status}, cookies: ${jar.toString().length}ch, html: ${loginHtml.length}ch)`);
+    // Extract any error message from the page
+    const errorMsg = loginHtml.match(/data-error="([^"]+)"/)?.[1]
+      || loginHtml.match(/class="error"[^>]*>([^<]+)/)?.[1]
+      || loginHtml.match(/status-msg[^>]*>([^<]+)/)?.[1]
+      || "";
+    throw new Error(`Login failed — no ticket (title: ${title}, status: ${loginResp.status}, error: ${errorMsg}, cookies: ${jar.toString().length}ch, csrf: ${csrf.slice(0, 8)}...)`);
   }
   const ticket = ticketMatch[1];
 
