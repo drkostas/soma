@@ -42,8 +42,13 @@ jobs:
           SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
         run: |
           echo "Refreshing Garmin tokens..."
-          RESP=$(curl -sf "${SOMA_WEB_URL}/api/sync/refresh-tokens" 2>&1) || true
+          RESP=$(curl -sf --max-time 25 "${SOMA_WEB_URL}/api/sync/refresh-tokens" 2>&1)
           echo "$RESP"
+          STATUS=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+          if [ "$STATUS" != "skipped" ] && [ "$STATUS" != "refreshed" ]; then
+            echo "::error::Token refresh failed: $RESP"
+            exit 1
+          fi
 
       - name: Install dependencies
         working-directory: sync
