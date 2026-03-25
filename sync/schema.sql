@@ -528,6 +528,8 @@ CREATE TABLE IF NOT EXISTS ingredients (
     raw_to_cooked_ratio REAL,
     category            VARCHAR(40),
     usda_fdc_id         INTEGER,
+    unit                VARCHAR(20) DEFAULT 'g',
+    grams_per_unit      REAL,
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
