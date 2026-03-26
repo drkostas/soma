@@ -28,9 +28,10 @@ export function countToGrams(ing: Ingredient, count: number): number {
   return count * (ing.grams_per_unit || 100);
 }
 
-/** Convert grams to count */
+/** Convert grams to count (snapped to 0.25 increments) */
 export function gramsToCount(ing: Ingredient, grams: number): number {
-  return Math.round(grams / (ing.grams_per_unit || 100));
+  const raw = grams / (ing.grams_per_unit || 100);
+  return Math.round(raw * 4) / 4; // snap to nearest 0.25
 }
 
 export interface MacroTarget {
