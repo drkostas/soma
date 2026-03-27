@@ -45,6 +45,7 @@ export function ComposeMealView({
   const [maxYolks, setMaxYolks] = useState(1);
   // Track which ingredients are in "cooked" display mode (key = ingredient_id)
   const [cookedMode, setCookedMode] = useState<Set<string>>(new Set());
+  const [gramMode, setGramMode] = useState<Set<string>>(new Set());
 
   const ingMap = useMemo(() => {
     const m = new Map<string, Ingredient>();
@@ -162,7 +163,7 @@ export function ComposeMealView({
                     {p.calories}kcal · {p.protein}P · {p.carbs}C · {p.fat}F
                   </span>
                 </span>
-                {ing && isCountBased(ing) ? (
+                {ing && isCountBased(ing) && !gramMode.has(p.ingredient_id) ? (
                   <NumberInput
                     value={gramsToCount(ing, p.grams)}
                     onChange={(v) => handlePortionChange(p.ingredient_id, countToGrams(ing, v))}
@@ -184,14 +185,28 @@ export function ComposeMealView({
                   />
                 )}
               </div>
-              {canToggle && (
-                <button
-                  className="text-[10px] text-muted-foreground ml-0.5 hover:text-foreground"
-                  onClick={() => toggleCookedMode(p.ingredient_id)}
-                >
-                  {isCooked ? `cooked (${p.grams}g raw)` : "switch to cooked weight"}
-                </button>
-              )}
+              <div className="flex gap-2">
+                {canToggle && (
+                  <button
+                    className="text-[10px] text-muted-foreground ml-0.5 hover:text-foreground"
+                    onClick={() => toggleCookedMode(p.ingredient_id)}
+                  >
+                    {isCooked ? `cooked (${p.grams}g raw)` : "switch to cooked weight"}
+                  </button>
+                )}
+                {ing && isCountBased(ing) && (
+                  <button
+                    className="text-[10px] text-muted-foreground ml-0.5 hover:text-foreground"
+                    onClick={() => setGramMode((prev) => {
+                      const next = new Set(prev);
+                      next.has(p.ingredient_id) ? next.delete(p.ingredient_id) : next.add(p.ingredient_id);
+                      return next;
+                    })}
+                  >
+                    {gramMode.has(p.ingredient_id) ? `switch to ${ing.unit || "pcs"}` : "switch to grams"}
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
