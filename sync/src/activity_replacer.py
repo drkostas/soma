@@ -568,9 +568,14 @@ def enrich_new_workouts() -> int:
     # New workouts (not in enrichment table)
     new_workouts = [w for w in workouts if w["hevy_id"] not in existing]
     # Stale workouts (used fallback HR, might now have real Garmin daily data)
+    # Only retry workouts from the last 7 days — older ones won't get daily HR
+    from datetime import datetime, timedelta
+    stale_cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
     stale_workouts = [
         w for w in workouts
-        if w["hevy_id"] in existing and existing[w["hevy_id"]]["hr_source"] != "daily"
+        if w["hevy_id"] in existing
+        and existing[w["hevy_id"]]["hr_source"] != "daily"
+        and (w.get("workout_date") or "2000-01-01") >= stale_cutoff
     ]
 
     to_enrich = new_workouts + stale_workouts
