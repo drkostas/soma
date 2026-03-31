@@ -246,26 +246,23 @@ def compute_and_store_pmc(conn, tau_ctl: float = 42, tau_atl: float = 7) -> list
     # Compute PMC
     pmc_results = compute_pmc(daily_loads, tau_ctl=tau_ctl, tau_atl=tau_atl)
 
-    # Upsert into pmc_daily
-    with conn.cursor() as cur:
-        for entry in pmc_results:
-            cur.execute("""
-                INSERT INTO pmc_daily (date, ctl, atl, tsb, daily_load, computed_at)
-                VALUES (%s, %s, %s, %s, %s, NOW())
+    # Batch upsert into pmc_daily (single query instead of N individual ones)
+    if pmc_results:
+        from psycopg2.extras import execute_values
+        with conn.cursor() as cur:
+            execute_values(cur, """
+                INSERT INTO pmc_daily (date, ctl, atl, tsb, daily_load)
+                VALUES %s
                 ON CONFLICT (date)
                 DO UPDATE SET
                     ctl = EXCLUDED.ctl,
                     atl = EXCLUDED.atl,
                     tsb = EXCLUDED.tsb,
-                    daily_load = EXCLUDED.daily_load,
-                    computed_at = NOW()
-            """, (
-                entry["date"],
-                entry["ctl"],
-                entry["atl"],
-                entry["tsb"],
-                entry["daily_load"],
-            ))
+                    daily_load = EXCLUDED.daily_load
+            """, [
+                (e["date"], e["ctl"], e["atl"], e["tsb"], e["daily_load"])
+                for e in pmc_results
+            ])
 
     conn.commit()
     return pmc_results
