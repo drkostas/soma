@@ -243,19 +243,38 @@ def _workout_steps_summary(parsed: list) -> str:
 
 
 def sync_garmin_workouts(client) -> int:
-    """Sync structured workouts (training templates) from Garmin Connect to DB."""
+    """Sync structured workouts from Garmin Connect to DB.
+
+    Compares updatedDate from the list call against what's in the DB.
+    Only fetches full workout detail for new or changed workouts.
+    """
     import json
     workouts = rate_limited_call(client.get_workouts, 0, 100)
     if not workouts:
         return 0
 
+    # Load known workout timestamps from DB
+    known = {}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT workout_id, COALESCE(raw_json->>'updatedDate', raw_json->>'updateDate') FROM garmin_workouts")
+            known = {str(row[0]): row[1] for row in cur.fetchall()}
+
     count = 0
+    skipped = 0
     with get_connection() as conn:
         with conn.cursor() as cur:
             for w in workouts:
                 workout_id = str(w.get("workoutId", ""))
                 if not workout_id:
                     continue
+
+                # Skip if unchanged (list returns 'updateDate', detail stores 'updatedDate')
+                updated_date = str(w.get("updateDate") or w.get("updatedDate") or "")
+                if workout_id in known and known[workout_id] == updated_date:
+                    skipped += 1
+                    continue
+
                 sport_type = w.get("sportType", {}).get("sportTypeKey", "running")
 
                 # Fetch full workout detail to get workoutSegments + steps
@@ -292,6 +311,9 @@ def sync_garmin_workouts(client) -> int:
                 ))
                 count += 1
         conn.commit()
+
+    if skipped:
+        print(f"  Skipped {skipped} unchanged workouts")
     return count
 
 

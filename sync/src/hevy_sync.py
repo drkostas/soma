@@ -4,16 +4,32 @@ from db import get_connection, upsert_hevy_raw, update_backfill_progress, get_ba
 from hevy_client import HevyClient
 
 
-def sync_all_workouts(client: HevyClient, start_page: int = 1, page_size: int = 10) -> int:
-    """Fetch all workouts from Hevy, paginated. Returns total count saved.
+def _get_known_workout_timestamps(conn) -> dict[str, str]:
+    """Return {hevy_id: updatedAt} for all workouts in DB."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT hevy_id, raw_json->>'updated_at' as updated_at
+            FROM hevy_raw_data
+            WHERE endpoint_name = 'workout'
+        """)
+        return {row[0]: row[1] for row in cur.fetchall()}
 
-    Each workout is committed individually for resume safety.
-    start_page allows resuming from where we left off.
+
+def sync_all_workouts(client: HevyClient, start_page: int = 1, page_size: int = 10) -> int:
+    """Fetch workouts from Hevy incrementally. Stops when reaching known unchanged workouts.
+
+    Hevy returns workouts newest-first. We compare updatedAt timestamps
+    to detect when we've reached data we already have.
     """
     total_count = client.get_workout_count()
     print(f"Hevy reports {total_count} total workouts")
 
+    # Load known timestamps once
+    with get_connection() as conn:
+        known = _get_known_workout_timestamps(conn)
+
     saved = 0
+    skipped = 0
     page = start_page
 
     while True:
@@ -27,48 +43,42 @@ def sync_all_workouts(client: HevyClient, start_page: int = 1, page_size: int = 
         if not workouts:
             break
 
-        # Save each workout individually with its own commit
+        page_all_known = True
         for workout in workouts:
             wid = workout.get("id", f"page{page}_unknown")
+            updated_at = workout.get("updated_at", "")
+
+            # Skip if we already have this exact version
+            if wid in known and known[wid] == updated_at:
+                skipped += 1
+                continue
+
+            page_all_known = False
             try:
                 with get_connection() as conn:
                     upsert_hevy_raw(conn, wid, "workout", workout)
                 saved += 1
+                known[wid] = updated_at  # update local cache
             except Exception as e:
                 print(f"  Error saving workout {wid}: {e}")
-
-        # Update progress after each page
-        try:
-            with get_connection() as conn:
-                update_backfill_progress(
-                    conn, "hevy_workouts",
-                    last_page=page,
-                    total_items=total_count,
-                    items_completed=saved + ((start_page - 1) * page_size),
-                    status="running",
-                )
-        except Exception as e:
-            print(f"  Warning: couldn't update progress: {e}")
 
         page_count = data.get("page_count", page)
         print(f"  Page {page}/{page_count} — {len(workouts)} workouts ({saved} saved this run)")
 
+        # If every workout on this page was already known and unchanged,
+        # all older pages will be too — stop early
+        if page_all_known:
+            remaining = (page_count - page) * page_size
+            if remaining > 0:
+                print(f"  All workouts on page {page} unchanged — skipping {remaining} older workouts")
+            break
+
         if page >= page_count:
-            # All pages fetched — mark complete
-            try:
-                with get_connection() as conn:
-                    update_backfill_progress(
-                        conn, "hevy_workouts",
-                        last_page=page,
-                        total_items=total_count,
-                        items_completed=saved + ((start_page - 1) * page_size),
-                        status="complete",
-                    )
-            except Exception:
-                pass
             break
         page += 1
 
+    if skipped:
+        print(f"  Skipped {skipped} unchanged workouts")
     return saved
 
 
