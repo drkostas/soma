@@ -9,6 +9,7 @@ interface NumberInputProps {
   min: number;
   max: number;
   step: number;
+  sliderStep?: number; // separate step for slider (defaults to step)
   suffix?: string;
   label?: string;
   className?: string;
@@ -30,10 +31,12 @@ export function NumberInput({
   min,
   max,
   step,
+  sliderStep,
   suffix,
   label,
   className,
 }: NumberInputProps) {
+  const sStep = sliderStep ?? step;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -41,7 +44,7 @@ export function NumberInput({
   const commit = (raw: string) => {
     const parsed = parseFloat(raw);
     if (!isNaN(parsed)) {
-      onChange(clamp(snapToStep(parsed, step, min), min, max));
+      onChange(clamp(parsed, min, max));
     }
     setEditing(false);
   };
@@ -55,7 +58,7 @@ export function NumberInput({
 
   const handleSlider = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value);
-    onChange(clamp(snapToStep(v, step, min), min, max));
+    onChange(clamp(snapToStep(v, sStep, min), min, max));
   };
 
   const nudge = (dir: 1 | -1) => {
@@ -121,7 +124,7 @@ export function NumberInput({
           type="range"
           min={min}
           max={max}
-          step={step}
+          step={sStep}
           value={value}
           onChange={handleSlider}
           className={cn(

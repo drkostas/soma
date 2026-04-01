@@ -180,6 +180,7 @@ export function ComposeMealView({
                     min={0}
                     max={500}
                     step={p.increment}
+                    sliderStep={1}
                     suffix="g"
                     className="w-36 shrink-0"
                   />
