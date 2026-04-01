@@ -421,25 +421,7 @@ export function NutritionDashboard({
           </a>
         </div>
 
-        {/* Sleep adjustment banner */}
-        {adjustmentReason && adjustmentReason !== "normal" && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-            <span>
-              {adjustmentReason === "sleep_mild"
-                ? "Mild sleep deficit — targets slightly adjusted"
-                : adjustmentReason === "sleep_moderate" || adjustmentReason === "sleep_moderate_escalated"
-                ? "Moderate sleep deficit — deficit halved for recovery"
-                : adjustmentReason === "sleep_severe" || adjustmentReason === "sleep_severe_escalated"
-                ? "Severe sleep deficit — eating at maintenance today"
-                : adjustmentReason === "sleep_forced_maintenance"
-                ? "Forced maintenance — poor sleep streak"
-                : adjustmentReason === "sleep_diet_break_recommended"
-                ? "Diet break recommended — sustained poor sleep"
-                : "Sleep adjustment active"}
-            </span>
-          </div>
-        )}
+        {/* Sleep adjustment banner — disabled, sleep adjustments are off */}
 
         {/* Budget card */}
         {targetCal > 0 ? (
