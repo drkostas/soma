@@ -169,7 +169,7 @@ export function ComposeMealView({
                     onChange={(v) => handlePortionChange(p.ingredient_id, countToGrams(ing, v))}
                     min={0}
                     max={20}
-                    step={0.25}
+                    step={ing.unit_step ?? 0.25}
                     suffix={ing.unit || "pcs"}
                     className="w-36 shrink-0"
                   />
