@@ -16,6 +16,7 @@ export interface Ingredient {
   raw_to_cooked_ratio?: number | null;
   unit?: string; // 'g' (default), 'egg', 'gel', etc.
   grams_per_unit?: number | null; // grams per 1 unit (e.g., 50 for eggs)
+  unit_step?: number | null; // step increment for count-based (default 0.25, 1 for whole-only)
 }
 
 /** Check if an ingredient uses count-based units instead of grams */
@@ -28,10 +29,11 @@ export function countToGrams(ing: Ingredient, count: number): number {
   return count * (ing.grams_per_unit || 100);
 }
 
-/** Convert grams to count (snapped to 0.25 increments) */
+/** Convert grams to count (snapped to unit_step increments) */
 export function gramsToCount(ing: Ingredient, grams: number): number {
   const raw = grams / (ing.grams_per_unit || 100);
-  return Math.round(raw * 4) / 4; // snap to nearest 0.25
+  const step = ing.unit_step ?? 0.25;
+  return Math.round(raw / step) * step;
 }
 
 export interface MacroTarget {
