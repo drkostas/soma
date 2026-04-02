@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Soma health data sync engine"
 requires-python = ">=3.10"
 dependencies = [
-    "garminconnect>=0.2.38",
+    "garminconnect>=0.2.38,<0.3.0",
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
     "requests>=2.31",
