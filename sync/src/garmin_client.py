@@ -1,155 +1,64 @@
-"""Garmin Connect API client wrapper with token caching."""
+"""Garmin Connect API client wrapper — backed by garmin-auth package.
+
+Public API (unchanged — all existing imports continue to work):
+    init_garmin() -> Garmin client
+    rate_limited_call(func, *args, **kwargs) -> result
+    set_activity_description(client, activity_id, description)
+    upload_activity_image(client, activity_id, image_bytes, filename)
+    API_CALL_DELAY
+"""
 
 import io
 import os
 import time
-from pathlib import Path
 
-from garminconnect import (
-    Garmin,
-    GarminConnectAuthenticationError,
-    GarminConnectTooManyRequestsError,
-)
-from garth.exc import GarthHTTPError
+from garminconnect import Garmin
 
-from config import GARMINTOKENS, get_garmin_credentials
+from garmin_auth import GarminAuth, rate_limited_call as _ga_rate_limited_call
+from garmin_auth.storage import DBTokenStore, FileTokenStore
+
+from config import GARMINTOKENS, DATABASE_URL, get_garmin_credentials
 
 # Delay between API calls to avoid rate limiting (seconds)
 API_CALL_DELAY = 1.0
 
 
-def _load_tokens_from_db():
-    """Load cached Garmin OAuth tokens from the database."""
-    try:
-        from db import get_connection
-        import json
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT credentials FROM platform_credentials WHERE platform = 'garmin_tokens' LIMIT 1")
-                row = cur.fetchone()
-                if row and row[0]:
-                    tokens = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-                    # Write tokens to filesystem so garth can load them
-                    GARMINTOKENS.mkdir(parents=True, exist_ok=True)
-                    for filename, data in tokens.items():
-                        (GARMINTOKENS / filename).write_text(json.dumps(data) if isinstance(data, dict) else data)
-                    return True
-    except Exception as e:
-        print(f"Could not load tokens from DB: {e}")
-    return False
-
-
-def _save_tokens_to_db():
-    """Save Garmin OAuth tokens to the database for persistence across CI runs."""
-    try:
-        from db import get_connection
-        import json
-        tokens = {}
-        for f in GARMINTOKENS.iterdir():
-            if f.is_file():
-                try:
-                    tokens[f.name] = json.loads(f.read_text())
-                except json.JSONDecodeError:
-                    tokens[f.name] = f.read_text()
-        if tokens:
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        INSERT INTO platform_credentials (platform, auth_type, credentials, status)
-                        VALUES ('garmin_tokens', 'oauth', %s, 'active')
-                        ON CONFLICT (platform) DO UPDATE SET credentials = EXCLUDED.credentials
-                    """, (json.dumps(tokens),))
-                conn.commit()
-    except Exception as e:
-        print(f"Could not save tokens to DB: {e}")
-
-
 def init_garmin() -> Garmin:
-    """Initialize Garmin client, reusing cached tokens when possible."""
-    # Attempt 1: Load from DB-cached tokens (survives CI ephemeral runners)
-    _load_tokens_from_db()
+    """Initialize Garmin client, reusing cached tokens when possible.
 
-    # Attempt 2: Use cached tokens if OAuth2 token has >1 hour remaining
-    try:
-        import json
-        from datetime import datetime
-        oauth2_path = GARMINTOKENS / "oauth2_token.json"
-        if oauth2_path.exists():
-            oauth2 = json.loads(oauth2_path.read_text())
-            expires_at = oauth2.get("expires_at", 0)
-            remaining_hours = (datetime.fromtimestamp(expires_at) - datetime.now()).total_seconds() / 3600
-            if remaining_hours > 1:
-                # Token has >1hr — safe to use without refresh
-                client = Garmin()
-                client.login(str(GARMINTOKENS))
-                print(f"Using cached OAuth2 token ({remaining_hours:.1f}h remaining, display_name={client.display_name})")
-                client.garth.dump(str(GARMINTOKENS))
-                _save_tokens_to_db()
-                return client
-            else:
-                print(f"OAuth2 token expiring soon ({remaining_hours:.1f}h) — will try refresh")
-    except Exception as e:
-        print(f"Cached token shortcut failed: {e}")
-
-    # Attempt 3: Load from filesystem cached tokens (triggers token exchange)
-    try:
-        client = Garmin()
-        client.login(str(GARMINTOKENS))
-        # Save back to DB in case they were refreshed
-        GARMINTOKENS.mkdir(parents=True, exist_ok=True)
-        client.garth.dump(str(GARMINTOKENS))
-        _save_tokens_to_db()
-        return client
-    except GarminConnectTooManyRequestsError:
-        print("Garmin rate limited (429) on token exchange — trying fresh credentials...")
-        # Fall through to Attempt 4 (fresh credentials)
-    except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError) as e:
-        print(f"Token login failed: {e}")
-        pass
-
-    # Attempt 3: Fresh login with credentials
+    Uses garmin-auth package with dual storage (file + DB) for token persistence.
+    """
     email, password = get_garmin_credentials()
-    if not email or not password:
-        raise RuntimeError(
-            "No cached tokens and Garmin credentials not set. "
-            "Configure via Sync Hub settings or GARMIN_EMAIL/GARMIN_PASSWORD env vars."
-        )
 
-    # Temporarily unset GARMINTOKENS so login() doesn't try to load from it
-    saved = os.environ.pop("GARMINTOKENS", None)
+    # Use DB as primary store (survives CI ephemeral runners),
+    # file store as the garth-compatible token dir
+    store = DBTokenStore(DATABASE_URL)
+
+    auth = GarminAuth(
+        email=email,
+        password=password,
+        store=store,
+        token_dir=GARMINTOKENS,
+    )
+
+    client = auth.login()
+
+    # Also save to DB after successful login (garmin-auth saves to its store,
+    # but we want to ensure both file and DB are in sync)
     try:
-        client = Garmin(email=email, password=password)
-        client.login()
-    except GarminConnectTooManyRequestsError:
-        raise RuntimeError(
-            "Garmin rate limited (429) on all auth attempts. "
-            "Wait for rate limit to clear or refresh tokens locally."
-        )
-    finally:
-        if saved is not None:
-            os.environ["GARMINTOKENS"] = saved
-
-    # Persist tokens to filesystem and DB
-    GARMINTOKENS.mkdir(parents=True, exist_ok=True)
-    client.garth.dump(str(GARMINTOKENS))
-    _save_tokens_to_db()
+        file_store = FileTokenStore(GARMINTOKENS)
+        tokens = file_store.load()
+        if tokens:
+            store.save(tokens)
+    except Exception:
+        pass
 
     return client
 
 
 def rate_limited_call(func, *args, **kwargs):
     """Call a Garmin API method with rate limiting and retry on 429."""
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            result = func(*args, **kwargs)
-            time.sleep(API_CALL_DELAY)
-            return result
-        except GarminConnectTooManyRequestsError:
-            wait = (attempt + 1) * 30
-            print(f"Rate limited. Waiting {wait}s before retry...")
-            time.sleep(wait)
-    raise GarminConnectTooManyRequestsError("Max retries exceeded")
+    return _ga_rate_limited_call(func, *args, delay=API_CALL_DELAY, **kwargs)
 
 
 def set_activity_description(client: Garmin, activity_id: int, description: str):
