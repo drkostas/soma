@@ -771,11 +771,11 @@ def run_pipeline(days: int | None = None):
                 cur.execute("""
                     SELECT COUNT(*) FROM sync_log
                     WHERE status = 'success'
-                      AND started_at >= NOW() - INTERVAL '30 minutes'
+                      AND started_at >= NOW() - INTERVAL '10 minutes'
                 """)
                 recent_count = cur.fetchone()[0]
         if recent_count > 0:
-            print(f"Skipping {triggered_by} sync — a sync completed within the last 30 minutes.")
+            print(f"Skipping {triggered_by} sync — a sync completed within the last 10 minutes.")
             return
 
     if days is not None:
