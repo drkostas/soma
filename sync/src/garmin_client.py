@@ -31,14 +31,15 @@ def init_garmin() -> Garmin:
     email, password = get_garmin_credentials()
 
     # Use DB as primary store (survives CI ephemeral runners),
-    # file store as the garth-compatible token dir
+    # /tmp for garth token files on read-only filesystems (Vercel, GitHub Actions)
     store = DBTokenStore(DATABASE_URL)
+    garth_dir = "/tmp/.garminconnect" if not os.path.isdir(GARMINTOKENS) else GARMINTOKENS
 
     auth = GarminAuth(
         email=email,
         password=password,
         store=store,
-        token_dir=GARMINTOKENS,
+        token_dir=garth_dir,
     )
 
     client = auth.login()
