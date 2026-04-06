@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Settings2, Check, Loader2, Eye, EyeOff } from "lucide-react";
+import { Settings2, Check, Loader2, Eye, EyeOff, ExternalLink } from "lucide-react";
 
 interface FieldConfig {
   key: string;
@@ -339,7 +339,7 @@ function GarminBrowserAuth({
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
       >
-        <LinkIcon className="h-3 w-3" />
+        <ExternalLink className="h-3 w-3" />
         Sign into Garmin
       </a>
       <div className="flex gap-2">
