@@ -18,7 +18,8 @@ from pathlib import Path
 
 from config import DATABASE_URL
 from db import get_connection, upsert_workout_enrichment, get_outlier_workouts
-from fit_generator import generate_fit
+from hevy2garmin.fit import generate_fit
+from hevy2garmin.garmin import upload_fit as h2g_upload_fit, rename_activity as h2g_rename
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -219,8 +220,8 @@ def resolve_hr_samples(
         return [avg_hr] * 30, f"avg_{len(window)}"
 
     # Ultimate fallback
-    from fit_generator import _DEFAULT_HR_BPM
-    return [_DEFAULT_HR_BPM] * 30, "static"
+    from hevy2garmin.fit import DEFAULT_HR_BPM
+    return [DEFAULT_HR_BPM] * 30, "static"
 
 
 # ---------------------------------------------------------------------------
@@ -372,36 +373,24 @@ def process_workout(
             print(f"  DRY RUN - skipping upload for {hevy_id}")
             return result
 
-        # 2. Upload FIT
+        # 2. Upload FIT + rename via hevy2garmin
         print(f"  Uploading {fit_path}...")
-        from garmin_client import rate_limited_call
-        upload_resp = rate_limited_call(garmin_client.upload_activity, fit_path)
-
-        # Extract activity ID from upload response
-        new_id = _extract_activity_id(upload_resp)
-        result["upload_result"] = str(upload_resp)
-
-        # If async processing, wait and find by timestamp match
-        if not new_id:
-            import time as _time
-            print(f"    Waiting 8s for Garmin to process upload...")
-            _time.sleep(8)
-            new_id = _find_recent_garmin_activity(garmin_client, workout)
-            if new_id:
-                print(f"    Found activity {new_id} via recent activity lookup")
-
-        # 3. Rename activity to match Hevy workout title
         hevy_title = workout.get("hevy_title", "")
+        start_time = workout.get("hevy_workout", {}).get("start_time")
+        upload_result = h2g_upload_fit(garmin_client, fit_path, workout_start=start_time)
+        new_id = upload_result.get("activity_id")
+
         if hevy_title and new_id:
             try:
-                rate_limited_call(
-                    garmin_client.set_activity_name, new_id, hevy_title
-                )
+                h2g_rename(garmin_client, new_id, hevy_title)
                 result["new_activity_id"] = new_id
                 print(f"  Renamed activity {new_id} to '{hevy_title}'")
             except Exception as e:
                 print(f"  Warning: could not rename activity: {e}")
-        elif hevy_title:
+                result["new_activity_id"] = new_id
+        elif new_id:
+            result["new_activity_id"] = new_id
+        else:
             print(f"  Warning: could not extract activity ID from upload response")
 
         # Update enrichment status (direct UPDATE avoids INSERT NOT NULL issues)
@@ -549,7 +538,7 @@ def enrich_new_workouts() -> int:
 
     Returns count of newly enriched/updated workouts.
     """
-    from fit_generator import _calc_calories, _parse_timestamp
+    from hevy2garmin.fit import calc_calories as _calc_calories, parse_timestamp as _parse_timestamp
 
     with get_connection() as conn:
         workouts = get_all_hevy_workouts(conn)

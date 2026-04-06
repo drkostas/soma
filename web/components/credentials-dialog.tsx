@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Settings2, Check, Loader2, Eye, EyeOff } from "lucide-react";
+import { Settings2, Check, Loader2, Eye, EyeOff, ExternalLink } from "lucide-react";
 
 interface FieldConfig {
   key: string;
@@ -219,6 +219,16 @@ export function CredentialsDialog({
             </div>
           ))}
 
+          {platform === "garmin" && (
+            <GarminBrowserAuth
+              onSuccess={() => {
+                setSaved(true);
+                setTimeout(() => { setOpen(false); router.refresh(); }, 800);
+              }}
+              onError={setError}
+            />
+          )}
+
           {error && (
             <p className="text-sm text-red-500">{error}</p>
           )}
@@ -250,5 +260,100 @@ export function CredentialsDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const GARMIN_SSO_URL =
+  "https://sso.garmin.com/sso/signin?id=gauth-widget&embedWidget=true" +
+  "&gauthHost=https%3A%2F%2Fsso.garmin.com%2Fsso" +
+  "&service=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed" +
+  "&source=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed" +
+  "&redirectAfterAccountLoginUrl=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed" +
+  "&redirectAfterAccountCreationUrl=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed";
+
+const CF_WORKER_URL = "https://hevy2garmin-exchange.gkos.workers.dev/exchange";
+
+function GarminBrowserAuth({
+  onSuccess,
+  onError,
+}: {
+  onSuccess: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [ticketUrl, setTicketUrl] = useState("");
+  const [connecting, setConnecting] = useState(false);
+
+  async function handleConnect() {
+    const raw = ticketUrl.trim();
+    if (!raw) { onError("Paste the URL first"); return; }
+
+    const ticketMatch = raw.match(/ticket=([^&\s]+)/);
+    const ticket = ticketMatch ? ticketMatch[1] : raw.startsWith("ST-") ? raw : null;
+    if (!ticket) { onError("No ticket found in URL. Copy the full URL after signing in."); return; }
+
+    setConnecting(true);
+    try {
+      // Exchange ticket via CF Worker
+      const exchResp = await fetch(CF_WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket }),
+      });
+      const exchData = await exchResp.json();
+      if (exchData.error) { onError(exchData.error); return; }
+
+      // Store tokens on our server
+      const storeResp = await fetch("/api/connections/garmin/ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(exchData),
+      });
+      const storeData = await storeResp.json();
+      if (storeData.ok) {
+        onSuccess();
+      } else {
+        onError(storeData.error || "Failed to save tokens");
+      }
+    } catch {
+      onError("Network error. Try again.");
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-border pt-4 space-y-3">
+      <p className="text-sm font-medium text-foreground">Browser Authentication</p>
+      <p className="text-xs text-muted-foreground">
+        Garmin blocks automated logins from cloud servers. Sign in with your browser instead:
+      </p>
+      <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+        <li>Click <strong>Sign into Garmin</strong> below</li>
+        <li>Log in with your Garmin email and password</li>
+        <li>Copy the URL from the address bar after login</li>
+        <li>Paste it below and click <strong>Connect</strong></li>
+      </ol>
+      <a
+        href={GARMIN_SSO_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+      >
+        <ExternalLink className="h-3 w-3" />
+        Sign into Garmin
+      </a>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={ticketUrl}
+          onChange={(e) => setTicketUrl(e.target.value)}
+          placeholder="https://sso.garmin.com/sso/embed?ticket=ST-..."
+          className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <Button size="sm" onClick={handleConnect} disabled={connecting}>
+          {connecting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Connect"}
+        </Button>
+      </div>
+    </div>
   );
 }
