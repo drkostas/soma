@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Soma health data sync engine"
 requires-python = ">=3.10"
 dependencies = [
-    "garmin-auth>=0.2.0",
+    "hevy2garmin>=0.1.2",
+    "garmin-auth>=0.2.1",
     "garminconnect>=0.2.38,<0.3.0",
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
