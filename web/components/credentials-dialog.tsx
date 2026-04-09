@@ -271,7 +271,9 @@ const GARMIN_SSO_URL =
   "&redirectAfterAccountLoginUrl=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed" +
   "&redirectAfterAccountCreationUrl=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed";
 
-const CF_WORKER_URL = "https://hevy2garmin-exchange.gkos.workers.dev/exchange";
+// DI OAuth exchange worker (garmin-auth >= 0.3.0). The legacy
+// `hevy2garmin-exchange` worker stays alive for older hevy2garmin deployments.
+const CF_WORKER_URL = "https://hevy2garmin-exchange-di.gkos.workers.dev/exchange";
 
 function GarminBrowserAuth({
   onSuccess,
@@ -293,7 +295,8 @@ function GarminBrowserAuth({
 
     setConnecting(true);
     try {
-      // Exchange ticket via CF Worker
+      // Exchange ticket via CF Worker — returns {di_token, di_refresh_token, di_client_id, ...}
+      // (garmin-auth >= 0.3.0 single-file DI OAuth format).
       const exchResp = await fetch(CF_WORKER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -301,12 +304,20 @@ function GarminBrowserAuth({
       });
       const exchData = await exchResp.json();
       if (exchData.error) { onError(exchData.error); return; }
+      if (!exchData.di_token || !exchData.di_refresh_token || !exchData.di_client_id) {
+        onError("Worker returned unexpected response shape");
+        return;
+      }
 
       // Store tokens on our server
       const storeResp = await fetch("/api/connections/garmin/ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(exchData),
+        body: JSON.stringify({
+          di_token: exchData.di_token,
+          di_refresh_token: exchData.di_refresh_token,
+          di_client_id: exchData.di_client_id,
+        }),
       });
       const storeData = await storeResp.json();
       if (storeData.ok) {
