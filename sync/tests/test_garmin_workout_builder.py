@@ -267,11 +267,12 @@ def test_push_plan_to_garmin_basic():
     ]
     mock_cursor.fetchone.return_value = (1,)  # week_number
 
-    # Mock Garmin client
+    # Mock Garmin client — garminconnect 0.3.0 exposes the inner HTTP client
+    # at ``client.client`` (replaces the old ``client.garth`` path).
     mock_client = MagicMock()
     mock_client.upload_workout.return_value = {"workoutId": 12345}
-    mock_garth_post = MagicMock()
-    mock_client.garth.post = mock_garth_post
+    mock_client_post = MagicMock()
+    mock_client.client.post = mock_client_post
 
     with patch("garmin_client.rate_limited_call") as mock_rlc:
         # rate_limited_call should call the function and return its result
@@ -289,9 +290,9 @@ def test_push_plan_to_garmin_basic():
     assert "Easy Run" in payload["workoutName"]
     assert payload["sportType"]["sportTypeKey"] == "running"
 
-    # Verify scheduling was called
-    mock_garth_post.assert_called_once()
-    schedule_args = mock_garth_post.call_args
+    # Verify scheduling was called via the new .client.post path
+    mock_client_post.assert_called_once()
+    schedule_args = mock_client_post.call_args
     assert "schedule" in schedule_args[0][1]
     assert schedule_args[1]["json"]["date"] == "2026-03-10"
 

@@ -66,7 +66,7 @@ def set_activity_description(client: Garmin, activity_id: int, description: str)
     """Set description for a Garmin activity (not built into garminconnect lib)."""
     url = f"/activity-service/activity/{activity_id}"
     payload = {"activityId": activity_id, "description": description}
-    result = client.garth.put("connectapi", url, json=payload, api=True)
+    result = client.client.put("connectapi", url, json=payload, api=True)
     time.sleep(API_CALL_DELAY)
     return result
 
@@ -78,7 +78,7 @@ def upload_activity_image(client: Garmin, activity_id: int, image_bytes: bytes, 
     POST /activity-service/activity/{id}/image (multipart/form-data)
     """
     files = {"file": (filename, io.BytesIO(image_bytes))}
-    result = client.garth.post(
+    result = client.client.post(
         "connectapi",
         f"activity-service/activity/{activity_id}/image",
         files=files,

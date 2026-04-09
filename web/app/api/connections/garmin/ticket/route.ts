@@ -2,41 +2,52 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
 /**
- * Store Garmin OAuth tokens obtained via the Cloudflare Worker exchange.
+ * Store Garmin DI OAuth tokens obtained via the Cloudflare Worker exchange.
  *
- * Flow: user signs into Garmin SSO in their browser (residential IP),
- * copies the ticket URL, frontend sends ticket to CF Worker which
- * exchanges it for OAuth1+OAuth2 tokens, then POSTs them here for storage.
+ * Flow: user signs into Garmin SSO in their browser (residential IP, MFA
+ * handled natively by Garmin's own UI), copies the ticket URL, frontend
+ * sends the ticket to the Cloudflare Worker which exchanges it for a
+ * DI OAuth token at `diauth.garmin.com`, then POSTs the result here for
+ * persistence in `platform_credentials.credentials` (wrapped under the
+ * ``garmin_tokens`` key so the Python-side `garmin-auth>=0.3.0`
+ * ``DBTokenStore`` can read it).
  */
 export async function POST(req: NextRequest) {
   const sql = getDb();
 
   try {
-    const { oauth1, oauth2 } = await req.json();
+    const body = await req.json();
+    // Accept either a top-level DI payload or a nested ``tokens`` wrapper
+    // (the CF Worker returns top-level; some clients wrap it).
+    const tokens = body?.tokens ?? body;
 
-    if (!oauth1?.oauth_token || !oauth2?.access_token) {
+    if (!tokens?.di_token || !tokens?.di_refresh_token || !tokens?.di_client_id) {
       return NextResponse.json(
-        { error: "Invalid tokens — missing oauth_token or access_token" },
+        { error: "Invalid tokens — expected di_token, di_refresh_token, di_client_id" },
         { status: 400 },
       );
     }
 
-    const tokens = {
-      "oauth1_token.json": oauth1,
-      "oauth2_token.json": oauth2,
+    const payload = {
+      di_token: tokens.di_token,
+      di_refresh_token: tokens.di_refresh_token,
+      di_client_id: tokens.di_client_id,
     };
+    // garmin-auth >= 0.3.0 DBTokenStore wraps the DI payload under the
+    // ``garmin_tokens`` key inside the credentials JSONB column.
+    const credentials = JSON.stringify({ garmin_tokens: payload });
 
-    // Store in platform_credentials as garmin_tokens (same format garmin-auth expects)
     await sql`
       INSERT INTO platform_credentials (platform, auth_type, credentials, status, connected_at)
-      VALUES ('garmin_tokens', 'oauth', ${JSON.stringify(tokens)}::jsonb, 'active', NOW())
+      VALUES ('garmin_tokens', 'oauth', ${credentials}::jsonb, 'active', NOW())
       ON CONFLICT (platform)
-      DO UPDATE SET credentials = ${JSON.stringify(tokens)}::jsonb,
+      DO UPDATE SET credentials = ${credentials}::jsonb,
                     status = 'active',
                     connected_at = NOW()
     `;
 
-    // Also update garmin platform status
+    // Also mark the user-facing ``garmin`` platform row as active so the
+    // connections dashboard reflects the state immediately.
     await sql`
       UPDATE platform_credentials
       SET status = 'active', connected_at = NOW()

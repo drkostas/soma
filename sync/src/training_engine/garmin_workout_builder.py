@@ -286,7 +286,7 @@ def push_plan_to_garmin(conn, client, plan_id: int) -> int:
                 schedule_url = f"/workout-service/schedule/{garmin_id}"
                 schedule_body = {"date": day_date.isoformat()}
                 rate_limited_call(
-                    client.garth.post,
+                    client.client.post,
                     "connectapi", schedule_url, json=schedule_body, api=True,
                 )
 
