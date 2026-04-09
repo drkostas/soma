@@ -156,22 +156,36 @@ def _compute_hevy_loads(conn):
     conn.commit()
 
 
-def run_training_engine(conn):
+def _fresh_conn():
+    """Get a fresh DB connection. Each step gets its own to prevent transaction cascade failures."""
+    import psycopg2
+    from config import DATABASE_URL
+    return psycopg2.connect(DATABASE_URL)
+
+
+def _run_step(name, func, *args):
+    """Run a training engine step with its own connection. Commits on success, rolls back on failure."""
+    conn = _fresh_conn()
+    try:
+        result = func(conn, *args)
+        conn.commit()
+        return result
+    except Exception as e:
+        conn.rollback()
+        logger.error("Training engine: %s failed: %s", name, e)
+        return None
+    finally:
+        conn.close()
+
+
+def run_training_engine(conn=None):
     """
     Run all training engine streams and merge.
     Called from pipeline.py after parsing.
 
-    Steps:
-    1. Compute load for any new activities (backfill_load_from_history)
-    1b. Compute strength loads from Hevy workouts
-    2. Recompute PMC (compute_and_store_pmc)
-    3. Compute today's readiness (compute_daily_readiness)
-    4. Update fitness trajectory (update_fitness_trajectory)
-    5. Update body comp (update_body_comp)
-    6. Merge all stream outputs
-    7. Log results
-
-    Each step is wrapped in try/except so one failure doesn't block others.
+    Each step uses its own DB connection so a failure in one step
+    doesn't put the transaction in an aborted state for subsequent steps.
+    The conn parameter is accepted for backwards compatibility but ignored.
     """
     from training_engine.load_stream import backfill_load_from_history, compute_and_store_pmc
     from training_engine.readiness_stream import compute_daily_readiness
@@ -182,146 +196,118 @@ def run_training_engine(conn):
     today = today_nyc()
 
     # 1. Compute loads for new activities
-    try:
-        loads = backfill_load_from_history(conn)
+    loads = _run_step("load computation", backfill_load_from_history) or []
+    if loads:
         logger.info("Training engine: %d activity loads computed", len(loads))
-    except Exception as e:
-        logger.error("Training engine: load computation failed: %s", e)
-        loads = []
 
     # 1b. Compute strength loads from Hevy workouts
-    try:
-        _compute_hevy_loads(conn)
-        logger.info("Training engine: strength loads computed")
-    except Exception as e:
-        logger.error("Training engine: strength load computation failed: %s", e)
+    _run_step("strength loads", lambda conn: _compute_hevy_loads(conn))
 
     # 2. Recompute PMC
-    pmc = []
-    try:
-        pmc = compute_and_store_pmc(conn)
+    pmc = _run_step("PMC", compute_and_store_pmc) or []
+    if pmc:
         logger.info("Training engine: PMC computed for %d days", len(pmc))
-    except Exception as e:
-        logger.error("Training engine: PMC computation failed: %s", e)
 
     # 2b. Try Banister fitting for personal tau values
-    banister_params = None
     try:
         from training_engine.banister import fit_from_db, _DEFAULT_PARAMS
-        banister_params = fit_from_db(conn)
+        banister_params = _run_step("Banister fitting", fit_from_db)
         if banister_params and abs(banister_params.tau1 - _DEFAULT_PARAMS.tau1) > 0.5:
-            logger.info("Training engine: Banister fitted — τ1=%.1f, τ2=%.1f",
-                        banister_params.tau1, banister_params.tau2)
-            # Re-run PMC with personal tau
-            pmc = compute_and_store_pmc(conn, tau_ctl=banister_params.tau1, tau_atl=banister_params.tau2)
-            logger.info("Training engine: PMC re-computed with personal τ values")
+            logger.info("Training engine: Banister fitted, re-running PMC with personal tau")
+            pmc = _run_step("PMC (personal tau)", compute_and_store_pmc,
+                            banister_params.tau1, banister_params.tau2) or pmc
     except Exception as e:
         logger.error("Training engine: Banister fitting failed (using defaults): %s", e)
 
     # 3. Today's readiness
-    readiness = None
-    try:
-        readiness = compute_daily_readiness(conn, today)
-        if readiness:
-            logger.info("Training engine: readiness=%s (z=%.2f)",
-                        readiness.get("traffic_light"), readiness.get("composite_score", 0))
-        else:
-            logger.info("Training engine: insufficient data for readiness")
-    except Exception as e:
-        logger.error("Training engine: readiness computation failed: %s", e)
+    readiness = _run_step("readiness", compute_daily_readiness, today)
+    if readiness:
+        logger.info("Training engine: readiness=%s (z=%.2f)",
+                    readiness.get("traffic_light"), readiness.get("composite_score", 0))
+    else:
+        logger.info("Training engine: insufficient data for readiness")
 
     # 3b. Advance calibration
     try:
         from training_engine.calibration import advance_calibration, CalibrationState
 
-        # Load persisted calibration state from DB, fall back to defaults
-        calib_state = None
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT phase, data_days, weights, correlations, force_equal
-                    FROM calibration_state
-                    WHERE id = 1
-                """)
-                row = cur.fetchone()
-            if row:
-                db_phase, db_data_days, db_weights, db_correlations, db_force_equal = row
-                if isinstance(db_weights, str):
-                    db_weights = json.loads(db_weights)
-                if isinstance(db_correlations, str):
-                    db_correlations = json.loads(db_correlations)
+        def _run_calibration(conn):
+            calib_state = None
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT phase, data_days, weights, correlations, force_equal
+                        FROM calibration_state WHERE id = 1
+                    """)
+                    row = cur.fetchone()
+                if row:
+                    db_phase, db_data_days, db_weights, db_correlations, db_force_equal = row
+                    if isinstance(db_weights, str):
+                        db_weights = json.loads(db_weights)
+                    if isinstance(db_correlations, str):
+                        db_correlations = json.loads(db_correlations)
+                    calib_state = CalibrationState(
+                        phase=db_phase, data_days=db_data_days, weights=db_weights,
+                        correlations=db_correlations, force_equal=db_force_equal,
+                    )
+            except Exception:
+                pass
+            if calib_state is None:
                 calib_state = CalibrationState(
-                    phase=db_phase,
-                    data_days=db_data_days,
-                    weights=db_weights,
-                    correlations=db_correlations,
-                    force_equal=db_force_equal,
+                    phase=1, data_days=0,
+                    weights={"hrv": 0.25, "sleep": 0.25, "rhr": 0.25, "bb": 0.25},
+                    force_equal=False,
                 )
-                logger.info("Training engine: loaded calibration state from DB (phase=%d, data_days=%d)",
-                            db_phase, db_data_days)
-        except Exception:
-            # Table may not exist yet; advance_calibration will create it
-            pass
+            return advance_calibration(conn, calib_state)
 
-        if calib_state is None:
-            calib_state = CalibrationState(
-                phase=1, data_days=0,
-                weights={"hrv": 0.25, "sleep": 0.25, "rhr": 0.25, "bb": 0.25},
-                force_equal=False,
-            )
-
-        updated_calib = advance_calibration(conn, calib_state)
-        logger.info("Training engine: calibration phase=%d, data_days=%d, weights=%s",
-                     updated_calib.phase, updated_calib.data_days, updated_calib.weights)
+        updated_calib = _run_step("calibration", _run_calibration)
+        if updated_calib:
+            logger.info("Training engine: calibration phase=%d, data_days=%d, weights=%s",
+                         updated_calib.phase, updated_calib.data_days, updated_calib.weights)
     except Exception as e:
         logger.error("Training engine: calibration failed: %s", e)
 
-    # 3c. Sequencing enforcement — apply z-penalty for leg day conflicts
+    # 3c. Sequencing enforcement
     try:
         from training_engine.sequencing import check_leg_day_conflict
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT day_date, gym_workout FROM training_plan_day
-                WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
-                  AND gym_workout IS NOT NULL
-                  AND day_date BETWEEN %s - interval '3 days' AND %s
-            """, (today, today))
-            recent_gym = [{"date": r[0], "gym_workout": r[1]} for r in cur.fetchall()]
 
-            cur.execute("""
-                SELECT run_type FROM training_plan_day
-                WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
-                  AND day_date = %s
-            """, (today,))
-            today_run = cur.fetchone()
+        def _run_sequencing(conn):
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT day_date, gym_workout FROM training_plan_day
+                    WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
+                      AND gym_workout IS NOT NULL
+                      AND day_date BETWEEN %s - interval '3 days' AND %s
+                """, (today, today))
+                recent_gym = [{"date": r[0], "gym_workout": r[1]} for r in cur.fetchall()]
+                cur.execute("""
+                    SELECT run_type FROM training_plan_day
+                    WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
+                      AND day_date = %s
+                """, (today,))
+                today_run = cur.fetchone()
+            return {"today_run": today_run, "recent_gym": recent_gym}
 
-        if today_run and recent_gym:
-            has_conflict = check_leg_day_conflict(today, today_run[0], recent_gym)
+        seq = _run_step("sequencing", _run_sequencing)
+        if seq and seq.get("today_run") and seq.get("recent_gym"):
+            has_conflict = check_leg_day_conflict(today, seq["today_run"][0], seq["recent_gym"])
             if has_conflict and readiness:
                 original_z = readiness.get("composite_score", 0)
                 readiness["composite_score"] = original_z - 0.3
-                logger.info("Training engine: sequencing conflict — z penalty applied (%.2f → %.2f)",
+                logger.info("Training engine: sequencing conflict, z penalty applied (%.2f -> %.2f)",
                             original_z, readiness["composite_score"])
     except Exception as e:
         logger.error("Training engine: sequencing check failed: %s", e)
 
     # 4. Fitness trajectory
-    fitness = None
-    try:
-        fitness = update_fitness_trajectory(conn, today)
-        if fitness:
-            logger.info("Training engine: VO2max=%s", fitness.get("vo2max"))
-    except Exception as e:
-        logger.error("Training engine: fitness update failed: %s", e)
+    fitness = _run_step("fitness trajectory", update_fitness_trajectory, today)
+    if fitness:
+        logger.info("Training engine: VO2max=%s", fitness.get("vo2max"))
 
     # 5. Body comp
-    body = None
-    try:
-        body = update_body_comp(conn, today)
-        if body:
-            logger.info("Training engine: weight=%.1f kg", body.get("weight_kg", 0))
-    except Exception as e:
-        logger.error("Training engine: body comp update failed: %s", e)
+    body = _run_step("body comp", update_body_comp, today)
+    if body:
+        logger.info("Training engine: weight=%.1f kg", body.get("weight_kg", 0))
 
     # 6. Merge all streams
     try:
@@ -357,42 +343,46 @@ def run_training_engine(conn):
     # 7. Compute session quality for matched plan days
     try:
         from training_engine.session_quality import compute_session_quality
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT d.id, d.run_type,
-                       g.raw_json, d.workout_steps
-                FROM training_plan_day d
-                JOIN training_plan p ON d.plan_id = p.id
-                JOIN garmin_activity_raw g ON g.activity_id::text = d.garmin_workout_id
-                WHERE p.status = 'active'
-                  AND d.garmin_workout_id IS NOT NULL
-                  AND d.session_quality_score IS NULL
-                  AND g.endpoint_name = 'summary'
-            """)
-            matched = cur.fetchall()
 
-        count = 0
-        for day_id, run_type, raw_json, workout_steps_raw in matched:
-            if run_type == 'rest':
-                continue
-            data = raw_json if isinstance(raw_json, dict) else json.loads(raw_json)
-            actual_duration = data.get('duration', 0)
-            actual_distance = data.get('distance', 0)
-            actual_hr = data.get('averageHR')
+        def _run_session_quality(conn):
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT d.id, d.run_type,
+                           g.raw_json, d.workout_steps
+                    FROM training_plan_day d
+                    JOIN training_plan p ON d.plan_id = p.id
+                    JOIN garmin_activity_raw g ON g.activity_id::text = d.garmin_workout_id
+                    WHERE p.status = 'active'
+                      AND d.garmin_workout_id IS NOT NULL
+                      AND d.session_quality_score IS NULL
+                      AND g.endpoint_name = 'summary'
+                """)
+                matched = cur.fetchall()
 
-            if actual_distance > 0 and actual_duration > 0:
-                actual_pace = actual_duration / (actual_distance / 1000)
-                planned_pace = _extract_planned_pace(workout_steps_raw)
-                planned_hr = 150  # no HR targets in plan yet; keep default
+            count = 0
+            for day_id, run_type, raw_json, workout_steps_raw in matched:
+                if run_type == 'rest':
+                    continue
+                data = raw_json if isinstance(raw_json, dict) else json.loads(raw_json)
+                actual_duration = data.get('duration', 0)
+                actual_distance = data.get('distance', 0)
+                actual_hr = data.get('averageHR')
 
-                quality = compute_session_quality(planned_pace, actual_pace, planned_hr, actual_hr)
-                if quality is not None:
-                    with conn.cursor() as cur:
-                        cur.execute("""
-                            UPDATE training_plan_day SET session_quality_score = %s WHERE id = %s
-                        """, (quality, day_id))
-                    count += 1
-        conn.commit()
+                if actual_distance > 0 and actual_duration > 0:
+                    actual_pace = actual_duration / (actual_distance / 1000)
+                    planned_pace = _extract_planned_pace(workout_steps_raw)
+                    planned_hr = 150
+
+                    quality = compute_session_quality(planned_pace, actual_pace, planned_hr, actual_hr)
+                    if quality is not None:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                UPDATE training_plan_day SET session_quality_score = %s WHERE id = %s
+                            """, (quality, day_id))
+                        count += 1
+            return count
+
+        count = _run_step("session quality", _run_session_quality) or 0
         logger.info("Training engine: session quality computed for %d matched days", count)
     except Exception as e:
         logger.error("Training engine: session quality failed: %s", e)
