@@ -18,31 +18,68 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Circuit breaker — skip if previous sync failed
+      - name: Additive backoff — skip if too soon after a failure
         if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          LAST=$(gh run list --workflow=sync.yml --status=completed --limit=5 \
-            --json conclusion \
-            --jq '[.[] | select(.conclusion == "success" or .conclusion == "failure")][0].conclusion // "none"' \
-            2>/dev/null || echo "unknown")
-          if [ "$LAST" = "failure" ]; then
-            echo "::error::Auto-sync paused after previous failure. Trigger a manual run to resume."
-            exit 1
-          fi
+          # Additive backoff: 1st fail → 1h, 2nd → 3h, 3rd → 5h ... cap 24h.
+          # Exits 0 + sets SKIP_SYNC=true if inside the window (so the skip
+          # itself is NOT a failure and doesn't extend the window).
+          # Manual/dispatch triggers bypass this step entirely.
+
+          RUNS=$(gh run list --workflow=sync.yml --status=completed --limit=20 \
+            --json conclusion,createdAt \
+            --jq '[.[] | select(.conclusion == "success" or .conclusion == "failure")]' \
+            2>/dev/null || echo "[]")
+
+          python3 -c "
+          import json, os, sys
+          from datetime import datetime, timezone, timedelta
+
+          runs = json.loads('''$RUNS''')
+          if not runs:
+              sys.exit(0)
+
+          consecutive = 0
+          for r in runs:
+              if r['conclusion'] == 'failure':
+                  consecutive += 1
+              else:
+                  break
+
+          if consecutive == 0:
+              sys.exit(0)
+
+          backoff_h = min(2 * consecutive - 1, 24)
+          last = datetime.fromisoformat(runs[0]['createdAt'].replace('Z', '+00:00'))
+          elapsed = datetime.now(timezone.utc) - last
+          remaining = timedelta(hours=backoff_h) - elapsed
+
+          if remaining.total_seconds() > 0:
+              h = remaining.total_seconds() / 3600
+              print(f'::notice::Backoff: {consecutive} failure(s), waiting {backoff_h}h ({h:.1f}h left). Manual trigger bypasses.')
+              with open(os.environ.get('GITHUB_ENV', '/dev/null'), 'a') as f:
+                  f.write('SKIP_SYNC=true\n')
+          else:
+              print(f'::notice::Backoff expired ({backoff_h}h window, {elapsed.total_seconds()/3600:.1f}h elapsed). Retrying.')
+          "
 
       - uses: actions/checkout@v4
+        if: env.SKIP_SYNC != 'true'
 
       - uses: actions/setup-python@v5
+        if: env.SKIP_SYNC != 'true'
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        if: env.SKIP_SYNC != 'true'
         working-directory: sync
         run: pip install -e .
 
       - name: Run sync pipeline (smart — auto-detects stale dates)
+        if: env.SKIP_SYNC != 'true'
         working-directory: sync
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
