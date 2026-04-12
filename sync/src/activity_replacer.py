@@ -20,6 +20,7 @@ from config import DATABASE_URL
 from db import get_connection, upsert_workout_enrichment, get_outlier_workouts
 from hevy2garmin.fit import generate_fit
 from hevy2garmin.garmin import upload_fit as h2g_upload_fit, rename_activity as h2g_rename
+from hevy2garmin.merge import attempt_merge, reset_circuit_breaker
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -326,8 +327,13 @@ def process_workout(
     dry_run: bool = False,
     fit_dir: str = DEFAULT_FIT_DIR,
     enrich_only: bool = False,
+    merge_mode: bool = False,
 ) -> dict:
     """Process a single Hevy workout: generate FIT and upload.
+
+    If merge_mode is True and a matching Garmin watch activity is found,
+    pushes Hevy exercise data into the existing activity instead of
+    generating a new FIT file. Falls back to FIT upload if no match.
 
     Returns a result dict with status and details.
     """
@@ -337,6 +343,22 @@ def process_workout(
         "date": workout.get("date", "unknown"),
         "status": "error",
     }
+
+    # ── Merge mode: try to enhance a watch-recorded activity ──
+    if merge_mode and garmin_client and not dry_run and not enrich_only:
+        try:
+            from hevy2garmin.db import get_db
+            merge_result = attempt_merge(garmin_client, workout["hevy_workout"], get_db())
+            if merge_result.merged:
+                result["status"] = "merged"
+                result["new_activity_id"] = merge_result.activity_id
+                result["sync_method"] = "merge"
+                print(f"  ⚡ Enhanced watch activity {merge_result.activity_id}")
+                return result
+            else:
+                print(f"  Merge fallback: {merge_result.fallback_reason}")
+        except Exception as e:
+            print(f"  Merge attempt failed: {e}")
 
     try:
         # 1. Generate FIT
