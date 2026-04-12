@@ -20,7 +20,12 @@ from config import DATABASE_URL
 from db import get_connection, upsert_workout_enrichment, get_outlier_workouts
 from hevy2garmin.fit import generate_fit
 from hevy2garmin.garmin import upload_fit as h2g_upload_fit, rename_activity as h2g_rename
-from hevy2garmin.merge import attempt_merge, reset_circuit_breaker
+
+try:
+    from hevy2garmin.merge import attempt_merge, reset_circuit_breaker
+    _MERGE_AVAILABLE = True
+except ImportError:
+    _MERGE_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -345,7 +350,7 @@ def process_workout(
     }
 
     # ── Merge mode: try to enhance a watch-recorded activity ──
-    if merge_mode and garmin_client and not dry_run and not enrich_only:
+    if merge_mode and _MERGE_AVAILABLE and garmin_client and not dry_run and not enrich_only:
         try:
             from hevy2garmin.db import get_db
             merge_result = attempt_merge(garmin_client, workout["hevy_workout"], get_db())
