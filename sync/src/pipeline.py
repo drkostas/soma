@@ -523,6 +523,9 @@ def _upload_enriched_to_garmin(garmin_client) -> int:
             "date": str(workout_date) if workout_date else "unknown",
         }
 
+        # Check merge mode from env or sync rules
+        merge_mode = os.environ.get("MERGE_MODE", "").lower() in ("1", "true", "yes")
+
         print(f"  Uploading {hevy_id} ({hevy_title})...")
         result = process_workout(
             workout,
@@ -530,9 +533,10 @@ def _upload_enriched_to_garmin(garmin_client) -> int:
             hr_source=hr_source or "unknown",
             garmin_client=garmin_client,
             fit_dir=DEFAULT_FIT_DIR,
+            merge_mode=merge_mode,
         )
 
-        if result["status"] == "uploaded":
+        if result["status"] in ("uploaded", "merged"):
             uploaded += 1
             fit_path = result.get("fit_path")
             if fit_path and os.path.exists(fit_path):
