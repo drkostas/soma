@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { computeMacroTargetsFromContext } from "@/lib/macro-targets";
+import type { Mode } from "@/lib/mode-engine";
 
 export const runtime = "edge";
+
+const VALID_MODES: readonly Mode[] = [
+  "standard", "aggressive", "reverse", "maintenance", "bulk", "injured",
+];
 
 /* ── Per-slot distribution fractions ── */
 const SLOT_DISTRIBUTION: Record<string, Record<string, number>> = {
@@ -204,7 +210,7 @@ export async function GET(req: NextRequest) {
     // Note: dayTargets.calories will be fully recomputed below from components
 
     // ── Dynamic step calories: recompute from weight + step formula ──
-    const profileRows = await sql`SELECT weight_kg, step_goal, daily_deficit, tdee_estimate FROM nutrition_profile WHERE id = 1`;
+    const profileRows = await sql`SELECT weight_kg, step_goal, daily_deficit, tdee_estimate, estimated_bf_pct, deficit_mode FROM nutrition_profile WHERE id = 1`;
     let weightKg = Number(profileRows[0]?.weight_kg) || 79.2;
 
     // Use latest weight from weight_log (more current than profile)
@@ -328,10 +334,33 @@ export async function GET(req: NextRequest) {
       dayTargets.calories = Number(plan.target_calories);
     }
 
-    // Recompute macros to match adjusted target
-    dayTargets.protein = Math.round(weightKg * 2.2);
-    dayTargets.fat = Math.round(weightKg * 0.8);
-    dayTargets.carbs = Math.round(Math.max(0, (dayTargets.calories - dayTargets.protein * 4 - dayTargets.fat * 9) / 4));
+    // ── M4 5-band × tier × mode matrix (Nutrition Batch 2 #67) ──
+    // Route to the macro-engine matrix when we have BF% context. Falls
+    // back to the legacy flat 2.2 / 0.8 formula when BF% is missing so
+    // existing users without a tier continue to see their old numbers.
+    const bfPct = profileRows[0]?.estimated_bf_pct != null
+      ? Number(profileRows[0].estimated_bf_pct) : null;
+    const rawMode = String(profileRows[0]?.deficit_mode ?? "standard");
+    const mode: Mode = (VALID_MODES as readonly string[]).includes(rawMode)
+      ? (rawMode as Mode) : "standard";
+    if (bfPct != null) {
+      const matrix = computeMacroTargetsFromContext({
+        weightKg, bfPct, mode,
+        runKcal: effectiveRunCal,
+        gymKcal: effectiveGymCal,
+        kcalTarget: dayTargets.calories,
+        inDeficit: effectiveDeficit > 0,
+      });
+      dayTargets.protein = matrix.protein;
+      dayTargets.fat = matrix.fat;
+      dayTargets.carbs = matrix.carbs;
+      dayTargets.fiber = matrix.fiber;
+    } else {
+      // Legacy flat fallback (preserved for users without BF%).
+      dayTargets.protein = Math.round(weightKg * 2.2);
+      dayTargets.fat = Math.round(weightKg * 0.8);
+      dayTargets.carbs = Math.round(Math.max(0, (dayTargets.calories - dayTargets.protein * 4 - dayTargets.fat * 9) / 4));
+    }
 
     // Scale protein+fat down if they exceed calorie budget (extreme deficit days)
     const macroFloorCal = dayTargets.protein * 4 + dayTargets.fat * 9;
