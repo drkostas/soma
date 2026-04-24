@@ -138,22 +138,20 @@ function MacroBar({
    */
   overflowWarnAt?: number | null;
 }) {
-  // Reference point that the goal marker sits on. For protein (no cap) this
-  // is null → no marker. For fiber it's the 60g ceiling, not the target.
-  // For carbs/fat it's the target itself.
-  const markerValue =
-    overflowWarnAt === null
-      ? null
-      : overflowWarnAt !== undefined
-        ? overflowWarnAt
-        : target;
+  // Goal marker + right-side buffer only render when `target` doubles as
+  // the dietary cap — i.e. the default case (carbs/fat). For any macro
+  // where overflowWarnAt is passed explicitly (protein: null, fiber: 60),
+  // the target is NOT a cap, so no vertical line and no buffer zone are
+  // shown. Amber threshold still honors overflowWarnAt.
+  const showMarker = overflowWarnAt === undefined && target > 0;
 
-  // Bar extends to 130% of target (or current if over), goal marker at marker
-  const markerForAxis = markerValue ?? target;
-  const maxVal = Math.max(markerForAxis * 1.3, current * 1.05, markerForAxis + 1);
+  // Axis always scales to 130% of target so the bar looks proportional
+  // regardless of whether a remote cap exists. `current * 1.05` keeps
+  // overflow fills visible.
+  const maxVal = Math.max(target * 1.3, current * 1.05, target + 1);
   const fillPct = maxVal > 0 ? Math.min(100, (current / maxVal) * 100) : 0;
-  const goalPct = maxVal > 0 && markerValue !== null
-    ? Math.min(100, (markerValue / maxVal) * 100)
+  const goalPct = showMarker && maxVal > 0
+    ? Math.min(100, (target / maxVal) * 100)
     : 0;
   const overflow =
     overflowWarnAt === null
@@ -170,8 +168,8 @@ function MacroBar({
         </span>
       </div>
       <div className="relative h-2 rounded-full overflow-hidden bg-muted">
-        {/* Buffer zone past the cap — only rendered when a cap exists */}
-        {markerValue !== null && (
+        {/* Right-side buffer zone — only when the target IS the cap */}
+        {showMarker && (
           <div className="absolute right-0 top-0 h-full bg-muted-foreground/10" style={{ width: `${100 - goalPct}%` }} />
         )}
         {/* Fill */}
@@ -179,11 +177,11 @@ function MacroBar({
           className={`absolute left-0 top-0 h-full rounded-full transition-all ${overflow ? "bg-amber-500" : color}`}
           style={{ width: `${fillPct}%` }}
         />
-        {/* Goal marker — only rendered when the target is also a cap */}
-        {markerValue !== null && markerValue > 0 && (
+        {/* Goal marker — only when the target IS the cap */}
+        {showMarker && (
           <div
             className="absolute top-0 h-full w-[2px] bg-foreground/50"
-            style={{ left: `${goalPct}%` }}
+            style={{ left: `calc(${Math.min(goalPct, 99.5)}% - 1px)` }}
           />
         )}
       </div>
