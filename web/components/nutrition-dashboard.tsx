@@ -116,74 +116,100 @@ interface NutritionDashboardProps {
 
 const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "pre_sleep"] as const;
 
+/**
+ * MacroBar — bounds-aware macro progress bar.
+ *
+ * Visual convention:
+ *   - Floor marker (left-pointing wedge, teal): "eat at least here". When
+ *     `current < floor` the text below the bar shows a muted "low" hint;
+ *     fill stays macro color (we don't penalize mid-day under-eating with
+ *     amber because the user is still filling up).
+ *   - Ceiling marker (right-pointing wedge, warm): "don't cross this".
+ *     When `current > ceiling` the fill and text turn amber.
+ *   - If neither floor nor ceiling is passed, the bar renders as a pure
+ *     progress fill with no markers.
+ *
+ * Per-macro usage:
+ *   - Protein: floor = matrix target, ceiling = null (no scientific cap).
+ *   - Fat: floor = target, ceiling = null.
+ *   - Carbs: floor = target, ceiling = null (kcal-implicit upper).
+ *   - Fiber: floor = target, ceiling = 60g (phytate cap, V2 §2.4).
+ */
 function MacroBar({
   label,
   current,
   target,
   color,
-  overflowWarnAt,
+  floor,
+  ceiling,
 }: {
   label: string;
   current: number;
   target: number;
   color: string;
-  /**
-   * Value at which going over becomes a warning.
-   * - undefined (default): warn whenever current > target (legacy — carbs / fat).
-   *   The target doubles as a visual cap (goal marker rendered at target).
-   * - null: never warn (protein — no scientific upper cap per Trommelen 2023).
-   *   No goal marker rendered — the target is a floor, not a cap.
-   * - number: warn only when current exceeds this threshold (fiber: 60g
-   *   phytate ceiling). Goal marker rendered at the ceiling, not the target.
-   */
-  overflowWarnAt?: number | null;
+  floor?: number | null;
+  ceiling?: number | null;
 }) {
-  // Reference point that the goal marker sits on. For protein (no cap) this
-  // is null → no marker. For fiber it's the 60g ceiling, not the target.
-  // For carbs/fat it's the target itself.
-  const markerValue =
-    overflowWarnAt === null
-      ? null
-      : overflowWarnAt !== undefined
-        ? overflowWarnAt
-        : target;
-
-  // Bar extends to 130% of target (or current if over), goal marker at marker
-  const markerForAxis = markerValue ?? target;
-  const maxVal = Math.max(markerForAxis * 1.3, current * 1.05, markerForAxis + 1);
+  // Axis scale: leave room past the highest anchor so both markers show.
+  const axisAnchors = [
+    target * 1.15,
+    floor != null ? floor * 1.15 : 0,
+    ceiling != null ? ceiling * 1.05 : 0,
+    current * 1.05,
+    target + 1,
+  ];
+  const maxVal = Math.max(...axisAnchors);
   const fillPct = maxVal > 0 ? Math.min(100, (current / maxVal) * 100) : 0;
-  const goalPct = maxVal > 0 && markerValue !== null
-    ? Math.min(100, (markerValue / maxVal) * 100)
-    : 0;
-  const overflow =
-    overflowWarnAt === null
-      ? false
-      : overflowWarnAt !== undefined
-        ? current > overflowWarnAt
-        : target > 0 && current > target;
+  const floorPct = floor != null && maxVal > 0
+    ? Math.min(100, (floor / maxVal) * 100)
+    : null;
+  const ceilingPct = ceiling != null && maxVal > 0
+    ? Math.min(100, (ceiling / maxVal) * 100)
+    : null;
+
+  const overCeiling = ceiling != null && current > ceiling;
+  const underFloor = floor != null && current < floor;
+
   return (
     <div className="space-y-0.5">
       <div className="flex justify-between text-xs lg:text-sm text-muted-foreground">
         <span>{label}</span>
-        <span className={overflow ? "text-amber-500 font-medium" : ""}>
+        <span className={overCeiling ? "text-amber-500 font-medium" : ""}>
           {Math.round(current)}/{Math.round(target)}g
+          {underFloor && (
+            <span className="ml-1 text-[10px] text-muted-foreground/70">
+              (−{Math.round(floor! - current)} to floor)
+            </span>
+          )}
         </span>
       </div>
       <div className="relative h-2 rounded-full overflow-hidden bg-muted">
-        {/* Buffer zone past the cap — only rendered when a cap exists */}
-        {markerValue !== null && (
-          <div className="absolute right-0 top-0 h-full bg-muted-foreground/10" style={{ width: `${100 - goalPct}%` }} />
+        {/* Ceiling danger zone — muted warm tint past the ceiling */}
+        {ceilingPct !== null && (
+          <div
+            className="absolute right-0 top-0 h-full bg-amber-500/10"
+            style={{ width: `${100 - ceilingPct}%` }}
+          />
         )}
         {/* Fill */}
         <div
-          className={`absolute left-0 top-0 h-full rounded-full transition-all ${overflow ? "bg-amber-500" : color}`}
+          className={`absolute left-0 top-0 h-full rounded-full transition-all ${overCeiling ? "bg-amber-500" : color}`}
           style={{ width: `${fillPct}%` }}
         />
-        {/* Goal marker — only rendered when the target is also a cap */}
-        {markerValue !== null && markerValue > 0 && (
+        {/* Floor marker (teal) — "eat at least here" */}
+        {floorPct !== null && floor! > 0 && (
           <div
-            className="absolute top-0 h-full w-[2px] bg-foreground/50"
-            style={{ left: `${goalPct}%` }}
+            className="absolute top-0 h-full w-[2px] bg-teal-500/70"
+            style={{ left: `calc(${Math.min(floorPct, 99.5)}% - 1px)` }}
+            title={`Floor: ${Math.round(floor!)}g — aim to reach this`}
+          />
+        )}
+        {/* Ceiling marker (warm) — "don't cross this" */}
+        {ceilingPct !== null && ceiling! > 0 && (
+          <div
+            className="absolute top-0 h-full w-[2px] bg-amber-500"
+            style={{ left: `calc(${Math.min(ceilingPct, 99.5)}% - 1px)` }}
+            title={`Ceiling: ${Math.round(ceiling!)}g — do not exceed`}
           />
         )}
       </div>
@@ -488,9 +514,9 @@ export function NutritionDashboard({
                   <div className="space-y-1">
                     {/* Bar with 3 hover zones */}
                     <div className="relative h-3 rounded-full overflow-hidden bg-muted">
-                      {/* Zone 3: Deficit buffer (right of goal) */}
+                      {/* Ceiling danger zone (right of goal) — muted warm */}
                       <div
-                        className="absolute right-0 top-0 h-full bg-muted-foreground/15"
+                        className="absolute right-0 top-0 h-full bg-amber-500/10"
                         style={{ width: `${100 - goalPct}%` }}
                         title={`Deficit goal: −${deficit} kcal\nTotal burn: ${totalBurn} kcal`}
                       />
@@ -508,13 +534,13 @@ export function NutritionDashboard({
                         style={{ width: `${eatPct}%` }}
                         title={`Eaten: ${Math.round(consumedCal)} kcal`}
                       />
-                      {/* Goal marker line — clamp to keep the 2px line
-                          inside the overflow-hidden container when goalPct
-                          is at the rightmost edge (e.g. deficit=0 days) */}
+                      {/* Ceiling marker (warm) — 'don't cross' the kcal
+                          goal. Clamped to stay inside overflow-hidden when
+                          goalPct hits 100% (e.g. deficit=0 days). */}
                       <div
-                        className="absolute top-0 h-full w-[2px] bg-foreground/60"
+                        className="absolute top-0 h-full w-[2px] bg-amber-500"
                         style={{ left: `calc(${Math.min(goalPct, 99.5)}% - 1px)` }}
-                        title={`Goal: eat ≤ ${goalIntake} kcal${deficit > 0 ? ` (−${deficit} deficit)` : " (maintenance)"}`}
+                        title={`Ceiling: eat ≤ ${goalIntake} kcal${deficit > 0 ? ` (−${deficit} deficit)` : " (maintenance)"}`}
                       />
                     </div>
                     {/* Labels under bar */}
@@ -709,14 +735,14 @@ export function NutritionDashboard({
               {dataReady ? (
                 <div className="grid gap-2 pt-1">
                   <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
-                    color="bg-blue-500" overflowWarnAt={null} />
+                    color="bg-blue-500" floor={targetProtein} ceiling={null} />
                   <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
-                    color="bg-amber-500" />
+                    color="bg-amber-500" floor={targetCarbs} ceiling={null} />
                   <MacroBar label="Fat" current={consumedFat} target={targetFat}
-                    color="bg-rose-500" />
+                    color="bg-rose-500" floor={targetFat} ceiling={null} />
                   {targetFiber > 0 && (
                     <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
-                      color="bg-green-500" overflowWarnAt={60} />
+                      color="bg-green-500" floor={targetFiber} ceiling={60} />
                   )}
                 </div>
               ) : (
