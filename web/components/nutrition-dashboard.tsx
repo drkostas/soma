@@ -121,17 +121,31 @@ function MacroBar({
   current,
   target,
   color,
+  overflowWarnAt,
 }: {
   label: string;
   current: number;
   target: number;
   color: string;
+  /**
+   * Value at which going over becomes a warning.
+   * - undefined (default): warn whenever current > target (legacy — carbs / fat).
+   * - null: never warn (protein — no scientific upper cap per Trommelen 2023).
+   * - number: warn only when current exceeds this threshold (fiber: 60g
+   *   phytate ceiling).
+   */
+  overflowWarnAt?: number | null;
 }) {
   // Bar extends to 130% of target (or current if over), goal marker at target
   const maxVal = Math.max(target * 1.3, current * 1.05, target + 1);
   const fillPct = maxVal > 0 ? Math.min(100, (current / maxVal) * 100) : 0;
   const goalPct = maxVal > 0 ? Math.min(100, (target / maxVal) * 100) : 0;
-  const overflow = target > 0 && current > target;
+  const overflow =
+    overflowWarnAt === null
+      ? false
+      : overflowWarnAt !== undefined
+        ? current > overflowWarnAt
+        : target > 0 && current > target;
   return (
     <div className="space-y-0.5">
       <div className="flex justify-between text-xs lg:text-sm text-muted-foreground">
@@ -676,14 +690,14 @@ export function NutritionDashboard({
               {dataReady ? (
                 <div className="grid gap-2 pt-1">
                   <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
-                    color="bg-blue-500" />
+                    color="bg-blue-500" overflowWarnAt={null} />
                   <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
                     color="bg-amber-500" />
                   <MacroBar label="Fat" current={consumedFat} target={targetFat}
                     color="bg-rose-500" />
                   {targetFiber > 0 && (
                     <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
-                      color="bg-green-500" />
+                      color="bg-green-500" overflowWarnAt={60} />
                   )}
                 </div>
               ) : (
