@@ -121,17 +121,46 @@ function MacroBar({
   current,
   target,
   color,
+  overflowWarnAt,
 }: {
   label: string;
   current: number;
   target: number;
   color: string;
+  /**
+   * Value at which going over becomes a warning.
+   * - undefined (default): warn whenever current > target (legacy — carbs / fat).
+   *   The target doubles as a visual cap (goal marker rendered at target).
+   * - null: never warn (protein — no scientific upper cap per Trommelen 2023).
+   *   No goal marker rendered — the target is a floor, not a cap.
+   * - number: warn only when current exceeds this threshold (fiber: 60g
+   *   phytate ceiling). Goal marker rendered at the ceiling, not the target.
+   */
+  overflowWarnAt?: number | null;
 }) {
-  // Bar extends to 130% of target (or current if over), goal marker at target
-  const maxVal = Math.max(target * 1.3, current * 1.05, target + 1);
+  // Reference point that the goal marker sits on. For protein (no cap) this
+  // is null → no marker. For fiber it's the 60g ceiling, not the target.
+  // For carbs/fat it's the target itself.
+  const markerValue =
+    overflowWarnAt === null
+      ? null
+      : overflowWarnAt !== undefined
+        ? overflowWarnAt
+        : target;
+
+  // Bar extends to 130% of target (or current if over), goal marker at marker
+  const markerForAxis = markerValue ?? target;
+  const maxVal = Math.max(markerForAxis * 1.3, current * 1.05, markerForAxis + 1);
   const fillPct = maxVal > 0 ? Math.min(100, (current / maxVal) * 100) : 0;
-  const goalPct = maxVal > 0 ? Math.min(100, (target / maxVal) * 100) : 0;
-  const overflow = target > 0 && current > target;
+  const goalPct = maxVal > 0 && markerValue !== null
+    ? Math.min(100, (markerValue / maxVal) * 100)
+    : 0;
+  const overflow =
+    overflowWarnAt === null
+      ? false
+      : overflowWarnAt !== undefined
+        ? current > overflowWarnAt
+        : target > 0 && current > target;
   return (
     <div className="space-y-0.5">
       <div className="flex justify-between text-xs lg:text-sm text-muted-foreground">
@@ -141,15 +170,17 @@ function MacroBar({
         </span>
       </div>
       <div className="relative h-2 rounded-full overflow-hidden bg-muted">
-        {/* Buffer zone past goal */}
-        <div className="absolute right-0 top-0 h-full bg-muted-foreground/10" style={{ width: `${100 - goalPct}%` }} />
+        {/* Buffer zone past the cap — only rendered when a cap exists */}
+        {markerValue !== null && (
+          <div className="absolute right-0 top-0 h-full bg-muted-foreground/10" style={{ width: `${100 - goalPct}%` }} />
+        )}
         {/* Fill */}
         <div
           className={`absolute left-0 top-0 h-full rounded-full transition-all ${overflow ? "bg-amber-500" : color}`}
           style={{ width: `${fillPct}%` }}
         />
-        {/* Goal marker */}
-        {target > 0 && (
+        {/* Goal marker — only rendered when the target is also a cap */}
+        {markerValue !== null && markerValue > 0 && (
           <div
             className="absolute top-0 h-full w-[2px] bg-foreground/50"
             style={{ left: `${goalPct}%` }}
@@ -477,10 +508,12 @@ export function NutritionDashboard({
                         style={{ width: `${eatPct}%` }}
                         title={`Eaten: ${Math.round(consumedCal)} kcal`}
                       />
-                      {/* Goal marker line */}
+                      {/* Goal marker line — clamp to keep the 2px line
+                          inside the overflow-hidden container when goalPct
+                          is at the rightmost edge (e.g. deficit=0 days) */}
                       <div
                         className="absolute top-0 h-full w-[2px] bg-foreground/60"
-                        style={{ left: `${goalPct}%` }}
+                        style={{ left: `calc(${Math.min(goalPct, 99.5)}% - 1px)` }}
                         title={`Goal: eat ≤ ${goalIntake} kcal${deficit > 0 ? ` (−${deficit} deficit)` : " (maintenance)"}`}
                       />
                     </div>
@@ -676,14 +709,14 @@ export function NutritionDashboard({
               {dataReady ? (
                 <div className="grid gap-2 pt-1">
                   <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
-                    color="bg-blue-500" />
+                    color="bg-blue-500" overflowWarnAt={null} />
                   <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
                     color="bg-amber-500" />
                   <MacroBar label="Fat" current={consumedFat} target={targetFat}
                     color="bg-rose-500" />
                   {targetFiber > 0 && (
                     <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
-                      color="bg-green-500" />
+                      color="bg-green-500" overflowWarnAt={60} />
                   )}
                 </div>
               ) : (
