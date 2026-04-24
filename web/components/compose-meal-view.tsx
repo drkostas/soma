@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/number-input";
 import { ProteinQualityPill } from "@/lib/per-meal-protein";
+import type { SlotBudget } from "@/lib/nutrition-types";
 import {
   type Ingredient,
   type PortionResult,
@@ -21,7 +22,7 @@ import {
 interface ComposeMealViewProps {
   portions: PortionResult[];
   ingredients: Ingredient[];
-  budget: Record<string, number> | null;
+  budget: SlotBudget | null;
   onLog: (
     items: { ingredient_id: string; grams: number; calories: number; protein: number; carbs: number; fat: number; fiber: number }[],
     totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number },

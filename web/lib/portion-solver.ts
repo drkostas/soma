@@ -1,6 +1,14 @@
 /**
  * Client-side portion solver for compose meals.
- * Priority: protein first → carbs → fat → vegetables fill volume.
+ *
+ * Contract (post-#81 / #83): target = { calories, proteinMpsFloor? }.
+ *
+ *   1. Hit the kcal budget with the provided ingredient mix.
+ *   2. Ensure total protein ≥ MPS floor (default 30g) when the mix allows it.
+ *      If not reachable without busting kcal, kcal wins — the meal just has
+ *      low protein and the UI flags it via the MPS quality pill.
+ *   3. Carbs / fat / fiber emerge from the ingredient selection. No proportional
+ *      per-slot targets — those have no scientific basis (see nutrition-types.ts).
  */
 
 export interface Ingredient {
@@ -14,34 +22,27 @@ export interface Ingredient {
   category: string;
   is_raw?: boolean;
   raw_to_cooked_ratio?: number | null;
-  unit?: string; // 'g' (default), 'egg', 'gel', etc.
-  grams_per_unit?: number | null; // grams per 1 unit (e.g., 50 for eggs)
-  unit_step?: number | null; // step increment for count-based (default 0.25, 1 for whole-only)
+  unit?: string;
+  grams_per_unit?: number | null;
+  unit_step?: number | null;
 }
 
-/** Check if an ingredient uses count-based units instead of grams */
 export function isCountBased(ing: Ingredient): boolean {
   return !!ing.unit && ing.unit !== "g" && !!ing.grams_per_unit;
 }
-
-/** Convert count to grams */
 export function countToGrams(ing: Ingredient, count: number): number {
   return count * (ing.grams_per_unit || 100);
 }
-
-/** Convert grams to count (snapped to unit_step increments) */
 export function gramsToCount(ing: Ingredient, grams: number): number {
   const raw = grams / (ing.grams_per_unit || 100);
   const step = ing.unit_step ?? 0.25;
   return Math.round(raw / step) * step;
 }
 
-export interface MacroTarget {
+export interface PerMealSolverTarget {
   calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  fiber?: number;
+  /** MPS floor in grams. Default 30g per Schoenfeld & Aragon 2018. */
+  proteinMpsFloor?: number;
 }
 
 export interface PortionResult {
@@ -57,32 +58,22 @@ export interface PortionResult {
 
 /** Per-category gram adjustment increments (for +/- buttons). */
 const INCREMENTS: Record<string, number> = {
-  protein: 25,
-  carbs: 10,
-  vegetable: 25,
-  fat: 5,
-  dairy: 25,
-  sauce: 10,
-  fruit: 25,
-  supplement: 5,
+  protein: 25, carbs: 10, vegetable: 25, fat: 5,
+  dairy: 25, sauce: 10, fruit: 25, supplement: 5,
 };
 
 /** Per-category gram bounds [min, max]. */
 const BOUNDS: Record<string, [number, number]> = {
-  protein: [50, 300],
-  carbs: [30, 200],
-  vegetable: [50, 250],
-  fat: [5, 100],
-  dairy: [25, 300],
-  sauce: [20, 80],
-  fruit: [50, 200],
-  supplement: [10, 60],
+  protein: [50, 300], carbs: [30, 200], vegetable: [50, 250],
+  fat: [5, 100], dairy: [25, 300], sauce: [20, 80],
+  fruit: [50, 200], supplement: [10, 60],
 };
+
+const FIXED_CATEGORIES = new Set(["vegetable", "sauce", "supplement"]);
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
-
 function macrosAt(ing: Ingredient, grams: number) {
   const f = grams / 100;
   return {
@@ -93,200 +84,140 @@ function macrosAt(ing: Ingredient, grams: number) {
     fiber: f * ing.fiber_per_100g,
   };
 }
+function fixedSeedGrams(ing: Ingredient): number {
+  if (ing.category === "vegetable") return 120;
+  if (ing.category === "sauce") return 50;
+  if (ing.category === "supplement") {
+    return ing.id === "protein_powder_whey" ? 30 : 35;
+  }
+  return 50;
+}
 
 export function solvePortions(
   ingredients: Ingredient[],
-  target: MacroTarget,
+  target: PerMealSolverTarget,
 ): PortionResult[] {
-  /**
-   * Simultaneous constraint solver:
-   * 1. Assign initial portions based on each ingredient's primary role
-   * 2. Compute total macros
-   * 3. If any macro exceeds budget, scale ALL portions down proportionally
-   * 4. Then iteratively shift grams from over-budget macros to under-budget ones
-   */
+  if (ingredients.length === 0) return [];
 
-  const vegs = ingredients.filter((i) => i.category === "vegetable");
-  const sauces = ingredients.filter((i) => i.category === "sauce");
-  const supplements = ingredients.filter((i) => i.category === "supplement");
-  const scalable = ingredients.filter((i) =>
-    !["vegetable", "sauce", "supplement"].includes(i.category)
-  );
-
+  const mpsFloor = target.proteinMpsFloor ?? 30;
   const portions: Record<string, number> = {};
 
-  // Fixed portions: veggies, sauces, supplements (not optimized)
-  for (const ing of vegs) { portions[ing.id] = 120; }
-  for (const ing of sauces) { portions[ing.id] = 50; }
-  for (const ing of supplements) {
-    portions[ing.id] = ing.id === "protein_powder_whey" ? 30 : 35;
-  }
+  const fixed = ingredients.filter((i) => FIXED_CATEGORIES.has(i.category));
+  const scalable = ingredients.filter((i) => !FIXED_CATEGORIES.has(i.category));
 
-  // Compute calories used by fixed ingredients
-  let fixedCal = 0, fixedP = 0, fixedC = 0, fixedF = 0, fixedFi = 0;
-  for (const ing of [...vegs, ...sauces, ...supplements]) {
-    const m = macrosAt(ing, portions[ing.id]);
-    fixedCal += m.calories;
-    fixedP += m.protein;
-    fixedC += m.carbs;
-    fixedF += m.fat;
-    fixedFi += m.fiber;
-  }
+  for (const ing of fixed) portions[ing.id] = fixedSeedGrams(ing);
 
-  // Remaining budget for scalable ingredients
+  // Cap whole eggs at 1 unit up front (one yolk/day).
+  const clampWholeEggs = () => {
+    const wholeEgg = ingredients.find((i) => i.id === "eggs_whole");
+    if (wholeEgg?.grams_per_unit && portions[wholeEgg.id] > wholeEgg.grams_per_unit) {
+      portions[wholeEgg.id] = wholeEgg.grams_per_unit;
+    }
+  };
+
+  // Kcal already consumed by fixed seeds.
+  let fixedCal = 0;
+  for (const ing of fixed) fixedCal += macrosAt(ing, portions[ing.id]).calories;
+
   const remCal = Math.max(0, target.calories - fixedCal);
-  const remP = Math.max(0, target.protein - fixedP);
-  const remC = Math.max(0, target.carbs - fixedC);
-  const remF = Math.max(0, target.fat - fixedF);
-  const remFi = Math.max(0, (target.fiber || 40) - fixedFi);
 
-  if (scalable.length === 0 || remCal <= 0) {
-    // Nothing to optimize — just use fixed
-    return ingredients.map((ing) => {
-      const grams = portions[ing.id] ?? 50;
-      const m = macrosAt(ing, grams);
-      return {
-        ingredient_id: ing.id, grams,
-        increment: INCREMENTS[ing.category] ?? 10,
-        calories: Math.round(m.calories),
-        protein: Math.round(m.protein * 10) / 10,
-        carbs: Math.round(m.carbs * 10) / 10,
-        fat: Math.round(m.fat * 10) / 10,
-        fiber: Math.round(m.fiber * 10) / 10,
-      };
-    });
+  // Seed scalable ingredients. Give each a share of remCal proportional to its
+  // role weight — protein-dense ingredients get more, so the initial guess is
+  // already close to MPS without overshooting.
+  if (scalable.length > 0 && remCal > 0) {
+    const roleWeight = (ing: Ingredient) =>
+      ing.protein_per_100g > 5 ? 2 : 1;
+    const totalWeight = scalable.reduce((s, ing) => s + roleWeight(ing), 0) || 1;
+    for (const ing of scalable) {
+      const calShare = remCal * (roleWeight(ing) / totalWeight);
+      const grams = ing.calories_per_100g > 0
+        ? (calShare / ing.calories_per_100g) * 100
+        : 50;
+      const [lo, hi] = BOUNDS[ing.category] ?? [10, 300];
+      portions[ing.id] = Math.round(clamp(grams, lo, hi));
+    }
+    clampWholeEggs();
+  } else {
+    for (const ing of scalable) portions[ing.id] = fixedSeedGrams(ing);
   }
 
-  // Step 1: Assign initial portions — each ingredient gets a calorie share
-  // proportional to its "role weight" (protein sources get more if protein target is high)
-  const roleWeight = (ing: Ingredient): number => {
-    const pShare = ing.protein_per_100g > 0 ? (remP * 4) : 0; // cal from protein this ing can help with
-    const cShare = ing.carbs_per_100g > 0 ? (remC * 4) : 0;
-    const fShare = ing.fat_per_100g > 0 ? (remF * 9) : 0;
-    return pShare + cShare + fShare || ing.calories_per_100g;
+  // Step 1: uniform kcal scaling. Scale all scalable ingredients by the same
+  // factor so total kcal lands near target, respecting per-category bounds.
+  const scaleScalable = (factor: number) => {
+    for (const ing of scalable) {
+      const [lo, hi] = BOUNDS[ing.category] ?? [10, 300];
+      portions[ing.id] = Math.round(clamp(portions[ing.id] * factor, lo, hi));
+    }
+    clampWholeEggs();
   };
-
-  const totalRoleWeight = scalable.reduce((s, ing) => s + roleWeight(ing), 0) || 1;
-
-  for (const ing of scalable) {
-    const calShare = remCal * (roleWeight(ing) / totalRoleWeight);
-    const gramsForCal = ing.calories_per_100g > 0 ? (calShare / ing.calories_per_100g) * 100 : 50;
-    const [lo, hi] = BOUNDS[ing.category] ?? [10, 300];
-    portions[ing.id] = Math.round(clamp(gramsForCal, lo, hi));
-  }
-
-  // Step 2: Check ALL macro constraints, scale down to fit the tightest one
-  const totalMacros = () => {
-    let cal = 0, p = 0, c = 0, f = 0, fi = 0;
-    for (const ing of scalable) {
-      const m = macrosAt(ing, portions[ing.id]);
-      cal += m.calories; p += m.protein; c += m.carbs; f += m.fat; fi += m.fiber;
-    }
-    return { cal, p, c, f, fi };
+  const totalKcal = () => {
+    let k = 0;
+    for (const ing of ingredients) k += macrosAt(ing, portions[ing.id]).calories;
+    return k;
   };
-
-  let t = totalMacros();
-
-  // Find the tightest constraint — the macro that overflows the most
-  const constraintScales: number[] = [];
-  if (t.cal > 0 && t.cal > remCal) constraintScales.push(remCal / t.cal);
-  if (t.p > 0 && t.p > remP) constraintScales.push(remP / t.p);
-  if (t.f > 0 && t.f > remF) constraintScales.push(remF / t.f);
-  if (t.fi > 0 && t.fi > remFi) constraintScales.push(remFi / t.fi);
-  // Don't constrain carbs — they're the "fill" macro
-
-  if (constraintScales.length > 0) {
-    const scale = Math.min(...constraintScales); // tightest constraint
-    for (const ing of scalable) {
-      const [lo] = BOUNDS[ing.category] ?? [10, 300];
-      portions[ing.id] = Math.max(lo, Math.round(portions[ing.id] * scale));
+  if (scalable.length > 0) {
+    for (let i = 0; i < 3; i++) {
+      const cur = totalKcal();
+      if (cur === 0) break;
+      const factor = target.calories / cur;
+      if (Math.abs(1 - factor) < 0.02) break;
+      scaleScalable(factor);
     }
-    t = totalMacros();
   }
 
-  // Per-macro targeted scaling: if protein or fat still over, reduce the top contributors
-  for (let iter = 0; iter < 3; iter++) {
-    t = totalMacros();
-    // Check protein
-    if (t.p > remP * 1.05) {
-      const proteinIngs = scalable.filter(i => i.protein_per_100g > 5).sort((a, b) => b.protein_per_100g - a.protein_per_100g);
-      for (const ing of proteinIngs) {
-        const m = macrosAt(ing, portions[ing.id]);
-        const excess = t.p - remP;
-        const reduceGrams = Math.round((excess / ing.protein_per_100g) * 100 / proteinIngs.length);
-        const [lo] = BOUNDS[ing.category] ?? [10, 300];
-        portions[ing.id] = Math.max(lo, portions[ing.id] - reduceGrams);
+  // Step 2: MPS floor enforcement. If total protein < floor, boost the most
+  // protein-dense scalable ingredient and trim the rest to stay within kcal.
+  const totalProtein = () => {
+    let p = 0;
+    for (const ing of ingredients) p += macrosAt(ing, portions[ing.id]).protein;
+    return p;
+  };
+  const proteinDense = scalable
+    .filter((i) => i.protein_per_100g >= 5)
+    .sort((a, b) => b.protein_per_100g - a.protein_per_100g);
+
+  if (proteinDense.length > 0) {
+    for (let iter = 0; iter < 8 && totalProtein() < mpsFloor - 0.5; iter++) {
+      const gap = mpsFloor - totalProtein();
+      const target0 = proteinDense[0];
+      const [tLo, tHi] = BOUNDS[target0.category] ?? [10, 300];
+      const addG = Math.ceil((gap / target0.protein_per_100g) * 100);
+      const newG = Math.min(tHi, portions[target0.id] + addG);
+      const actuallyAdded = newG - portions[target0.id];
+      if (actuallyAdded <= 0) break;
+
+      portions[target0.id] = newG;
+      // Compensate by trimming non-protein-dense scalables uniformly.
+      const others = scalable.filter((i) => i !== target0);
+      if (others.length > 0) {
+        const addedKcal = macrosAt(target0, actuallyAdded).calories;
+        let toRemove = addedKcal;
+        for (const o of others) {
+          const [oLo] = BOUNDS[o.category] ?? [10, 300];
+          const maxShrinkG = Math.max(0, portions[o.id] - oLo);
+          if (maxShrinkG <= 0) continue;
+          const oKcalPerG = o.calories_per_100g / 100;
+          const shrinkByKcal = Math.min(
+            toRemove / others.length,
+            maxShrinkG * oKcalPerG,
+          );
+          if (oKcalPerG > 0) {
+            const shrinkG = Math.round(shrinkByKcal / oKcalPerG);
+            portions[o.id] = Math.max(oLo, portions[o.id] - shrinkG);
+            toRemove -= shrinkG * oKcalPerG;
+          }
+        }
       }
-    }
-    // Check fat
-    t = totalMacros();
-    if (t.f > remF * 1.05) {
-      const fatIngs = scalable.filter(i => i.fat_per_100g > 3).sort((a, b) => b.fat_per_100g - a.fat_per_100g);
-      for (const ing of fatIngs) {
-        const excess = t.f - remF;
-        const reduceGrams = Math.round((excess / ing.fat_per_100g) * 100 / fatIngs.length);
-        const [lo] = BOUNDS[ing.category] ?? [10, 300];
-        portions[ing.id] = Math.max(lo, portions[ing.id] - reduceGrams);
-      }
+      clampWholeEggs();
     }
   }
 
-  // Step 3: Fine-tune — try to shift grams to better hit protein target
-  // If protein is underfilled, increase protein sources slightly at expense of carb/fat sources
-  for (let iter = 0; iter < 5; iter++) {
-    t = totalMacros();
-    const proteinGap = remP - t.p;
-    if (proteinGap <= 1) break; // close enough
-
-    // Find a protein source to increase
-    const proteinIngs = scalable.filter(i => i.category === "protein" && i.protein_per_100g > 5);
-    const carbFatIngs = scalable.filter(i => ["carbs", "fruit", "fat", "dairy"].includes(i.category));
-
-    if (proteinIngs.length === 0 || carbFatIngs.length === 0) break;
-
-    // Increase protein source by 10g, decrease a carb/fat source by equivalent calories
-    for (const pIng of proteinIngs) {
-      const addGrams = 10;
-      const addCal = macrosAt(pIng, addGrams).calories;
-      const [, pHi] = BOUNDS[pIng.category] ?? [10, 300];
-      if (portions[pIng.id] + addGrams > pHi) continue;
-
-      // Find a carb/fat source to shrink
-      for (const cfIng of carbFatIngs) {
-        const shrinkGrams = cfIng.calories_per_100g > 0
-          ? Math.round((addCal / cfIng.calories_per_100g) * 100)
-          : 0;
-        const [cfLo] = BOUNDS[cfIng.category] ?? [10, 300];
-        if (portions[cfIng.id] - shrinkGrams < cfLo) continue;
-
-        portions[pIng.id] += addGrams;
-        portions[cfIng.id] -= shrinkGrams;
-        break;
-      }
-      break; // one shift per iteration
-    }
+  // Step 3: final kcal fit — if over by >2%, scale down once more.
+  const final = totalKcal();
+  if (final > target.calories * 1.02 && final > 0) {
+    scaleScalable(target.calories / final);
   }
 
-  // Constraint: max 1 whole egg (with yolk) per day — clamp to 1 unit
-  const wholeEgg = scalable.find(i => i.id === "eggs_whole");
-  if (wholeEgg && wholeEgg.grams_per_unit) {
-    const maxGrams = wholeEgg.grams_per_unit; // 1 egg = 50g
-    if (portions[wholeEgg.id] > maxGrams) {
-      portions[wholeEgg.id] = maxGrams;
-    }
-  }
-
-  // Final calorie check — scale down again if over
-  t = totalMacros();
-  if (t.cal > remCal * 1.02 && t.cal > 0) {
-    const scale = remCal / t.cal;
-    for (const ing of scalable) {
-      const [lo] = BOUNDS[ing.category] ?? [10, 300];
-      portions[ing.id] = Math.max(lo, Math.round(portions[ing.id] * scale));
-    }
-  }
-
-  // Build results
   return ingredients.map((ing) => {
     const grams = portions[ing.id] ?? 50;
     const m = macrosAt(ing, grams);
@@ -303,7 +234,6 @@ export function solvePortions(
   });
 }
 
-/** Recompute macros for a single ingredient at a given gram amount. */
 export function computeItemMacros(ing: Ingredient, grams: number) {
   const m = macrosAt(ing, grams);
   return {
@@ -315,7 +245,6 @@ export function computeItemMacros(ing: Ingredient, grams: number) {
   };
 }
 
-/** Convert between raw and cooked grams using the ingredient's ratio. */
 export function rawToCooked(ing: Ingredient, rawGrams: number): number {
   const ratio = ing.raw_to_cooked_ratio;
   if (!ing.is_raw || !ratio || ratio <= 0) return rawGrams;
@@ -328,12 +257,10 @@ export function cookedToRaw(ing: Ingredient, cookedGrams: number): number {
   return Math.round(cookedGrams / ratio);
 }
 
-/** Check if an ingredient supports cooked weight toggle. */
 export function hasRawCookedToggle(ing: Ingredient): boolean {
   return !!ing.is_raw && !!ing.raw_to_cooked_ratio && ing.raw_to_cooked_ratio > 0 && ing.raw_to_cooked_ratio !== 1;
 }
 
-/** Sum macros across a list of portion results. */
 export function sumPortionMacros(portions: PortionResult[]) {
   return {
     calories: Math.round(portions.reduce((s, p) => s + p.calories, 0)),
