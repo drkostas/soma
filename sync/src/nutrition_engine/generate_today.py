@@ -147,7 +147,8 @@ def generate_today() -> None:
         cur.execute(
             "SELECT target_calories, weight_kg, goal, daily_deficit,"
             " estimated_ffm_kg, protein_g_per_kg, fat_g_per_kg,"
-            " estimated_bf_pct, target_bf_pct, target_date, age, sex, step_goal"
+            " estimated_bf_pct, target_bf_pct, target_date, age, sex, step_goal,"
+            " deficit_mode"
             " FROM nutrition_profile WHERE id = 1"
         )
         profile = cur.fetchone()
@@ -161,6 +162,7 @@ def generate_today() -> None:
             profile_ffm_kg, profile_protein_g_per_kg, profile_fat_g_per_kg,
             profile_bf_pct, profile_target_bf_pct, profile_target_date,
             profile_age, profile_sex, profile_step_goal,
+            profile_deficit_mode,
         ) = profile
 
         age = int(profile_age) if profile_age else DEFAULT_AGE
@@ -170,6 +172,7 @@ def generate_today() -> None:
         fat_g_per_kg = float(profile_fat_g_per_kg) if profile_fat_g_per_kg else 0.8
         ffm_kg = float(profile_ffm_kg) if profile_ffm_kg else None
         estimated_bf_pct = float(profile_bf_pct) if profile_bf_pct else None
+        deficit_mode = str(profile_deficit_mode) if profile_deficit_mode else "standard"
 
         # 2. Latest weight from weight_log
         cur.execute(
@@ -297,7 +300,25 @@ def generate_today() -> None:
             logger.info("Sleep adjustment: %s (deficit %.0f → %.0f)",
                         adjustment_reason, deficit, adjusted_deficit)
 
-        # 10. Compute macro targets with carb periodization
+        # 10. Compute macro targets — route to M4 5-band × tier × mode matrix
+        #     when we have BF% data; otherwise fall back to flat g/kg.
+        #     Split exercise_cal into run vs gym portions for the band
+        #     classifier: has_run implies all of exercise_cal is run-load;
+        #     has_gym-only means all gym-load; both implies 60/40 run/gym.
+        has_run = run_type is not None and str(run_type).strip() != ""
+        if has_run and has_gym:
+            run_kcal_split = exercise_cal * 0.6
+            gym_kcal_split = exercise_cal * 0.4
+        elif has_run:
+            run_kcal_split = float(exercise_cal)
+            gym_kcal_split = 0.0
+        elif has_gym:
+            run_kcal_split = 0.0
+            gym_kcal_split = float(exercise_cal)
+        else:
+            run_kcal_split = 0.0
+            gym_kcal_split = 0.0
+
         macros = compute_macro_targets(
             tdee=tdee,
             deficit=adjusted_deficit,
@@ -308,6 +329,9 @@ def generate_today() -> None:
             fat_g_per_kg=fat_g_per_kg,
             estimated_bf_pct=estimated_bf_pct,
             ffm_kg=ffm_kg,
+            mode=deficit_mode,
+            run_kcal=run_kcal_split,
+            gym_kcal=gym_kcal_split,
         )
 
         # Apply sleep boosts — recompute carbs to maintain calorie target
