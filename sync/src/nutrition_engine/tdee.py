@@ -326,8 +326,19 @@ def compute_macro_targets(
     fat_g_per_kg: float = 0.8,
     estimated_bf_pct: float | None = None,
     ffm_kg: float | None = None,
+    *,
+    mode: str | None = None,
+    run_kcal: float | None = None,
+    gym_kcal: float | None = None,
 ) -> dict[str, int]:
     """Compute daily macro targets given TDEE, deficit, and training context.
+
+    Routing: when ``estimated_bf_pct``, ``mode``, ``run_kcal``, and ``gym_kcal``
+    are all provided, delegates to the macro-engine M4 matrix
+    (``nutrition_engine.macro_targets``) for a 5-band × 5-tier × mode
+    periodized target. Otherwise falls back to the legacy flat
+    ``protein_g_per_kg`` / ``fat_g_per_kg`` computation for backward
+    compatibility with callers that don't yet pass the new context.
 
     Args:
         tdee: Total daily energy expenditure in kcal.
@@ -336,10 +347,14 @@ def compute_macro_targets(
         exercise_calories: Estimated exercise calories from
             :func:`compute_exercise_calories` (replaces static boost).
         training_day_type: Day type key for carb periodization (Task 10).
-        protein_g_per_kg: Protein target per kg body weight (default 2.2).
-        fat_g_per_kg: Fat target per kg body weight (default 0.8).
-        estimated_bf_pct: Optional body fat percentage (unused currently).
-        ffm_kg: Optional fat-free mass in kg for RED-S floor check.
+        protein_g_per_kg: Fallback protein g/kg when matrix inputs missing.
+        fat_g_per_kg: Fallback fat g/kg when matrix inputs missing.
+        estimated_bf_pct: Body fat percentage — required for matrix routing.
+        ffm_kg: Fat-free mass in kg — used for RED-S floor check either way.
+        mode: One of 'standard', 'aggressive', 'reverse', 'maintenance',
+            'bulk', 'injured'. When None, legacy flat formula is used.
+        run_kcal: Run-portion of exercise kcal for band classifier.
+        gym_kcal: Gym-portion of exercise kcal for band classifier.
 
     Returns:
         Dict with ``calories``, ``protein``, ``carbs``, ``fat``, ``fiber``.
@@ -356,17 +371,49 @@ def compute_macro_targets(
         if target_calories < reds_minimum:
             target_calories = reds_minimum
 
-    # 4. Protein
+    # 4. Route to the M4 matrix when full context is available.
+    use_matrix = (
+        estimated_bf_pct is not None
+        and mode is not None
+        and run_kcal is not None
+        and gym_kcal is not None
+    )
+    if use_matrix:
+        from nutrition_engine.macro_targets import (  # local import to avoid cycles
+            classify_band,
+            compute_macro_targets as matrix_targets,
+            compute_training_load,
+        )
+        from nutrition_engine.mode import Mode as ModeEnum
+        from nutrition_engine.tier import compute_tier_raw
+
+        tier = compute_tier_raw(estimated_bf_pct)
+        load = compute_training_load(
+            run_kcal=run_kcal, gym_kcal=gym_kcal, weight_kg=weight_kg,
+        )
+        band = classify_band(load)
+        try:
+            mode_enum = ModeEnum(mode)
+        except ValueError:
+            mode_enum = ModeEnum.STANDARD
+        in_deficit = deficit > 0
+        m = matrix_targets(
+            weight_kg=weight_kg, tier=tier, mode=mode_enum, band=band,
+            kcal_target=target_calories, in_deficit=in_deficit,
+        )
+        return {
+            "calories": m.kcal,
+            "protein": m.protein_g,
+            "carbs": m.carbs_g,
+            "fat": m.fat_g,
+            "fiber": m.fiber_g,
+        }
+
+    # 5. Legacy flat formula (backwards compatible).
     protein = round(weight_kg * protein_g_per_kg)
-
-    # 5. Fat
     fat = round(weight_kg * fat_g_per_kg)
-
-    # 6. Carbs = strict remainder after protein and fat (guarantees macro-calorie match)
     carb_remainder = max((target_calories - (protein * 4) - (fat * 9)) / 4, 0)
     carbs = round(carb_remainder)
-
-    # 7. Fiber (fixed)
     fiber = 35
 
     return {
