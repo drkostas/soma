@@ -508,10 +508,12 @@ export function NutritionDashboard({
                         style={{ width: `${eatPct}%` }}
                         title={`Eaten: ${Math.round(consumedCal)} kcal`}
                       />
-                      {/* Goal marker line */}
+                      {/* Goal marker line — clamp to keep the 2px line
+                          inside the overflow-hidden container when goalPct
+                          is at the rightmost edge (e.g. deficit=0 days) */}
                       <div
                         className="absolute top-0 h-full w-[2px] bg-foreground/60"
-                        style={{ left: `${goalPct}%` }}
+                        style={{ left: `calc(${Math.min(goalPct, 99.5)}% - 1px)` }}
                         title={`Goal: eat ≤ ${goalIntake} kcal${deficit > 0 ? ` (−${deficit} deficit)` : " (maintenance)"}`}
                       />
                     </div>
