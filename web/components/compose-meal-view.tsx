@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/number-input";
+import { ProteinQualityPill } from "@/lib/per-meal-protein";
 import {
   type Ingredient,
   type PortionResult,
@@ -231,36 +232,52 @@ export function ComposeMealView({
         </div>
       )}
 
-      {/* Macro progress bars */}
+      {/* Per-meal read-out — kcal is a soft pacing bar; P/C/F/Fi are plain
+          numbers. Per-meal P/C/F/Fi do NOT have scientific caps (Schoenfeld &
+          Aragon 2018; Trommelen 2023), so we don't draw goal markers or flip
+          to an "over" state for them. Protein gets an MPS-quality pill. */}
       <div className="space-y-1.5 border-t pt-2">
-        {[
-          { label: "kcal", current: totals.calories, max: budget?.calories || 0, color: "bg-primary" },
-          { label: "P", current: totals.protein, max: budget?.protein || 0, color: "bg-blue-500", suffix: "g" },
-          { label: "C", current: totals.carbs, max: budget?.carbs || 0, color: "bg-amber-500", suffix: "g" },
-          { label: "F", current: totals.fat, max: budget?.fat || 0, color: "bg-rose-500", suffix: "g" },
-          { label: "Fi", current: totals.fiber, max: budget?.fiber || 0, color: "bg-green-500", suffix: "g" },
-        ].map(({ label, current, max, color, suffix }) => {
-          const barMax = Math.max(max * 1.3, current * 1.05, max + 1);
-          const fillPct = barMax > 0 ? Math.min(100, (current / barMax) * 100) : 0;
-          const goalPct = barMax > 0 ? Math.min(100, (max / barMax) * 100) : 0;
-          const over = max > 0 && current > max;
+        {(() => {
+          const kcalBudget = budget?.calories || 0;
+          const barMax = Math.max(kcalBudget * 1.3, totals.calories * 1.05, kcalBudget + 1);
+          const fillPct = barMax > 0 ? Math.min(100, (totals.calories / barMax) * 100) : 0;
+          const goalPct = barMax > 0 && kcalBudget > 0 ? Math.min(100, (kcalBudget / barMax) * 100) : 0;
           return (
-            <div key={label} className="flex items-center gap-2 text-xs">
-              <span className="w-8 text-muted-foreground text-right">{label}</span>
-              <div className="relative flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                <div className="absolute right-0 top-0 h-full bg-muted-foreground/10" style={{ width: `${100 - goalPct}%` }} />
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-8 text-muted-foreground text-right">kcal</span>
+              <div
+                className="relative flex-1 h-2 bg-muted rounded-full overflow-hidden"
+                title="Per-meal kcal is a soft pacing hint — splits the daily target across slots. Going over here is fine as long as the day total lands right."
+              >
+                {kcalBudget > 0 && (
+                  <div className="absolute right-0 top-0 h-full bg-muted-foreground/10" style={{ width: `${100 - goalPct}%` }} />
+                )}
                 <div
-                  className={`absolute left-0 top-0 h-full rounded-full transition-all ${over ? "bg-amber-500" : color}`}
+                  className="absolute left-0 top-0 h-full rounded-full transition-all bg-primary"
                   style={{ width: `${fillPct}%` }}
                 />
-                {max > 0 && <div className="absolute top-0 h-full w-[2px] bg-foreground/50" style={{ left: `${goalPct}%` }} />}
+                {kcalBudget > 0 && (
+                  <div className="absolute top-0 h-full w-[2px] bg-foreground/40" style={{ left: `${goalPct}%` }} />
+                )}
               </div>
-              <span className={`w-20 text-right tabular-nums ${over ? "text-amber-500" : ""}`}>
-                {Math.round(current)}{suffix || ""} / {Math.round(max)}{suffix || ""}
+              <span className="w-24 text-right tabular-nums text-muted-foreground">
+                {Math.round(totals.calories)}
+                {kcalBudget > 0 && <span className="text-muted-foreground/60"> / {Math.round(kcalBudget)} budget</span>}
               </span>
             </div>
           );
-        })}
+        })()}
+
+        <div className="flex items-center gap-3 text-xs text-muted-foreground pt-0.5">
+          <span className="flex items-center tabular-nums">
+            <span className="text-blue-400 font-medium">{Math.round(totals.protein)}g</span>
+            <span className="ml-1 text-muted-foreground/70">P</span>
+            <ProteinQualityPill grams={totals.protein} />
+          </span>
+          <span className="tabular-nums"><span className="text-amber-400 font-medium">{Math.round(totals.carbs)}g</span> <span className="text-muted-foreground/70">C</span></span>
+          <span className="tabular-nums"><span className="text-rose-400 font-medium">{Math.round(totals.fat)}g</span> <span className="text-muted-foreground/70">F</span></span>
+          <span className="tabular-nums"><span className="text-green-400 font-medium">{Math.round(totals.fiber)}g</span> <span className="text-muted-foreground/70">Fi</span></span>
+        </div>
       </div>
 
       {/* Volume score */}

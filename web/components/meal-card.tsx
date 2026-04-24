@@ -9,8 +9,8 @@ import { IngredientPicker } from "@/components/ingredient-picker";
 import { ComposeMealView } from "@/components/compose-meal-view";
 import { MealDetailModal } from "@/components/meal-detail-modal";
 import { type Ingredient, type PortionResult, solvePortions, computeItemMacros } from "@/lib/portion-solver";
-
-// ── Helpers ───────────────────────────────────────────────────
+import { ProteinQualityPill } from "@/lib/per-meal-protein";
+import type { SlotBudget } from "@/lib/nutrition-types";
 
 /** Generate a readable name from meal items, e.g. "Salmon, Broccoli & Yogurt" */
 function autoMealName(items: any[]): string {
@@ -107,7 +107,7 @@ interface MealCardProps {
   date: string;
   disabled: boolean;
   skipped?: boolean;
-  slotBudget?: Record<string, number> | null;
+  slotBudget?: SlotBudget | null;
   ingredients?: any[];
   onMealLogged: (changedSlot?: string) => void;
   onSlotSkipped?: () => void;
@@ -200,9 +200,6 @@ export function MealCard({
   const slotLabel = SLOT_LABELS[slot] || slot;
   const slotIcon = SLOT_ICONS[slot] || "";
   const totalCal = meals.reduce((s, m) => s + Number(m.calories || 0), 0);
-  const totalProtein = meals.reduce((s, m) => s + Number(m.protein || 0), 0);
-  const totalCarbs = meals.reduce((s, m) => s + Number(m.carbs || 0), 0);
-  const totalFat = meals.reduce((s, m) => s + Number(m.fat || 0), 0);
 
   // Filter presets for this slot
   const slotTags = SLOT_TAG_MAP[slot] || [];
@@ -332,15 +329,12 @@ export function MealCard({
     const selected = (ingredients as Ingredient[]).filter((i) =>
       selectedIngredients.has(i.id),
     );
-    const budget = slotBudget
-      ? {
-          calories: Number(slotBudget.calories) || 500,
-          protein: Number(slotBudget.protein) || 40,
-          carbs: Number(slotBudget.carbs) || 50,
-          fat: Number(slotBudget.fat) || 20,
-          fiber: Number(slotBudget.fiber) || 10,
-        }
-      : { calories: 500, protein: 40, carbs: 50, fat: 20, fiber: 10 };
+    // Per-meal solver target: only kcal is slot-aware. Non-kcal macros use
+    // neutral defaults (solver's wide contract is retired in #83). These are
+    // NOT science-grounded per-slot caps — they're just seed values for the
+    // auto-portioner until the solver gets the {kcal + MPS floor} contract.
+    const kcal = slotBudget ? Number(slotBudget.calories) || 500 : 500;
+    const budget = { calories: kcal, protein: 40, carbs: 50, fat: 20, fiber: 10 };
     const portions = solvePortions(selected, budget);
     setComposedPortions(portions);
   };
@@ -503,8 +497,11 @@ export function MealCard({
             </span>
           )}
           {slotBudget && totalCal > 0 && (
-            <span className="text-[10px] text-muted-foreground tabular-nums">
-              / {Math.round(slotBudget.calories)}
+            <span
+              className="text-[10px] text-muted-foreground/70 tabular-nums"
+              title="Soft pacing hint — splits the daily calorie target across slots. Not a hard cap."
+            >
+              budget {Math.round(slotBudget.calories)}
             </span>
           )}
           {expanded ? (
@@ -514,14 +511,6 @@ export function MealCard({
           )}
         </div>
       </button>
-
-      {expanded && meals.length > 0 && slotBudget && (
-        <div className="px-4 pb-2 text-[10px] text-muted-foreground tabular-nums">
-          {Math.round(totalProtein)}P / {Math.round(slotBudget.protein || 0)}
-          {" · "}{Math.round(totalCarbs)}C / {Math.round(slotBudget.carbs || 0)}
-          {" · "}{Math.round(totalFat)}F / {Math.round(slotBudget.fat || 0)}
-        </div>
-      )}
 
       {expanded && (
         <CardContent className="pt-0 space-y-2">
@@ -550,7 +539,9 @@ export function MealCard({
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {Math.round(meal.calories)} kcal &middot;{" "}
-                      {Math.round(meal.protein)}P &middot;{" "}
+                      {Math.round(meal.protein)}P
+                      <ProteinQualityPill grams={meal.protein} />
+                      {" · "}
                       {Math.round(meal.carbs)}C &middot; {Math.round(meal.fat)}F
                       {!disabled && itemsList.some(i => { const ig = ingLookup.get(i.ingredient_id ?? ""); return ig?.is_raw && ig?.raw_to_cooked_ratio && ig.raw_to_cooked_ratio > 1; }) && <span className="text-[9px] ml-1.5 text-muted-foreground/60">20+ min</span>}
                     </div>
@@ -873,21 +864,20 @@ export function MealCard({
 
           {/* Compose meal view (compose step 2) */}
           {!disabled && composedPortions && (() => {
-            // When editing, budget = slot total - other meals in this slot (gives room for this meal)
-            // When composing new, budget = slot total as-is
+            // Per-meal compose budget: only kcal is slot-derived. Subtract kcal
+            // already consumed by other meals in this slot so the composer
+            // pacing bar reflects remaining headroom. Non-kcal fields are
+            // neutral defaults — the solver rewrite in #83 will drop them.
             const otherMeals = editingMealId ? meals.filter(m => m.id !== editingMealId) : [];
             const otherCal = otherMeals.reduce((s, m) => s + Number(m.calories || 0), 0);
-            const otherP = otherMeals.reduce((s, m) => s + Number(m.protein || 0), 0);
-            const otherC = otherMeals.reduce((s, m) => s + Number(m.carbs || 0), 0);
-            const otherF = otherMeals.reduce((s, m) => s + Number(m.fat || 0), 0);
-            const otherFi = otherMeals.reduce((s, m) => s + Number(m.fiber || 0), 0);
+            const slotKcal = slotBudget ? Number(slotBudget.calories) || 0 : 0;
             const composeBudget = slotBudget ? {
-              calories: Math.max(0, Number(slotBudget.calories) - otherCal),
-              protein: Math.max(0, Number(slotBudget.protein) - otherP),
-              carbs: Math.max(0, Number(slotBudget.carbs) - otherC),
-              fat: Math.max(0, Number(slotBudget.fat) - otherF),
-              fiber: Math.max(0, Number(slotBudget.fiber || 0) - otherFi),
-            } : slotBudget;
+              calories: Math.max(0, slotKcal - otherCal),
+              protein: 40,
+              carbs: 50,
+              fat: 20,
+              fiber: 10,
+            } : null;
             return (
             <ComposeMealView
               portions={composedPortions}
