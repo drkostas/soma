@@ -9,8 +9,7 @@ import { IngredientPicker } from "@/components/ingredient-picker";
 import { ComposeMealView } from "@/components/compose-meal-view";
 import { MealDetailModal } from "@/components/meal-detail-modal";
 import { type Ingredient, type PortionResult, solvePortions, computeItemMacros } from "@/lib/portion-solver";
-
-// ── Helpers ───────────────────────────────────────────────────
+import { ProteinQualityPill } from "@/lib/per-meal-protein";
 
 /** Generate a readable name from meal items, e.g. "Salmon, Broccoli & Yogurt" */
 function autoMealName(items: any[]): string {
@@ -200,9 +199,6 @@ export function MealCard({
   const slotLabel = SLOT_LABELS[slot] || slot;
   const slotIcon = SLOT_ICONS[slot] || "";
   const totalCal = meals.reduce((s, m) => s + Number(m.calories || 0), 0);
-  const totalProtein = meals.reduce((s, m) => s + Number(m.protein || 0), 0);
-  const totalCarbs = meals.reduce((s, m) => s + Number(m.carbs || 0), 0);
-  const totalFat = meals.reduce((s, m) => s + Number(m.fat || 0), 0);
 
   // Filter presets for this slot
   const slotTags = SLOT_TAG_MAP[slot] || [];
@@ -503,8 +499,11 @@ export function MealCard({
             </span>
           )}
           {slotBudget && totalCal > 0 && (
-            <span className="text-[10px] text-muted-foreground tabular-nums">
-              / {Math.round(slotBudget.calories)}
+            <span
+              className="text-[10px] text-muted-foreground/70 tabular-nums"
+              title="Soft pacing hint — splits the daily calorie target across slots. Not a hard cap."
+            >
+              budget {Math.round(slotBudget.calories)}
             </span>
           )}
           {expanded ? (
@@ -514,14 +513,6 @@ export function MealCard({
           )}
         </div>
       </button>
-
-      {expanded && meals.length > 0 && slotBudget && (
-        <div className="px-4 pb-2 text-[10px] text-muted-foreground tabular-nums">
-          {Math.round(totalProtein)}P / {Math.round(slotBudget.protein || 0)}
-          {" · "}{Math.round(totalCarbs)}C / {Math.round(slotBudget.carbs || 0)}
-          {" · "}{Math.round(totalFat)}F / {Math.round(slotBudget.fat || 0)}
-        </div>
-      )}
 
       {expanded && (
         <CardContent className="pt-0 space-y-2">
@@ -550,7 +541,9 @@ export function MealCard({
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {Math.round(meal.calories)} kcal &middot;{" "}
-                      {Math.round(meal.protein)}P &middot;{" "}
+                      {Math.round(meal.protein)}P
+                      <ProteinQualityPill grams={meal.protein} />
+                      {" · "}
                       {Math.round(meal.carbs)}C &middot; {Math.round(meal.fat)}F
                       {!disabled && itemsList.some(i => { const ig = ingLookup.get(i.ingredient_id ?? ""); return ig?.is_raw && ig?.raw_to_cooked_ratio && ig.raw_to_cooked_ratio > 1; }) && <span className="text-[9px] ml-1.5 text-muted-foreground/60">20+ min</span>}
                     </div>
