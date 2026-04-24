@@ -329,13 +329,10 @@ export function MealCard({
     const selected = (ingredients as Ingredient[]).filter((i) =>
       selectedIngredients.has(i.id),
     );
-    // Per-meal solver target: only kcal is slot-aware. Non-kcal macros use
-    // neutral defaults (solver's wide contract is retired in #83). These are
-    // NOT science-grounded per-slot caps — they're just seed values for the
-    // auto-portioner until the solver gets the {kcal + MPS floor} contract.
+    // Per-meal solver target: kcal from slot budget + MPS floor (30g default).
+    // Carbs / fat / fiber emerge from ingredient selection.
     const kcal = slotBudget ? Number(slotBudget.calories) || 500 : 500;
-    const budget = { calories: kcal, protein: 40, carbs: 50, fat: 20, fiber: 10 };
-    const portions = solvePortions(selected, budget);
+    const portions = solvePortions(selected, { calories: kcal });
     setComposedPortions(portions);
   };
 
@@ -866,18 +863,13 @@ export function MealCard({
           {!disabled && composedPortions && (() => {
             // Per-meal compose budget: only kcal is slot-derived. Subtract kcal
             // already consumed by other meals in this slot so the composer
-            // pacing bar reflects remaining headroom. Non-kcal fields are
-            // neutral defaults — the solver rewrite in #83 will drop them.
+            // pacing bar reflects remaining headroom.
             const otherMeals = editingMealId ? meals.filter(m => m.id !== editingMealId) : [];
             const otherCal = otherMeals.reduce((s, m) => s + Number(m.calories || 0), 0);
             const slotKcal = slotBudget ? Number(slotBudget.calories) || 0 : 0;
-            const composeBudget = slotBudget ? {
-              calories: Math.max(0, slotKcal - otherCal),
-              protein: 40,
-              carbs: 50,
-              fat: 20,
-              fiber: 10,
-            } : null;
+            const composeBudget: SlotBudget | null = slotBudget
+              ? { calories: Math.max(0, slotKcal - otherCal) }
+              : null;
             return (
             <ComposeMealView
               portions={composedPortions}
