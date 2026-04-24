@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { computeMacroTargetsFromContext } from "@/lib/macro-targets";
 import type { Mode } from "@/lib/mode-engine";
+import type { SlotBudgets } from "@/lib/nutrition-types";
 
 export const runtime = "edge";
 
@@ -9,70 +10,59 @@ const VALID_MODES: readonly Mode[] = [
   "standard", "aggressive", "reverse", "maintenance", "bulk", "injured",
 ];
 
-/* ── Per-slot distribution fractions ── */
-const SLOT_DISTRIBUTION: Record<string, Record<string, number>> = {
-  breakfast: { calories: 0.28, protein: 0.25, carbs: 0.28, fat: 0.28, fiber: 0.2 },
-  lunch: { calories: 0.25, protein: 0.25, carbs: 0.25, fat: 0.25, fiber: 0.3 },
-  dinner: { calories: 0.37, protein: 0.32, carbs: 0.37, fat: 0.37, fiber: 0.35 },
-  pre_sleep: { calories: 0.1, protein: 0.18, carbs: 0.1, fat: 0.1, fiber: 0.15 },
+/**
+ * Per-slot calorie distribution fractions.
+ *
+ * Only kcal. Protein/carbs/fat/fiber have no scientific basis for per-slot
+ * allocation (Schoenfeld & Aragon 2018; Trommelen 2023). See
+ * `web/lib/nutrition-types.ts` for the full invariant.
+ */
+const SLOT_KCAL_DISTRIBUTION: Record<string, number> = {
+  breakfast: 0.28,
+  lunch: 0.25,
+  dinner: 0.37,
+  pre_sleep: 0.1,
 };
 
 const ALL_SLOTS = ["breakfast", "lunch", "dinner", "pre_sleep"] as const;
-const MACROS = ["calories", "protein", "carbs", "fat", "fiber"] as const;
 
 /**
- * Redistribute remaining daily macros across unfilled meal slots,
- * weighted by each slot's default distribution fraction.
+ * Redistribute remaining daily kcal across unfilled meal slots, weighted by
+ * each slot's default kcal fraction. Non-kcal macros are not allocated.
  */
 function redistributeRemaining(
-  dayTargets: Record<string, number>,
-  eatenBySlot: Record<string, Record<string, number>>,
+  dayKcalTarget: number,
+  eatenKcalBySlot: Record<string, number>,
   skippedSlots: string[] = [],
-): Record<string, Record<string, number>> {
-  const totalEaten: Record<string, number> = {};
-  for (const m of MACROS) totalEaten[m] = 0;
-
+): SlotBudgets {
+  let totalEaten = 0;
   const filledSlots = new Set<string>();
-  for (const [slot, vals] of Object.entries(eatenBySlot)) {
+  for (const [slot, kcal] of Object.entries(eatenKcalBySlot)) {
     filledSlots.add(slot);
-    for (const m of MACROS) totalEaten[m] += vals[m] ?? 0;
+    totalEaten += kcal;
   }
+  for (const s of skippedSlots) filledSlots.add(s);
 
-  // Treat skipped slots as filled (zero macros) so their budget redistributes
-  for (const s of skippedSlots) {
-    if (!filledSlots.has(s)) {
-      filledSlots.add(s);
-    }
-  }
-
-  const remaining: Record<string, number> = {};
-  for (const m of MACROS) remaining[m] = Math.max(0, dayTargets[m] - totalEaten[m]);
-
+  const remaining = Math.max(0, dayKcalTarget - totalEaten);
   const unfilled = ALL_SLOTS.filter((s) => !filledSlots.has(s));
+
   if (unfilled.length === 0) {
-    // All slots filled — return actual eaten values (or zeros)
     return Object.fromEntries(
-      ALL_SLOTS.map((s) => [
-        s,
-        eatenBySlot[s] ?? Object.fromEntries(MACROS.map((m) => [m, 0])),
-      ]),
+      ALL_SLOTS.map((s) => [s, { calories: eatenKcalBySlot[s] ?? 0 }]),
     );
   }
 
-  // Distribute remaining across unfilled slots proportional to kcal weight
   const slotWeights: Record<string, number> = {};
-  for (const s of unfilled) slotWeights[s] = SLOT_DISTRIBUTION[s].calories;
+  for (const s of unfilled) slotWeights[s] = SLOT_KCAL_DISTRIBUTION[s];
   const totalWeight = Object.values(slotWeights).reduce((a, b) => a + b, 0) || 1;
 
-  const result: Record<string, Record<string, number>> = {};
+  const result: SlotBudgets = {};
   for (const slot of ALL_SLOTS) {
     if (filledSlots.has(slot)) {
-      result[slot] = eatenBySlot[slot];
+      result[slot] = { calories: Math.round(eatenKcalBySlot[slot] ?? 0) };
     } else {
       const frac = slotWeights[slot] / totalWeight;
-      result[slot] = Object.fromEntries(
-        MACROS.map((m) => [m, Math.round(remaining[m] * frac)]),
-      );
+      result[slot] = { calories: Math.round(remaining * frac) };
     }
   }
   return result;
@@ -127,7 +117,7 @@ export async function GET(req: NextRequest) {
 
   // Compute day targets, remaining, and per-slot budgets
   let remaining: Record<string, number> | null = null;
-  let slotBudgets: Record<string, Record<string, number>> | null = null;
+  let slotBudgets: SlotBudgets | null = null;
   let breakdown: Record<string, unknown> | null = null;
 
   if (plan) {
@@ -400,22 +390,15 @@ export async function GET(req: NextRequest) {
       fiber: Math.round(dayTargets.fiber - consumed.fiber),
     };
 
-    // Aggregate eaten macros by meal_slot
-    const eatenBySlot: Record<string, Record<string, number>> = {};
+    // Aggregate eaten kcal by meal_slot — only kcal is budgeted per slot.
+    const eatenKcalBySlot: Record<string, number> = {};
     for (const m of mealRows) {
       const slot = m.meal_slot as string;
       if (!slot) continue;
-      if (!eatenBySlot[slot]) {
-        eatenBySlot[slot] = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
-      }
-      eatenBySlot[slot].calories += Number(m.calories) || 0;
-      eatenBySlot[slot].protein += Number(m.protein) || 0;
-      eatenBySlot[slot].carbs += Number(m.carbs) || 0;
-      eatenBySlot[slot].fat += Number(m.fat) || 0;
-      eatenBySlot[slot].fiber += Number(m.fiber) || 0;
+      eatenKcalBySlot[slot] = (eatenKcalBySlot[slot] ?? 0) + (Number(m.calories) || 0);
     }
 
-    slotBudgets = redistributeRemaining(dayTargets, eatenBySlot, skippedSlots);
+    slotBudgets = redistributeRemaining(dayTargets.calories, eatenKcalBySlot, skippedSlots);
 
     // ── Build observability breakdown ──
     breakdown = {

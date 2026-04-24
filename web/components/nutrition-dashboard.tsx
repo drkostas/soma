@@ -10,6 +10,7 @@ import { MealCard } from "@/components/meal-card";
 import { DrinkLogger } from "@/components/drink-logger";
 import { ActivitySelector } from "@/components/activity-selector";
 import { PrepSummary } from "@/components/prep-summary";
+import type { SlotBudgets } from "@/lib/nutrition-types";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -241,7 +242,7 @@ export function NutritionDashboard({
   const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>(initialPlan?.selected_workouts ?? []);
   const [gymCalories, setGymCalories] = useState<number>(0);
   const [skippedSlots, setSkippedSlots] = useState<string[]>(initialPlan?.skipped_slots ?? []);
-  const [slotBudgets, setSlotBudgets] = useState<Record<string, Record<string, number>> | null>(null);
+  const [slotBudgets, setSlotBudgets] = useState<SlotBudgets | null>(null);
   const [budgetExpanded, setBudgetExpanded] = useState(false);
   const [breakdown, setBreakdown] = useState<any>(null);
   const [trend7d, setTrend7d] = useState<any>(null);
@@ -639,30 +640,24 @@ export function NutritionDashboard({
                       </div>
                     </div>
 
-                    {/* Per-slot budget */}
+                    {/* Per-slot kcal pacing. P/C/F/Fi are intentionally not
+                        split across slots — no scientific basis for per-slot
+                        non-kcal allocation. See lib/nutrition-types.ts. */}
                     {slotBudgets && (
                       <div className="space-y-1">
-                        <div className="text-[10px] lg:text-xs font-medium text-muted-foreground uppercase tracking-wider">Per-Meal Budget</div>
+                        <div className="text-[10px] lg:text-xs font-medium text-muted-foreground uppercase tracking-wider">Per-Meal kcal Pacing</div>
                         {skippedSlots.length >= 4 ? (
                           <div className="text-xs text-muted-foreground text-center py-2">Fasting day — all meals skipped</div>
                         ) : (
-                          <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs">
+                          <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-xs">
                             <span className="text-muted-foreground text-[10px]">Slot</span>
                             <span className="text-muted-foreground text-[10px] text-right">kcal</span>
-                            <span className="text-muted-foreground text-[10px] text-right">P</span>
-                            <span className="text-muted-foreground text-[10px] text-right">C</span>
-                            <span className="text-muted-foreground text-[10px] text-right">F</span>
-                            <span className="text-muted-foreground text-[10px] text-right">Fi</span>
-                            {Object.entries(slotBudgets).map(([slot, macros]: [string, any]) => (
+                            {Object.entries(slotBudgets).map(([slot, macros]) => (
                               <React.Fragment key={slot}>
                                 <span className={skippedSlots.includes(slot) ? "text-muted-foreground/50 line-through" : ""}>
                                   {slot.replace("_", "-")}
                                 </span>
                                 <span className="tabular-nums text-right">{Math.round(macros.calories)}</span>
-                                <span className="tabular-nums text-right text-blue-500">{Math.round(macros.protein)}</span>
-                                <span className="tabular-nums text-right text-amber-500">{Math.round(macros.carbs)}</span>
-                                <span className="tabular-nums text-right text-rose-500">{Math.round(macros.fat)}</span>
-                                <span className="tabular-nums text-right text-green-500">{Math.round(macros.fiber || 0)}</span>
                               </React.Fragment>
                             ))}
                           </div>
