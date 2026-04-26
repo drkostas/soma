@@ -19,10 +19,22 @@ import {
   gramsToCount,
 } from "@/lib/portion-solver";
 
+interface DayMacros {
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+}
+
 interface ComposeMealViewProps {
   portions: PortionResult[];
   ingredients: Ingredient[];
   budget: SlotBudget | null;
+  /** Daily P/C/F/Fi targets. When provided, C/F/Fi render as daily-progress bars
+   *  (consumed-today + this-meal vs daily target). */
+  dayTargets?: DayMacros | null;
+  /** Daily consumed P/C/F/Fi BEFORE this meal (excludes the meal being edited). */
+  dayConsumed?: DayMacros | null;
   onLog: (
     items: { ingredient_id: string; grams: number; calories: number; protein: number; carbs: number; fat: number; fiber: number }[],
     totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number },
@@ -33,10 +45,15 @@ interface ComposeMealViewProps {
   onTotalsChange?: (totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number }) => void;
 }
 
+/** Per-meal protein anabolic floor (Schoenfeld & Aragon 2018; ≈0.4 g/kg). */
+const MPS_FLOOR_G = 30;
+
 export function ComposeMealView({
   portions: initialPortions,
   ingredients,
   budget,
+  dayTargets,
+  dayConsumed,
   onLog,
   onCancel,
   onEditIngredients,
@@ -233,11 +250,17 @@ export function ComposeMealView({
         </div>
       )}
 
-      {/* Per-meal read-out — kcal is a soft pacing bar; P/C/F/Fi are plain
-          numbers. Per-meal P/C/F/Fi do NOT have scientific caps (Schoenfeld &
-          Aragon 2018; Trommelen 2023), so we don't draw goal markers or flip
-          to an "over" state for them. Protein gets an MPS-quality pill. */}
+      {/* Per-meal read-out.
+          kcal: per-slot soft pacing bar (kcal is the only macro with scientific
+            per-slot pacing — Schoenfeld & Aragon 2018).
+          Protein: per-meal bar with MPS floor at 30g. Below 30 → missed MPS
+            (blue dim); at/above 30 → blue solid + ProteinQualityPill. No upper cap.
+          C / F / Fi: daily-progress bars. Grey = consumed today excluding this
+            meal; colored = this meal would add; goal line at daily target;
+            over-portion past daily target renders amber so the user can see
+            whether logging this meal pushes the DAY past goal. */}
       <div className="space-y-1.5 border-t pt-2">
+        {/* kcal pacing bar — slot-level (unchanged) */}
         {(() => {
           const kcalBudget = budget?.calories || 0;
           const barMax = Math.max(kcalBudget * 1.3, totals.calories * 1.05, kcalBudget + 1);
@@ -269,16 +292,116 @@ export function ComposeMealView({
           );
         })()}
 
-        <div className="flex items-center gap-3 text-xs text-muted-foreground pt-0.5">
-          <span className="flex items-center tabular-nums">
-            <span className="text-blue-400 font-medium">{Math.round(totals.protein)}g</span>
-            <span className="ml-1 text-muted-foreground/70">P</span>
-            <ProteinQualityPill grams={totals.protein} />
-          </span>
-          <span className="tabular-nums"><span className="text-amber-400 font-medium">{Math.round(totals.carbs)}g</span> <span className="text-muted-foreground/70">C</span></span>
-          <span className="tabular-nums"><span className="text-rose-400 font-medium">{Math.round(totals.fat)}g</span> <span className="text-muted-foreground/70">F</span></span>
-          <span className="tabular-nums"><span className="text-green-400 font-medium">{Math.round(totals.fiber)}g</span> <span className="text-muted-foreground/70">Fi</span></span>
-        </div>
+        {/* Protein bar — per-meal MPS floor at 30g (no upper cap) */}
+        {(() => {
+          const thisP = totals.protein;
+          const barMax = Math.max(MPS_FLOOR_G * 1.5, thisP * 1.1, MPS_FLOOR_G + 1);
+          const fillPct = Math.min(100, (thisP / barMax) * 100);
+          const floorPct = Math.min(100, (MPS_FLOOR_G / barMax) * 100);
+          const hitMps = thisP >= MPS_FLOOR_G;
+          const dayP = (dayConsumed?.protein ?? 0) + thisP;
+          const dayTargetP = dayTargets?.protein ?? 0;
+          return (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-8 text-muted-foreground text-right">P</span>
+              <div
+                className="relative flex-1 h-2 bg-muted rounded-full overflow-hidden"
+                title={`MPS floor: ${MPS_FLOOR_G}g per meal (Schoenfeld & Aragon 2018). Above the floor is good — there is no upper cap.`}
+              >
+                <div
+                  className={`absolute left-0 top-0 h-full rounded-full transition-all ${hitMps ? "bg-blue-500" : "bg-blue-500/40"}`}
+                  style={{ width: `${fillPct}%` }}
+                />
+                <div className="absolute top-0 h-full w-[2px] bg-foreground/50" style={{ left: `${floorPct}%` }} />
+              </div>
+              <span className="w-24 text-right tabular-nums text-muted-foreground">
+                <span className={hitMps ? "text-blue-400 font-medium" : "text-blue-400/60 font-medium"}>{Math.round(thisP)}g</span>
+                <ProteinQualityPill grams={thisP} />
+                {dayTargetP > 0 && (
+                  <span className="block text-[10px] text-muted-foreground/60">
+                    {Math.round(dayP)} / {Math.round(dayTargetP)} day
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })()}
+
+        {/* Carbs / Fat / Fiber — daily-progress bars */}
+        {(["carbs", "fat", "fiber"] as const).map((key) => {
+          const labelMap = { carbs: "C", fat: "F", fiber: "Fi" } as const;
+          const colorMap = {
+            carbs: "bg-amber-500",
+            fat: "bg-rose-500",
+            fiber: "bg-green-500",
+          } as const;
+          const textColorMap = {
+            carbs: "text-amber-400",
+            fat: "text-rose-400",
+            fiber: "text-green-400",
+          } as const;
+          const eaten = dayConsumed?.[key] ?? 0;
+          const thisMeal = totals[key];
+          const target = dayTargets?.[key] ?? 0;
+          // Fall back to plain read-out if no daily target available (e.g. plan didn't load)
+          if (target <= 0) {
+            return (
+              <div key={key} className="flex items-center gap-2 text-xs">
+                <span className="w-8 text-muted-foreground text-right">{labelMap[key]}</span>
+                <div className="flex-1" />
+                <span className="w-24 text-right tabular-nums">
+                  <span className={`${textColorMap[key]} font-medium`}>{Math.round(thisMeal)}g</span>
+                </span>
+              </div>
+            );
+          }
+          const total = eaten + thisMeal;
+          const barMax = Math.max(target * 1.3, total * 1.05, target + 1);
+          const eatenPct = Math.min(100, (eaten / barMax) * 100);
+          const targetPct = Math.min(100, (target / barMax) * 100);
+          // Amber over-portion: only the part of `thisMeal` that exceeds the daily target.
+          const underTarget = Math.max(0, Math.min(target, total) - eaten);
+          const overTarget = Math.max(0, total - Math.max(target, eaten));
+          const underPct = Math.min(100, (underTarget / barMax) * 100);
+          const overPct = Math.min(100, (overTarget / barMax) * 100);
+          const overshootStart = Math.max(eatenPct, targetPct);
+          const dayOverGoal = total > target;
+          return (
+            <div key={key} className="flex items-center gap-2 text-xs">
+              <span className="w-8 text-muted-foreground text-right">{labelMap[key]}</span>
+              <div
+                className="relative flex-1 h-2 bg-muted rounded-full overflow-hidden"
+                title={`Day so far ${Math.round(eaten)}g + this meal ${Math.round(thisMeal)}g = ${Math.round(total)}g vs ${Math.round(target)}g daily target. Daily totals matter, not per-meal.`}
+              >
+                {/* Already-eaten today (grey) */}
+                <div
+                  className="absolute left-0 top-0 h-full bg-muted-foreground/40"
+                  style={{ width: `${eatenPct}%` }}
+                />
+                {/* This meal — under-target portion (color) */}
+                <div
+                  className={`absolute top-0 h-full ${colorMap[key]}`}
+                  style={{ left: `${eatenPct}%`, width: `${underPct}%` }}
+                />
+                {/* This meal — over-target portion (amber) */}
+                {overPct > 0 && (
+                  <div
+                    className="absolute top-0 h-full bg-amber-500"
+                    style={{ left: `${overshootStart}%`, width: `${overPct}%` }}
+                  />
+                )}
+                {/* Goal marker */}
+                <div className="absolute top-0 h-full w-[2px] bg-foreground/50" style={{ left: `${targetPct}%` }} />
+              </div>
+              <span className="w-24 text-right tabular-nums text-muted-foreground">
+                <span className={`${textColorMap[key]} font-medium`}>{Math.round(thisMeal)}g</span>
+                <span className="block text-[10px] text-muted-foreground/60">
+                  <span className={dayOverGoal ? "text-amber-500" : ""}>{Math.round(total)}</span> / {Math.round(target)} day
+                </span>
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Volume score */}

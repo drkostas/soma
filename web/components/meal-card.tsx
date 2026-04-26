@@ -109,6 +109,10 @@ interface MealCardProps {
   skipped?: boolean;
   slotBudget?: SlotBudget | null;
   ingredients?: any[];
+  /** Daily P/C/F/Fi targets — passed through to ComposeMealView for daily-progress bars. */
+  dayTargets?: { protein: number; carbs: number; fat: number; fiber: number } | null;
+  /** Daily P/C/F/Fi consumed today across all slots, raw (no live preview). */
+  dayConsumed?: { protein: number; carbs: number; fat: number; fiber: number } | null;
   onMealLogged: (changedSlot?: string) => void;
   onSlotSkipped?: () => void;
   onTotalsPreview?: (slot: string, totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number } | null) => void;
@@ -148,6 +152,8 @@ export function MealCard({
   skipped,
   slotBudget,
   ingredients,
+  dayTargets,
+  dayConsumed,
   onMealLogged,
   onSlotSkipped,
   onTotalsPreview,
@@ -870,11 +876,23 @@ export function MealCard({
             const composeBudget: SlotBudget | null = slotBudget
               ? { calories: Math.max(0, slotKcal - otherCal) }
               : null;
+            // dayConsumed includes ALL day's logged meals; when editing, subtract the
+            // meal being edited so the daily-progress bar isn't double-counting it.
+            const dayConsumedExcl = dayConsumed && editingMealMacros
+              ? {
+                  protein: Math.max(0, dayConsumed.protein - editingMealMacros.protein),
+                  carbs: Math.max(0, dayConsumed.carbs - editingMealMacros.carbs),
+                  fat: Math.max(0, dayConsumed.fat - editingMealMacros.fat),
+                  fiber: Math.max(0, dayConsumed.fiber - editingMealMacros.fiber),
+                }
+              : dayConsumed;
             return (
             <ComposeMealView
               portions={composedPortions}
               ingredients={(ingredients ?? []) as Ingredient[]}
               budget={composeBudget ?? null}
+              dayTargets={dayTargets ?? null}
+              dayConsumed={dayConsumedExcl ?? null}
               onLog={handleComposeLog}
               onCancel={handleComposeCancel}
               onEditIngredients={handleEditIngredients}
