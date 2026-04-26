@@ -204,7 +204,7 @@ export function ComposeMealView({
                 <span className="truncate flex-1 min-w-0">
                   {ing?.name ?? p.ingredient_id}
                   <span className="block text-[10px] text-muted-foreground">
-                    {p.calories}kcal · {p.protein}P · {p.carbs}C · {p.fat}F
+                    {p.calories}kcal · {p.protein}P · {p.carbs}C · {p.fat}F · {p.fiber}Fi
                   </span>
                 </span>
                 {ing && isCountBased(ing) && !gramMode.has(p.ingredient_id) ? (
