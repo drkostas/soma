@@ -141,8 +141,13 @@ interface MacroMarker {
   label: string;
   /** 'achievement' (default): just a tier mark, no overlay past it.
    *  'softCeiling': orange overlay past this value (warning).
-   *  'hardCeiling': red overlay past this value (real ceiling). */
+   *  'hardCeiling': red overlay + RED marker past this value (real ceiling). */
   kind?: "achievement" | "softCeiling" | "hardCeiling";
+  /** Optimal hit-this target — renders the marker line in GREEN. Independent
+   *  from `kind` (e.g. kcal target is BOTH softCeiling and optimal). */
+  optimal?: boolean;
+  /** Hover tooltip text. Falls back to "{label}: {value}" if not provided. */
+  description?: string;
 }
 
 function MacroBar({
@@ -252,16 +257,28 @@ function MacroBar({
             style={{ left: `${hardStartPct}%`, width: `${fillPct - hardStartPct}%` }}
           />
         )}
-        {/* Multi-markers — opaque, dim if crossed, bright if ahead. Always visible. */}
+        {/* Multi-markers — color-coded by meaning, always visible.
+            Red = hardCeiling (don't cross). Green = optimal hit-this target.
+            White = other achievement tier. Crossed renders at /40 opacity. */}
         {useMulti && markers!.map((m, i) => {
           const pct = Math.min(100, (m.value / maxVal) * 100);
           const crossed = current >= m.value;
+          const colorClass =
+            m.kind === "hardCeiling"
+              ? (crossed ? "bg-red-500/40" : "bg-red-500")
+              : m.optimal
+                ? (crossed ? "bg-green-500/40" : "bg-green-500")
+                : (crossed ? "bg-foreground/40" : "bg-foreground");
           return (
             <div
               key={i}
-              className={`absolute top-0 h-full w-[2px] ${crossed ? "bg-foreground/40" : "bg-foreground"}`}
+              className={`absolute top-0 h-full w-[2px] ${colorClass}`}
               style={{ left: `calc(${Math.min(pct, 99.5)}% - 1px)` }}
-              title={`${m.label}: ${Math.round(m.value)}${unit}`}
+              title={
+                m.description
+                  ? `${m.description} (${Math.round(m.value)}${unit})`
+                  : `${m.label}: ${Math.round(m.value)}${unit}`
+              }
             />
           );
         })}
@@ -800,19 +817,55 @@ export function NutritionDashboard({
                   bright. Past the highest marker = red overlay. */}
               {dataReady ? (() => {
                 const w = (breakdown as any)?.weightKg ?? 0;
-                const proteinMarkers = w > 0
-                  ? [1.6, 1.8, 2.0, 2.2].map((g) => ({ value: w * g, label: g.toFixed(1) }))
-                  : [{ value: targetProtein, label: "target" }];
-                const fatMarkers = w > 0
-                  ? [0.6, 0.8, 1.0].map((g) => ({ value: w * g, label: g.toFixed(1) }))
-                  : [{ value: targetFat, label: "target" }];
-                const carbMarkers = [
-                  { value: 100, label: "min" },
-                  { value: targetCarbs, label: "target" },
+                const proteinDescs: Record<string, string> = {
+                  "1.6": "Hypertrophy minimum (Schoenfeld 2018 meta)",
+                  "1.8": "Common cutting target",
+                  "2.0": "Conservative high — diminishing returns past this",
+                  "2.2": "Aggressive cut sweet spot — best muscle preservation in deficit",
+                };
+                const fatDescs: Record<string, string> = {
+                  "0.6": "Hormone-risk floor — going below for long deficits suppresses test/T3",
+                  "0.8": "Sufficient for hormones, leaves carbs for training (cutting consensus)",
+                  "1.0": "Maintenance/bulk target — no extra hormonal benefit in deficit",
+                };
+                const proteinMarkers: MacroMarker[] = w > 0
+                  ? [1.6, 1.8, 2.0, 2.2].map((g) => ({
+                      value: w * g,
+                      label: g.toFixed(1),
+                      optimal: g === 2.2,
+                      description: proteinDescs[g.toFixed(1)],
+                    }))
+                  : [{ value: targetProtein, label: "target", optimal: true }];
+                const fatMarkers: MacroMarker[] = w > 0
+                  ? [0.6, 0.8, 1.0].map((g) => ({
+                      value: w * g,
+                      label: g.toFixed(1),
+                      optimal: g === 0.8,
+                      description: fatDescs[g.toFixed(1)],
+                    }))
+                  : [{ value: targetFat, label: "target", optimal: true }];
+                const carbMarkers: MacroMarker[] = [
+                  {
+                    value: 100, label: "min",
+                    description: "Health floor — keto-ish below this",
+                  },
+                  {
+                    value: targetCarbs, label: "target",
+                    optimal: true,
+                    description: "Today's matrix-computed carb target",
+                  },
                 ].sort((a, b) => a.value - b.value);
                 const fiberMarkers: MacroMarker[] = [
-                  { value: targetFiber || 30, label: "target" },
-                  { value: 60, label: "ceil", kind: "hardCeiling" },
+                  {
+                    value: targetFiber || 30, label: "target",
+                    optimal: true,
+                    description: "Daily fiber target — gut health + satiety",
+                  },
+                  {
+                    value: 60, label: "ceil",
+                    kind: "hardCeiling",
+                    description: "GI distress threshold — past this risks bloating/cramps",
+                  },
                 ];
                 return (
                   <div className="grid gap-2 pt-1">
