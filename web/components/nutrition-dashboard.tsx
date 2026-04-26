@@ -864,24 +864,38 @@ export function NutritionDashboard({
         )}
 
         {/* Meal cards */}
-        {slots.map((slot) => (
-          <MealCard
-            key={slot}
-            slot={slot}
-            meals={meals.filter((m) => m.meal_slot === slot)}
-            presets={presets}
-            ingredients={ingredients}
-            slotBudget={slotBudgets?.[slot] ?? null}
-            skipped={skippedSlots.includes(slot)}
-            date={date}
-            disabled={isClosed}
-            onMealLogged={(slot?: string) => handleMealChanged(slot)}
-            onSlotSkipped={refreshData}
-            onTotalsPreview={handleTotalsPreview}
-            locked={lockedSlots.has(slot)}
-            onLockToggle={handleLockToggle}
-          />
-        ))}
+        {slots.map((slot) => {
+          // Day-level macros (raw, no live preview) so each compose view can render
+          // daily-progress bars: "if I log this meal, where does my day end up?"
+          const dayConsumedRaw = {
+            protein: meals.reduce((s, m) => s + Number(m.protein || 0), 0),
+            carbs:
+              meals.reduce((s, m) => s + Number(m.carbs || 0), 0) +
+              drinks.reduce((s, d) => s + Number(d.carbs || 0), 0),
+            fat: meals.reduce((s, m) => s + Number(m.fat || 0), 0),
+            fiber: meals.reduce((s, m) => s + Number(m.fiber || 0), 0),
+          };
+          return (
+            <MealCard
+              key={slot}
+              slot={slot}
+              meals={meals.filter((m) => m.meal_slot === slot)}
+              presets={presets}
+              ingredients={ingredients}
+              slotBudget={slotBudgets?.[slot] ?? null}
+              dayTargets={{ protein: targetProtein, carbs: targetCarbs, fat: targetFat, fiber: targetFiber }}
+              dayConsumed={dayConsumedRaw}
+              skipped={skippedSlots.includes(slot)}
+              date={date}
+              disabled={isClosed}
+              onMealLogged={(slot?: string) => handleMealChanged(slot)}
+              onSlotSkipped={refreshData}
+              onTotalsPreview={handleTotalsPreview}
+              locked={lockedSlots.has(slot)}
+              onLockToggle={handleLockToggle}
+            />
+          );
+        })}
 
         {/* Drink logger */}
         <DrinkLogger
