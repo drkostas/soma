@@ -67,8 +67,14 @@ interface Goalpost {
   label: string;
   /** 'achievement' (default): just a tier mark, no overlay past it.
    *  'softCeiling': render orange overlay past this value (warning, not stop).
-   *  'hardCeiling': render red overlay past this value (real ceiling — stop). */
+   *  'hardCeiling': render red overlay past this value + RED marker (real ceiling — stop). */
   kind?: "achievement" | "softCeiling" | "hardCeiling";
+  /** Optimal hit-this target for this macro. Renders the marker line in GREEN.
+   *  Independent from `kind` — kcal target is BOTH softCeiling (orange overlay
+   *  past) AND optimal (green marker line). */
+  optimal?: boolean;
+  /** Hover tooltip text. Falls back to "{label}: {value}" if not provided. */
+  description?: string;
 }
 
 export function ComposeMealView({
@@ -295,32 +301,78 @@ export function ComposeMealView({
         const burn = totalBurn && totalBurn > 0 ? totalBurn : 0;
 
         // Goalpost taxonomy:
-        //  - kcal: target is a SOFT ceiling (orange — over goal but in deficit
-        //    is fine), burn is the HARD ceiling (red — surplus = stop).
-        //  - Protein/Carbs/Fat: only achievement tiers. No real upper ceiling
-        //    on any of these — eating past them is just "above the highest
-        //    research anchor", not wrong. No orange/red overlay.
-        //  - Fiber: 60g is the HARD ceiling (real GI distress threshold).
+        //  Markers are COLOR-CODED by meaning:
+        //    - red    = hardCeiling (don't cross): kcal burn, fiber 60g.
+        //    - green  = optimal hit-this target: kcal goal, protein 2.2 g/kg
+        //               (user pref), carbs today's matrix target, fat 0.8 g/kg
+        //               (research-consensus cutting target), fiber 30g.
+        //    - white  = other achievement tiers.
+        //  Each marker has a description for hover.
+        const proteinDescs: Record<string, string> = {
+          "1.6": "Hypertrophy minimum (Schoenfeld 2018 meta)",
+          "1.8": "Common cutting target",
+          "2.0": "Conservative high — diminishing returns past this",
+          "2.2": "Aggressive cut sweet spot — best muscle preservation in deficit",
+        };
+        const fatDescs: Record<string, string> = {
+          "0.6": "Hormone-risk floor — going below for long deficits suppresses test/T3",
+          "0.8": "Sufficient for hormones, leaves carbs for training (cutting consensus)",
+          "1.0": "Maintenance/bulk target — no extra hormonal benefit in deficit",
+        };
         const goalposts: Record<"kcal" | "P" | "C" | "F" | "Fi", Goalpost[]> = {
           kcal: [
-            ...(dayKcalTarget > 0 ? [{ value: dayKcalTarget, label: "goal", kind: "softCeiling" as const }] : []),
-            ...(burn > 0 ? [{ value: burn, label: "burn", kind: "hardCeiling" as const }] : []),
+            ...(dayKcalTarget > 0 ? [{
+              value: dayKcalTarget, label: "goal",
+              kind: "softCeiling" as const,
+              optimal: true,
+              description: "Daily deficit target — hit this to land your goal",
+            }] : []),
+            ...(burn > 0 ? [{
+              value: burn, label: "burn",
+              kind: "hardCeiling" as const,
+              description: "Total burn (BMR + steps + workouts). Past this is surplus.",
+            }] : []),
           ],
           P: w > 0
-            ? PROTEIN_G_PER_KG_TIERS.map((g) => ({ value: w * g, label: g.toFixed(1) }))
-            : (dayTargets?.protein ? [{ value: dayTargets.protein, label: "target" }] : []),
+            ? PROTEIN_G_PER_KG_TIERS.map((g) => ({
+                value: w * g,
+                label: g.toFixed(1),
+                optimal: g === 2.2,
+                description: proteinDescs[g.toFixed(1)],
+              }))
+            : (dayTargets?.protein ? [{ value: dayTargets.protein, label: "target", optimal: true }] : []),
           C: dayTargets?.carbs
             ? [
-                { value: CARB_HEALTH_FLOOR_G, label: "min" },
-                { value: dayTargets.carbs, label: "target" },
+                {
+                  value: CARB_HEALTH_FLOOR_G, label: "min",
+                  description: "Health floor — keto-ish below this",
+                },
+                {
+                  value: dayTargets.carbs, label: "target",
+                  optimal: true,
+                  description: "Today's matrix-computed carb target",
+                },
               ].sort((a, b) => a.value - b.value)
             : [{ value: CARB_HEALTH_FLOOR_G, label: "min" }],
           F: w > 0
-            ? FAT_G_PER_KG_TIERS.map((g) => ({ value: w * g, label: g.toFixed(1) }))
-            : (dayTargets?.fat ? [{ value: dayTargets.fat, label: "target" }] : []),
+            ? FAT_G_PER_KG_TIERS.map((g) => ({
+                value: w * g,
+                label: g.toFixed(1),
+                optimal: g === 0.8,
+                description: fatDescs[g.toFixed(1)],
+              }))
+            : (dayTargets?.fat ? [{ value: dayTargets.fat, label: "target", optimal: true }] : []),
           Fi: [
-            { value: FIBER_TARGET_G, label: "target" },
-            { value: FIBER_CEILING_G, label: "ceil", kind: "hardCeiling" },
+            {
+              value: FIBER_TARGET_G, label: "target",
+              optimal: true,
+              description: "Daily fiber target — gut health + satiety",
+            },
+            {
+              value: FIBER_CEILING_G, label: "ceil",
+              kind: "hardCeiling",
+              description: "GI distress threshold — past this risks bloating/cramps",
+            },
           ],
         };
 
@@ -396,17 +448,31 @@ export function ComposeMealView({
                   <div className="absolute top-0 h-full bg-red-500"
                     style={{ left: `${hardStartPct}%`, width: `${totalPct - hardStartPct}%` }} />
                 )}
-                {/* Goalpost markers. Always opaque so fill can't hide them.
-                    Crossed = dim (foreground/40), ahead = bright (foreground). */}
+                {/* Goalpost markers. Always visible regardless of fill overlap.
+                    Color = meaning:
+                      red    = don't cross (hardCeiling)
+                      green  = optimal hit-this target
+                      white  = other achievement tier
+                    Crossed markers render at /40 opacity (dimmer but still visible). */}
                 {posts.map((g, i) => {
                   const pct = Math.min(100, (g.value / barMax) * 100);
                   const crossed = total >= g.value;
+                  const colorClass =
+                    g.kind === "hardCeiling"
+                      ? (crossed ? "bg-red-500/40" : "bg-red-500")
+                      : g.optimal
+                        ? (crossed ? "bg-green-500/40" : "bg-green-500")
+                        : (crossed ? "bg-foreground/40" : "bg-foreground");
                   return (
                     <div
                       key={i}
-                      className={`absolute top-0 h-full w-[2px] ${crossed ? "bg-foreground/40" : "bg-foreground"}`}
+                      className={`absolute top-0 h-full w-[2px] ${colorClass}`}
                       style={{ left: `${pct}%` }}
-                      title={`${g.label}: ${Math.round(g.value)}${suffix}`}
+                      title={
+                        g.description
+                          ? `${g.description} (${Math.round(g.value)}${suffix})`
+                          : `${g.label}: ${Math.round(g.value)}${suffix}`
+                      }
                     />
                   );
                 })}
