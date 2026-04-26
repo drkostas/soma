@@ -109,10 +109,14 @@ interface MealCardProps {
   skipped?: boolean;
   slotBudget?: SlotBudget | null;
   ingredients?: any[];
-  /** Daily P/C/F/Fi targets — passed through to ComposeMealView for daily-progress bars. */
-  dayTargets?: { protein: number; carbs: number; fat: number; fiber: number } | null;
-  /** Daily P/C/F/Fi consumed today across all slots, raw (no live preview). */
-  dayConsumed?: { protein: number; carbs: number; fat: number; fiber: number } | null;
+  /** Daily P/C/F/Fi/kcal targets — drives goalposts in compose view. */
+  dayTargets?: { protein: number; carbs: number; fat: number; fiber: number; calories: number } | null;
+  /** Daily P/C/F/Fi/kcal consumed today across all slots, raw (no live preview). */
+  dayConsumed?: { protein: number; carbs: number; fat: number; fiber: number; calories: number } | null;
+  /** User body weight (kg) — used to compute g/kg goalposts on protein/fat bars. */
+  weightKg?: number | null;
+  /** Today's total burn (BMR + steps + workouts) — kcal "burn" goalpost. */
+  totalBurn?: number | null;
   onMealLogged: (changedSlot?: string) => void;
   onSlotSkipped?: () => void;
   onTotalsPreview?: (slot: string, totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number } | null) => void;
@@ -154,6 +158,8 @@ export function MealCard({
   ingredients,
   dayTargets,
   dayConsumed,
+  weightKg,
+  totalBurn,
   onMealLogged,
   onSlotSkipped,
   onTotalsPreview,
@@ -884,6 +890,7 @@ export function MealCard({
                   carbs: Math.max(0, dayConsumed.carbs - editingMealMacros.carbs),
                   fat: Math.max(0, dayConsumed.fat - editingMealMacros.fat),
                   fiber: Math.max(0, dayConsumed.fiber - editingMealMacros.fiber),
+                  calories: Math.max(0, dayConsumed.calories - editingMealMacros.calories),
                 }
               : dayConsumed;
             return (
@@ -893,6 +900,8 @@ export function MealCard({
               budget={composeBudget ?? null}
               dayTargets={dayTargets ?? null}
               dayConsumed={dayConsumedExcl ?? null}
+              weightKg={weightKg ?? null}
+              totalBurn={totalBurn ?? null}
               onLog={handleComposeLog}
               onCancel={handleComposeCancel}
               onEditIngredients={handleEditIngredients}
