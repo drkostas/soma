@@ -432,6 +432,7 @@ export async function GET(req: NextRequest) {
         fat: dayTargets.fat,
         fiber: dayTargets.fiber,
       },
+      weightKg,
     };
 
     // ── Write-back: sync computed values to DB so stored matches dynamic ──

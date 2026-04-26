@@ -136,6 +136,15 @@ const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "pre_sleep"] as const;
  *   - Carbs: floor = target, ceiling = null (kcal-implicit upper).
  *   - Fiber: floor = target, ceiling = 60g (phytate cap, V2 §2.4).
  */
+interface MacroMarker {
+  value: number;
+  label: string;
+  /** 'achievement' (default): just a tier mark, no overlay past it.
+   *  'softCeiling': orange overlay past this value (warning).
+   *  'hardCeiling': red overlay past this value (real ceiling). */
+  kind?: "achievement" | "softCeiling" | "hardCeiling";
+}
+
 function MacroBar({
   label,
   current,
@@ -143,6 +152,8 @@ function MacroBar({
   color,
   floor,
   ceiling,
+  markers,
+  unit = "g",
 }: {
   label: string;
   current: number;
@@ -150,33 +161,59 @@ function MacroBar({
   color: string;
   floor?: number | null;
   ceiling?: number | null;
+  /** Multi-goalposts. When provided, replaces floor/ceiling rendering with a
+   *  research-anchored set of ticks. Crossed markers render dim, ahead markers
+   *  bright. Bar fill stays in the macro's color until past the HIGHEST marker;
+   *  past the highest, an extra red overlay signals "meaningfully over". */
+  markers?: MacroMarker[];
+  unit?: string;
 }) {
-  // Axis scale: leave room past the highest anchor so both markers show.
-  const axisAnchors = [
-    target * 1.15,
-    floor != null ? floor * 1.15 : 0,
-    ceiling != null ? ceiling * 1.05 : 0,
-    current * 1.05,
-    target + 1,
-  ];
+  const useMulti = !!markers && markers.length > 0;
+  const highest = useMulti ? Math.max(...markers!.map((m) => m.value)) : 0;
+  const softCeiling = useMulti ? markers!.find((m) => m.kind === "softCeiling") : undefined;
+  const hardCeiling = useMulti ? markers!.find((m) => m.kind === "hardCeiling") : undefined;
+
+  // Axis scale: leave room past the highest anchor so all markers show.
+  const axisAnchors = useMulti
+    ? [highest * 1.15, current * 1.05, highest + 1]
+    : [
+        target * 1.15,
+        floor != null ? floor * 1.15 : 0,
+        ceiling != null ? ceiling * 1.05 : 0,
+        current * 1.05,
+        target + 1,
+      ];
   const maxVal = Math.max(...axisAnchors);
   const fillPct = maxVal > 0 ? Math.min(100, (current / maxVal) * 100) : 0;
-  const floorPct = floor != null && maxVal > 0
-    ? Math.min(100, (floor / maxVal) * 100)
-    : null;
-  const ceilingPct = ceiling != null && maxVal > 0
-    ? Math.min(100, (ceiling / maxVal) * 100)
-    : null;
 
-  const overCeiling = ceiling != null && current > ceiling;
-  const underFloor = floor != null && current < floor;
+  const pastSoft = !!softCeiling && current > softCeiling.value;
+  const pastHard = !!hardCeiling && current > hardCeiling.value;
+  const softStartPct = softCeiling && maxVal > 0
+    ? Math.min(100, (softCeiling.value / maxVal) * 100) : 0;
+  const orangeEndValue = hardCeiling ? Math.min(current, hardCeiling.value) : current;
+  const orangeEndPct = useMulti && maxVal > 0
+    ? Math.min(100, (orangeEndValue / maxVal) * 100) : 0;
+  const hardStartPct = hardCeiling && maxVal > 0
+    ? Math.min(100, (hardCeiling.value / maxVal) * 100) : 100;
+
+  // Display denominator: prefer soft ceiling if exists, else hard ceiling,
+  // else highest achievement tier.
+  const displayRef = useMulti ? (softCeiling?.value ?? hardCeiling?.value ?? highest) : target;
+
+  // Legacy floor/ceiling support (used when markers prop not provided).
+  const floorPct = !useMulti && floor != null && maxVal > 0
+    ? Math.min(100, (floor / maxVal) * 100) : null;
+  const ceilingPct = !useMulti && ceiling != null && maxVal > 0
+    ? Math.min(100, (ceiling / maxVal) * 100) : null;
+  const overCeiling = !useMulti && ceiling != null && current > ceiling;
+  const underFloor = !useMulti && floor != null && current < floor;
 
   return (
     <div className="space-y-0.5">
       <div className="flex justify-between text-xs lg:text-sm text-muted-foreground">
         <span>{label}</span>
-        <span className={overCeiling ? "text-amber-500 font-medium" : ""}>
-          {Math.round(current)}/{Math.round(target)}g
+        <span className={pastHard || overCeiling ? "text-red-500 font-medium" : pastSoft ? "text-amber-500 font-medium" : ""}>
+          {Math.round(current)}/{Math.round(displayRef)}{unit}
           {underFloor && (
             <span className="ml-1 text-[10px] text-muted-foreground/70">
               (−{Math.round(floor! - current)} to floor)
@@ -185,8 +222,8 @@ function MacroBar({
         </span>
       </div>
       <div className="relative h-2 rounded-full overflow-hidden bg-muted">
-        {/* Ceiling danger zone — muted warm tint past the ceiling */}
-        {ceilingPct !== null && (
+        {/* Legacy ceiling danger zone (only when not using multi-markers) */}
+        {!useMulti && ceilingPct !== null && (
           <div
             className="absolute right-0 top-0 h-full bg-amber-500/10"
             style={{ width: `${100 - ceilingPct}%` }}
@@ -194,23 +231,54 @@ function MacroBar({
         )}
         {/* Fill */}
         <div
-          className={`absolute left-0 top-0 h-full rounded-full transition-all ${overCeiling ? "bg-amber-500" : color}`}
+          className={`absolute left-0 top-0 h-full rounded-full transition-all ${
+            overCeiling && !useMulti ? "bg-amber-500" : color
+          }`}
           style={{ width: `${fillPct}%` }}
         />
-        {/* Floor marker (teal) — "eat at least here" */}
+        {/* Soft-ceiling overlay (orange) — only when macro has a soft ceiling
+            and current has crossed it. Stops at the hard ceiling (or current). */}
+        {useMulti && pastSoft && orangeEndPct > softStartPct && (
+          <div
+            className="absolute top-0 h-full bg-amber-500"
+            style={{ left: `${softStartPct}%`, width: `${orangeEndPct - softStartPct}%` }}
+          />
+        )}
+        {/* Hard-ceiling overlay (red) — only when macro has a hard ceiling
+            and current has crossed it. */}
+        {useMulti && pastHard && (
+          <div
+            className="absolute top-0 h-full bg-red-500"
+            style={{ left: `${hardStartPct}%`, width: `${fillPct - hardStartPct}%` }}
+          />
+        )}
+        {/* Multi-markers — opaque, dim if crossed, bright if ahead. Always visible. */}
+        {useMulti && markers!.map((m, i) => {
+          const pct = Math.min(100, (m.value / maxVal) * 100);
+          const crossed = current >= m.value;
+          return (
+            <div
+              key={i}
+              className={`absolute top-0 h-full w-[2px] ${crossed ? "bg-foreground/40" : "bg-foreground"}`}
+              style={{ left: `calc(${Math.min(pct, 99.5)}% - 1px)` }}
+              title={`${m.label}: ${Math.round(m.value)}${unit}`}
+            />
+          );
+        })}
+        {/* Legacy floor marker */}
         {floorPct !== null && floor! > 0 && (
           <div
             className="absolute top-0 h-full w-[2px] bg-teal-500/70"
             style={{ left: `calc(${Math.min(floorPct, 99.5)}% - 1px)` }}
-            title={`Floor: ${Math.round(floor!)}g — aim to reach this`}
+            title={`Floor: ${Math.round(floor!)}${unit} — aim to reach this`}
           />
         )}
-        {/* Ceiling marker (warm) — "don't cross this" */}
+        {/* Legacy ceiling marker */}
         {ceilingPct !== null && ceiling! > 0 && (
           <div
             className="absolute top-0 h-full w-[2px] bg-amber-500"
             style={{ left: `calc(${Math.min(ceilingPct, 99.5)}% - 1px)` }}
-            title={`Ceiling: ${Math.round(ceiling!)}g — do not exceed`}
+            title={`Ceiling: ${Math.round(ceiling!)}${unit} — do not exceed`}
           />
         )}
       </div>
@@ -726,21 +794,41 @@ export function NutritionDashboard({
                 )}
               </div>
 
-              {/* Macro bars (always visible) */}
-              {dataReady ? (
-                <div className="grid gap-2 pt-1">
-                  <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
-                    color="bg-blue-500" floor={targetProtein} ceiling={null} />
-                  <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
-                    color="bg-amber-500" floor={targetCarbs} ceiling={null} />
-                  <MacroBar label="Fat" current={consumedFat} target={targetFat}
-                    color="bg-rose-500" floor={targetFat} ceiling={null} />
-                  {targetFiber > 0 && (
-                    <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
-                      color="bg-green-500" floor={targetFiber} ceiling={60} />
-                  )}
-                </div>
-              ) : (
+              {/* Macro bars (always visible) — multi-goalpost mode.
+                  Each macro gets its natural research-anchored markers, not a
+                  forced "4 goalposts everywhere". Crossed markers dim, ahead
+                  bright. Past the highest marker = red overlay. */}
+              {dataReady ? (() => {
+                const w = (breakdown as any)?.weightKg ?? 0;
+                const proteinMarkers = w > 0
+                  ? [1.6, 1.8, 2.0, 2.2].map((g) => ({ value: w * g, label: g.toFixed(1) }))
+                  : [{ value: targetProtein, label: "target" }];
+                const fatMarkers = w > 0
+                  ? [0.6, 0.8, 1.0].map((g) => ({ value: w * g, label: g.toFixed(1) }))
+                  : [{ value: targetFat, label: "target" }];
+                const carbMarkers = [
+                  { value: 100, label: "min" },
+                  { value: targetCarbs, label: "target" },
+                ].sort((a, b) => a.value - b.value);
+                const fiberMarkers: MacroMarker[] = [
+                  { value: targetFiber || 30, label: "target" },
+                  { value: 60, label: "ceil", kind: "hardCeiling" },
+                ];
+                return (
+                  <div className="grid gap-2 pt-1">
+                    <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
+                      color="bg-blue-500" markers={proteinMarkers} />
+                    <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
+                      color="bg-amber-500" markers={carbMarkers} />
+                    <MacroBar label="Fat" current={consumedFat} target={targetFat}
+                      color="bg-rose-500" markers={fatMarkers} />
+                    {targetFiber > 0 && (
+                      <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
+                        color="bg-green-500" markers={fiberMarkers} />
+                    )}
+                  </div>
+                );
+              })() : (
                 <div className="h-24" />
               )}
             </CardContent>
@@ -866,7 +954,7 @@ export function NutritionDashboard({
         {/* Meal cards */}
         {slots.map((slot) => {
           // Day-level macros (raw, no live preview) so each compose view can render
-          // daily-progress bars: "if I log this meal, where does my day end up?"
+          // day-progress bars + multi-goalposts.
           const dayConsumedRaw = {
             protein: meals.reduce((s, m) => s + Number(m.protein || 0), 0),
             carbs:
@@ -874,7 +962,12 @@ export function NutritionDashboard({
               drinks.reduce((s, d) => s + Number(d.carbs || 0), 0),
             fat: meals.reduce((s, m) => s + Number(m.fat || 0), 0),
             fiber: meals.reduce((s, m) => s + Number(m.fiber || 0), 0),
+            calories:
+              meals.reduce((s, m) => s + Number(m.calories || 0), 0) +
+              drinks.reduce((s, d) => s + Number(d.calories || 0), 0),
           };
+          const userWeightKg = (breakdown as any)?.weightKg ?? null;
+          const todayTotalBurn = (breakdown as any)?.totalBurn ?? null;
           return (
             <MealCard
               key={slot}
@@ -883,8 +976,10 @@ export function NutritionDashboard({
               presets={presets}
               ingredients={ingredients}
               slotBudget={slotBudgets?.[slot] ?? null}
-              dayTargets={{ protein: targetProtein, carbs: targetCarbs, fat: targetFat, fiber: targetFiber }}
+              dayTargets={{ protein: targetProtein, carbs: targetCarbs, fat: targetFat, fiber: targetFiber, calories: targetCal }}
               dayConsumed={dayConsumedRaw}
+              weightKg={userWeightKg}
+              totalBurn={todayTotalBurn}
               skipped={skippedSlots.includes(slot)}
               date={date}
               disabled={isClosed}
