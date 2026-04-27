@@ -13,16 +13,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date
 
 from config import today_nyc
 from db import get_connection
 from nutrition_engine.close_yesterday import close_yesterday
-from nutrition_engine.daily_plan import (
-    adjust_deficit_for_sleep,
-    adjust_for_sleep_history,
-    classify_sleep_quality,
-)
+from nutrition_engine.daily_plan import classify_sleep_quality
 from nutrition_engine.tdee import (
     bootstrap_tdee_base,
     compute_deficit_from_goal,
@@ -86,33 +82,6 @@ def _get_sleep_score(cur, today: date) -> tuple[float, float | None]:
     score = classify_sleep_quality(total_sec, deep_sec, garmin_score)
     hours = total_sec / 3600.0
     return score, hours
-
-
-def _count_consecutive_poor_nights(cur, today: date, threshold: float = 50.0) -> int:
-    """Count consecutive nights with sleep score below threshold, up to 7 days back.
-
-    Missing data (no sleep_detail row) breaks the streak — we assume those
-    nights were okay rather than counting them as poor.
-    """
-    count = 0
-    for days_back in range(1, 8):
-        d = today - timedelta(days=days_back)
-        cur.execute(
-            "SELECT total_sleep_seconds, deep_sleep_seconds, sleep_score "
-            "FROM sleep_detail WHERE date = %s",
-            (d,),
-        )
-        row = cur.fetchone()
-        if row is None:
-            break  # No data = assume okay
-        total_sec = row[0] or 0
-        deep_sec = row[1] or 0
-        garmin_score = row[2] or 0
-        score = classify_sleep_quality(total_sec, deep_sec, garmin_score)
-        if score >= threshold:
-            break
-        count += 1
-    return count
 
 
 # ---------------------------------------------------------------------------
@@ -277,28 +246,27 @@ def generate_today() -> None:
                 logger.info("Note: goal-based (%d) differs from profile (%d) — using profile",
                             deficit_info["daily_deficit"], deficit)
 
-        # 9. Sleep quality + adjustment
+        # 9. Sleep quality (observability only — DO NOT adjust deficit).
+        #
+        # PR 045b88a disabled sleep-based deficit adjustments inside
+        # `generate_daily_plan` (per the user's standing rule: "sleep should not
+        # change goals — display only, user decides"). That fix did not reach
+        # this code path: `generate_today` bypasses `generate_daily_plan` and
+        # was still calling `adjust_deficit_for_sleep` + `adjust_for_sleep_history`
+        # directly, which is why a single bad-sleep night could zero out the
+        # day's deficit. Mirror the same no-op here.
+        #
+        # We still query and log the sleep score so it gets stored in the
+        # `plan` JSON for observability — the user just doesn't want it
+        # modifying their goal.
         sleep_score, sleep_hours = _get_sleep_score(cur, today)
         logger.info("Sleep quality score: %.1f, hours: %s",
                      sleep_score, f"{sleep_hours:.1f}" if sleep_hours is not None else "N/A")
 
-        # Single-night sleep adjustment
-        sleep_result = adjust_deficit_for_sleep(deficit, sleep_score, sleep_hours)
-
-        # Multi-day escalation
-        consecutive_poor = _count_consecutive_poor_nights(cur, today)
-        if consecutive_poor > 0:
-            logger.info("Consecutive poor sleep nights: %d", consecutive_poor)
-        sleep_result = adjust_for_sleep_history(consecutive_poor, sleep_result)
-
-        adjusted_deficit = sleep_result["deficit"]
-        adjustment_reason = sleep_result["reason"]
-        protein_boost = sleep_result["protein_boost_g"]
-        fiber_boost = sleep_result["fiber_boost_g"]
-
-        if adjustment_reason != "normal":
-            logger.info("Sleep adjustment: %s (deficit %.0f → %.0f)",
-                        adjustment_reason, deficit, adjusted_deficit)
+        adjusted_deficit = deficit
+        adjustment_reason = "normal"
+        protein_boost = 0
+        fiber_boost = 0
 
         # 10. Compute macro targets — route to M4 5-band × tier × mode matrix
         #     when we have BF% data; otherwise fall back to flat g/kg.
