@@ -251,64 +251,53 @@ class TestGenerateDailyPlan:
         )
         assert plan["adjustment_reason"] == "normal"
 
-    def test_poor_sleep_higher_calories(self):
-        """Poor sleep plan should have more calories (less deficit) than normal."""
-        normal = generate_daily_plan(
-            tdee=2300, deficit=400, weight_kg=80,
-            training_day_type="rest", sleep_quality_score=80,
-        )
-        poor = generate_daily_plan(
-            tdee=2300, deficit=400, weight_kg=80,
-            training_day_type="rest", sleep_quality_score=20,
-        )
-        assert poor["target_calories"] > normal["target_calories"]
+    # Sleep-based deficit adjustments were disabled in PR 045b88a
+    # (user pref: "sleep should not change goals — display only, user decides").
+    # These tests verify the disabled behavior — no matter the sleep score, hours,
+    # or multi-day history, the deficit stays at the user's profile setting and
+    # adjustment_reason stays "normal".
 
-    def test_moderate_sleep_halves_deficit(self):
-        plan = generate_daily_plan(
-            tdee=2300, deficit=400, weight_kg=80,
-            training_day_type="rest", sleep_quality_score=40,
-        )
-        assert plan["deficit_used"] == 200
-        assert plan["adjustment_reason"] == "sleep_moderate"
-
-    def test_severe_sleep_zeros_deficit(self):
+    def test_severe_sleep_does_not_zero_deficit(self):
         plan = generate_daily_plan(
             tdee=2300, deficit=400, weight_kg=80,
             training_day_type="rest", sleep_quality_score=10,
         )
-        assert plan["deficit_used"] == 0
-        assert plan["adjustment_reason"] == "sleep_severe"
+        assert plan["deficit_used"] == 400
+        assert plan["adjustment_reason"] == "normal"
 
-    def test_mild_sleep_keeps_deficit_adds_boosts(self):
-        """Score 60 → mild: deficit unchanged, protein/fiber boosted."""
+    def test_moderate_sleep_does_not_halve_deficit(self):
         plan = generate_daily_plan(
             tdee=2300, deficit=400, weight_kg=80,
-            training_day_type="rest", sleep_quality_score=60,
+            training_day_type="rest", sleep_quality_score=40,
         )
         assert plan["deficit_used"] == 400
-        assert plan["adjustment_reason"] == "sleep_mild"
-        assert plan["protein_boost_g"] == 10
-        assert plan["fiber_boost_g"] == 5
+        assert plan["adjustment_reason"] == "normal"
 
-    def test_short_sleep_overrides_score(self):
-        """4h sleep with score 80 → severe."""
+    def test_short_sleep_does_not_override(self):
         plan = generate_daily_plan(
             tdee=2300, deficit=400, weight_kg=80,
             training_day_type="rest", sleep_quality_score=80,
             total_sleep_hours=4.0,
         )
-        assert plan["deficit_used"] == 0
-        assert plan["adjustment_reason"] == "sleep_severe"
+        assert plan["deficit_used"] == 400
+        assert plan["adjustment_reason"] == "normal"
 
-    def test_multi_day_escalation_in_plan(self):
-        """3 consecutive poor nights → forced maintenance in full plan."""
+    def test_consecutive_poor_nights_do_not_force_maintenance(self):
         plan = generate_daily_plan(
             tdee=2300, deficit=400, weight_kg=80,
             training_day_type="rest", sleep_quality_score=60,
             consecutive_poor_nights=3,
         )
-        assert plan["deficit_used"] == 0
-        assert plan["adjustment_reason"] == "sleep_forced_maintenance"
+        assert plan["deficit_used"] == 400
+        assert plan["adjustment_reason"] == "normal"
+
+    def test_no_protein_or_fiber_boost_from_sleep(self):
+        plan = generate_daily_plan(
+            tdee=2300, deficit=400, weight_kg=80,
+            training_day_type="rest", sleep_quality_score=60,
+        )
+        assert plan["protein_boost_g"] == 0
+        assert plan["fiber_boost_g"] == 0
 
     def test_tdee_passed_through(self):
         plan = generate_daily_plan(
