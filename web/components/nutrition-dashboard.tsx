@@ -952,6 +952,8 @@ export function NutritionDashboard({
           runActual={!!breakdown?.runActual}
           actualRunKm={Number(breakdown?.runActualDistKm) || 0}
           actualRunCalories={Number(breakdown?.runCalories) || 0}
+          plannedRunKm={(plan as any)?.planned_run_km ?? null}
+          weightKg={(breakdown as any)?.weightKg ?? null}
           onActivityChanged={refreshData}
           disabled={(() => {
             const isPast = date < new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
