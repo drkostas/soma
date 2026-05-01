@@ -946,6 +946,9 @@ export function NutritionDashboard({
           expectedSteps={breakdown?.expectedSteps || Number(plan?.step_goal) || 10000}
           stepGoal={Number(plan?.step_goal) || 10000}
           runStepEstimate={breakdown?.runStepEstimate || 0}
+          runActual={!!breakdown?.runActual}
+          actualRunKm={Number(breakdown?.runActualDistKm) || 0}
+          actualRunCalories={Number(breakdown?.runCalories) || 0}
           onActivityChanged={refreshData}
           disabled={(() => {
             const isPast = date < new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });

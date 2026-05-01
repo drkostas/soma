@@ -31,6 +31,12 @@ interface ActivitySelectorProps {
   expectedSteps: number;
   stepGoal: number;
   runStepEstimate: number;
+  /** True when a real Garmin-completed run was found for `date`. */
+  runActual?: boolean;
+  /** Distance of the actual completed run, km. */
+  actualRunKm?: number;
+  /** Calories of the actual completed run. */
+  actualRunCalories?: number;
   onActivityChanged: () => void;
   disabled?: boolean;
   disabledReason?: string;
@@ -45,6 +51,9 @@ export function ActivitySelector({
   expectedSteps: initialExpectedSteps,
   stepGoal,
   runStepEstimate,
+  runActual,
+  actualRunKm,
+  actualRunCalories,
   onActivityChanged,
   disabled,
   disabledReason,
@@ -141,8 +150,31 @@ export function ActivitySelector({
             )}
           </div>
 
-          {/* Run toggle */}
-          {hasRun && (
+          {/* Actual completed run (Garmin) — read-only row.
+              Renders whenever a real run is detected for `date`, even when
+              there's no matching planned run in training_plan. Takes
+              precedence over the planned-run toggle since the actual data
+              is what actually drives the day's burn calculation. */}
+          {runActual && actualRunKm && actualRunKm > 0 ? (
+            <div className="w-full flex items-center justify-between rounded-md px-3 py-2 text-sm bg-primary/10 border border-primary/30">
+              <div className="flex items-center gap-2">
+                <span>🏃</span>
+                <div className="text-left">
+                  <div className="font-medium text-xs">
+                    {training?.run_title || "Run"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {actualRunKm}km
+                    {actualRunCalories ? ` · ${actualRunCalories}cal` : ""}
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] uppercase tracking-wide text-emerald-500 font-medium">
+                actual
+              </span>
+            </div>
+          ) : hasRun ? (
+            /* Planned run toggle — only when no actual run exists yet. */
             <button
               className={`w-full flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
                 runEnabled
@@ -167,7 +199,7 @@ export function ActivitySelector({
                 {runEnabled ? "ON" : "OFF"}
               </span>
             </button>
-          )}
+          ) : null}
 
           {/* Expected steps */}
           <NumberInput
