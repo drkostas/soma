@@ -549,7 +549,7 @@ export function MealCard({
                     <div className="text-xs text-muted-foreground">
                       {Math.round(meal.calories)} kcal &middot;{" "}
                       {Math.round(meal.protein)}P
-                      <ProteinQualityPill grams={meal.protein} />
+                      <ProteinQualityPill grams={meal.protein} weightKg={weightKg} />
                       {" · "}
                       {Math.round(meal.carbs)}C &middot; {Math.round(meal.fat)}F
                       {!disabled && itemsList.some(i => { const ig = ingLookup.get(i.ingredient_id ?? ""); return ig?.is_raw && ig?.raw_to_cooked_ratio && ig.raw_to_cooked_ratio > 1; }) && <span className="text-[9px] ml-1.5 text-muted-foreground/60">20+ min</span>}
