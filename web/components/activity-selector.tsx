@@ -37,6 +37,12 @@ interface ActivitySelectorProps {
   actualRunKm?: number;
   /** Calories of the actual completed run. */
   actualRunCalories?: number;
+  /** Ad-hoc planned run distance in km. User can set this for unplanned runs
+   *  (between training blocks or ad-hoc) so calories are pre-allocated to the
+   *  day's target. NULL/0 = no ad-hoc plan; falls back to training_plan_day. */
+  plannedRunKm?: number | null;
+  /** User weight (kg) — used to compute the live "X km × Y kg ≈ Z kcal" hint. */
+  weightKg?: number | null;
   onActivityChanged: () => void;
   disabled?: boolean;
   disabledReason?: string;
@@ -54,6 +60,8 @@ export function ActivitySelector({
   runActual,
   actualRunKm,
   actualRunCalories,
+  plannedRunKm: initialPlannedRunKm,
+  weightKg,
   onActivityChanged,
   disabled,
   disabledReason,
@@ -61,14 +69,18 @@ export function ActivitySelector({
   const [runEnabled, setRunEnabled] = useState(initialRunEnabled);
   const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>(initialSelectedWorkouts);
   const [steps, setSteps] = useState(initialExpectedSteps || stepGoal);
+  const [plannedRunKm, setPlannedRunKm] = useState<number>(initialPlannedRunKm ?? 0);
   const [routines, setRoutines] = useState<RoutineCalories[]>([]);
   const [saving, setSaving] = useState(false);
   const minSteps = 1000; // allow setting any reasonable step count
 
-  // Sync steps from parent when expectedSteps prop changes (e.g., after refreshData)
+  // Sync steps + planned-run-km from parent when props change (after refreshData)
   useEffect(() => {
     setSteps(initialExpectedSteps || stepGoal);
   }, [initialExpectedSteps, stepGoal]);
+  useEffect(() => {
+    setPlannedRunKm(initialPlannedRunKm ?? 0);
+  }, [initialPlannedRunKm]);
 
   // Fetch available routines with their average calories
   useEffect(() => {
@@ -79,18 +91,22 @@ export function ActivitySelector({
   }, []);
 
   const saveSelections = useCallback(
-    async (run: boolean, workouts: string[], stepsOverride?: number) => {
+    async (run: boolean, workouts: string[], stepsOverride?: number, plannedRunKmOverride?: number | null) => {
       setSaving(true);
       try {
+        const body: Record<string, unknown> = {
+          date,
+          run_enabled: run,
+          selected_workouts: workouts,
+          expected_steps: stepsOverride ?? steps,
+        };
+        if (plannedRunKmOverride !== undefined) {
+          body.planned_run_km = plannedRunKmOverride && plannedRunKmOverride > 0 ? plannedRunKmOverride : null;
+        }
         const res = await fetch("/api/nutrition/activity-select", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            date,
-            run_enabled: run,
-            selected_workouts: workouts,
-            expected_steps: stepsOverride ?? steps,
-          }),
+          body: JSON.stringify(body),
         });
         if (res.ok) {
           onActivityChanged();
@@ -117,16 +133,17 @@ export function ActivitySelector({
     saveSelections(runEnabled, next, steps);
   };
 
-  // Debounced save for slider-driven changes (steps)
+  // Debounced save for slider-driven changes (steps, planned_run_km)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedSave = useCallback(
-    (overrides: { expected_steps?: number }) => {
+    (overrides: { expected_steps?: number; planned_run_km?: number | null }) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
         saveSelections(
           runEnabled,
           selectedWorkouts,
           overrides.expected_steps ?? steps,
+          overrides.planned_run_km,
         );
       }, 400);
     },
@@ -200,6 +217,40 @@ export function ActivitySelector({
               </span>
             </button>
           ) : null}
+
+          {/* Ad-hoc planned run distance.
+              Visible only when no actual run is detected and no coach-planned
+              run exists for today (otherwise the planned-run toggle above
+              already covers it). User can override either by entering a
+              non-zero km value here. Predicted kcal ≈ km × weight × 1.0. */}
+          {!runActual && !hasRun && (() => {
+            const w = weightKg && weightKg > 0 ? weightKg : 0;
+            const estKcal = w > 0 && plannedRunKm > 0
+              ? Math.round(plannedRunKm * w)
+              : 0;
+            return (
+              <div>
+                <NumberInput
+                  value={plannedRunKm}
+                  onChange={(v) => {
+                    const next = Math.max(0, v);
+                    setPlannedRunKm(next);
+                    debouncedSave({ planned_run_km: next > 0 ? next : null });
+                  }}
+                  min={0}
+                  max={50}
+                  step={0.5}
+                  suffix="km"
+                  label="Planned run (ad-hoc)"
+                />
+                {plannedRunKm > 0 && estKcal > 0 && (
+                  <div className="text-[10px] text-muted-foreground/70 mt-0.5 ml-0.5">
+                    🏃 ≈ {estKcal} kcal pre-allocated
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Expected steps */}
           <NumberInput
