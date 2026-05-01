@@ -387,7 +387,7 @@ export function ComposeMealView({
 
         const data: Record<Key, { eaten: number; thisMeal: number; suffix: string; extra?: React.ReactNode }> = {
           kcal: { eaten: dayConsumed?.calories ?? 0, thisMeal: totals.calories, suffix: "" },
-          P:    { eaten: dayConsumed?.protein ?? 0,  thisMeal: totals.protein,  suffix: "g", extra: <ProteinQualityPill grams={totals.protein} /> },
+          P:    { eaten: dayConsumed?.protein ?? 0,  thisMeal: totals.protein,  suffix: "g", extra: <ProteinQualityPill grams={totals.protein} weightKg={weightKg} /> },
           C:    { eaten: dayConsumed?.carbs ?? 0,    thisMeal: totals.carbs,    suffix: "g" },
           F:    { eaten: dayConsumed?.fat ?? 0,      thisMeal: totals.fat,      suffix: "g" },
           Fi:   { eaten: dayConsumed?.fiber ?? 0,    thisMeal: totals.fiber,    suffix: "g" },
