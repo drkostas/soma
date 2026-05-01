@@ -179,7 +179,11 @@ export async function GET(req: NextRequest) {
           AND (raw_json->>'startTimeLocal')::date = ${date}::date
       `;
       const runCal2 = Number(runActualRows[0]?.total_cal) || 0;
-      const actualRunDistKm = Math.round((Number(runActualRows[0]?.total_dist) || 0) / 1000 * 10) / 10;
+      // NB: assign to the outer-scope `actualRunDistKm`, not a new const.
+      // Earlier this line was `const actualRunDistKm = ...` which shadowed
+      // the outer variable, so `breakdown.runActualDistKm` always rendered
+      // 0km in the dashboard even when a real run was completed.
+      actualRunDistKm = Math.round((Number(runActualRows[0]?.total_dist) || 0) / 1000 * 10) / 10;
       if (runCal2 > 0) actualRunCalories = Math.round(runCal2);
 
       // Actual gym calories from workout_enrichment for today
