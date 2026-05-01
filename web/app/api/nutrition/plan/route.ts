@@ -254,14 +254,24 @@ export async function GET(req: NextRequest) {
     let runStepEstimate = 0;
     let runDistanceKm = 0;
 
-    // Fetch run distance for step dedup
-    const runDistanceRows = await sql`
-      SELECT target_distance_km FROM training_plan_day d
-      JOIN training_plan p ON d.plan_id = p.id
-      WHERE p.status = 'active' AND d.day_date = ${date}
-      LIMIT 1
-    `;
-    runDistanceKm = Number(runDistanceRows[0]?.target_distance_km) || 0;
+    // Fetch run distance for step dedup. Resolution order:
+    //   1. Ad-hoc planned run (nutrition_day.planned_run_km) — user-set
+    //      via the Today's Activity panel for unplanned/ad-hoc runs.
+    //   2. Coach plan (training_plan_day.target_distance_km) — fallback
+    //      when no ad-hoc value but an active training plan exists.
+    //   3. 0 — no planned run.
+    const adhocRunKm = Number(plan?.planned_run_km) || 0;
+    if (adhocRunKm > 0) {
+      runDistanceKm = adhocRunKm;
+    } else {
+      const runDistanceRows = await sql`
+        SELECT target_distance_km FROM training_plan_day d
+        JOIN training_plan p ON d.plan_id = p.id
+        WHERE p.status = 'active' AND d.day_date = ${date}
+        LIMIT 1
+      `;
+      runDistanceKm = Number(runDistanceRows[0]?.target_distance_km) || 0;
+    }
 
     if (runEnabled && runDistanceKm > 0) {
       runStepEstimate = Math.round(runDistanceKm * 1300);

@@ -147,6 +147,7 @@ ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS run_enabled         BOOLEAN D
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS selected_workouts   TEXT[] DEFAULT '{}';
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS expected_steps      INTEGER;
 ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS manual_override     BOOLEAN DEFAULT FALSE;
+ALTER TABLE nutrition_day ADD COLUMN IF NOT EXISTS planned_run_km      REAL;
 
 -- Migrate closed → status
 UPDATE nutrition_day SET status = 'closed' WHERE closed = TRUE;

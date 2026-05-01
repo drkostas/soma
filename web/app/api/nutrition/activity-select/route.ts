@@ -10,9 +10,12 @@ export async function POST(req: NextRequest) {
     run_enabled?: boolean;
     selected_workouts?: string[];
     expected_steps?: number | null;
+    /** Ad-hoc planned run distance in km. NULL clears the override and falls back
+     *  to training_plan_day.target_distance_km in the plan API read path. */
+    planned_run_km?: number | null;
     manual_override?: boolean;
   };
-  const { date, run_enabled, selected_workouts, expected_steps } = body;
+  const { date, run_enabled, selected_workouts, expected_steps, planned_run_km } = body;
 
   if (!date) {
     return NextResponse.json({ error: "date is required" }, { status: 400 });
@@ -44,6 +47,16 @@ export async function POST(req: NextRequest) {
           selected_workouts = ${selected_workouts},
           expected_steps = ${expected_steps ?? null}
       WHERE date = ${date}
+    `;
+  }
+
+  // Handle ad-hoc planned run distance independently — user can set/clear it
+  // without touching the run_enabled/selected_workouts pair. NULL clears the
+  // override, in which case the plan API falls back to training_plan_day.
+  if (planned_run_km !== undefined) {
+    const v = planned_run_km !== null && planned_run_km > 0 ? planned_run_km : null;
+    await sql`
+      UPDATE nutrition_day SET planned_run_km = ${v} WHERE date = ${date}
     `;
   }
 
