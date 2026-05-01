@@ -259,7 +259,10 @@ function MacroBar({
         )}
         {/* Multi-markers — color-coded by meaning, always visible.
             Red = hardCeiling (don't cross). Green = optimal hit-this target.
-            White = other achievement tier. Crossed renders at /40 opacity. */}
+            White = other achievement tier. Crossed renders at /40 opacity.
+            Dark 1px shadow ring ensures the marker stays visible even
+            when its color matches the underlying bar fill (e.g. green
+            optimal marker on a green fiber bar — would otherwise blend). */}
         {useMulti && markers!.map((m, i) => {
           const pct = Math.min(100, (m.value / maxVal) * 100);
           const crossed = current >= m.value;
@@ -272,7 +275,7 @@ function MacroBar({
           return (
             <div
               key={i}
-              className={`absolute top-0 h-full w-[2px] ${colorClass}`}
+              className={`absolute top-0 h-full w-[2px] shadow-[0_0_0_1px_rgba(0,0,0,0.7)] ${colorClass}`}
               style={{ left: `calc(${Math.min(pct, 99.5)}% - 1px)` }}
               title={
                 m.description
