@@ -453,7 +453,10 @@ export function ComposeMealView({
                       red    = don't cross (hardCeiling)
                       green  = optimal hit-this target
                       white  = other achievement tier
-                    Crossed markers render at /40 opacity (dimmer but still visible). */}
+                    Crossed markers render at /40 opacity.
+                    Dark 1px shadow ring ensures the marker stays visible even
+                    when its color matches the underlying bar fill (e.g. green
+                    optimal marker on a green fiber bar — would otherwise blend). */}
                 {posts.map((g, i) => {
                   const pct = Math.min(100, (g.value / barMax) * 100);
                   const crossed = total >= g.value;
@@ -466,7 +469,7 @@ export function ComposeMealView({
                   return (
                     <div
                       key={i}
-                      className={`absolute top-0 h-full w-[2px] ${colorClass}`}
+                      className={`absolute top-0 h-full w-[2px] shadow-[0_0_0_1px_rgba(0,0,0,0.7)] ${colorClass}`}
                       style={{ left: `${pct}%` }}
                       title={
                         g.description
