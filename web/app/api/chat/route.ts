@@ -76,6 +76,11 @@ export async function POST(req: NextRequest) {
           "text",
           "--add-dir",
           repoRoot(),
+          // Headless mode can't show interactive permission prompts, so
+          // tools like WebFetch fail and the CLI exits 1. soma is a
+          // personal-use local widget — same trust boundary as the user's
+          // terminal claude — so we bypass.
+          "--dangerously-skip-permissions",
         ];
         if (sessionId) {
           args.push("--resume", sessionId);
