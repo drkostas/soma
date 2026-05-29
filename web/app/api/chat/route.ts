@@ -7,10 +7,10 @@ import { readChatConfig, writeChatConfig } from "@/lib/chat-config";
 import { chatMode, proxyToLocal, requireToken } from "@/lib/chat-transport";
 
 export const runtime = "nodejs";
-// Max Pro plan ceiling for serverless functions on Fluid Compute. Cold-cache
-// claude calls can run 30s+ for the first response after a 5-min idle gap;
-// most subsequent calls return in ~5s.
-export const maxDuration = 800;
+// Hobby-plan ceiling for serverless function lifetime. Cold-cache claude
+// calls can run 10-30s for first-token latency; the heartbeat below keeps
+// the stream from being idle-timed while we wait.
+export const maxDuration = 300;
 
 // Single-flight per session id (or "fresh" before we have one). Prevents two
 // tabs from racing into the same JSONL.
