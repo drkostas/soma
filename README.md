@@ -151,6 +151,24 @@ cd web && npm install && npm run dev    # → http://localhost:3456
 cd sync && python -m src.pipeline      # manual sync run
 ```
 
+### In-app Claude chat
+
+A floating chat bubble in the bottom-right of every soma page spawns a
+local `claude -p` subprocess per turn — no API key, no extra service. It
+reuses your Claude Code subscription auth from `~/.claude/`.
+
+Requirements:
+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`claude --version` should print a version).
+- soma running locally (`npm run dev` above). The widget makes a subprocess call, so it can't work on Vercel deployments — local-only by design.
+
+On the first message the route bootstraps a new session, captures its UUID,
+and stores it at `~/.soma/chat.json` so subsequent turns resume the same
+conversation. Click the pencil icon in the chat header to start a fresh
+thread.
+
+The assistant is primed by [`web/lib/chat-system-prompt.md`](web/lib/chat-system-prompt.md) — role, project layout, DB schemas, conventions. Edit that file to change how it behaves.
+
 ---
 
 ## License

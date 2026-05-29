@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readChatConfig, writeChatConfig } from "@/lib/chat-config";
 
@@ -16,6 +17,15 @@ function locateClaude(): string {
 
 function repoRoot(): string {
   return join(process.cwd(), "..");
+}
+
+// Path to the repo-checked-in system prompt that primes the soma chat
+// assistant (role, context, db schemas, conventions). Lives in web/lib/ so
+// it ships with a fresh clone. Optional — we only attach the flag if the
+// file actually exists, so the route still works if someone removes it.
+function systemPromptFile(): string | null {
+  const path = join(process.cwd(), "lib", "chat-system-prompt.md");
+  return existsSync(path) ? path : null;
 }
 
 interface ResultEvent {
@@ -82,6 +92,14 @@ export async function POST(req: NextRequest) {
           // terminal claude — so we bypass.
           "--dangerously-skip-permissions",
         ];
+        // Prime the assistant with soma's role, context, DB schemas, and
+        // conventions on EVERY call. This file ships with the repo so a
+        // fresh clone gets the same behavior without depending on the
+        // user's prior session history.
+        const promptFile = systemPromptFile();
+        if (promptFile) {
+          args.push("--append-system-prompt-file", promptFile);
+        }
         if (sessionId) {
           args.push("--resume", sessionId);
         }
