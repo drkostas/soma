@@ -4,12 +4,9 @@ import { dirname, join } from "node:path";
 
 const CONFIG_PATH = join(homedir(), ".soma", "chat.json");
 
-// Hardcoded fallback: the live terminal session for soma at the time this
-// feature was built. If the user blows away ~/.soma/chat.json they'll get
-// back to this thread.
-const DEFAULT_SESSION_ID = "da2bc3f0-e985-4ca2-aa67-c841e9212fbc";
-
 export interface ChatConfig {
+  // Empty string means "no session yet — the next /api/chat call will spawn a
+  // fresh `claude -p`, capture its result.session_id, and persist it here.
   sessionId: string;
 }
 
@@ -17,13 +14,13 @@ export async function readChatConfig(): Promise<ChatConfig> {
   try {
     const raw = await readFile(CONFIG_PATH, "utf8");
     const parsed = JSON.parse(raw) as Partial<ChatConfig>;
-    if (typeof parsed.sessionId === "string" && parsed.sessionId.length > 0) {
+    if (typeof parsed.sessionId === "string") {
       return { sessionId: parsed.sessionId };
     }
   } catch {
-    // file missing or unreadable: fall through to default
+    // file missing or unreadable: bootstrap with an empty session
   }
-  return { sessionId: DEFAULT_SESSION_ID };
+  return { sessionId: "" };
 }
 
 export async function writeChatConfig(cfg: ChatConfig): Promise<void> {
