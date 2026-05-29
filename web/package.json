@@ -28,7 +28,9 @@
     "react-body-highlighter": "^2.0.5",
     "react-dom": "19.2.3",
     "react-map-gl": "^8.1.0",
+    "react-markdown": "^9.1.0",
     "recharts": "^3.7.0",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0"
   },

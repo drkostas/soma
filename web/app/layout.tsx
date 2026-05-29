@@ -7,6 +7,7 @@ import { Toaster } from "sonner";
 import { SWRegister } from "@/components/sw-register";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { NavProgress } from "@/components/nav-progress";
+import { ChatWidget } from "@/components/chat-widget";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -61,6 +62,7 @@ export default function RootLayout({
         </TooltipProvider>
         <SWRegister />
         <PWAInstallPrompt />
+        <ChatWidget />
       </body>
     </html>
   );
