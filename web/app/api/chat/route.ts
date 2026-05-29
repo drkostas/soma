@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readChatConfig, writeChatConfig } from "@/lib/chat-config";
 
@@ -11,12 +12,42 @@ export const maxDuration = 300;
 // tabs from racing into the same JSONL.
 const inFlight = new Set<string>();
 
+// Token-bucket rate limit: at most N turns per rolling minute. The chat is
+// single-user / local-only, but this caps the damage from a loop bug or
+// accidental scripted spam.
+const TURNS_PER_MINUTE = 20;
+const turnTimestamps: number[] = [];
+function checkRateLimit(): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  while (turnTimestamps.length && now - turnTimestamps[0] > 60_000) {
+    turnTimestamps.shift();
+  }
+  if (turnTimestamps.length >= TURNS_PER_MINUTE) {
+    const retryAfter = Math.ceil((60_000 - (now - turnTimestamps[0])) / 1000);
+    return { ok: false, retryAfterSec: retryAfter };
+  }
+  turnTimestamps.push(now);
+  return { ok: true };
+}
+
 function locateClaude(): string {
   return process.env.CLAUDE_CMD || "claude";
 }
 
 function repoRoot(): string {
   return join(process.cwd(), "..");
+}
+
+// Where pasted images are saved by the upload route. Created on demand so
+// the spawned claude's --add-dir doesn't fail if the dir doesn't exist yet.
+function uploadsDir(): string {
+  const dir = join(tmpdir(), "soma-chat");
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    // ignore
+  }
+  return dir;
 }
 
 // Path to the repo-checked-in system prompt that primes the soma chat
@@ -48,6 +79,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "message (string) is required" },
       { status: 400 }
+    );
+  }
+
+  const rl = checkRateLimit();
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: `Rate limit: ${TURNS_PER_MINUTE}/min. Try again in ${rl.retryAfterSec}s.`,
+      },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
     );
   }
 
@@ -86,6 +127,8 @@ export async function POST(req: NextRequest) {
           "text",
           "--add-dir",
           repoRoot(),
+          "--add-dir",
+          uploadsDir(),
           // Headless mode can't show interactive permission prompts, so
           // tools like WebFetch fail and the CLI exits 1. soma is a
           // personal-use local widget — same trust boundary as the user's

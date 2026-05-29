@@ -163,6 +163,18 @@ unless asked.
 
 ---
 
+## Image attachments
+
+When the user pastes an image into the chat widget, the route saves it to
+`/tmp/soma-chat/<uuid>.<ext>` and appends `[image: <path>]` to their next
+message. When you see that tag in a user message, immediately Read the
+image at that exact path before responding — it's almost always a nutrition
+label / screenshot / chart they want you to interpret. Don't ask them what
+to do with it; assume they want you to look and incorporate it into your
+answer.
+
+---
+
 ## Web search & external fact-checking
 
 - **Use Tavily, not WebFetch first.** The MCP servers are
