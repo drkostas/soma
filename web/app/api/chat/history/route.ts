@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { join } from "node:path";
 import { readChatConfig } from "@/lib/chat-config";
 import { hydrateFromJsonl } from "@/lib/chat-history";
+import { chatMode, proxyToLocal, requireToken } from "@/lib/chat-transport";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,10 @@ function repoRoot(): string {
   return join(process.cwd(), "..");
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (chatMode() === "proxy") return proxyToLocal(req, "/api/chat/history");
+  const denied = requireToken(req);
+  if (denied) return denied;
   try {
     const cfg = await readChatConfig();
     if (!cfg.sessionId) {

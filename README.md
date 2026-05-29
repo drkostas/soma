@@ -169,6 +169,63 @@ thread.
 
 The assistant is primed by [`web/lib/chat-system-prompt.md`](web/lib/chat-system-prompt.md) — role, project layout, DB schemas, conventions. Edit that file to change how it behaves.
 
+#### Using the chat from your Vercel deployment (phone / anywhere)
+
+You can have the deployed soma forward chat requests to your Mac's local Claude
+Code via a Cloudflare tunnel. Vercel becomes a thin proxy; the actual
+`claude -p` still runs on your machine against your subscription auth.
+
+**On the Mac (one-time setup):**
+
+```bash
+brew install cloudflared
+cloudflared tunnel login                                    # browser auth
+cloudflared tunnel create soma-chat                         # creates UUID + creds
+cloudflared tunnel route dns soma-chat chat.your-domain.com # your subdomain
+```
+
+`~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: soma-chat
+credentials-file: /Users/<you>/.cloudflared/<UUID>.json
+ingress:
+  - hostname: chat.your-domain.com
+    service: http://localhost:3456
+  - service: http_status:404
+```
+
+Then run it (or `launchctl` it for autostart):
+
+```bash
+cloudflared tunnel run soma-chat
+```
+
+Add a shared secret to `web/.env.local`:
+
+```
+SOMA_CHAT_TOKEN=$(openssl rand -base64 32)
+```
+
+Keep `npm run dev` running on the Mac as usual.
+
+**On Vercel** (Settings → Environment Variables):
+
+| Var | Value |
+|---|---|
+| `SOMA_CHAT_TUNNEL_URL` | `https://chat.your-domain.com` |
+| `SOMA_CHAT_TOKEN` | same value as the Mac's `.env.local` |
+
+Redeploy. The widget now shows a status dot in the header:
+
+- 🟢 green — direct local subprocess (when you're on `localhost:3456`)
+- 🔵 blue — proxied via Vercel → your Mac's tunnel (when you're on the deployed URL)
+- 🔴 red — tunnel unreachable (Mac asleep, no internet, etc.)
+
+Rotate `SOMA_CHAT_TOKEN` on both sides if it ever leaks. The shared secret is
+the only thing standing between your tunnel's public DNS name and your
+local filesystem.
+
 ---
 
 ## License

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { chatMode, proxyToLocal, requireToken } from "@/lib/chat-transport";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,9 @@ function extFor(mime: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  if (chatMode() === "proxy") return proxyToLocal(req, "/api/chat/upload");
+  const denied = requireToken(req);
+  if (denied) return denied;
   const ct = req.headers.get("content-type") || "";
   if (!ct.startsWith("multipart/form-data")) {
     return NextResponse.json(
