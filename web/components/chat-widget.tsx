@@ -14,6 +14,7 @@ interface Message {
   tools: string[];
   done: boolean;
   errored?: string;
+  erroredDetail?: string;
 }
 
 const SOMA_CHAT_OPEN_KEY = "soma:chat:open";
@@ -41,18 +42,14 @@ function extractTextFromEvent(evt: unknown): {
   }
 
   // Full assistant message: {type:"assistant", message:{content:[{type:"text",text:"..."}]}}
+  // We DON'T extract text from this — the stream_event partials already
+  // delivered every chunk and we'd double-append. We do still extract tool
+  // names for the indicator pills.
   if (e.type === "assistant" && e.message && typeof e.message === "object") {
     const m = e.message as { content?: Array<{ type?: string; text?: string; name?: string }> };
     if (Array.isArray(m.content)) {
-      const textPart = m.content
-        .filter((c) => c.type === "text" && typeof c.text === "string")
-        .map((c) => c.text as string)
-        .join("");
       const toolUse = m.content.find((c) => c.type === "tool_use");
-      return {
-        textDelta: textPart || undefined,
-        toolName: toolUse?.name,
-      };
+      return { toolName: toolUse?.name };
     }
   }
 
@@ -181,6 +178,7 @@ export function ChatWidget() {
                       ...m,
                       done: true,
                       errored: f.error || "claude subprocess failed",
+                      erroredDetail: f.stderr?.trim() || undefined,
                     }
                   : m
               )
@@ -193,9 +191,35 @@ export function ChatWidget() {
                 m.id === assistantId ? { ...m, done: true } : m
               )
             );
+            // Backend may have just persisted a freshly-bootstrapped session
+            // id; pick it up so the header reflects reality.
+            fetch("/api/chat/session")
+              .then((r) => r.json())
+              .then((d) => setSessionId(d.sessionId ?? null))
+              .catch(() => {});
             continue;
           }
           if (eventName !== "event") continue;
+
+          // The backend forwards the final stream-json `result` event, which
+          // carries session_id and may also carry the model's text response
+          // if no streaming chunks fired. Handle both.
+          const r = parsed as { type?: string; session_id?: string; result?: string };
+          if (r.type === "result") {
+            if (typeof r.session_id === "string" && r.session_id.length > 0) {
+              setSessionId(r.session_id);
+            }
+            if (typeof r.result === "string" && r.result.length > 0) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId && m.text === ""
+                    ? { ...m, text: r.result as string }
+                    : m
+                )
+              );
+            }
+            continue;
+          }
 
           const { textDelta, toolName } = extractTextFromEvent(parsed);
           if (!textDelta && !toolName) continue;
@@ -237,14 +261,16 @@ export function ChatWidget() {
 
   return (
     <>
-      <button
-        type="button"
-        aria-label={open ? "Close chat" : "Open chat"}
-        onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
-      >
-        {open ? <CloseIcon /> : <ChatIcon />}
-      </button>
+      {!open && (
+        <button
+          type="button"
+          aria-label="Open chat"
+          onClick={() => setOpen(true)}
+          className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+        >
+          <ChatIcon />
+        </button>
+      )}
 
       <aside
         className={`fixed bottom-0 right-0 z-40 flex w-full max-w-[420px] flex-col border-l border-white/10 bg-zinc-950/95 backdrop-blur transition-transform duration-200 ${
@@ -257,7 +283,11 @@ export function ChatWidget() {
           <div>
             <div className="text-sm font-medium text-white">Claude</div>
             <div className="font-mono text-[10px] text-zinc-500" title={sessionId ?? ""}>
-              {sessionId ? `session ${sessionId.slice(0, 8)}…` : "loading session…"}
+              {sessionId === null
+                ? "loading session…"
+                : sessionId === ""
+                  ? "new session (will be created on first message)"
+                  : `session ${sessionId.slice(0, 8)}…`}
             </div>
           </div>
           <button
@@ -276,7 +306,7 @@ export function ChatWidget() {
         >
           {messages.length === 0 && (
             <div className="text-xs text-zinc-500">
-              Resumes your local Claude Code session. Try: <em>“log my dinner: 200g chicken breast, 150g rice, 100g broccoli”</em>
+              Soma&apos;s own Claude Code thread (separate from your terminal session). Try: <em>“log my dinner: 200g chicken breast, 150g rice, 100g broccoli”</em>
             </div>
           )}
           {messages.map((m) => (
@@ -337,7 +367,10 @@ function MessageBubble({ msg }: { msg: Message }) {
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-emerald-500/20 px-3 py-2 text-sm text-white">
+        <div
+          className="max-w-[85%] min-w-0 whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-emerald-500/20 px-3 py-2 text-sm text-white"
+          style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+        >
           {msg.text}
         </div>
       </div>
@@ -345,7 +378,10 @@ function MessageBubble({ msg }: { msg: Message }) {
   }
   return (
     <div className="flex justify-start">
-      <div className="max-w-[92%] rounded-2xl rounded-bl-sm bg-white/5 px-3 py-2 text-sm text-zinc-100">
+      <div
+        className="max-w-[92%] min-w-0 rounded-2xl rounded-bl-sm bg-white/5 px-3 py-2 text-sm text-zinc-100"
+        style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+      >
         {msg.tools.length > 0 && (
           <div className="mb-1 flex flex-wrap gap-1">
             {msg.tools.map((t, i) => (
@@ -372,7 +408,14 @@ function MessageBubble({ msg }: { msg: Message }) {
           </div>
         )}
         {msg.errored && (
-          <div className="mt-1 text-xs text-rose-400">⚠ {msg.errored}</div>
+          <div className="mt-1 text-xs text-rose-400">
+            <div>⚠ {msg.errored}</div>
+            {msg.erroredDetail && (
+              <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-rose-500/10 p-1.5 text-[10px] text-rose-200/80">
+                {msg.erroredDetail}
+              </pre>
+            )}
+          </div>
         )}
       </div>
     </div>
