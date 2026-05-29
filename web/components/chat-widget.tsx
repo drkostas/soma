@@ -6,12 +6,30 @@ import remarkGfm from "remark-gfm";
 
 type Role = "user" | "assistant";
 
+type Step = TextStep | ToolStep;
+
+interface TextStep {
+  kind: "text";
+  id: string;
+  text: string;
+}
+
+interface ToolStep {
+  kind: "tool";
+  id: string; // tool_use_id from claude
+  name: string;
+  inputJson: string; // accumulating partial JSON
+  input: Record<string, unknown> | null; // parsed at content_block_stop
+  output: string;
+  outputTruncated: boolean;
+  isError: boolean;
+  status: "running" | "done";
+}
+
 interface Message {
   id: string;
   role: Role;
-  text: string;
-  // For assistant rows we show running tool indicators here.
-  tools: string[];
+  steps: Step[];
   done: boolean;
   errored?: string;
   erroredDetail?: string;
@@ -23,37 +41,66 @@ function newId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-// Pull any text deltas out of a Claude Code stream-json event.
-function extractTextFromEvent(evt: unknown): {
-  textDelta?: string;
-  toolName?: string;
-} {
-  if (!evt || typeof evt !== "object") return {};
-  const e = evt as { type?: string; message?: unknown; delta?: unknown };
-
-  // Partial streamed chunk: {type:"stream_event", event:{type:"content_block_delta", delta:{type:"text_delta", text:"..."}}}
-  if (e.type === "stream_event") {
-    const inner = (evt as { event?: { delta?: { type?: string; text?: string } } }).event;
-    const d = inner?.delta;
-    if (d?.type === "text_delta" && typeof d.text === "string") {
-      return { textDelta: d.text };
-    }
-    return {};
-  }
-
-  // Full assistant message: {type:"assistant", message:{content:[{type:"text",text:"..."}]}}
-  // We DON'T extract text from this — the stream_event partials already
-  // delivered every chunk and we'd double-append. We do still extract tool
-  // names for the indicator pills.
-  if (e.type === "assistant" && e.message && typeof e.message === "object") {
-    const m = e.message as { content?: Array<{ type?: string; text?: string; name?: string }> };
-    if (Array.isArray(m.content)) {
-      const toolUse = m.content.find((c) => c.type === "tool_use");
-      return { toolName: toolUse?.name };
+// Summarize the relevant field of a tool's input as a one-liner.
+function summarizeToolInput(
+  name: string,
+  input: Record<string, unknown> | null
+): string {
+  if (!input || typeof input !== "object") return "";
+  const get = (k: string) => {
+    const v = (input as Record<string, unknown>)[k];
+    return typeof v === "string" ? v : undefined;
+  };
+  if (name === "Bash") return get("command") || "";
+  if (name === "Read" || name === "Edit" || name === "Write") return get("file_path") || "";
+  if (name === "Glob") return [get("pattern"), get("path")].filter(Boolean).join(" in ");
+  if (name === "Grep") return [get("pattern"), get("path") || get("include")].filter(Boolean).join(" in ");
+  if (name === "WebFetch") return get("url") || "";
+  if (name === "TaskCreate") return get("subject") || "";
+  if (name === "TaskUpdate") return get("taskId") || "";
+  if (name === "ToolSearch") return get("query") || "";
+  if (name.startsWith("mcp__tavily-")) {
+    const q = get("query");
+    if (q) return q;
+    const urls = (input as { urls?: unknown }).urls;
+    if (Array.isArray(urls) && urls.length > 0 && typeof urls[0] === "string") {
+      return urls[0] as string;
     }
   }
+  // Fallback: stringify a small object
+  try {
+    return JSON.stringify(input).slice(0, 100);
+  } catch {
+    return "";
+  }
+}
 
-  return {};
+const TOOL_ICON: Record<string, string> = {
+  Bash: "▶",
+  Read: "📄",
+  Edit: "✏️",
+  Write: "📝",
+  Glob: "🔎",
+  Grep: "🔎",
+  WebFetch: "🌐",
+  ToolSearch: "🧰",
+  Task: "🤖",
+  TaskCreate: "✓",
+  TaskUpdate: "✓",
+};
+function toolIcon(name: string): string {
+  if (name in TOOL_ICON) return TOOL_ICON[name];
+  if (name.startsWith("mcp__tavily")) return "🌐";
+  if (name.startsWith("mcp__playwright")) return "🎭";
+  if (name.startsWith("mcp__github")) return "🐙";
+  if (name.startsWith("mcp__")) return "🔌";
+  return "◆";
+}
+
+// Truncate long tool output for inline preview.
+function truncateOutput(s: string, n = 800): { text: string; truncated: boolean } {
+  if (s.length <= n) return { text: s, truncated: false };
+  return { text: s.slice(0, n), truncated: true };
 }
 
 export function ChatWidget() {
@@ -65,13 +112,11 @@ export function ChatWidget() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Restore open state across reloads (within a single tab).
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem(SOMA_CHAT_OPEN_KEY);
-      if (saved === "1") setOpen(true);
+      if (sessionStorage.getItem(SOMA_CHAT_OPEN_KEY) === "1") setOpen(true);
     } catch {
-      // sessionStorage unavailable, ignore
+      // ignore
     }
   }, []);
   useEffect(() => {
@@ -82,7 +127,6 @@ export function ChatWidget() {
     }
   }, [open]);
 
-  // Fetch the current session id once when the widget mounts, so the user can see it.
   useEffect(() => {
     fetch("/api/chat/session")
       .then((r) => r.json())
@@ -90,7 +134,6 @@ export function ChatWidget() {
       .catch(() => setSessionId(null));
   }, []);
 
-  // Autoscroll on new content.
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -104,23 +147,149 @@ export function ChatWidget() {
     const userMsg: Message = {
       id: newId(),
       role: "user",
-      text: message,
-      tools: [],
+      steps: [{ kind: "text", id: newId(), text: message }],
       done: true,
     };
     const assistantId = newId();
     const assistantMsg: Message = {
       id: assistantId,
       role: "assistant",
-      text: "",
-      tools: [],
+      steps: [],
       done: false,
     };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setBusy(true);
 
+    // Mutable scratchpad for the in-progress assistant message: maps the
+    // streaming content_block_index to the step id we created for it, so
+    // delta events know which step to append to.
+    const blockIndexToStepId = new Map<number, string>();
+
     const ac = new AbortController();
     abortRef.current = ac;
+
+    // Helpers that mutate the assistant message's steps array in React state.
+    const mutateAssistant = (mutator: (m: Message) => Message) =>
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? mutator(m) : m))
+      );
+    const upsertStep = (step: Step) => {
+      mutateAssistant((m) => {
+        const i = m.steps.findIndex((s) => s.id === step.id);
+        const steps = i >= 0 ? m.steps.map((s) => (s.id === step.id ? step : s)) : [...m.steps, step];
+        return { ...m, steps };
+      });
+    };
+    const updateStep = (stepId: string, fn: (s: Step) => Step) => {
+      mutateAssistant((m) => ({
+        ...m,
+        steps: m.steps.map((s) => (s.id === stepId ? fn(s) : s)),
+      }));
+    };
+
+    const handleStreamEvent = (e: { event?: unknown }) => {
+      const inner = e.event as
+        | {
+            type?: string;
+            index?: number;
+            content_block?: { type?: string; id?: string; name?: string; input?: Record<string, unknown> };
+            delta?: { type?: string; text?: string; partial_json?: string };
+          }
+        | undefined;
+      if (!inner) return;
+      const idx = typeof inner.index === "number" ? inner.index : -1;
+
+      if (inner.type === "content_block_start" && inner.content_block && idx >= 0) {
+        const cb = inner.content_block;
+        if (cb.type === "text") {
+          const step: TextStep = { kind: "text", id: newId(), text: "" };
+          blockIndexToStepId.set(idx, step.id);
+          upsertStep(step);
+        } else if (cb.type === "tool_use") {
+          const step: ToolStep = {
+            kind: "tool",
+            id: cb.id || newId(),
+            name: cb.name || "tool",
+            inputJson: "",
+            input: cb.input && Object.keys(cb.input).length > 0 ? cb.input : null,
+            output: "",
+            outputTruncated: false,
+            isError: false,
+            status: "running",
+          };
+          blockIndexToStepId.set(idx, step.id);
+          upsertStep(step);
+        }
+        return;
+      }
+
+      if (inner.type === "content_block_delta" && inner.delta && idx >= 0) {
+        const stepId = blockIndexToStepId.get(idx);
+        if (!stepId) return;
+        const d = inner.delta;
+        if (d.type === "text_delta" && typeof d.text === "string") {
+          updateStep(stepId, (s) =>
+            s.kind === "text" ? { ...s, text: s.text + d.text } : s
+          );
+        } else if (d.type === "input_json_delta" && typeof d.partial_json === "string") {
+          updateStep(stepId, (s) =>
+            s.kind === "tool" ? { ...s, inputJson: s.inputJson + d.partial_json! } : s
+          );
+        }
+        return;
+      }
+
+      if (inner.type === "content_block_stop" && idx >= 0) {
+        const stepId = blockIndexToStepId.get(idx);
+        if (!stepId) return;
+        updateStep(stepId, (s) => {
+          if (s.kind !== "tool") return s;
+          if (s.input) return s;
+          try {
+            return { ...s, input: JSON.parse(s.inputJson) as Record<string, unknown> };
+          } catch {
+            return s;
+          }
+        });
+        return;
+      }
+    };
+
+    const handleAssistantEvent = (_evt: unknown) => {
+      // Full assistant message fires after partials — partials already built
+      // the steps, so we don't act on this event for state. (We could verify,
+      // but it'd just double-render.)
+    };
+
+    const handleUserEvent = (evt: { message?: unknown }) => {
+      // Tool results come back as user messages with content[*].type === 'tool_result'.
+      const m = evt.message as { content?: Array<{ type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }> } | undefined;
+      if (!m || !Array.isArray(m.content)) return;
+      for (const item of m.content) {
+        if (item.type !== "tool_result" || !item.tool_use_id) continue;
+        const tuid = item.tool_use_id;
+        let raw = "";
+        if (typeof item.content === "string") raw = item.content;
+        else if (Array.isArray(item.content)) {
+          raw = (item.content as Array<{ type?: string; text?: string }>)
+            .filter((c) => c.type === "text" && typeof c.text === "string")
+            .map((c) => c.text as string)
+            .join("\n");
+        }
+        const { text, truncated } = truncateOutput(raw);
+        updateStep(tuid, (s) =>
+          s.kind === "tool"
+            ? {
+                ...s,
+                status: "done",
+                isError: !!item.is_error,
+                output: text,
+                outputTruncated: truncated,
+              }
+            : s
+        );
+      }
+    };
 
     try {
       const resp = await fetch("/api/chat", {
@@ -129,16 +298,9 @@ export function ChatWidget() {
         body: JSON.stringify({ message }),
         signal: ac.signal,
       });
-
       if (!resp.ok || !resp.body) {
         const errText = await resp.text().catch(() => `${resp.status}`);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? { ...m, done: true, errored: errText }
-              : m
-          )
-        );
+        mutateAssistant((m) => ({ ...m, done: true, errored: errText }));
         return;
       }
 
@@ -171,28 +333,16 @@ export function ChatWidget() {
 
           if (eventName === "fatal") {
             const f = parsed as { error?: string; stderr?: string };
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId
-                  ? {
-                      ...m,
-                      done: true,
-                      errored: f.error || "claude subprocess failed",
-                      erroredDetail: f.stderr?.trim() || undefined,
-                    }
-                  : m
-              )
-            );
+            mutateAssistant((m) => ({
+              ...m,
+              done: true,
+              errored: f.error || "claude subprocess failed",
+              erroredDetail: f.stderr?.trim() || undefined,
+            }));
             continue;
           }
           if (eventName === "done") {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, done: true } : m
-              )
-            );
-            // Backend may have just persisted a freshly-bootstrapped session
-            // id; pick it up so the header reflects reality.
+            mutateAssistant((m) => ({ ...m, done: true }));
             fetch("/api/chat/session")
               .then((r) => r.json())
               .then((d) => setSessionId(d.sessionId ?? null))
@@ -201,54 +351,48 @@ export function ChatWidget() {
           }
           if (eventName !== "event") continue;
 
-          // The backend forwards the final stream-json `result` event, which
-          // carries session_id and may also carry the model's text response
-          // if no streaming chunks fired. Handle both.
-          const r = parsed as { type?: string; session_id?: string; result?: string };
-          if (r.type === "result") {
+          const evt = parsed as { type?: string };
+          if (evt.type === "stream_event") {
+            handleStreamEvent(evt as { event?: unknown });
+            continue;
+          }
+          if (evt.type === "assistant") {
+            handleAssistantEvent(evt);
+            continue;
+          }
+          if (evt.type === "user") {
+            handleUserEvent(evt as { message?: unknown });
+            continue;
+          }
+          if (evt.type === "result") {
+            const r = evt as { session_id?: string; result?: string };
             if (typeof r.session_id === "string" && r.session_id.length > 0) {
               setSessionId(r.session_id);
             }
+            // Fallback only if no text streamed (no partial deltas fired):
+            // surface the result string as a single text step.
             if (typeof r.result === "string" && r.result.length > 0) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId && m.text === ""
-                    ? { ...m, text: r.result as string }
-                    : m
-                )
-              );
+              mutateAssistant((m) => {
+                if (m.steps.some((s) => s.kind === "text" && s.text.length > 0)) {
+                  return m;
+                }
+                return {
+                  ...m,
+                  steps: [...m.steps, { kind: "text", id: newId(), text: r.result as string }],
+                };
+              });
             }
             continue;
           }
-
-          const { textDelta, toolName } = extractTextFromEvent(parsed);
-          if (!textDelta && !toolName) continue;
-
-          setMessages((prev) =>
-            prev.map((m) => {
-              if (m.id !== assistantId) return m;
-              return {
-                ...m,
-                text: textDelta ? m.text + textDelta : m.text,
-                tools: toolName ? [...m.tools, toolName] : m.tools,
-              };
-            })
-          );
         }
       }
     } catch (err) {
       const aborted = (err as Error).name === "AbortError";
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId
-            ? {
-                ...m,
-                done: true,
-                errored: aborted ? "Cancelled" : String(err),
-              }
-            : m
-        )
-      );
+      mutateAssistant((m) => ({
+        ...m,
+        done: true,
+        errored: aborted ? "Cancelled" : String(err),
+      }));
     } finally {
       abortRef.current = null;
       setBusy(false);
@@ -300,13 +444,11 @@ export function ChatWidget() {
           </button>
         </header>
 
-        <div
-          ref={scrollerRef}
-          className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
-        >
+        <div ref={scrollerRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {messages.length === 0 && (
             <div className="text-xs text-zinc-500">
-              Soma&apos;s own Claude Code thread (separate from your terminal session). Try: <em>“log my dinner: 200g chicken breast, 150g rice, 100g broccoli”</em>
+              Soma&apos;s own Claude Code thread (separate from your terminal session). Try:{" "}
+              <em>“log my dinner: 200g chicken breast, 150g rice, 100g broccoli”</em>
             </div>
           )}
           {messages.map((m) => (
@@ -365,48 +507,50 @@ export function ChatWidget() {
 
 function MessageBubble({ msg }: { msg: Message }) {
   if (msg.role === "user") {
+    const text = msg.steps.find((s): s is TextStep => s.kind === "text")?.text || "";
     return (
       <div className="flex justify-end">
         <div
           className="max-w-[85%] min-w-0 whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-emerald-500/20 px-3 py-2 text-sm text-white"
           style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
         >
-          {msg.text}
+          {text}
         </div>
       </div>
     );
   }
+
+  const hasContent = msg.steps.length > 0;
   return (
     <div className="flex justify-start">
       <div
-        className="max-w-[92%] min-w-0 rounded-2xl rounded-bl-sm bg-white/5 px-3 py-2 text-sm text-zinc-100"
+        className="w-full max-w-[95%] min-w-0 space-y-2 rounded-2xl rounded-bl-sm bg-white/5 px-3 py-2 text-sm text-zinc-100"
         style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
       >
-        {msg.tools.length > 0 && (
-          <div className="mb-1 flex flex-wrap gap-1">
-            {msg.tools.map((t, i) => (
-              <span
-                key={`${t}-${i}`}
-                className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-[1px] text-[10px] text-amber-300"
-              >
-                {t}
-              </span>
-            ))}
-          </div>
-        )}
-        {msg.text ? (
-          <div className="prose prose-invert prose-sm max-w-none break-words [&_code]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-zinc-900 [&_pre]:p-2 [&_table]:text-xs">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
-          </div>
-        ) : msg.done ? (
-          <div className="text-xs italic text-zinc-500">(no text)</div>
-        ) : (
-          <div className="flex gap-1">
+        {!hasContent && !msg.done && !msg.errored && (
+          <div className="flex gap-1 py-1">
             <Dot />
             <Dot delay="120ms" />
             <Dot delay="240ms" />
           </div>
         )}
+
+        {msg.steps.map((s) =>
+          s.kind === "text" ? (
+            <TextStepView key={s.id} step={s} />
+          ) : (
+            <ToolStepView key={s.id} step={s} />
+          )
+        )}
+
+        {hasContent && !msg.done && !msg.errored && (
+          <div className="flex gap-1 pt-1">
+            <Dot />
+            <Dot delay="120ms" />
+            <Dot delay="240ms" />
+          </div>
+        )}
+
         {msg.errored && (
           <div className="mt-1 text-xs text-rose-400">
             <div>⚠ {msg.errored}</div>
@@ -418,6 +562,76 @@ function MessageBubble({ msg }: { msg: Message }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function TextStepView({ step }: { step: TextStep }) {
+  if (!step.text) return null;
+  return (
+    <div className="prose prose-invert prose-sm max-w-none break-words [&_code]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-zinc-900 [&_pre]:p-2 [&_table]:border [&_table]:border-white/10 [&_table]:text-xs [&_th]:border [&_th]:border-white/10 [&_th]:bg-white/5 [&_th]:px-1.5 [&_th]:py-1 [&_td]:border [&_td]:border-white/10 [&_td]:px-1.5 [&_td]:py-1 [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{step.text}</ReactMarkdown>
+    </div>
+  );
+}
+
+function ToolStepView({ step }: { step: ToolStep }) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = summarizeToolInput(step.name, step.input);
+  const statusColor =
+    step.status === "running"
+      ? "border-amber-500/40 bg-amber-500/10"
+      : step.isError
+        ? "border-rose-500/40 bg-rose-500/10"
+        : "border-emerald-500/30 bg-emerald-500/10";
+  return (
+    <div className={`rounded-md border ${statusColor} px-2 py-1.5`}>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-start gap-1.5 text-left"
+      >
+        <span className="mt-[1px] text-xs leading-none">{toolIcon(step.name)}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <span className="font-mono font-medium text-zinc-200">{step.name}</span>
+            {step.status === "running" && (
+              <span className="font-mono text-[9px] text-amber-300">running…</span>
+            )}
+            {step.status === "done" && step.isError && (
+              <span className="font-mono text-[9px] text-rose-300">error</span>
+            )}
+          </div>
+          {summary && (
+            <div className="mt-0.5 truncate font-mono text-[10px] text-zinc-400" title={summary}>
+              {summary}
+            </div>
+          )}
+        </div>
+        <span className="ml-1 text-[10px] text-zinc-500">{expanded ? "▾" : "▸"}</span>
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-1.5 border-t border-white/5 pt-1.5">
+          {step.input && (
+            <details className="text-[10px] text-zinc-400" open>
+              <summary className="cursor-pointer text-zinc-500">input</summary>
+              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-1.5 text-[10px] text-zinc-300">
+                {JSON.stringify(step.input, null, 2)}
+              </pre>
+            </details>
+          )}
+          {step.output && (
+            <details className="text-[10px] text-zinc-400" open>
+              <summary className="cursor-pointer text-zinc-500">
+                output{step.outputTruncated ? " (truncated)" : ""}
+              </summary>
+              <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-1.5 text-[10px] text-zinc-300">
+                {step.output}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
     </div>
   );
 }
