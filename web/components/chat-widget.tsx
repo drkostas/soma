@@ -6,10 +6,16 @@ import remarkGfm from "remark-gfm";
 
 type Role = "user" | "assistant";
 
-type Step = TextStep | ToolStep;
+type Step = TextStep | ThinkingStep | ToolStep;
 
 interface TextStep {
   kind: "text";
+  id: string;
+  text: string;
+}
+
+interface ThinkingStep {
+  kind: "thinking";
   id: string;
   text: string;
 }
@@ -20,19 +26,32 @@ interface ToolStep {
   name: string;
   inputJson: string; // accumulating partial JSON
   input: Record<string, unknown> | null; // parsed at content_block_stop
-  output: string;
+  output: string; // possibly truncated for inline render
+  outputFull: string; // full string for "show full"
   outputTruncated: boolean;
   isError: boolean;
   status: "running" | "done";
 }
 
+interface Usage {
+  input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  output_tokens?: number;
+}
+
 interface Message {
   id: string;
   role: Role;
+  // For user role: the original prompt text so we can retry.
+  userPrompt?: string;
   steps: Step[];
   done: boolean;
   // Timestamp (ms) when the turn started, so we can show elapsed time.
   startedAt?: number;
+  // Filled from result.usage on completion.
+  usage?: Usage;
+  durationMs?: number;
   errored?: string;
   erroredDetail?: string;
 }
@@ -167,21 +186,27 @@ export function ChatWidget() {
       .then((r) => r.json())
       .then((d) => setSessionId(d.sessionId ?? null))
       .catch(() => setSessionId(null));
+    // Best-effort hydrate from the on-disk JSONL — source of truth across
+    // devices/browsers. Falls back to localStorage if the route fails or
+    // returns no messages.
+    fetch("/api/chat/history")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.messages) && d.messages.length > 0) {
+          setMessages(d.messages as Message[]);
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, open]);
-
-  const send = useCallback(async () => {
-    const message = input.trim();
-    if (!message || busy) return;
-    setInput("");
+  const sendMessage = useCallback(async (rawMessage: string) => {
+    const message = rawMessage.trim();
+    if (!message) return;
 
     const userMsg: Message = {
       id: newId(),
       role: "user",
+      userPrompt: message,
       steps: [{ kind: "text", id: newId(), text: message }],
       done: true,
     };
@@ -241,6 +266,10 @@ export function ChatWidget() {
           const step: TextStep = { kind: "text", id: newId(), text: "" };
           blockIndexToStepId.set(idx, step.id);
           upsertStep(step);
+        } else if (cb.type === "thinking") {
+          const step: ThinkingStep = { kind: "thinking", id: newId(), text: "" };
+          blockIndexToStepId.set(idx, step.id);
+          upsertStep(step);
         } else if (cb.type === "tool_use") {
           const step: ToolStep = {
             kind: "tool",
@@ -249,6 +278,7 @@ export function ChatWidget() {
             inputJson: "",
             input: cb.input && Object.keys(cb.input).length > 0 ? cb.input : null,
             output: "",
+            outputFull: "",
             outputTruncated: false,
             isError: false,
             status: "running",
@@ -262,10 +292,14 @@ export function ChatWidget() {
       if (inner.type === "content_block_delta" && inner.delta && idx >= 0) {
         const stepId = blockIndexToStepId.get(idx);
         if (!stepId) return;
-        const d = inner.delta;
+        const d = inner.delta as { type?: string; text?: string; thinking?: string; partial_json?: string };
         if (d.type === "text_delta" && typeof d.text === "string") {
           updateStep(stepId, (s) =>
             s.kind === "text" ? { ...s, text: s.text + d.text } : s
+          );
+        } else if (d.type === "thinking_delta" && typeof d.thinking === "string") {
+          updateStep(stepId, (s) =>
+            s.kind === "thinking" ? { ...s, text: s.text + d.thinking! } : s
           );
         } else if (d.type === "input_json_delta" && typeof d.partial_json === "string") {
           updateStep(stepId, (s) =>
@@ -320,6 +354,7 @@ export function ChatWidget() {
                 status: "done",
                 isError: !!item.is_error,
                 output: text,
+                outputFull: raw,
                 outputTruncated: truncated,
               }
             : s
@@ -401,10 +436,22 @@ export function ChatWidget() {
             continue;
           }
           if (evt.type === "result") {
-            const r = evt as { session_id?: string; result?: string };
+            const r = evt as {
+              session_id?: string;
+              result?: string;
+              duration_ms?: number;
+              usage?: Usage;
+            };
             if (typeof r.session_id === "string" && r.session_id.length > 0) {
               setSessionId(r.session_id);
             }
+            // Capture usage + duration for the footer.
+            mutateAssistant((m) => ({
+              ...m,
+              usage: r.usage || m.usage,
+              durationMs:
+                typeof r.duration_ms === "number" ? r.duration_ms : m.durationMs,
+            }));
             // Fallback only if no text streamed (no partial deltas fired):
             // surface the result string as a single text step.
             if (typeof r.result === "string" && r.result.length > 0) {
@@ -433,11 +480,83 @@ export function ChatWidget() {
       abortRef.current = null;
       setBusy(false);
     }
-  }, [input, busy]);
+  }, []);
+
+  const send = useCallback(() => {
+    if (busy) return;
+    const message = input.trim();
+    if (!message) return;
+    setInput("");
+    void sendMessage(message);
+  }, [input, busy, sendMessage]);
+
+  // Re-send the previous user message (or specific message's userPrompt).
+  const retry = useCallback(
+    (prompt?: string) => {
+      if (busy) return;
+      const target =
+        prompt ??
+        (() => {
+          for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m.role === "user" && m.userPrompt) return m.userPrompt;
+          }
+          return "";
+        })();
+      if (!target) return;
+      void sendMessage(target);
+    },
+    [busy, messages, sendMessage]
+  );
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
   }, []);
+
+  // Auto-scroll lock: only autoscroll if user is near the bottom.
+  const [atBottom, setAtBottom] = useState(true);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const dist = el.scrollHeight - (el.scrollTop + el.clientHeight);
+      setAtBottom(dist < 40);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [open]);
+  useEffect(() => {
+    if (!atBottom) return;
+    const el = scrollerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, open, atBottom]);
+
+  // Keyboard shortcuts: Cmd/Ctrl+K toggles + focuses, Esc closes.
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const cmd = e.metaKey || e.ctrlKey;
+      if (cmd && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpen(true);
+        setTimeout(() => textareaRef.current?.focus(), 0);
+        return;
+      }
+      if (e.key === "Escape" && open) {
+        // Don't steal Escape from other modal-like things; only act on it
+        // when our textarea is focused, or no input is focused at all.
+        const ae = document.activeElement;
+        const ours =
+          ae === textareaRef.current ||
+          (ae && (ae.tagName !== "INPUT" && ae.tagName !== "TEXTAREA"));
+        if (ours) {
+          setOpen(false);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   return (
     <>
@@ -456,7 +575,13 @@ export function ChatWidget() {
         className={`fixed bottom-0 right-0 z-40 flex w-full max-w-[420px] flex-col border-l border-white/10 bg-zinc-950/95 backdrop-blur transition-transform duration-200 ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
-        style={{ top: "calc(env(safe-area-inset-top, 0px) + 3rem)" }}
+        style={{
+          // Below the soma top bar on desktop; full-height on mobile.
+          top: "calc(env(safe-area-inset-top, 0px) + 3rem)",
+          // Use dvh so iOS Safari's URL bar / on-screen keyboard don't crop
+          // the panel. paddingBottom honours the home-bar safe area.
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
         aria-hidden={!open}
       >
         <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
@@ -515,7 +640,7 @@ export function ChatWidget() {
             </div>
           )}
           {messages.map((m) => (
-            <MessageBubble key={m.id} msg={m} />
+            <MessageBubble key={m.id} msg={m} onRetry={retry} busy={busy} />
           ))}
         </div>
 
@@ -528,15 +653,41 @@ export function ChatWidget() {
         >
           <div className="flex items-end gap-2">
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onPaste={(e) => {
+                // Paste an image → upload, append the saved path to the input
+                // so the assistant can Read it.
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                for (const it of items) {
+                  if (it.kind !== "file") continue;
+                  const blob = it.getAsFile();
+                  if (!blob || !blob.type.startsWith("image/")) continue;
+                  e.preventDefault();
+                  const form = new FormData();
+                  form.append("file", blob, blob.name || "pasted.png");
+                  void fetch("/api/chat/upload", { method: "POST", body: form })
+                    .then((r) => r.json())
+                    .then((d) => {
+                      if (d?.path) {
+                        setInput((prev) =>
+                          (prev ? prev + "\n\n" : "") + `[image: ${d.path}]`
+                        );
+                      }
+                    })
+                    .catch(() => {});
+                  return;
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   void send();
                 }
               }}
-              placeholder={busy ? "Claude is responding…" : "Message Claude…"}
+              placeholder={busy ? "Claude is responding…" : "Message Claude… (⌘K to focus, paste an image to attach)"}
               rows={2}
               disabled={busy}
               className="flex-1 resize-none rounded-md border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
@@ -568,7 +719,15 @@ export function ChatWidget() {
   );
 }
 
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({
+  msg,
+  onRetry,
+  busy,
+}: {
+  msg: Message;
+  onRetry: (prompt?: string) => void;
+  busy: boolean;
+}) {
   if (msg.role === "user") {
     const text = msg.steps.find((s): s is TextStep => s.kind === "text")?.text || "";
     return (
@@ -584,6 +743,12 @@ function MessageBubble({ msg }: { msg: Message }) {
   }
 
   const hasContent = msg.steps.length > 0;
+  // Index of the latest tool step (used to auto-expand the in-flight one).
+  let lastToolIdx = -1;
+  msg.steps.forEach((s, i) => {
+    if (s.kind === "tool") lastToolIdx = i;
+  });
+
   return (
     <div className="flex justify-start">
       <div
@@ -597,10 +762,18 @@ function MessageBubble({ msg }: { msg: Message }) {
         {msg.steps.map((s, i) => {
           const isLast = i === msg.steps.length - 1;
           const showCursor = isLast && !msg.done && !msg.errored && s.kind === "text";
-          return s.kind === "text" ? (
-            <TextStepView key={s.id} step={s} showCursor={showCursor} />
-          ) : (
-            <ToolStepView key={s.id} step={s} />
+          if (s.kind === "text") {
+            return <TextStepView key={s.id} step={s} showCursor={showCursor} />;
+          }
+          if (s.kind === "thinking") {
+            return <ThinkingStepView key={s.id} step={s} />;
+          }
+          return (
+            <ToolStepView
+              key={s.id}
+              step={s}
+              defaultExpanded={i === lastToolIdx && s.status === "running"}
+            />
           );
         })}
 
@@ -616,11 +789,69 @@ function MessageBubble({ msg }: { msg: Message }) {
                 {msg.erroredDetail}
               </pre>
             )}
+            <button
+              type="button"
+              onClick={() => onRetry()}
+              disabled={busy}
+              className="mt-1 rounded border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-300 hover:bg-rose-500/20 disabled:opacity-40"
+            >
+              Retry
+            </button>
           </div>
+        )}
+
+        {msg.done && !msg.errored && hasContent && (
+          <TurnFooter msg={msg} onRegenerate={() => onRetry()} busy={busy} />
         )}
       </div>
     </div>
   );
+}
+
+function TurnFooter({
+  msg,
+  onRegenerate,
+  busy,
+}: {
+  msg: Message;
+  onRegenerate: () => void;
+  busy: boolean;
+}) {
+  const u = msg.usage;
+  const dur = typeof msg.durationMs === "number" ? msg.durationMs / 1000 : null;
+  const toolCount = msg.steps.filter((s) => s.kind === "tool").length;
+  const parts: string[] = [];
+  if (dur !== null) parts.push(`${dur < 10 ? dur.toFixed(1) : Math.round(dur)}s`);
+  if (toolCount > 0) parts.push(`${toolCount} tool${toolCount === 1 ? "" : "s"}`);
+  if (u) {
+    const inTok = u.input_tokens ?? 0;
+    const cacheW = u.cache_creation_input_tokens ?? 0;
+    const cacheR = u.cache_read_input_tokens ?? 0;
+    const out = u.output_tokens ?? 0;
+    parts.push(
+      `${inTok} in · ${cacheW ? `${formatTok(cacheW)} write` : "0 write"} · ${formatTok(cacheR)} read · ${out} out`
+    );
+  }
+  if (parts.length === 0) return null;
+  return (
+    <div className="flex items-center justify-between pt-1 text-[10px] text-zinc-500">
+      <span className="font-mono">{parts.join(" · ")}</span>
+      <button
+        type="button"
+        onClick={onRegenerate}
+        disabled={busy}
+        title="Regenerate (re-send the same prompt)"
+        className="text-zinc-500 hover:text-zinc-200 disabled:opacity-40"
+      >
+        ↻
+      </button>
+    </div>
+  );
+}
+
+function formatTok(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K`;
+  return String(n);
 }
 
 function useElapsed(startedAt: number | undefined): string {
@@ -680,8 +911,47 @@ function TextStepView({ step, showCursor }: { step: TextStep; showCursor?: boole
   );
 }
 
-function ToolStepView({ step }: { step: ToolStep }) {
+function ThinkingStepView({ step }: { step: ThinkingStep }) {
   const [expanded, setExpanded] = useState(false);
+  if (!step.text) return null;
+  return (
+    <div className="rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-1.5 text-left text-[11px] text-zinc-500"
+      >
+        <span>💭</span>
+        <span className="font-mono">thinking ({step.text.length} chars)</span>
+        <span className="ml-auto text-[10px]">{expanded ? "▾" : "▸"}</span>
+      </button>
+      {expanded && (
+        <div className="mt-1.5 whitespace-pre-wrap border-t border-white/5 pt-1.5 text-[11px] italic text-zinc-400">
+          {step.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolStepView({
+  step,
+  defaultExpanded,
+}: {
+  step: ToolStep;
+  defaultExpanded?: boolean;
+}) {
+  const [expanded, setExpanded] = useState<boolean>(!!defaultExpanded);
+  const [userToggled, setUserToggled] = useState(false);
+  const [showFull, setShowFull] = useState(false);
+
+  // Auto-collapse when a running tool completes (unless the user toggled it manually).
+  useEffect(() => {
+    if (userToggled) return;
+    if (step.status === "running") setExpanded(true);
+    else setExpanded(!!defaultExpanded);
+  }, [step.status, defaultExpanded, userToggled]);
+
   const summary = summarizeToolInput(step.name, step.input);
   const statusColor =
     step.status === "running"
@@ -689,11 +959,16 @@ function ToolStepView({ step }: { step: ToolStep }) {
       : step.isError
         ? "border-rose-500/40 bg-rose-500/10"
         : "border-emerald-500/30 bg-emerald-500/10";
+  const outputToShow =
+    showFull && step.outputFull ? step.outputFull : step.output;
   return (
     <div className={`rounded-md border ${statusColor} px-2 py-1.5`}>
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => {
+          setExpanded((v) => !v);
+          setUserToggled(true);
+        }}
         className="flex w-full items-start gap-1.5 text-left"
       >
         <span className="mt-[1px] text-xs leading-none">{toolIcon(step.name)}</span>
@@ -727,11 +1002,28 @@ function ToolStepView({ step }: { step: ToolStep }) {
           )}
           {step.output && (
             <details className="text-[10px] text-zinc-400" open>
-              <summary className="cursor-pointer text-zinc-500">
-                output{step.outputTruncated ? " (truncated)" : ""}
+              <summary className="cursor-pointer text-zinc-500 flex items-center gap-2">
+                <span>
+                  output
+                  {step.outputTruncated && !showFull
+                    ? ` (truncated · ${step.outputFull.length} chars)`
+                    : ""}
+                </span>
+                {step.outputTruncated && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setShowFull((v) => !v);
+                    }}
+                    className="text-emerald-400 hover:text-emerald-300"
+                  >
+                    {showFull ? "show less" : "show full"}
+                  </button>
+                )}
               </summary>
               <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-1.5 text-[10px] text-zinc-300">
-                {step.output}
+                {outputToShow}
               </pre>
             </details>
           )}

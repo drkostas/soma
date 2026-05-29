@@ -2,7 +2,10 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-const CONFIG_PATH = join(homedir(), ".soma", "chat.json");
+function configPath(): string {
+  // Resolved on each call so tests can swap homedir() between calls.
+  return join(homedir(), ".soma", "chat.json");
+}
 
 export interface ChatConfig {
   // Empty string means "no session yet — the next /api/chat call will spawn a
@@ -12,7 +15,7 @@ export interface ChatConfig {
 
 export async function readChatConfig(): Promise<ChatConfig> {
   try {
-    const raw = await readFile(CONFIG_PATH, "utf8");
+    const raw = await readFile(configPath(), "utf8");
     const parsed = JSON.parse(raw) as Partial<ChatConfig>;
     if (typeof parsed.sessionId === "string") {
       return { sessionId: parsed.sessionId };
@@ -24,6 +27,6 @@ export async function readChatConfig(): Promise<ChatConfig> {
 }
 
 export async function writeChatConfig(cfg: ChatConfig): Promise<void> {
-  await mkdir(dirname(CONFIG_PATH), { recursive: true });
-  await writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf8");
+  await mkdir(dirname(configPath()), { recursive: true });
+  await writeFile(configPath(), JSON.stringify(cfg, null, 2), "utf8");
 }
