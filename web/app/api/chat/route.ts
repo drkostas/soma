@@ -7,7 +7,10 @@ import { readChatConfig, writeChatConfig } from "@/lib/chat-config";
 import { chatMode, proxyToLocal, requireToken } from "@/lib/chat-transport";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// Max Pro plan ceiling for serverless functions on Fluid Compute. Cold-cache
+// claude calls can run 30s+ for the first response after a 5-min idle gap;
+// most subsequent calls return in ~5s.
+export const maxDuration = 800;
 
 // Single-flight per session id (or "fresh" before we have one). Prevents two
 // tabs from racing into the same JSONL.
@@ -112,16 +115,50 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder();
+      // Once the controller is closed (client disconnect, panel close,
+      // upstream fetch cancelled, etc.) any further enqueue throws. Wrap
+      // every write so an aborted client never breaks the rest of the
+      // stream-handling path (which is what was leaking the inFlight lock).
+      let controllerClosed = false;
       const send = (event: string, data: unknown) => {
-        const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-        controller.enqueue(enc.encode(payload));
+        if (controllerClosed) return;
+        try {
+          const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+          controller.enqueue(enc.encode(payload));
+        } catch {
+          controllerClosed = true;
+        }
       };
+
+      // Belt-and-braces: if the client aborts, mark the controller dead so
+      // pending child.on("close") writes are no-ops.
+      req.signal.addEventListener("abort", () => {
+        controllerClosed = true;
+      });
+
+      // SSE heartbeat: send a comment line every 10s so Vercel / Cloudflare
+      // edges don't close idle connections during the model's first-token
+      // wait (which can be 5-15s cold-cache). Comments are ignored by the
+      // browser's EventSource parser.
+      const heartbeat = setInterval(() => {
+        if (controllerClosed) return;
+        try {
+          controller.enqueue(enc.encode(": keepalive\n\n"));
+        } catch {
+          controllerClosed = true;
+        }
+      }, 10_000);
 
       // Bootstrap-and-retry: try once with the configured session; if claude
       // reports "no conversation found", retry once with no --resume so we
       // create a fresh session and persist its id.
       let triedFreshFallback = false;
-      let active = await runOne(cfg.sessionId);
+      let active = false;
+      try {
+        active = await runOne(cfg.sessionId);
+      } catch (err) {
+        send("fatal", { error: `chat runner crashed: ${String(err)}` });
+      }
 
       async function runOne(sessionId: string): Promise<boolean> {
         const args = [
@@ -259,8 +296,24 @@ export async function POST(req: NextRequest) {
       }
 
       send("done", { ok: active });
+      clearInterval(heartbeat);
       inFlight.delete(lockKey);
-      controller.close();
+      controllerClosed = true;
+      try {
+        controller.close();
+      } catch {
+        // already closed (client gone) — fine
+      }
+    },
+    cancel() {
+      // Browser aborted (closed tab, navigated away, panel re-render).
+      // Free the lock even though start()'s closure may still be awaiting
+      // the child process — that closure is now no-op'd by the
+      // controllerClosed guard around send().
+      inFlight.delete(lockKey);
+      // (The heartbeat interval is cleared inside start()'s cleanup once
+      // the awaited promise resolves; the child process is killed via
+      // req.signal so that path runs even on disconnect.)
     },
   });
 
