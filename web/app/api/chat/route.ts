@@ -65,10 +65,12 @@ function systemPromptFile(): string | null {
 
 interface ResultEvent {
   type?: string;
+  subtype?: string;
   is_error?: boolean;
   session_id?: string;
   result?: string;
   errors?: string[];
+  api_error_status?: number | string | null;
 }
 
 function isMissingSessionError(evt: ResultEvent): boolean {
@@ -255,7 +257,8 @@ export async function POST(req: NextRequest) {
               return;
             }
 
-            // Non-recoverable error: forward to the client.
+            // Non-recoverable error: forward to the client with full
+            // diagnostics so the error pill can show something actionable.
             if (
               code !== 0 ||
               !lastResult ||
@@ -263,11 +266,35 @@ export async function POST(req: NextRequest) {
             ) {
               const errors =
                 (lastResult?.errors && lastResult.errors.join("; ")) || "";
+              const headline = errors || `claude exited with code ${code}`;
+              // Build a multi-source stderr-ish detail so we never show an
+              // empty box. Order: real stderr → result.errors → result
+              // subtype/api_error_status if present.
+              const detailParts: string[] = [];
+              if (stderrBuf.trim()) detailParts.push(stderrBuf.trim());
+              if (lastResult?.errors?.length && !errors) {
+                detailParts.push(`errors: ${JSON.stringify(lastResult.errors)}`);
+              }
+              if (lastResult?.subtype) {
+                detailParts.push(`subtype: ${lastResult.subtype}`);
+              }
+              if (lastResult?.api_error_status) {
+                detailParts.push(`api_error_status: ${lastResult.api_error_status}`);
+              }
+              if (typeof code === "number") {
+                detailParts.push(`exit_code: ${code}`);
+              }
+              const detail = detailParts.join("\n");
+
+              // Server-side log so the dev terminal shows what the user saw.
+              // eslint-disable-next-line no-console
+              console.error(
+                `[chat] spawn failed: ${headline}\n${detail.slice(0, 4000)}`
+              );
+
               send("fatal", {
-                error:
-                  errors ||
-                  `claude exited with code ${code}`,
-                stderr: stderrBuf.slice(-2000),
+                error: headline,
+                stderr: detail.slice(-2000),
               });
               resolve(false);
               return;
