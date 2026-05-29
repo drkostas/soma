@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readChatConfig, writeChatConfig } from "@/lib/chat-config";
+import { chatMode, proxyToLocal, requireToken } from "@/lib/chat-transport";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -73,6 +74,12 @@ function isMissingSessionError(evt: ResultEvent): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  // Vercel deployment: just forward to the Mac via the cloudflared tunnel.
+  if (chatMode() === "proxy") return proxyToLocal(req, "/api/chat");
+  // Local (Mac or dev): enforce the shared secret on non-same-origin calls.
+  const denied = requireToken(req);
+  if (denied) return denied;
+
   const body = (await req.json()) as { message?: unknown };
   const message = typeof body.message === "string" ? body.message.trim() : "";
   if (!message) {

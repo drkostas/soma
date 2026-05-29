@@ -133,6 +133,12 @@ export function ChatWidget() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // Track which deployment we're talking to so the header can render a dot:
+  //   "local"   = same machine (dev or Mac) spawning claude directly
+  //   "proxy"   = Vercel forwarding to the cloudflared tunnel
+  //   "offline" = tunnel unreachable / Mac asleep
+  const [transportStatus, setTransportStatus] =
+    useState<"unknown" | "local" | "proxy" | "offline">("unknown");
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -183,9 +189,24 @@ export function ChatWidget() {
 
   useEffect(() => {
     fetch("/api/chat/session")
-      .then((r) => r.json())
-      .then((d) => setSessionId(d.sessionId ?? null))
-      .catch(() => setSessionId(null));
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`session http ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        setSessionId(d.sessionId ?? null);
+        // The local-mode handler returns { mode: "local" }. When proxied
+        // through Vercel we ALSO get { mode: "local" } back (because the
+        // upstream Mac responds), and the network path was proxy — we
+        // distinguish by host: localhost = direct local, anything else = proxy.
+        const host = typeof window !== "undefined" ? window.location.hostname : "";
+        const direct = host === "localhost" || host === "127.0.0.1";
+        setTransportStatus(direct ? "local" : "proxy");
+      })
+      .catch(() => {
+        setSessionId(null);
+        setTransportStatus("offline");
+      });
     // Best-effort hydrate from the on-disk JSONL — source of truth across
     // devices/browsers. Falls back to localStorage if the route fails or
     // returns no messages.
@@ -586,7 +607,10 @@ export function ChatWidget() {
       >
         <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
-            <div className="text-sm font-medium text-white">Claude</div>
+            <div className="flex items-center gap-1.5 text-sm font-medium text-white">
+              <TransportDot status={transportStatus} />
+              Claude
+            </div>
             <div className="font-mono text-[10px] text-zinc-500" title={sessionId ?? ""}>
               {sessionId === null
                 ? "loading session…"
@@ -1040,6 +1064,30 @@ function Dot({ delay = "0ms" }: { delay?: string }) {
       style={{ animationDelay: delay }}
     />
   );
+}
+
+function TransportDot({
+  status,
+}: {
+  status: "unknown" | "local" | "proxy" | "offline";
+}) {
+  const cls =
+    status === "local"
+      ? "bg-emerald-400"
+      : status === "proxy"
+        ? "bg-sky-400"
+        : status === "offline"
+          ? "bg-rose-400"
+          : "bg-zinc-500";
+  const title =
+    status === "local"
+      ? "Local — claude -p running on this machine"
+      : status === "proxy"
+        ? "Proxied via Vercel → your Mac's cloudflared tunnel"
+        : status === "offline"
+          ? "Unreachable — is your Mac awake and the tunnel running?"
+          : "Status unknown";
+  return <span title={title} className={`h-2 w-2 rounded-full ${cls}`} />;
 }
 
 function ChatIcon() {
