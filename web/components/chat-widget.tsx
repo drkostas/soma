@@ -31,11 +31,16 @@ interface Message {
   role: Role;
   steps: Step[];
   done: boolean;
+  // Timestamp (ms) when the turn started, so we can show elapsed time.
+  startedAt?: number;
   errored?: string;
   erroredDetail?: string;
 }
 
 const SOMA_CHAT_OPEN_KEY = "soma:chat:open";
+const SOMA_CHAT_HISTORY_KEY = "soma:chat:history";
+// Don't grow localStorage forever — keep the last N messages.
+const HISTORY_LIMIT = 50;
 
 function newId() {
   return Math.random().toString(36).slice(2, 10);
@@ -118,7 +123,37 @@ export function ChatWidget() {
     } catch {
       // ignore
     }
+    // Restore message history across refreshes.
+    try {
+      const raw = localStorage.getItem(SOMA_CHAT_HISTORY_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Message[];
+        if (Array.isArray(parsed)) {
+          // Mark any half-done assistant message as cancelled so it doesn't
+          // look like it's still streaming after a reload.
+          setMessages(
+            parsed.map((m) =>
+              m.role === "assistant" && !m.done
+                ? { ...m, done: true, errored: m.errored || "interrupted by reload" }
+                : m
+            )
+          );
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
   }, []);
+
+  // Persist messages to localStorage as they change (keep last N).
+  useEffect(() => {
+    try {
+      const trimmed = messages.slice(-HISTORY_LIMIT);
+      localStorage.setItem(SOMA_CHAT_HISTORY_KEY, JSON.stringify(trimmed));
+    } catch {
+      // localStorage may be full or unavailable
+    }
+  }, [messages]);
   useEffect(() => {
     try {
       sessionStorage.setItem(SOMA_CHAT_OPEN_KEY, open ? "1" : "0");
@@ -156,6 +191,7 @@ export function ChatWidget() {
       role: "assistant",
       steps: [],
       done: false,
+      startedAt: Date.now(),
     };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setBusy(true);
@@ -434,14 +470,41 @@ export function ChatWidget() {
                   : `session ${sessionId.slice(0, 8)}…`}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="rounded p-1 text-zinc-400 hover:bg-white/5 hover:text-white"
-            aria-label="Close panel"
-          >
-            <CloseIcon />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={async () => {
+                if (busy) return;
+                if (!confirm("Start a new conversation? This clears the chat history and resets the soma session.")) return;
+                setMessages([]);
+                try {
+                  localStorage.removeItem(SOMA_CHAT_HISTORY_KEY);
+                } catch {
+                  // ignore
+                }
+                await fetch("/api/chat/session", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ sessionId: "" }),
+                }).catch(() => {});
+                setSessionId("");
+              }}
+              disabled={busy}
+              title="New conversation"
+              aria-label="New conversation"
+              className="rounded p-1 text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-40"
+            >
+              <NewIcon />
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded p-1 text-zinc-400 hover:bg-white/5 hover:text-white"
+              aria-label="Close panel"
+            >
+              <CloseIcon />
+            </button>
+          </div>
         </header>
 
         <div ref={scrollerRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
@@ -528,27 +591,21 @@ function MessageBubble({ msg }: { msg: Message }) {
         style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
       >
         {!hasContent && !msg.done && !msg.errored && (
-          <div className="flex gap-1 py-1">
-            <Dot />
-            <Dot delay="120ms" />
-            <Dot delay="240ms" />
-          </div>
+          <ThinkingIndicator startedAt={msg.startedAt} />
         )}
 
-        {msg.steps.map((s) =>
-          s.kind === "text" ? (
-            <TextStepView key={s.id} step={s} />
+        {msg.steps.map((s, i) => {
+          const isLast = i === msg.steps.length - 1;
+          const showCursor = isLast && !msg.done && !msg.errored && s.kind === "text";
+          return s.kind === "text" ? (
+            <TextStepView key={s.id} step={s} showCursor={showCursor} />
           ) : (
             <ToolStepView key={s.id} step={s} />
-          )
-        )}
+          );
+        })}
 
         {hasContent && !msg.done && !msg.errored && (
-          <div className="flex gap-1 pt-1">
-            <Dot />
-            <Dot delay="120ms" />
-            <Dot delay="240ms" />
-          </div>
+          <StreamingFooter startedAt={msg.startedAt} />
         )}
 
         {msg.errored && (
@@ -566,11 +623,59 @@ function MessageBubble({ msg }: { msg: Message }) {
   );
 }
 
-function TextStepView({ step }: { step: TextStep }) {
-  if (!step.text) return null;
+function useElapsed(startedAt: number | undefined): string {
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    if (!startedAt) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  if (!startedAt) return "";
+  const s = Math.max(0, (now - startedAt) / 1000);
+  return s < 10 ? s.toFixed(1) + "s" : Math.round(s) + "s";
+}
+
+function ThinkingIndicator({ startedAt }: { startedAt?: number }) {
+  const elapsed = useElapsed(startedAt);
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <div className="flex gap-1">
+        <Dot />
+        <Dot delay="120ms" />
+        <Dot delay="240ms" />
+      </div>
+      <span className="font-mono text-[10px] text-zinc-500">
+        {startedAt ? `thinking · ${elapsed}` : "thinking…"}
+      </span>
+    </div>
+  );
+}
+
+function StreamingFooter({ startedAt }: { startedAt?: number }) {
+  const elapsed = useElapsed(startedAt);
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <div className="flex gap-1">
+        <Dot />
+        <Dot delay="120ms" />
+        <Dot delay="240ms" />
+      </div>
+      <span className="font-mono text-[10px] text-zinc-500">
+        {startedAt ? `streaming · ${elapsed}` : "streaming…"}
+      </span>
+    </div>
+  );
+}
+
+function TextStepView({ step, showCursor }: { step: TextStep; showCursor?: boolean }) {
+  if (!step.text && !showCursor) return null;
+  const rendered = showCursor ? step.text + "​" : step.text;
   return (
     <div className="prose prose-invert prose-sm max-w-none break-words [&_code]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-zinc-900 [&_pre]:p-2 [&_table]:border [&_table]:border-white/10 [&_table]:text-xs [&_th]:border [&_th]:border-white/10 [&_th]:bg-white/5 [&_th]:px-1.5 [&_th]:py-1 [&_td]:border [&_td]:border-white/10 [&_td]:px-1.5 [&_td]:py-1 [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{step.text}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{rendered}</ReactMarkdown>
+      {showCursor && (
+        <span className="ml-0.5 inline-block h-3.5 w-[7px] -translate-y-[1px] animate-pulse bg-emerald-400/80 align-middle" />
+      )}
     </div>
   );
 }
@@ -658,6 +763,15 @@ function CloseIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function NewIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
   );
 }
