@@ -228,27 +228,36 @@ local filesystem.
 
 ##### Self-healing autostart with launchd (macOS)
 
-If you don't have a domain in CF DNS yet, you can still get a robust setup
-using a Cloudflare Quick Tunnel + three `launchctl` agents that survive Mac
-sleep, reboot, and tunnel URL rotation. The third agent watches for URL
-changes and auto-syncs them to your Vercel env, so the trycloudflare URL
-flap no longer breaks the deployed chat.
-
-Three plists under `~/Library/LaunchAgents/` (per-user, no sudo):
+Two plists under `~/Library/LaunchAgents/` (per-user, no sudo) keep
+everything alive across Mac sleep/wake/reboot:
 
 | Plist | Purpose |
 |---|---|
-| `dev.gkos.soma.web.plist` | Runs `npm run dev` from `web/`, KeepAlive on crash |
-| `dev.gkos.soma.tunnel.plist` | Runs `cloudflared tunnel --protocol http2 --url http://localhost:3456`, KeepAlive |
-| `dev.gkos.soma.tunnel-watch.plist` | Runs [`web/scripts/soma-tunnel-watch.sh`](web/scripts/soma-tunnel-watch.sh) which tails the tunnel log, detects URL rotation, runs `vercel env rm/add SOMA_CHAT_TUNNEL_URL production` + `vercel deploy --prod` |
+| `dev.gkos.soma.web.plist` | Runs `npm run dev` from `web/` on :3456, KeepAlive on crash |
+| `dev.gkos.soma.tunnel.plist` | Runs the cloudflared named tunnel (`tunnel run --token <connector>`), KeepAlive |
 
-After writing the plists, load them with `launchctl bootstrap gui/$UID <plist>`.
-Logs land in `~/Library/Logs/soma/`. To temporarily disable for hands-on
-development: `launchctl bootout gui/$UID dev.gkos.soma.web`.
+Logs land in `~/Library/Logs/soma/`. Manage with
+`launchctl bootstrap gui/$UID <plist>` to load and
+`launchctl bootout gui/$UID dev.gkos.soma.web` to temporarily stop for
+hands-on development.
 
-Prereqs for autosync: the Vercel CLI must be logged in (`vercel login`)
-once on the Mac so the watcher's `vercel env`/`vercel deploy` calls work
-non-interactively.
+###### Fallback when your domain isn't in Cloudflare DNS
+
+If your domain's authoritative DNS lives somewhere other than Cloudflare,
+you can still use a Cloudflare Quick Tunnel — but its `trycloudflare.com`
+URL rotates on every cloudflared restart. To keep the deployed Vercel
+chat pointed at the live URL automatically, add a third agent that tails
+the tunnel log and syncs URL changes into Vercel env:
+
+| Plist | Purpose |
+|---|---|
+| `dev.gkos.soma.tunnel-watch.plist` | Runs [`web/scripts/soma-tunnel-watch.sh`](web/scripts/soma-tunnel-watch.sh) — tails the tunnel log, detects URL rotation, runs `vercel env rm/add SOMA_CHAT_TUNNEL_URL production` + `vercel deploy --prod` |
+
+Prereq: the Vercel CLI must be logged in (`vercel login`) once on the Mac
+so the watcher's CLI calls work non-interactively.
+
+This becomes unnecessary once you migrate your zone to Cloudflare DNS (the
+named-tunnel route in the previous section), since the URL is then stable.
 
 ---
 
