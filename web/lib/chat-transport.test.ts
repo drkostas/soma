@@ -68,7 +68,7 @@ describe("requireToken", () => {
     process.env.SOMA_CHAT_TOKEN = "secret";
     const r = requireToken(
       mockReq({
-        origin: "https://soma.gkos.dev",
+        origin: "https://soma.example.com",
         "x-soma-chat-token": "wrong",
       })
     );
@@ -81,7 +81,7 @@ describe("requireToken", () => {
     expect(
       requireToken(
         mockReq({
-          origin: "https://soma.gkos.dev",
+          origin: "https://soma.example.com",
           "x-soma-chat-token": "secret",
         })
       )
