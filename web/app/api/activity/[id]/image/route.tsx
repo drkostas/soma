@@ -127,7 +127,7 @@ async function fetchTile(
     }
     if (!res) return null;
     const ct = res.headers.get("content-type") || "image/png";
-    let buf = Buffer.from(await res.arrayBuffer());
+    let buf: Buffer<ArrayBufferLike> = Buffer.from(await res.arrayBuffer());
     const duo = opts?.duo, bright = opts?.bright, sat = opts?.sat, hue = opts?.hue, sea = opts?.sea;
     const mod = (bright && bright !== 1) || (sat && sat !== 1) || (hue && hue !== 0);
     if (duo || mod || sea) {
