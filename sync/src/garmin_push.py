@@ -145,6 +145,79 @@ def generate_run_strava_description(summary: dict, hr_zones: list | None = None)
     return "\n".join(lines)
 
 
+def _get_kite_jumps(conn, activity_id: int) -> dict | None:
+    """Fetch the stored kite_jumps payload for an activity, if any."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT raw_json FROM garmin_activity_raw "
+            "WHERE activity_id = %s AND endpoint_name = 'kite_jumps'",
+            (activity_id,),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+def kite_activity_name(summary: dict, payload: dict) -> str:
+    """Custom kite naming: 'Schinias · Max Jump: 5.2m · 29 jumps'."""
+    s = payload.get("summary", {})
+    spot = s.get("spot") or summary.get("activityName") or "Kiteboarding"
+    n, mh = s.get("jump_count") or 0, s.get("max_height_m")
+    if mh and n:
+        return f"{spot} · Max Jump: {mh}m · {n} jumps"
+    return f"{spot} Kiteboarding" if s.get("spot") else (summary.get("activityName") or "Kiteboarding")
+
+
+def generate_kite_strava_description(summary: dict, payload: dict) -> str:
+    """Rich Strava description for a kiteboarding session (jumps in metres,
+    speed in knots), built from the extracted per-jump data."""
+    s = payload.get("summary", {})
+    jumps = payload.get("jumps", [])
+    lines: list[str] = []
+
+    headline = []
+    if s.get("max_height_m"):
+        headline.append(f"🪁 Max Jump: {s['max_height_m']} m")
+    if s.get("max_airtime_s"):
+        headline.append(f"⏱️ Airtime: {round(float(s['max_airtime_s']), 1)} s")
+    if s.get("jump_count"):
+        headline.append(f"🔢 {s['jump_count']} jumps")
+    if headline:
+        lines.append("  ·  ".join(headline))
+
+    stats = []
+    dist = summary.get("distance", 0)
+    if dist > 0:
+        stats.append(f"📏 {dist / 1000:.1f} km")
+    max_speed = summary.get("maxSpeed", 0)
+    if max_speed and max_speed > 0:
+        stats.append(f"💨 {max_speed * 1.94384:.1f} kn")
+    dur = summary.get("movingDuration") or summary.get("duration") or 0
+    if dur > 0:
+        stats.append(f"🕒 {int(dur // 3600)}h {int((dur % 3600) // 60):02d}m")
+    avg_hr = summary.get("averageHR", 0)
+    if avg_hr and avg_hr > 0:
+        stats.append(f"❤️ {round(avg_hr)} bpm")
+    if stats:
+        lines.append("  ·  ".join(stats))
+
+    top = [j for j in jumps if j.get("rank")][:5]
+    if top:
+        lines.append("")
+        lines.append("Top jumps:")
+        for j in top:
+            seg = f"  {j['rank']}. {j['height_m']} m"
+            if j.get("airtime_s"):
+                seg += f", {round(float(j['airtime_s']), 1)} s air"
+            if j.get("distance_m"):
+                seg += f", {j['distance_m']} m"
+            lines.append(seg)
+
+    if lines:
+        lines.append("")
+        lines.append("Tracked by github.com/drkostas/soma")
+    return "\n".join(lines)
+
+
 def _download_fit_file(garmin_client, activity_id: int) -> str:
     """Download the original FIT file from Garmin Connect.
 
@@ -213,6 +286,14 @@ def push_garmin_activity_to_strava(
         garmin_type = summary.get("activityType", {}).get("typeKey", "")
         sport_type = GARMIN_TO_STRAVA_SPORT.get(garmin_type, "Workout")
 
+        # Kite sessions get a custom name + description from the extracted jump data.
+        kite_payload = None
+        if "kite" in garmin_type.lower():
+            with get_connection() as db_conn:
+                kite_payload = _get_kite_jumps(db_conn, activity_id)
+            if kite_payload and kite_payload.get("summary", {}).get("jump_count"):
+                name = kite_activity_name(summary, kite_payload)
+
         # 2. Init Garmin client if not provided
         if garmin_client is None:
             garmin_client = init_garmin()
@@ -255,9 +336,12 @@ def push_garmin_activity_to_strava(
         # 6. Update Strava activity with rich description
         if strava_activity_id:
             try:
-                with get_connection() as db_conn:
-                    hr_zones = _get_activity_hr_zones(db_conn, activity_id)
-                desc = generate_run_strava_description(summary, hr_zones)
+                if kite_payload:
+                    desc = generate_kite_strava_description(summary, kite_payload)
+                else:
+                    with get_connection() as db_conn:
+                        hr_zones = _get_activity_hr_zones(db_conn, activity_id)
+                    desc = generate_run_strava_description(summary, hr_zones)
                 if desc:
                     strava_client.update_activity(strava_activity_id, description=desc)
                     logger.info("Description updated for Strava activity %s", strava_activity_id)
