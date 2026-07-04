@@ -126,6 +126,25 @@ def sync_activities_for_date(client, sync_date: date) -> list[int]:
         return []
 
 
+def _maybe_extract_kite_jumps(conn, client, activity_id: int) -> None:
+    """If this activity is a kiteboarding session, extract and store its per-jump
+    data (heights + 3D flight paths) so the share image can render it. Guarded so a
+    failure never breaks the main activity sync."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT raw_json->'activityType'->>'typeKey', raw_json->>'startTimeGMT' "
+            "FROM garmin_activity_raw WHERE activity_id = %s AND endpoint_name = 'summary'",
+            (activity_id,),
+        )
+        row = cur.fetchone()
+    if not row or not row[0] or "kite" not in row[0].lower():
+        return
+    from backfill_kite_jumps import store_kite_jumps_for_activity
+
+    payload = store_kite_jumps_for_activity(conn, client, activity_id, row[1])
+    print(f"    Kite: {payload['summary']['jump_count']} jumps extracted for {activity_id}")
+
+
 def sync_activity_details(client, activity_id: int) -> int:
     """Fetch all detail endpoints for a single activity. Returns count saved."""
     from db import upsert_activity_raw
@@ -139,6 +158,10 @@ def sync_activity_details(client, activity_id: int) -> int:
                     count += 1
             except Exception as e:
                 print(f"    Warning: activity {activity_id}/{endpoint_name} failed: {e}")
+        try:
+            _maybe_extract_kite_jumps(conn, client, activity_id)
+        except Exception as e:
+            print(f"    Warning: kite extraction for {activity_id} failed: {e}")
     return count
 
 
