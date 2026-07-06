@@ -284,24 +284,36 @@ function renderJumpArcSvg(
   const appW = samples.slice(0, iT + 1).map((p) => p.w);
   const runW = samples.slice(iL).map((p) => p.w);
   const trueA = Math.max(1e-6, len3(appW)), trueR = Math.max(1e-6, len3(runW));
+  // `best` keeps the takeoff-left / landing-right reading (start left, land right,
+  // downwind run-out curving off to the right); `bestAny` is the fallback if no
+  // green-nearest view can also put takeoff on the left.
   let best: { A: number; E: number; score: number } | null = null;
+  let bestAny: { A: number; E: number; score: number } | null = null;
   for (let Ad = 0; Ad < 360; Ad += 6) {
     const A = (Ad * Math.PI) / 180;
-    for (let Ed = 10; Ed <= 26; Ed += 2) {
+    for (let Ed = 12; Ed <= 24; Ed += 2) {
       const b = basis(A, (Ed * Math.PI) / 180);
       const gd = pW(samples[iT].w, b).depth, rd = pW(samples[iL].w, b).depth;
       if (gd <= rd) continue;                                   // green (takeoff) must be nearest
       const visT = len2(appW.map((w) => pW(w, b))) / trueA;
       const visL = len2(runW.map((w) => pW(w, b))) / trueR;
-      if (visT < 0.25 || visL < 0.12) continue;                 // avoid end-on degeneracy
+      if (visT < 0.3 || visL < 0.28) continue;                  // both lines must read (no end-on)
       const pk = pW(samples[iP].w, b), tk = pW(samples[iT].w, b), ld = pW(samples[iL].w, b);
+      const runEnd = pW(runW[runW.length - 1], b);              // end of the run-out (downwind side)
       const fw = Math.hypot(ld.sx - tk.sx, ld.sy - tk.sy) || 1;
       const peakRise = (pk.sy - (tk.sy + ld.sy) / 2) / fw;
-      const score = -2.4 * (visT - 0.69) ** 2 - 0.7 * (visL - 0.51) ** 2 - 0.01 * (Ed - 16) ** 2 + 0.08 * Math.min(peakRise, 1.4);
-      if (!best || score > best.score) best = { A, E: (Ed * Math.PI) / 180, score };
+      // reward the whole flight PROGRESSING left→right: landing and the downwind
+      // run-out both clearly right of takeoff (so the landing curve reads on the right).
+      const span = Math.max(1, Math.max(ld.sx, runEnd.sx) - tk.sx);
+      const l2r = (ld.sx - tk.sx) / span + (runEnd.sx - tk.sx) / span; // both terms +ve when it flows right
+      const score = -2.2 * (visT - 0.65) ** 2 - 2.2 * (visL - 0.65) ** 2 - 0.008 * (Ed - 16) ** 2 + 0.35 * Math.min(peakRise, 1.3) + 0.3 * l2r;
+      const cand = { A, E: (Ed * Math.PI) / 180, score };
+      if (!bestAny || score > bestAny.score) bestAny = cand;
+      // hard gate: takeoff left AND the run-out ends to the right of takeoff
+      if (tk.sx < ld.sx && runEnd.sx > tk.sx && (!best || score > best.score)) best = cand;
     }
   }
-  if (!best) best = { A: 0, E: (16 * Math.PI) / 180, score: 0 };
+  best = best || bestAny || { A: 0, E: (16 * Math.PI) / 180, score: 0 };
   const B = basis(best.A + (azBiasDeg * Math.PI) / 180, best.E);
   const proj = (w: number[]) => { const p = pW(w, B); return { px: p.sx, py: -p.sy }; };
 
