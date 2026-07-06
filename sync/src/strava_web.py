@@ -51,13 +51,17 @@ def _load_session(conn) -> list[dict] | None:
     with conn.cursor() as cur:
         cur.execute("SELECT cookies FROM strava_web_session WHERE id = 1")
         row = cur.fetchone()
-    return row[0] if row and row[0] else None
+    if not (row and row[0]):
+        return None
+    # Playwright add_cookies rejects a non-numeric `expires`; drop it (the values
+    # act as session cookies for the run, which is all we need).
+    return [{k: v for k, v in c.items() if k != "expires"} for c in row[0]]
 
 
 def _save_session(conn, cookies: list[dict]) -> None:
     import json
     keep = [
-        {k: c.get(k) for k in ("name", "value", "domain", "path", "httpOnly", "secure", "sameSite", "expires")}
+        {k: c.get(k) for k in ("name", "value", "domain", "path", "httpOnly", "secure", "sameSite")}
         for c in cookies if any(n in (c.get("name") or "") for n in _SESSION_COOKIES) or "strava" in (c.get("domain") or "")
     ]
     if conn is None or not keep:
