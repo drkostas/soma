@@ -24,6 +24,11 @@ dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
 ]
+# Session-based Strava web connector (photo upload). Heavy (bundled Chromium),
+# so it's only installed in the dedicated strava-photos workflow, not the main sync.
+strava-web = [
+    "playwright>=1.40",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
