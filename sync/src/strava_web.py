@@ -111,13 +111,41 @@ def _login(page, email: str, password: str) -> None:
         raise RuntimeError("Strava login failed (still on /login — bad creds or bot challenge)")
 
 
-def _upload_one(page, activity_id: int, image_path: str) -> None:
-    """Attach `image_path` to the activity via the edit page's Media file input."""
+_PHOTO_CDN = "dgtzuqphqg23d.cloudfront.net"  # Strava serves activity photos from here
+
+
+def _delete_existing_photos(page) -> int:
+    """Remove all existing photos on the open edit page: click a photo → its
+    'Delete' button → repeat. Caller saves. Returns how many were removed."""
+    deleted = 0
+    for _ in range(12):
+        photos = page.locator(f'img[src*="{_PHOTO_CDN}"]')
+        if photos.count() == 0:
+            break
+        photos.first.scroll_into_view_if_needed()
+        photos.first.click()
+        page.wait_for_timeout(900)
+        btn = page.get_by_role("button", name="Delete")
+        if not btn.count():
+            break
+        btn.first.click()
+        page.wait_for_timeout(900)
+        deleted += 1
+    return deleted
+
+
+def _upload_one(page, activity_id: int, image_path: str, replace: bool = False) -> None:
+    """Attach `image_path` to the activity via the edit page's Media file input.
+    replace=True first deletes any existing photos, so a regenerated image swaps
+    the old one instead of stacking a duplicate."""
     page.goto(
         f"https://www.strava.com/activities/{activity_id}/edit",
         wait_until="domcontentloaded", timeout=45000,
     )
     page.wait_for_timeout(3500)
+    if replace:
+        _delete_existing_photos(page)
+        page.wait_for_timeout(500)
     before = page.locator("img").count()
     page.locator("input[type=file]").first.set_input_files(image_path)
     # wait for the new media thumbnail to appear (presigned upload completes)
@@ -131,7 +159,7 @@ def _upload_one(page, activity_id: int, image_path: str) -> None:
     page.wait_for_timeout(5000)
 
 
-def upload_photos(items: list[tuple[int, str]], conn=None, channel: str | None = None) -> list[tuple[int, bool]]:
+def upload_photos(items: list[tuple[int, str]], conn=None, channel: str | None = None, replace: bool = False) -> list[tuple[int, bool]]:
     """Upload photos to Strava activities in one logged-in session.
 
     items: list of (strava_activity_id, image_path).
@@ -180,7 +208,7 @@ def upload_photos(items: list[tuple[int, str]], conn=None, channel: str | None =
                 return [(a, False) for a, _ in items]
         for activity_id, image_path in items:
             try:
-                _upload_one(page, activity_id, image_path)
+                _upload_one(page, activity_id, image_path, replace=replace)
                 logger.info("Attached photo to Strava activity %s", activity_id)
                 results.append((activity_id, True))
             except Exception as exc:  # noqa: BLE001
