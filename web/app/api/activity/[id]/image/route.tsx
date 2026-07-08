@@ -226,6 +226,20 @@ function kiteRouteColor(t: number, stops: string[]): string {
 // invariant is a specific geometry, not "camera behind takeoff": takeoff (green)
 // nearest the viewer, the approach line showing ~0.69 of its true length, the
 // landing line ~0.51, a low ~16° camera, and a tall arc. We search azimuth ×
+// Takeoff stance, on the WATER plane: draw the green→red line (moving direction) and
+// drop the peak (white) straight down onto the water. If that projection is LEFT of the
+// green→red line the rider was on the RIGHT foot; if RIGHT of the line, the LEFT foot.
+function footForward(path: number[][], airtimeS: number, traj: number[]): "L" | "R" {
+  const at = (t: number) => path.reduce((a, p) => (Math.abs(p[0] - t) < Math.abs(a[0] - t) ? p : a), path[0]);
+  const T = at(0), R = at(airtimeS);
+  let pk = 0; for (let i = 1; i < traj.length; i++) if (traj[i] > traj[pk]) pk = i;
+  const W = at((pk / Math.max(1, traj.length - 1)) * airtimeS);   // peak's ground point
+  const c = Math.cos((T[1] * Math.PI) / 180);
+  const Dx = (R[2] - T[2]) * c, Dy = R[1] - T[1];       // green → red (direction of travel)
+  const Wx = (W[2] - T[2]) * c, Wy = W[1] - T[1];       // green → peak-projection
+  return Dx * Wy - Dy * Wx > 0 ? "R" : "L";             // cross>0: peak left of line → right foot
+}
+
 // elevation on the upper hemisphere (camera always above the water) and pick the
 // view best matching those targets — reproducing how the user frames jumps.
 function renderJumpArcSvg(
@@ -277,71 +291,68 @@ function renderJumpArcSvg(
     return { camDir, right, up: cross(right, f) };
   };
   const pW = (w: number[], b: Basis) => { const d = [w[0] - tgt[0], w[1] - tgt[1], w[2] - tgt[2]]; return { sx: dot(d, b.right), sy: dot(d, b.up), depth: dot(d, b.camDir) }; };
-  const len2 = (ps: { sx: number; sy: number }[]) => { let s = 0; for (let i = 1; i < ps.length; i++) s += Math.hypot(ps[i].sx - ps[i - 1].sx, ps[i].sy - ps[i - 1].sy); return s; };
-  const len3 = (ws: number[][]) => { let s = 0; for (let i = 1; i < ws.length; i++) s += Math.hypot(ws[i][0] - ws[i - 1][0], ws[i][1] - ws[i - 1][1], ws[i][2] - ws[i - 1][2]); return s; };
 
-  // viewpoint search: match the user's measured framing invariants
-  const appW = samples.slice(0, iT + 1).map((p) => p.w);
-  const runW = samples.slice(iL).map((p) => p.w);
-  const trueA = Math.max(1e-6, len3(appW)), trueR = Math.max(1e-6, len3(runW));
-  // `best` keeps the takeoff-left / landing-right reading (start left, land right,
-  // downwind run-out curving off to the right); `bestAny` is the fallback if no
-  // green-nearest view can also put takeoff on the left.
-  let best: { A: number; E: number; score: number } | null = null;
-  let bestAny: { A: number; E: number; score: number } | null = null;
-  for (let Ad = 0; Ad < 360; Ad += 6) {
+  // Calibration 1 — the green→red baseline (takeoff→landing) must land at the SAME
+  // place on the viewer plane for every jump. Fixed elevation; pick the azimuth that
+  // puts that line at the reference screen angle, with takeoff (green) nearest.
+  const EL = (13 * Math.PI) / 180;
+  const TARGET_GR_ANGLE = (40.7 * Math.PI) / 180;   // green→red screen angle in the reference render
+  let bestA = 0, bestD = Infinity;
+  for (let Ad = 0; Ad < 360; Ad += 1) {
     const A = (Ad * Math.PI) / 180;
-    for (let Ed = 12; Ed <= 24; Ed += 2) {
-      const b = basis(A, (Ed * Math.PI) / 180);
-      const gd = pW(samples[iT].w, b).depth, rd = pW(samples[iL].w, b).depth;
-      if (gd <= rd) continue;                                   // green (takeoff) must be nearest
-      const visT = len2(appW.map((w) => pW(w, b))) / trueA;
-      const visL = len2(runW.map((w) => pW(w, b))) / trueR;
-      if (visT < 0.3 || visL < 0.28) continue;                  // both lines must read (no end-on)
-      const pk = pW(samples[iP].w, b), tk = pW(samples[iT].w, b), ld = pW(samples[iL].w, b);
-      const runEnd = pW(runW[runW.length - 1], b);              // end of the run-out (downwind side)
-      const fw = Math.hypot(ld.sx - tk.sx, ld.sy - tk.sy) || 1;
-      const peakRise = (pk.sy - (tk.sy + ld.sy) / 2) / fw;
-      // reward the whole flight PROGRESSING left→right: landing and the downwind
-      // run-out both clearly right of takeoff (so the landing curve reads on the right).
-      const span = Math.max(1, Math.max(ld.sx, runEnd.sx) - tk.sx);
-      const l2r = (ld.sx - tk.sx) / span + (runEnd.sx - tk.sx) / span; // both terms +ve when it flows right
-      const score = -2.2 * (visT - 0.65) ** 2 - 2.2 * (visL - 0.65) ** 2 - 0.008 * (Ed - 16) ** 2 + 0.35 * Math.min(peakRise, 1.3) + 0.3 * l2r;
-      const cand = { A, E: (Ed * Math.PI) / 180, score };
-      if (!bestAny || score > bestAny.score) bestAny = cand;
-      // hard gate: takeoff left AND the run-out ends to the right of takeoff
-      if (tk.sx < ld.sx && runEnd.sx > tk.sx && (!best || score > best.score)) best = cand;
-    }
+    const b = basis(A, EL);
+    const g = pW(samples[iT].w, b), r = pW(samples[iL].w, b);
+    if (g.depth <= r.depth) continue;               // takeoff nearest (green in front)
+    let d = Math.abs(Math.atan2(r.sy - g.sy, r.sx - g.sx) - TARGET_GR_ANGLE);
+    d = Math.min(d, 2 * Math.PI - d);
+    if (d < bestD) { bestD = d; bestA = A; }
   }
-  best = best || bestAny || { A: 0, E: (16 * Math.PI) / 180, score: 0 };
-  const B = basis(best.A + (azBiasDeg * Math.PI) / 180, best.E);
+  const B = basis(bestA + (azBiasDeg * Math.PI) / 180, EL);
   const proj = (w: number[]) => { const p = pW(w, B); return { px: p.sx, py: -p.sy }; };
+  // Calibration 2 landmarks — the curved-path midpoints (green→peak and peak→red).
+  const at = (t: number) => samples.reduce((a, p) => (Math.abs(p.t - t) < Math.abs(a.t - t) ? p : a), samples[0]).w;
+  const tPeak = samples[iP].t;
+  const upMidW = at(tPeak / 2), downMidW = at((tPeak + airtimeS) / 2);
 
   const flight = samples.map((p) => proj(p.w));
   const ground = samples.map((p) => proj([p.w[0], p.w[1], 0]));
-  // grid aligned to the flight direction (always projects obliquely, reads as a plane)
+  // Calibration 2 — scale so the two path-midpoints span the reference distance.
+  const upMidP = proj(upMidW), downMidP = proj(downMidW);
+  const midPx = Math.hypot(downMidP.px - upMidP.px, downMidP.py - upMidP.py) || 1;
+  const TARGET_MID = 20;                             // midpoint span in card px (tuned to the reference)
+
+  // Calibration 3 — the sea plane lands at the SAME place and size on every card. The
+  // grid runs along the flight direction, centered on the green→red midpoint, sized in
+  // midPx units (so it projects to a fixed parallelogram), and extended far enough
+  // along + across that the approach and run-out lines always stay on the water.
   const fd = nrm([samples[iL].w[0] - samples[iT].w[0], samples[iL].w[1] - samples[iT].w[1], 0]);
   const pd = [-fd[1], fd[0], 0];
-  const af = samples.map((p) => p.w[0] * fd[0] + p.w[1] * fd[1]);
-  const ap = samples.map((p) => p.w[0] * pd[0] + p.w[1] * pd[1]);
-  const GRID = 5, gp = 4;
-  const f0 = Math.floor((Math.min(...af) - gp) / GRID) * GRID, f1 = Math.ceil((Math.max(...af) + gp) / GRID) * GRID;
-  const p0 = Math.floor((Math.min(...ap) - gp) / GRID) * GRID, p1 = Math.ceil((Math.max(...ap) + gp) / GRID) * GRID;
+  const grMidW = [(samples[iT].w[0] + samples[iL].w[0]) / 2, (samples[iT].w[1] + samples[iL].w[1]) / 2, 0];
+  const midAf = grMidW[0] * fd[0] + grMidW[1] * fd[1], midAp = grMidW[0] * pd[0] + grMidW[1] * pd[1];
+  const CELL = 0.9 * midPx;
+  const f0 = midAf - 5.0 * midPx, f1 = midAf + 5.0 * midPx;   // along the flight (covers the lines)
+  const p0 = midAp - 3.5 * midPx, p1 = midAp + 3.5 * midPx;   // across it
   const gw = (a: number, c: number) => [a * fd[0] + c * pd[0], a * fd[1] + c * pd[1], 0];
   const gridPts: { px: number; py: number }[] = [];
-  for (let a = f0; a <= f1; a += GRID) gridPts.push(proj(gw(a, p0)), proj(gw(a, p1)));
-  for (let c = p0; c <= p1; c += GRID) gridPts.push(proj(gw(f0, c)), proj(gw(f1, c)));
+  for (let a = f0; a <= f1 + 1e-6; a += CELL) gridPts.push(proj(gw(a, p0)), proj(gw(a, p1)));
+  for (let c = p0; c <= p1 + 1e-6; c += CELL) gridPts.push(proj(gw(f0, c)), proj(gw(f1, c)));
   const seaCorners = [gw(f0, p0), gw(f1, p0), gw(f1, p1), gw(f0, p1)].map(proj);
 
-  const all = [...flight, ...ground, ...gridPts];
-  const minX = Math.min(...all.map((p) => p.px)), maxX = Math.max(...all.map((p) => p.px));
-  const minY = Math.min(...all.map((p) => p.py)), maxY = Math.max(...all.map((p) => p.py));
-  const pad = { l: 6, r: 6, t: 12, b: 6 };
-  const sc = Math.min((W - pad.l - pad.r) / Math.max(1e-6, maxX - minX), (H - pad.t - pad.b) / Math.max(1e-6, maxY - minY));
-  const fit = (p: { px: number; py: number }) => ({
-    x: pad.l + (p.px - minX) * sc + (W - pad.l - pad.r - (maxX - minX) * sc) / 2,
-    y: pad.t + (p.py - minY) * sc + (H - pad.t - pad.b - (maxY - minY) * sc) / 2,
-  });
+  // final placement — pin the green→red midpoint to a fixed spot, and hold the reference
+  // midpoint span EXCEPT zoom out when a tall arc would otherwise clip the card edges.
+  const gP = proj(samples[iT].w), rP = proj(samples[iL].w);
+  const grMid = { px: (gP.px + rP.px) / 2, py: (gP.py + rP.py) / 2 };
+  const ANCHOR = { x: W * 0.48, y: H * 0.70 };       // where the green→red midpoint sits on the card
+  const mg = { l: 7, r: 7, t: 15, b: 10 };           // card margins (top wider for the label)
+  let sc = TARGET_MID / midPx;
+  for (const p of flight.slice(iT, iL + 1)) {         // fit the jump arc (green → peak → red)
+    const dx = p.px - grMid.px, dy = p.py - grMid.py;
+    if (dx > 1e-3) sc = Math.min(sc, (W - mg.r - ANCHOR.x) / dx);
+    if (dx < -1e-3) sc = Math.min(sc, (ANCHOR.x - mg.l) / -dx);
+    if (dy > 1e-3) sc = Math.min(sc, (H - mg.b - ANCHOR.y) / dy);
+    if (dy < -1e-3) sc = Math.min(sc, (ANCHOR.y - mg.t) / -dy);
+  }
+  const fit = (p: { px: number; py: number }) => ({ x: ANCHOR.x + (p.px - grMid.px) * sc, y: ANCHOR.y + (p.py - grMid.py) * sc });
   const F = flight.map(fit), G = ground.map(fit), SC = seaCorners.map(fit);
   const toPath = (pts: { x: number; y: number }[]) => `M${pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L")}`;
   let grid = "";
@@ -554,6 +565,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // Only render when we have the REAL flight: measured heights + the GPS window.
   const hasTraj = !!(topJump?.trajectory_m?.length >= 3 && topJump?.airtime_s > 0 && topJump?.path?.length >= 3);
   const arcSvg = hasTraj ? renderJumpArcSvg(184, 118, topJump.trajectory_m, topJump.airtime_s, topJump.path, Number((data["weather"] ?? {}).windDirection), q.get("arcrot") ? parseFloat(q.get("arcrot")!) : 0) : "";
+  const jumpFoot = hasTraj ? footForward(topJump.path, topJump.airtime_s, topJump.trajectory_m) : "";
   const avgHr     = summary.averageHR > 0 ? Math.round(summary.averageHR) : null;
   const maxHr     = summary.maxHR > 0 ? Math.round(summary.maxHR) : null;
   const calories  = summary.calories > 0 ? Math.round(summary.calories) : null;
@@ -937,9 +949,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                 </div>
                 <img src={`data:image/svg+xml,${encodeURIComponent(arcSvg)}`} width={184} height={118} style={{ width: 184, height: 118 }} />
                 {(topJump.airtime_s || topJump.distance_m) && (
-                  <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
                     {topJump.airtime_s && <span style={{ display: "flex", fontSize: 11, color: "#a1a1aa" }}>{topJump.airtime_s}s air</span>}
                     {topJump.distance_m && <span style={{ display: "flex", fontSize: 11, color: "#a1a1aa" }}>{topJump.distance_m}m flight</span>}
+                    {jumpFoot && <span style={{ display: "flex", fontSize: 11, fontWeight: 700, color: jumpFoot === "R" ? "#f59e0b" : "#38bdf8" }}>{jumpFoot === "R" ? "R" : "L"} foot</span>}
                   </div>
                 )}
               </div>
