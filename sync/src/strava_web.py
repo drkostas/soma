@@ -137,12 +137,19 @@ def _delete_existing_photos(page) -> int:
 def _upload_one(page, activity_id: int, image_path: str, replace: bool = False) -> None:
     """Attach `image_path` to the activity via the edit page's Media file input.
     replace=True first deletes any existing photos, so a regenerated image swaps
-    the old one instead of stacking a duplicate."""
+    the old one instead of stacking a duplicate.
+
+    Manual-upload aware: if the activity already has a photo and we're not
+    replacing, this returns without uploading (so a photo the user attached by
+    hand is not duplicated). The caller records it as done, clearing the backlog."""
     page.goto(
         f"https://www.strava.com/activities/{activity_id}/edit",
         wait_until="domcontentloaded", timeout=45000,
     )
     page.wait_for_timeout(3500)
+    if not replace and page.locator(f'img[src*="{_PHOTO_CDN}"]').count() > 0:
+        logger.info("Activity %s already has a photo — skipping (manual upload detected)", activity_id)
+        return
     if replace:
         _delete_existing_photos(page)
         page.wait_for_timeout(500)
@@ -155,6 +162,37 @@ def _upload_one(page, activity_id: int, image_path: str, replace: bool = False) 
             break
     else:
         raise RuntimeError(f"photo did not attach for activity {activity_id}")
+    page.get_by_role("button", name="Save").first.click()
+    page.wait_for_timeout(5000)
+
+
+def set_activity_details(page, activity_id: int, title: str | None = None,
+                         description: str | None = None, image_path: str | None = None,
+                         replace_photo: bool = True) -> None:
+    """On a Strava activity's edit page: set title + description + attach an image,
+    then Save. Finishes an activity that Garmin forwarded — the FIT forward carries
+    the workout data but not the title, description, or photo."""
+    page.goto(f"https://www.strava.com/activities/{activity_id}/edit",
+              wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(3000)
+    if title:
+        t = page.locator("input#activity_name")
+        if t.count():
+            t.first.fill(title)
+    if description:
+        d = page.locator("textarea:not(#activity_private_note)")
+        if d.count():
+            d.first.fill(description)
+    if image_path and os.path.isfile(image_path):
+        if replace_photo:
+            _delete_existing_photos(page)
+            page.wait_for_timeout(500)
+        before = page.locator("img").count()
+        page.locator("input[type=file]").first.set_input_files(image_path)
+        for _ in range(25):
+            page.wait_for_timeout(1000)
+            if page.locator("img").count() > before:
+                break
     page.get_by_role("button", name="Save").first.click()
     page.wait_for_timeout(5000)
 
