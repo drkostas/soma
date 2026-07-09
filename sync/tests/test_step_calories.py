@@ -10,11 +10,11 @@ class TestComputeStepCalories:
 
     def test_10k_steps(self):
         result = compute_step_calories(10000, weight_kg=80)
-        assert 300 < result < 500  # ~0.0005 * 10000 * 80 = 400
+        assert 300 < result < 500  # ~0.000423 * 10000 * 80 = 338.4
 
     def test_exact_10k_80kg(self):
-        """10000 * 0.0005 * 80 = 400.0"""
-        assert compute_step_calories(10000, weight_kg=80) == 400.0
+        """10000 * 0.000423 * 80 = 338.4"""
+        assert compute_step_calories(10000, weight_kg=80) == 338.4
 
     def test_scales_with_steps(self):
         low = compute_step_calories(5000, weight_kg=80)
@@ -35,8 +35,8 @@ class TestComputeStepCalories:
 
     def test_rounded_to_one_decimal(self):
         result = compute_step_calories(7777, weight_kg=73)
-        # 7777 * 0.0005 * 73 = 283.8605 → 283.9
-        assert result == round(7777 * 0.0005 * 73, 1)
+        # 7777 * 0.000423 * 73 = 240.14 → 240.1
+        assert result == round(7777 * 0.000423 * 73, 1)
 
 
 class TestBootstrapTdeeBase:
