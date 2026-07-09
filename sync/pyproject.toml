@@ -24,10 +24,13 @@ dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
 ]
-# Session-based Strava web connector (photo upload). Heavy (bundled Chromium),
-# so it's only installed in the dedicated strava-photos workflow, not the main sync.
+# Session-based Strava web connector (photo upload) + the facterino bridge push.
+# Heavy (bundled Chromium), so it's only installed in the dedicated strava-photos
+# and strava-bridge workflows, not the main sync. garth authenticates the
+# facterino bridge account (strava_bridge.py); the base pipeline never imports it.
 strava-web = [
     "playwright>=1.40",
+    "garth>=0.5,<0.6",
 ]
 
 [tool.pytest.ini_options]
