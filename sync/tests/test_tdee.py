@@ -60,13 +60,11 @@ class TestComputeMacroTargets:
         assert active["carbs"] > rest["carbs"]
         assert active["calories"] > rest["calories"]
 
-    def test_deficit_capped_at_500(self):
-        """Input deficit 700 should be capped at 500."""
-        result = compute_macro_targets(
-            tdee=2300, deficit=700, weight_kg=80,
-        )
-        # With 500 cap: 2300 - 500 + 0 = 1800
-        assert result["calories"] == 1800
+    def test_deficit_capped_at_max(self):
+        """A deficit above MAX_DEFICIT (1200) is capped at MAX_DEFICIT."""
+        over = compute_macro_targets(tdee=3000, deficit=2000, weight_kg=80)
+        at_cap = compute_macro_targets(tdee=3000, deficit=MAX_DEFICIT, weight_kg=80)
+        assert over["calories"] == at_cap["calories"]
 
     def test_reds_floor_enforced(self):
         """RED-S floor: 25 kcal/kg FFM. 65kg FFM = 1625 minimum."""
@@ -182,7 +180,7 @@ class TestCarbPeriodization:
 
 class TestConstants:
     def test_max_deficit(self):
-        assert MAX_DEFICIT == 500
+        assert MAX_DEFICIT == 1200
 
     def test_reds_floor(self):
         assert REDS_FLOOR == 25

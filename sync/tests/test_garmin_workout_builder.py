@@ -89,7 +89,7 @@ def test_duration_type_time():
 # ===============================
 
 def test_pace_target_conversion():
-    """Pace target should convert sec/km to ms/km with reversed order for Garmin."""
+    """Pace target should convert sec/km to speed (m/s) for Garmin."""
     step = {
         "step_type": "interval", "duration_type": "distance", "duration_value": 1600,
         "target_type": "pace",
@@ -99,9 +99,9 @@ def test_pace_target_conversion():
     result = _build_garmin_step(1, step)
     assert result["targetType"]["workoutTargetTypeId"] == 6
     assert result["targetType"]["workoutTargetTypeKey"] == "pace.zone"
-    # Garmin: targetValueOne = SLOWER (higher number), targetValueTwo = FASTER (lower number)
-    assert result["targetValueOne"] == 269000  # slower pace in ms/km
-    assert result["targetValueTwo"] == 269000  # faster pace in ms/km
+    # Garmin stores pace as speed (m/s): One = slower pace = lower m/s, Two = faster = higher m/s
+    assert result["targetValueOne"] == 1000 / 269  # slower pace as speed (m/s)
+    assert result["targetValueTwo"] == 1000 / 269  # faster pace as speed (m/s)
 
 
 def test_pace_target_range_conversion():
@@ -113,10 +113,10 @@ def test_pace_target_range_conversion():
         "target_pace_max": 345,  # slower end (5:45/km)
     }
     result = _build_garmin_step(1, step)
-    # targetValueOne = slower pace (345 sec/km = 345000 ms/km)
-    assert result["targetValueOne"] == 345000
-    # targetValueTwo = faster pace (322 sec/km = 322000 ms/km)
-    assert result["targetValueTwo"] == 322000
+    # targetValueOne = slower pace (345 sec/km) as speed m/s
+    assert result["targetValueOne"] == 1000 / 345
+    # targetValueTwo = faster pace (322 sec/km) as speed m/s
+    assert result["targetValueTwo"] == 1000 / 322
 
 
 def test_open_target():
@@ -137,7 +137,7 @@ def test_open_target():
 # ===============================
 
 def test_simple_easy_run():
-    """Converting a simple easy run (single step with pace target)."""
+    """Converting a simple easy run (single HR-zone step, no pace target)."""
     steps = build_easy_run_steps(8.0, 322, 345)
     workout = steps_to_garmin_workout("Week 1 Mon: Easy Run", steps)
 
@@ -156,12 +156,14 @@ def test_simple_easy_run():
     step = garmin_steps[0]
     assert step["type"] == "ExecutableStepDTO"
     assert step["stepOrder"] == 1
-    assert step["stepType"]["stepTypeKey"] == "interval"
+    assert step["stepType"]["stepTypeKey"] == "warmup"
     assert step["endCondition"]["conditionTypeKey"] == "distance"
     assert step["endConditionValue"] == 8000  # 8 km in meters
-    assert step["targetType"]["workoutTargetTypeKey"] == "pace.zone"
-    assert step["targetValueOne"] == 345000  # slower pace ms/km
-    assert step["targetValueTwo"] == 322000  # faster pace ms/km
+    # easy runs are HR-zone only (zone 2), no pace target
+    assert step["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
+    assert step["zoneNumber"] == 2
+    assert step["targetValueOne"] is None
+    assert step["targetValueTwo"] is None
     assert "Easy 8.0 km" in step["description"]
 
 
@@ -174,40 +176,42 @@ def test_cruise_intervals_conversion():
     workout = steps_to_garmin_workout("Week 1 Tue: Cruise Intervals", steps)
 
     garmin_steps = workout["workoutSegments"][0]["workoutSteps"]
-    # warmup + 4 intervals + 3 recoveries + cooldown = 9 steps
-    assert len(garmin_steps) == 9
+    # warmup + lap-button + repeat group (4×[interval + recovery]) + cooldown = 4 top-level
+    assert len(garmin_steps) == 4
 
-    # Warmup
+    # Warmup — HR zone 2
     wu = garmin_steps[0]
     assert wu["stepType"]["stepTypeKey"] == "warmup"
     assert wu["endCondition"]["conditionTypeKey"] == "distance"
     assert wu["endConditionValue"] == 2000
-    assert wu["targetType"]["workoutTargetTypeKey"] == "pace.zone"
-    assert wu["targetValueOne"] == 345000
-    assert wu["targetValueTwo"] == 322000
+    assert wu["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
+    assert wu["zoneNumber"] == 2
 
-    # First interval at T-pace
-    i1 = garmin_steps[1]
-    assert i1["stepType"]["stepTypeKey"] == "interval"
-    assert i1["endConditionValue"] == 1600
-    assert i1["targetValueOne"] == 269000
-    assert i1["targetValueTwo"] == 269000
+    # Lap-button rest to start the intervals
+    lap = garmin_steps[1]
+    assert lap["stepType"]["stepTypeKey"] == "rest"
+    assert lap["targetType"]["workoutTargetTypeKey"] == "no.target"
 
-    # First recovery
-    r1 = garmin_steps[2]
-    assert r1["stepType"]["stepTypeKey"] == "recovery"
-    assert r1["endCondition"]["conditionTypeKey"] == "time"
-    assert r1["endConditionValue"] == 90
-    assert r1["targetType"]["workoutTargetTypeKey"] == "no.target"
+    # Repeat group of the 4 intervals (each followed by a recovery jog)
+    grp = garmin_steps[2]
+    assert grp["type"] == "RepeatGroupDTO"
+    assert grp["numberOfIterations"] == 4
+    interval, recovery = grp["workoutSteps"][0], grp["workoutSteps"][1]
+    assert interval["stepType"]["stepTypeKey"] == "interval"
+    assert interval["endConditionValue"] == 1600
+    assert interval["targetType"]["workoutTargetTypeKey"] == "pace.zone"
+    # T-pace 269 sec/km ± PACE_RANGE(7) → speed m/s (slower first, faster second)
+    assert interval["targetValueOne"] == 1000 / 276
+    assert interval["targetValueTwo"] == 1000 / 262
+    assert recovery["stepType"]["stepTypeKey"] == "recovery"
+    assert recovery["endConditionValue"] == 90
+    assert recovery["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
 
-    # Cooldown (last step)
+    # Cooldown (last step) — HR zone 2
     cd = garmin_steps[-1]
     assert cd["stepType"]["stepTypeKey"] == "cooldown"
     assert cd["endConditionValue"] == 2000
-
-    # Step ordering
-    for i, step in enumerate(garmin_steps):
-        assert step["stepOrder"] == i + 1
+    assert cd["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
 
 
 def test_rest_day_none_steps():
