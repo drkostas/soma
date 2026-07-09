@@ -136,8 +136,8 @@ def compute_step_calories(step_goal: int, weight_kg: float) -> float:
 
     Uses step_goal (not actual steps) since this is for planning.
 
-    Formula: step_goal × 0.0005 × weight_kg
-    e.g. 10 000 steps × 0.0005 × 80 kg = 400 kcal
+    Formula: step_goal × 0.000423 × weight_kg
+    e.g. 10 000 steps × 0.000423 × 80 kg = 338.4 kcal
 
     Args:
         step_goal: Daily step target (non-negative).

@@ -15,9 +15,9 @@ class TestComputeDeficitFromGoal:
         assert result["fat_to_lose_kg"] > 0
         assert result["timeline_weeks"] > 0
 
-    def test_caps_at_500(self):
+    def test_caps_at_max(self):
         result = compute_deficit_from_goal(80, 25, 10, date(2026, 4, 1), date(2026, 3, 13))
-        assert result["daily_deficit"] == 500
+        assert result["daily_deficit"] == 1200
         assert result["safety"] == "red"
 
     def test_at_goal_zero_deficit(self):
@@ -51,7 +51,7 @@ class TestComputeDeficitFromGoal:
     def test_single_day_timeline(self):
         """Edge case: target date is tomorrow."""
         result = compute_deficit_from_goal(80, 17, 12, date(2026, 3, 14), date(2026, 3, 13))
-        assert result["daily_deficit"] == 500  # capped
+        assert result["daily_deficit"] == 1200  # capped
         assert result["safety"] == "red"
 
     def test_default_today(self):
