@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import io
+import json
 import logging
 import os
 import re
@@ -107,6 +108,41 @@ def _record(conn, gid: int, sid: int) -> None:
     conn.commit()
 
 
+def _load_kite_payload(conn, gid: int) -> dict | None:
+    """Stored kite_jumps payload for a Garmin activity, or None."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT raw_json FROM garmin_activity_raw "
+            "WHERE activity_id = %s AND endpoint_name = 'kite_jumps'",
+            (gid,),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    if not row or row[0] is None:
+        return None
+    return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+
+
+def _kite_finalize_fields(conn, g, gid: int, summary: dict) -> tuple[str | None, str | None]:
+    """Title + description for a kite activity, built from its per-jump data
+    (extracting the jumps on demand if they are missing, so the Strava image and
+    description are never stuck at 0 jumps). Returns (None, None) for non-kite
+    activities so the caller keeps the default Garmin name/description."""
+    type_key = ((summary.get("activityType") or {}).get("typeKey") or "").lower()
+    if "kite" not in type_key:
+        return None, None
+    payload = _load_kite_payload(conn, gid)
+    if payload is None:
+        from backfill_kite_jumps import store_kite_jumps_for_activity
+        try:
+            payload = store_kite_jumps_for_activity(conn, g, gid, summary.get("startTimeGMT"))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("kite jump extraction failed for %s during finalize: %s", gid, exc)
+            return None, None
+    from garmin_push import kite_activity_name, generate_kite_strava_description
+    return kite_activity_name(summary, payload), generate_kite_strava_description(summary, payload)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     conn = psycopg2.connect(DATABASE_URL)
@@ -175,7 +211,12 @@ def main() -> None:
             gid = a["activityId"]
             name = a.get("activityName") or "Workout"
             try:
-                desc = (g.get_activity(gid) or {}).get("description") or ""
+                # Kite sessions get a jump-aware title + description (and jumps are
+                # extracted here if missing, so the image below shows real jumps).
+                kite_title, kite_desc = _kite_finalize_fields(conn, g, gid, a)
+                if kite_title:
+                    name = kite_title
+                desc = kite_desc if kite_desc is not None else ((g.get_activity(gid) or {}).get("description") or "")
                 img = _image_for(gid, conn)
                 fit = _fit_for(g, gid)
                 before = own()
