@@ -1,0 +1,185 @@
+{
+ "daily": {
+  "heart_rates": {
+   "url": "/wellness-service/wellness/dailyHeartRate/TESTUSER",
+   "params": {
+    "date": "2026-07-13"
+   }
+  },
+  "sleep_data": {
+   "url": "/wellness-service/wellness/dailySleepData/TESTUSER",
+   "params": {
+    "date": "2026-07-13",
+    "nonSleepBufferMinutes": 60
+   }
+  },
+  "stress_data": {
+   "url": "/wellness-service/wellness/dailyStress/2026-07-13",
+   "params": null
+  },
+  "hrv_data": {
+   "url": "/hrv-service/hrv/2026-07-13",
+   "params": null
+  },
+  "spo2_data": {
+   "url": "/wellness-service/wellness/daily/spo2/2026-07-13",
+   "params": null
+  },
+  "respiration_data": {
+   "url": "/wellness-service/wellness/daily/respiration/2026-07-13",
+   "params": null
+  },
+  "steps_data": {
+   "url": "/wellness-service/wellness/dailySummaryChart/TESTUSER",
+   "params": {
+    "date": "2026-07-13"
+   }
+  },
+  "floors": {
+   "url": "/wellness-service/wellness/floorsChartData/daily/2026-07-13",
+   "params": null
+  },
+  "hydration_data": {
+   "url": "/usersummary-service/usersummary/hydration/daily/2026-07-13",
+   "params": null
+  },
+  "blood_pressure": {
+   "url": "/bloodpressure-service/bloodpressure/range/2026-07-13/2026-07-13",
+   "params": {
+    "includeAll": true
+   }
+  },
+  "training_readiness": {
+   "url": "/metrics-service/metrics/trainingreadiness/2026-07-13",
+   "params": null
+  },
+  "training_status": {
+   "url": "/metrics-service/metrics/trainingstatus/aggregated/2026-07-13",
+   "params": null
+  },
+  "max_metrics": {
+   "url": "/metrics-service/metrics/maxmet/daily/2026-07-13/2026-07-13",
+   "params": null
+  },
+  "race_predictions": {
+   "url": "/metrics-service/metrics/racepredictions/latest/TESTUSER",
+   "params": null
+  },
+  "endurance_score": {
+   "url": "/metrics-service/metrics/endurancescore",
+   "params": {
+    "calendarDate": "2026-07-13"
+   }
+  },
+  "hill_score": {
+   "url": "/metrics-service/metrics/hillscore",
+   "params": {
+    "calendarDate": "2026-07-13"
+   }
+  },
+  "fitnessage_data": {
+   "url": "/fitnessage-service/fitnessage/2026-07-13",
+   "params": null
+  },
+  "intensity_minutes_data": {
+   "url": "/wellness-service/wellness/daily/im/2026-07-13",
+   "params": null
+  },
+  "daily_weigh_ins": {
+   "url": "/weight-service/weight/dayview/2026-07-13",
+   "params": {
+    "includeAll": true
+   }
+  },
+  "rhr_day": {
+   "url": "/userstats-service/wellness/daily/TESTUSER",
+   "params": {
+    "fromDate": "2026-07-13",
+    "untilDate": "2026-07-13",
+    "metricId": 60
+   }
+  },
+  "body_battery_events": {
+   "url": "/wellness-service/wellness/bodyBattery/events/2026-07-13",
+   "params": null
+  },
+  "user_summary": {
+   "url": "/usersummary-service/usersummary/daily/TESTUSER",
+   "params": {
+    "calendarDate": "2026-07-13"
+   }
+  }
+ },
+ "range": {
+  "body_battery": {
+   "url": "/wellness-service/wellness/bodyBattery/reports/daily",
+   "params": {
+    "startDate": "2026-07-13",
+    "endDate": "2026-07-13"
+   }
+  },
+  "weigh_ins": {
+   "url": "/weight-service/weight/range/2026-07-13/2026-07-13",
+   "params": {
+    "includeAll": true
+   }
+  },
+  "body_composition": {
+   "url": "/weight-service/weight/dateRange",
+   "params": {
+    "startDate": "2026-07-13",
+    "endDate": "2026-07-13"
+   }
+  }
+ },
+ "detail": {
+  "details": {
+   "url": "/activity-service/activity/123456789/details",
+   "params": {
+    "maxChartSize": "2000",
+    "maxPolylineSize": "4000"
+   }
+  },
+  "exercise_sets": {
+   "url": "/activity-service/activity/123456789/exerciseSets",
+   "params": null
+  },
+  "splits": {
+   "url": "/activity-service/activity/123456789/splits",
+   "params": null
+  },
+  "typed_splits": {
+   "url": "/activity-service/activity/123456789/typedsplits",
+   "params": null
+  },
+  "split_summaries": {
+   "url": "/activity-service/activity/123456789/split_summaries",
+   "params": null
+  },
+  "hr_zones": {
+   "url": "/activity-service/activity/123456789/hrTimeInZones",
+   "params": null
+  },
+  "weather": {
+   "url": "/activity-service/activity/123456789/weather",
+   "params": null
+  },
+  "gear": {
+   "url": "/gear-service/gear/filterGear",
+   "params": {
+    "activityId": "123456789"
+   }
+  }
+ },
+ "discovery": {
+  "activities_list": {
+   "url": "/activitylist-service/activities/search/activities",
+   "params": {
+    "startDate": "2026-07-13",
+    "start": "0",
+    "limit": "20",
+    "endDate": "2026-07-13"
+   }
+  }
+ }
+}
