@@ -75,7 +75,7 @@ export async function getStaleDates(sql: QueryFn, maxLookback = 14, now: Date = 
                 THEN jsonb_array_length(raw_json->'heartRateValues') ELSE 0 END AS pts
     FROM garmin_raw_data
     WHERE endpoint_name = 'heart_rates'
-      AND date >= CURRENT_DATE - ${maxLookback}
+      AND date >= CURRENT_DATE - ${maxLookback}::int
       AND date < CURRENT_DATE
     ORDER BY date DESC`;
   let foundComplete = false;
