@@ -1,3 +1,6 @@
 {
-  "buildCommand": "next build --webpack"
+  "buildCommand": "next build --webpack",
+  "crons": [
+    { "path": "/api/cron/garmin-ingest", "schedule": "0 5 * * *" }
+  ]
 }
