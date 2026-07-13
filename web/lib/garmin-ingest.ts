@@ -16,7 +16,10 @@ import {
 } from "./garmin-endpoints";
 
 const MIN_COMPLETE_HR_POINTS = 650;
-const PROFILE_URL = "/userprofile-service/userprofile/profile";
+// DI-token API profile path (returns displayName). garth's web API uses
+// /userprofile/profile, but the DI/native-app token 404s there — socialProfile
+// is the DI-compatible path (same one garmin-auth's own refresh() uses).
+const PROFILE_URL = "/userprofile-service/socialProfile";
 
 /** Today's date (YYYY-MM-DD) in America/New_York — mirrors config.today_nyc. */
 export function todayNyc(now: Date = new Date()): string {
