@@ -967,8 +967,9 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
                     cur.execute("""
                         SELECT DISTINCT ON (g.activity_id)
                                g.activity_id,
-                               COALESCE(g.raw_json->>'activityName', g.raw_json->>'name', 'Run') as name,
-                               g.raw_json->>'startTimeGMT' as start_time
+                               COALESCE(g.raw_json->>'activityName', g.raw_json->>'name', 'Activity') as name,
+                               g.raw_json->>'startTimeGMT' as start_time,
+                               g.raw_json->'activityType'->>'typeKey' as type_key
                         FROM garmin_activity_raw g
                         WHERE EXISTS (
                             SELECT 1 FROM activity_sync_log img
@@ -988,13 +989,15 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
                     """)
                     run_rows = cur.fetchall()
 
-            for activity_id, name, start_time in run_rows:
-                run_date = str(start_time or "")[:10]
+            from telegram_notify import activity_label
+            for activity_id, name, start_time, type_key in run_rows:
+                activity_date = str(start_time or "")[:10]
+                label = activity_label(type_key)
                 ok = send_push(
-                    title="Run Synced",
-                    body=f"{name} - {run_date}",
-                    url="/running",
-                    event_type="sync_run",
+                    title=f"{label} Synced",
+                    body=f"{name} - {activity_date}",
+                    url="/running" if label == "Run" else "/activities",
+                    event_type="sync_run",  # the single activity-sync preference
                 )
                 if ok > 0:
                     with get_connection() as conn:

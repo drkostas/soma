@@ -151,6 +151,38 @@ def activity_emoji(activity_type: str | None) -> str:
     return "🏅"
 
 
+# Human label per Garmin activity type, for notification titles ("Kiteboarding
+# Synced"). Substring match; specific keys before generic ones.
+_ACTIVITY_LABEL: list[tuple[str, str]] = [
+    ("kite", "Kiteboarding"),
+    ("wind_surf", "Windsurf"),
+    ("surf", "Surf"),
+    ("trail", "Trail Run"),
+    ("run", "Run"),
+    ("cycl", "Ride"),
+    ("bik", "Ride"),
+    ("bmx", "Ride"),
+    ("walk", "Walk"),
+    ("hik", "Hike"),
+    ("swim", "Swim"),
+    ("ski", "Ski"),
+    ("snowboard", "Snowboard"),
+    ("row", "Row"),
+    ("strength", "Strength"),
+    ("yoga", "Yoga"),
+]
+
+
+def activity_label(activity_type: str | None) -> str:
+    """Human label for a Garmin activity typeKey (e.g. 'Kiteboarding'). Falls back
+    to a generic 'Activity'."""
+    key = (activity_type or "").lower()
+    for needle, label in _ACTIVITY_LABEL:
+        if needle in key:
+            return label
+    return "Activity"
+
+
 def send_activity_image(
     garmin_activity_id: str | int,
     title: str,

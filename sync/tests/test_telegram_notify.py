@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from telegram_notify import activity_emoji  # noqa: E402
+from telegram_notify import activity_emoji, activity_label  # noqa: E402
 
 
 class TestActivityEmoji:
@@ -35,3 +35,23 @@ class TestActivityEmoji:
         assert activity_emoji("some_new_sport") == "🏅"
         assert activity_emoji("") == "🏅"
         assert activity_emoji(None) == "🏅"
+
+
+class TestActivityLabel:
+    """Guards the push-notification title ('Run Synced' was hardcoded for all types)."""
+
+    def test_kite_label(self) -> None:
+        assert activity_label("kiteboarding_v2") == "Kiteboarding"
+        assert activity_label("kiteboarding_v2") != "Run"
+
+    def test_common_labels(self) -> None:
+        assert activity_label("running") == "Run"
+        assert activity_label("treadmill_running") == "Run"
+        assert activity_label("cycling") == "Ride"
+        assert activity_label("walking") == "Walk"
+        assert activity_label("hiking") == "Hike"
+        assert activity_label("lap_swimming") == "Swim"
+
+    def test_unknown_falls_back_to_activity(self) -> None:
+        assert activity_label("some_new_sport") == "Activity"
+        assert activity_label(None) == "Activity"
