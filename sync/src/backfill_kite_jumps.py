@@ -95,9 +95,24 @@ def store_kite_jumps_for_activity(conn, garmin, activity_id, start_gmt: str | No
             shutil.rmtree(fit_dir, ignore_errors=True)
 
 
+def _activities_with_jumps(conn) -> set[int]:
+    """Activity ids that already have a stored kite_jumps payload."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT activity_id FROM garmin_activity_raw WHERE endpoint_name = 'kite_jumps'"
+        )
+        return {int(r[0]) for r in cur.fetchall()}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", type=int, help="Backfill a single activity id")
+    ap.add_argument(
+        "--missing-only",
+        action="store_true",
+        help="Only process kite sessions that have no kite_jumps row yet (cheap, "
+        "idempotent — safe to run on a schedule to self-heal gaps).",
+    )
     args = ap.parse_args()
 
     conn = psycopg2.connect(DB_URL)
@@ -107,6 +122,9 @@ def main():
     activities = _kite_activities(conn)
     if args.only:
         activities = [a for a in activities if int(a[0]) == args.only]
+    if args.missing_only:
+        have = _activities_with_jumps(conn)
+        activities = [a for a in activities if int(a[0]) not in have]
 
     print(f"Backfilling {len(activities)} kite activities")
     done = jumps_total = 0
