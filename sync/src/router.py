@@ -185,13 +185,15 @@ def execute_routes(
                     logger.warning("Push not configured, skipping rule %s", rule_id)
                     continue
                 if source_platform == "garmin":
-                    activity_name = workout.get("name", workout.get("activityName", "Run"))
-                    run_date = str(workout.get("date", workout.get("startTimeLocal", "")[:10]))
+                    from telegram_notify import activity_label
+                    activity_name = workout.get("name") or workout.get("activityName") or "Activity"
+                    activity_date = str(workout.get("date", workout.get("startTimeLocal", "")[:10]))
+                    label = activity_label(activity_type)
                     ok = send_push(
-                        title="Run Synced",
-                        body=f"{activity_name} - {run_date}",
-                        url="/running",
-                        event_type="sync_run",
+                        title=f"{label} Synced",
+                        body=f"{activity_name} - {activity_date}",
+                        url="/running" if label == "Run" else "/activities",
+                        event_type="sync_run",  # the single activity-sync preference
                     )
                 else:
                     ok = send_push(
