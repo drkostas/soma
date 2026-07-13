@@ -119,8 +119,46 @@ def send_workout_image(hevy_id: str, title: str, workout_date: str) -> bool:
     return send_image(image_bytes, caption=caption, filename=f"{hevy_id}.png")
 
 
-def send_run_image(garmin_activity_id: str | int, title: str, run_date: str) -> bool:
-    """Fetch a run summary image from the local Next.js server and send it via Telegram."""
+# Emoji + short label per Garmin activity type (typeKey). Matched by substring so
+# variants like "kiteboarding_v2" or "treadmill_running" resolve correctly. The
+# first matching entry wins, so order specific keys before generic ones.
+_ACTIVITY_EMOJI: list[tuple[str, str]] = [
+    ("kite", "🪁"),
+    ("wind_surf", "🏄"),
+    ("surf", "🏄"),
+    ("run", "🏃"),
+    ("trail", "🏃"),
+    ("cycl", "🚴"),
+    ("bik", "🚴"),
+    ("bmx", "🚴"),
+    ("walk", "🚶"),
+    ("hik", "🥾"),
+    ("swim", "🏊"),
+    ("ski", "⛷️"),
+    ("snowboard", "🏂"),
+    ("row", "🚣"),
+    ("strength", "🏋️"),
+    ("yoga", "🧘"),
+]
+
+
+def activity_emoji(activity_type: str | None) -> str:
+    """Emoji for a Garmin activity typeKey. Falls back to a generic medal."""
+    key = (activity_type or "").lower()
+    for needle, emoji in _ACTIVITY_EMOJI:
+        if needle in key:
+            return emoji
+    return "🏅"
+
+
+def send_activity_image(
+    garmin_activity_id: str | int,
+    title: str,
+    activity_date: str,
+    activity_type: str | None = None,
+) -> bool:
+    """Fetch an activity summary image from the Next.js server and send it via
+    Telegram, captioned with the emoji for its activity type (kite/run/bike/…)."""
     if not is_configured():
         return False
 
@@ -129,14 +167,14 @@ def send_run_image(garmin_activity_id: str | int, title: str, run_date: str) -> 
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=30) as resp:
             if resp.status != 200:
-                print(f"    Telegram: run image fetch failed (HTTP {resp.status})")
+                print(f"    Telegram: activity image fetch failed (HTTP {resp.status})")
                 return False
             image_bytes = resp.read()
     except Exception as e:
-        print(f"    Telegram: run image fetch failed ({e})")
+        print(f"    Telegram: activity image fetch failed ({e})")
         return False
 
-    caption = f"🏃 {title} — {run_date}"
-    return send_image(image_bytes, caption=caption, filename=f"run_{garmin_activity_id}.png")
+    caption = f"{activity_emoji(activity_type)} {title} — {activity_date}"
+    return send_image(image_bytes, caption=caption, filename=f"activity_{garmin_activity_id}.png")
 
 

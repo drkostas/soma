@@ -731,6 +731,7 @@ def _route_garmin_activities(strava_client=None, garmin_client=None) -> int:
         workout = {
             "activity_id": str(activity_id),
             "source_id": str(activity_id),
+            "name": activity_name,
         }
 
         with get_connection() as conn:
