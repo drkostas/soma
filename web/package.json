@@ -17,6 +17,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "garmin-auth": "^0.1.0",
     "lucide-react": "^0.575.0",
     "macro-engine-core": "^0.1.1",
     "maplibre-gl": "^5.19.0",
@@ -24,6 +25,7 @@
     "nanoid": "^5.1.6",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
+    "pg": "^8.22.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-body-highlighter": "^2.0.5",
@@ -36,6 +38,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/spotify-web-playback-sdk": "^0.1.19",
