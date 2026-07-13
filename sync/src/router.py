@@ -127,15 +127,16 @@ def execute_routes(
                     "error": push_result.get("error"),
                 })
             elif destination == "telegram":
-                from telegram_notify import send_workout_image, send_run_image, is_configured
+                from telegram_notify import send_workout_image, send_activity_image, is_configured
                 if not is_configured():
                     logger.warning("Telegram not configured, skipping rule %s", rule_id)
                     continue
                 if source_platform == "garmin":
-                    ok = send_run_image(
+                    ok = send_activity_image(
                         garmin_activity_id=source_id,
-                        title=workout.get("name", workout.get("activityName", "Run")),
-                        run_date=str(workout.get("date", workout.get("startTimeLocal", "")[:10])),
+                        title=workout.get("name") or workout.get("activityName") or "Activity",
+                        activity_date=str(workout.get("date", workout.get("startTimeLocal", "")[:10])),
+                        activity_type=activity_type,
                     )
                 else:
                     ok = send_workout_image(
