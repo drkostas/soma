@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findMissed, lookbackStart, type GarminActivitySummary } from "./strava-bridge";
+import { findMissed, lookbackStart, type GarminActivitySummary } from "../src/dedup";
 
 const act = (id: number, name = "Run"): GarminActivitySummary => ({ activityId: id, activityName: name });
 
