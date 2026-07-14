@@ -9,6 +9,18 @@ import type { QueryFn } from "./db";
 
 export type KnownTimestamps = Record<string, string>;
 
+/**
+ * Hevy API key: DB first (platform_credentials for 'hevy'), then env fallback.
+ * Mirrors config.get_hevy_api_key.
+ */
+export async function getHevyApiKey(sql: QueryFn): Promise<string | null> {
+  const rows = await sql`SELECT credentials FROM platform_credentials WHERE platform = 'hevy'`;
+  const creds = rows[0]?.credentials;
+  const parsed = typeof creds === "string" ? JSON.parse(creds) : creds;
+  if (parsed?.api_key) return parsed.api_key as string;
+  return process.env.HEVY_API_KEY ?? null;
+}
+
 export interface PagePartition {
   /** Workouts new or changed since the DB copy (wid + full workout). */
   toSave: Array<{ wid: string; updatedAt: string; workout: any }>;
