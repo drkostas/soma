@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { HevyClient } from "hevy2garmin";
 import { getDb } from "@/lib/db";
-import { syncAllWorkouts } from "@/lib/hevy-ingest";
+import { syncAllWorkouts, getHevyApiKey } from "@/lib/hevy-ingest";
 import { enrichNewWorkouts } from "@/lib/hevy-enrich-run";
 
 // HevyClient + enrichment need Node APIs (fetch/pg via garmin-auth downstream).
@@ -22,11 +22,10 @@ export async function GET(req: Request): Promise<Response> {
   if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const apiKey = process.env.HEVY_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "HEVY_API_KEY not set" }, { status: 500 });
-
   const sql = getDb();
   try {
+    const apiKey = await getHevyApiKey(sql);
+    if (!apiKey) return NextResponse.json({ error: "Hevy API key not configured" }, { status: 500 });
     const client = new HevyClient(apiKey);
     const pull = await syncAllWorkouts(client, sql);
     const enrich = await enrichNewWorkouts(sql);
