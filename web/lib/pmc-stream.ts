@@ -146,12 +146,35 @@ export async function backfillLoadFromHistory(sql: QueryFn): Promise<number> {
   return inserted;
 }
 
+// Default PMC time constants (Banister classic). The training engine overrides
+// these with the personally-fitted tau when a Banister fit exists.
+export const DEFAULT_TAU_CTL = 42;
+export const DEFAULT_TAU_ATL = 7;
+
+/**
+ * Resolve the PMC time constants the way the Python runner does: after a
+ * Banister fit, PMC is recomputed with the personal (tau1, tau2) when tau1
+ * differs from the default by more than 0.5; otherwise the defaults stand.
+ * Reads the latest banister_params row (written by the Banister fit — Python's
+ * during coexistence, TS's post-cutover). Falls back to defaults if none.
+ */
+export async function getPmcTau(sql: QueryFn): Promise<{ tauCtl: number; tauAtl: number }> {
+  const rows = await sql`
+    SELECT tau1, tau2 FROM banister_params ORDER BY fitted_at DESC LIMIT 1`;
+  if (!rows.length) return { tauCtl: DEFAULT_TAU_CTL, tauAtl: DEFAULT_TAU_ATL };
+  const tau1 = Number(rows[0].tau1);
+  const tau2 = Number(rows[0].tau2);
+  if (Math.abs(tau1 - DEFAULT_TAU_CTL) > 0.5) return { tauCtl: tau1, tauAtl: tau2 };
+  return { tauCtl: DEFAULT_TAU_CTL, tauAtl: DEFAULT_TAU_ATL };
+}
+
 /**
  * Sum training_load per day (cross-modal scaled), fill rest-day gaps with 0,
  * compute PMC, and upsert pmc_daily. Port of compute_and_store_pmc. DB-only.
- * Returns the PMC entries written.
+ * Returns the PMC entries written. tau defaults to the classic 42/7; pass the
+ * personally-fitted tau (see getPmcTau) to match the training engine's output.
  */
-export async function computeAndStorePmc(sql: QueryFn, tauCtl = 42, tauAtl = 7): Promise<PmcEntry[]> {
+export async function computeAndStorePmc(sql: QueryFn, tauCtl = DEFAULT_TAU_CTL, tauAtl = DEFAULT_TAU_ATL): Promise<PmcEntry[]> {
   const rows = await sql`
     SELECT activity_date::text AS activity_date, source, load_value
     FROM training_load
