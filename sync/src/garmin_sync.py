@@ -158,10 +158,9 @@ def sync_activity_details(client, activity_id: int) -> int:
                     count += 1
             except Exception as e:
                 print(f"    Warning: activity {activity_id}/{endpoint_name} failed: {e}")
-        try:
-            _maybe_extract_kite_jumps(conn, client, activity_id)
-        except Exception as e:
-            print(f"    Warning: kite extraction for {activity_id} failed: {e}")
+        # Kite jump extraction is now owned by the TS garmin-ingest cron
+        # (web/lib/kite-jumps.ts extractKiteJumpsForActivity). Disabled here so
+        # the two don't both download the FIT + overwrite kite_jumps (#187).
     return count
 
 
