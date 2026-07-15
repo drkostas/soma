@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/plan-push",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/garmin-enrich",
+      "schedule": "15 6 * * *"
     }
   ]
 }

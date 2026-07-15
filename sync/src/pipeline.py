@@ -934,13 +934,13 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
     except Exception as e:
         print(f"  Garmin routing error (non-fatal): {e}")
 
-    # --- Enrich Garmin run activities (description + image upload) ---
-    print(f"\nEnriching Garmin run activities...")
-    try:
-        run_enriched = _enrich_garmin_run_activities(garmin_client=client)
-        print(f"  Enriched: {run_enriched} Garmin run activities")
-    except Exception as e:
-        print(f"  Garmin run enrichment error (non-fatal): {e}")
+    # --- Garmin run enrichment: now owned by the TS garmin-enrich cron ---
+    # The TypeScript enrichGarminRunActivities (web/lib/garmin-run-enrich.ts,
+    # invoked by /api/cron/garmin-enrich) is the single enricher during the sync
+    # cutover (#187). Running the Python enrichment here too would risk a
+    # duplicate-image race (both uploading a share image before either logs
+    # dest='garmin_image'). Disabled deliberately.
+    print(f"\nGarmin run enrichment: handled by the TS garmin-enrich cron (skipped here).")
 
     # --- Backfill Telegram notifications for runs/workouts that were missed ---
     print(f"\nBackfilling Telegram notifications...")
