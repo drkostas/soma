@@ -14,6 +14,7 @@ import {
   DAILY_ENDPOINTS, RANGE_ENDPOINTS, DISCOVERY_ENDPOINTS,
   buildRequest, type GarminRequest,
 } from "./garmin-endpoints";
+import { processDay } from "./garmin-parse-day";
 
 const MIN_COMPLETE_HR_POINTS = 650;
 // DI-token API profile path (returns displayName). garth's web API uses
@@ -146,6 +147,7 @@ export interface IngestResult {
   dates: string[];
   recordsSaved: number;
   activitiesFound: number;
+  daysParsed: number;
 }
 
 /** Top-level ingestion: auth, resolve stale dates, sync each. */
@@ -159,9 +161,14 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
   const dates = await getStaleDates(sql);
   let recordsSaved = 0;
   let activitiesFound = 0;
+  let daysParsed = 0;
   for (const date of dates) {
     recordsSaved += await syncDay(client, sql, display, date);
     activitiesFound += (await syncActivitiesForDate(client, sql, date)).length;
+    // Parse the raw we just fetched into the structured tables (daily_health_summary,
+    // sleep_detail, weight_log) — completes fetch→parse in TS.
+    try { const r = await processDay(sql, date); if (r.health) daysParsed += 1; }
+    catch (e) { console.warn(`  parse failed for ${date}: ${(e as Error).message}`); }
   }
-  return { displayName: display, dates, recordsSaved, activitiesFound };
+  return { displayName: display, dates, recordsSaved, activitiesFound, daysParsed };
 }
