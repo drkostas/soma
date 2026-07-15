@@ -3,6 +3,7 @@ import { HevyClient } from "hevy2garmin";
 import { getDb } from "@/lib/db";
 import { syncAllWorkouts, getHevyApiKey } from "@/lib/hevy-ingest";
 import { enrichNewWorkouts } from "@/lib/hevy-enrich-run";
+import { computeHevyLoads } from "@/lib/training-load";
 
 // HevyClient + enrichment need Node APIs (fetch/pg via garmin-auth downstream).
 export const runtime = "nodejs";
@@ -29,7 +30,8 @@ export async function GET(req: Request): Promise<Response> {
     const client = new HevyClient(apiKey);
     const pull = await syncAllWorkouts(client, sql);
     const enrich = await enrichNewWorkouts(sql);
-    return NextResponse.json({ ok: true, pull, enrich });
+    const loadsComputed = await computeHevyLoads(sql); // training_load for new workouts
+    return NextResponse.json({ ok: true, pull, enrich, loadsComputed });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
