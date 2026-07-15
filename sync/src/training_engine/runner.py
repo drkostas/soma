@@ -208,16 +208,16 @@ def run_training_engine(conn=None):
     if pmc:
         logger.info("Training engine: PMC computed for %d days", len(pmc))
 
-    # 2b. Try Banister fitting for personal tau values
+    # 2b. Banister fitting — kept for the current-VDOT display (banister_params),
+    # but its tau is NOT fed back into PMC. With only ~4 max-effort anchors the
+    # (tau1, tau2) are mathematically unidentifiable: every optimizer seed lands
+    # on a different tau with the identical fit quality, so a personal tau would
+    # make the CTL/ATL curve drift arbitrarily. PMC uses the classic 42/7.
     try:
-        from training_engine.banister import fit_from_db, _DEFAULT_PARAMS
-        banister_params = _run_step("Banister fitting", fit_from_db)
-        if banister_params and abs(banister_params.tau1 - _DEFAULT_PARAMS.tau1) > 0.5:
-            logger.info("Training engine: Banister fitted, re-running PMC with personal tau")
-            pmc = _run_step("PMC (personal tau)", compute_and_store_pmc,
-                            banister_params.tau1, banister_params.tau2) or pmc
+        from training_engine.banister import fit_from_db
+        _run_step("Banister fitting", fit_from_db)
     except Exception as e:
-        logger.error("Training engine: Banister fitting failed (using defaults): %s", e)
+        logger.error("Training engine: Banister fitting failed: %s", e)
 
     # 3. Today's readiness
     readiness = _run_step("readiness", compute_daily_readiness, today)
