@@ -14,6 +14,7 @@
     "@neondatabase/serverless": "^1.0.2",
     "@serwist/next": "^9.5.6",
     "@vercel/og": "^0.8.6",
+    "banister": "^0.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
