@@ -16,6 +16,7 @@ import {
 } from "./garmin-endpoints";
 import { processDay } from "./garmin-parse-day";
 import { updateFitnessTrajectory } from "./fitness-stream";
+import { computeDailyReadiness } from "./readiness-stream";
 
 const MIN_COMPLETE_HR_POINTS = 650;
 // DI-token API profile path (returns displayName). garth's web API uses
@@ -177,6 +178,7 @@ export interface IngestResult {
   activitiesFound: number;
   daysParsed: number;
   fitnessUpdated: boolean;
+  readiness: string | null;
 }
 
 /** Top-level ingestion: auth, resolve stale dates, sync each. */
@@ -207,5 +209,13 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
     fitnessUpdated = traj !== null;
   } catch (e) { console.warn(`  fitness trajectory failed: ${(e as Error).message}`); }
 
-  return { displayName: display, dates, recordsSaved, activitiesFound, daysParsed, fitnessUpdated };
+  // Daily readiness (traffic light from HRV/sleep/RHR/body-battery z-scores) for
+  // today — reads the daily_health_summary just parsed. Non-fatal on failure.
+  let readiness: string | null = null;
+  try {
+    const rd = await computeDailyReadiness(sql, todayNyc());
+    readiness = rd.traffic_light;
+  } catch (e) { console.warn(`  readiness failed: ${(e as Error).message}`); }
+
+  return { displayName: display, dates, recordsSaved, activitiesFound, daysParsed, fitnessUpdated, readiness };
 }
