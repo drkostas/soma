@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import { syncAllWorkouts, getHevyApiKey } from "@/lib/hevy-ingest";
 import { enrichNewWorkouts } from "@/lib/hevy-enrich-run";
 import { computeHevyLoads } from "@/lib/training-load";
-import { backfillLoadFromHistory, computeAndStorePmc } from "@/lib/pmc-stream";
+import { backfillLoadFromHistory, computeAndStorePmc, getPmcTau } from "@/lib/pmc-stream";
 
 // HevyClient + enrichment need Node APIs (fetch/pg via garmin-auth downstream).
 export const runtime = "nodejs";
@@ -35,9 +35,13 @@ export async function GET(req: Request): Promise<Response> {
     // Backfill Garmin activity EPOC into training_load, then recompute the PMC
     // (fitness/fatigue/form) curve the dashboard graphs. Both load sources are
     // in the table before PMC runs. Idempotent (ON CONFLICT / upsert).
+    // Use the personally-fitted Banister tau (matching the Python runner), NOT
+    // the default 42/7 — otherwise this clobbers the personal-tau PMC that the
+    // dashboard shows during coexistence with the Python sync.
     const garminLoads = await backfillLoadFromHistory(sql);
-    const pmc = await computeAndStorePmc(sql);
-    return NextResponse.json({ ok: true, pull, enrich, loadsComputed, garminLoads, pmcDays: pmc.length });
+    const { tauCtl, tauAtl } = await getPmcTau(sql);
+    const pmc = await computeAndStorePmc(sql, tauCtl, tauAtl);
+    return NextResponse.json({ ok: true, pull, enrich, loadsComputed, garminLoads, pmcDays: pmc.length, tauCtl, tauAtl });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }
