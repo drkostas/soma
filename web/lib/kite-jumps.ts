@@ -8,6 +8,9 @@
  * Heights stay in meters; speeds are exposed in knots (project convention).
  */
 import { Decoder, Stream } from "@garmin/fitsdk";
+import { unzipSync } from "fflate";
+import type { GarminClient } from "garmin-auth";
+import type { QueryFn } from "./db";
 
 const KMH_TO_KNOTS = 1 / 1.852;
 const MS_TO_KNOTS = 3.6 / 1.852;
@@ -236,4 +239,56 @@ export function buildKiteJumps(fitBytes: Uint8Array, surfrDescription: string | 
   const jumps = groupJumps(readJumpSamples(records, devIdx));
   attachJumpPaths(jumps, readTrack(records));
   return assembleJumps(jumps, surfrDescription);
+}
+
+// ---- DB + download orchestration (wiring) ----
+
+/**
+ * Find the Surfr-exported Strava activity within 15 min of this Garmin start and
+ * return its corrected description. Port of _surfr_description. (strava_raw_data
+ * is currently stale — this returns null in practice, and the native CIQ jump
+ * data is Surfr-accurate anyway.)
+ */
+export async function surfrDescription(sql: QueryFn, startGmt: string | null): Promise<string | null> {
+  if (!startGmt) return null;
+  const rows = await sql`
+    SELECT raw_json->>'description' AS description
+    FROM strava_raw_data
+    WHERE jsonb_typeof(raw_json) = 'object'
+      AND raw_json->>'name' ILIKE '%surfr%'
+      AND raw_json->>'description' ILIKE '%Top%Jump%'
+      AND abs(EXTRACT(EPOCH FROM ((raw_json->>'start_date')::timestamptz - (${startGmt} || ' UTC')::timestamptz))) < 900
+    ORDER BY abs(EXTRACT(EPOCH FROM ((raw_json->>'start_date')::timestamptz - (${startGmt} || ' UTC')::timestamptz)))
+    LIMIT 1`;
+  return rows.length ? (rows[0].description ?? null) : null;
+}
+
+/** Download the ORIGINAL activity FIT (a zip) and return the .fit bytes. */
+export async function downloadFit(client: GarminClient, activityId: number): Promise<Uint8Array> {
+  const zipBytes = await client.getBytes(`/download-service/files/activity/${activityId}`);
+  const files = unzipSync(zipBytes);
+  const fitName = Object.keys(files).find((n) => n.toLowerCase().endsWith(".fit"));
+  if (!fitName) throw new Error(`No .fit in download zip for activity ${activityId}`);
+  return files[fitName];
+}
+
+/**
+ * If the activity is a kiteboarding session, extract its per-jump data and store
+ * it under endpoint 'kite_jumps'. Port of store_kite_jumps_for_activity +
+ * _maybe_extract_kite_jumps. Returns the payload, or null if not a kite activity.
+ * DB + a Garmin FIT download. Guarded by the caller so it never breaks ingest.
+ */
+export async function extractKiteJumpsForActivity(
+  sql: QueryFn, client: GarminClient, activityId: number, typeKey: string | null, startGmt: string | null,
+): Promise<KitePayload | null> {
+  if (!typeKey || !typeKey.toLowerCase().includes("kite")) return null;
+  const fitBytes = await downloadFit(client, activityId);
+  const desc = await surfrDescription(sql, startGmt);
+  const payload = buildKiteJumps(fitBytes, desc);
+  await sql`
+    INSERT INTO garmin_activity_raw (activity_id, endpoint_name, raw_json, synced_at)
+    VALUES (${activityId}, 'kite_jumps', ${JSON.stringify(payload)}::jsonb, NOW())
+    ON CONFLICT (activity_id, endpoint_name)
+    DO UPDATE SET raw_json = EXCLUDED.raw_json, synced_at = NOW()`;
+  return payload;
 }
