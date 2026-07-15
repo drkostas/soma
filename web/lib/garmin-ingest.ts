@@ -18,6 +18,7 @@ import { processDay } from "./garmin-parse-day";
 import { updateFitnessTrajectory } from "./fitness-stream";
 import { computeDailyReadiness } from "./readiness-stream";
 import { updateBodyComp } from "./body-comp-stream";
+import { extractKiteJumpsForActivity } from "./kite-jumps";
 
 const MIN_COMPLETE_HR_POINTS = 650;
 // DI-token API profile path (returns displayName). garth's web API uses
@@ -162,6 +163,15 @@ export async function syncActivitiesForDate(client: GarminClient, sql: QueryFn, 
       if (aid) {
         await upsertActivityRaw(sql, aid, "summary", a);
         await syncActivityDetails(client, sql, aid);
+        // Kiteboarding: extract per-jump data (downloads the FIT). Non-fatal —
+        // never let a kite-extraction failure break the activity sync.
+        try {
+          const typeKey = a.activityType?.typeKey ?? null;
+          const kite = await extractKiteJumpsForActivity(sql, client, aid, typeKey, a.startTimeGMT ?? null);
+          if (kite) console.log(`  Kite: ${kite.summary.jump_count} jumps for ${aid}`);
+        } catch (e) {
+          console.warn(`  Warning: kite extraction for ${aid} failed: ${(e as Error).message}`);
+        }
         ids.push(aid);
       }
     }
