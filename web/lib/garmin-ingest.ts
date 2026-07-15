@@ -15,6 +15,7 @@ import {
   buildRequest, type GarminRequest,
 } from "./garmin-endpoints";
 import { processDay } from "./garmin-parse-day";
+import { updateFitnessTrajectory } from "./fitness-stream";
 
 const MIN_COMPLETE_HR_POINTS = 650;
 // DI-token API profile path (returns displayName). garth's web API uses
@@ -175,6 +176,7 @@ export interface IngestResult {
   recordsSaved: number;
   activitiesFound: number;
   daysParsed: number;
+  fitnessUpdated: boolean;
 }
 
 /** Top-level ingestion: auth, resolve stale dates, sync each. */
@@ -197,5 +199,13 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
     try { const r = await processDay(sql, date); if (r.health) daysParsed += 1; }
     catch (e) { console.warn(`  parse failed for ${date}: ${(e as Error).message}`); }
   }
-  return { displayName: display, dates, recordsSaved, activitiesFound, daysParsed };
+  // Fitness trajectory (VO2max / EF / decoupling / race prediction) for today —
+  // uses the raw + parsed data just ingested. Non-fatal on failure.
+  let fitnessUpdated = false;
+  try {
+    const traj = await updateFitnessTrajectory(sql, todayNyc());
+    fitnessUpdated = traj !== null;
+  } catch (e) { console.warn(`  fitness trajectory failed: ${(e as Error).message}`); }
+
+  return { displayName: display, dates, recordsSaved, activitiesFound, daysParsed, fitnessUpdated };
 }
