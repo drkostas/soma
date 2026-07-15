@@ -8,7 +8,8 @@ export const runtime = "nodejs";
 const STATUS_FILE = "/tmp/soma-dj-status.json";
 const PID_FILE = "/tmp/soma-dj-pid";
 const LOG_FILE = "/tmp/soma-dj.log";
-const DAEMON_SCRIPT = path.join(process.cwd(), "../sync/src/dj_daemon.py");
+// TS daemon (port of the Python dj_daemon.py). Run with tsx (dev/local host).
+const DAEMON_SCRIPT = path.join(process.cwd(), "scripts/dj-daemon.mts");
 
 export async function POST(req: NextRequest) {
   // Guard against double-start: if a daemon is already running, return early
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
   };
 
   const args = [
-    DAEMON_SCRIPT,
+    "tsx", DAEMON_SCRIPT,
     "--hr-rest", String(hrRest),
     "--hr-max", String(hrMax),
     "--offset", String(offset),
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
   ];
 
   const logFd = openSync(LOG_FILE, "a");
-  const proc = spawn("python3", args, {
+  const proc = spawn("npx", args, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env },
