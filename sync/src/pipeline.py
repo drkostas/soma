@@ -1071,31 +1071,13 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
     except Exception as e:
         print(f"  Push plans error (non-fatal): {e}")
 
-    # --- Push pending training plan workouts to Garmin ---
-    print(f"\nPushing pending training plan workouts to Garmin...")
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT id FROM training_plan WHERE status = 'active' LIMIT 1")
-                row = cur.fetchone()
-            if row:
-                # Check how many are pending
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT COUNT(*) FROM training_plan_day WHERE plan_id = %s "
-                        "AND garmin_push_status IN ('none','pending') AND workout_steps IS NOT NULL",
-                        (row[0],)
-                    )
-                    pending = cur.fetchone()[0]
-                print(f"  Found {pending} pending workouts for plan {row[0]}")
-                tp_pushed = push_plan_to_garmin(conn, client, row[0])
-                print(f"  Pushed: {tp_pushed} training plan workouts")
-            else:
-                print(f"  No active training plan found")
-    except Exception as e:
-        print(f"  Training plan push error (non-fatal): {e}")
-        import traceback
-        traceback.print_exc()
+    # --- Training plan workout push: now owned by the TS plan-push cron ---
+    # The TypeScript pushPlanToGarmin (web/lib/garmin-workout-builder.ts, invoked
+    # by the /api/cron/plan-push route) is the single pusher during the sync
+    # cutover (#187). Running the Python push here too would risk a double-push
+    # race (both pushing the same 'none'/'pending' day before either marks it
+    # 'pushed'), creating duplicate Garmin workouts. Disabled deliberately.
+    print(f"\nTraining plan push: handled by the TS plan-push cron (skipped here).")
 
     # --- Log completion ---
     total = total_raw + total_activities
