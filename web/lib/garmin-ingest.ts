@@ -17,6 +17,7 @@ import {
 import { processDay } from "./garmin-parse-day";
 import { updateFitnessTrajectory } from "./fitness-stream";
 import { computeDailyReadiness } from "./readiness-stream";
+import { updateBodyComp } from "./body-comp-stream";
 
 const MIN_COMPLETE_HR_POINTS = 650;
 // DI-token API profile path (returns displayName). garth's web API uses
@@ -208,6 +209,12 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
     const traj = await updateFitnessTrajectory(sql, todayNyc());
     fitnessUpdated = traj !== null;
   } catch (e) { console.warn(`  fitness trajectory failed: ${(e as Error).message}`); }
+
+  // Body composition: 7-day weight EMA + weight-adjusted VDOT / race prediction.
+  // Runs AFTER the fitness trajectory (needs its vo2max) and overwrites weight_kg
+  // with the smoothed value. Non-fatal on failure.
+  try { await updateBodyComp(sql, todayNyc()); }
+  catch (e) { console.warn(`  body comp failed: ${(e as Error).message}`); }
 
   // Daily readiness (traffic light from HRV/sleep/RHR/body-battery z-scores) for
   // today — reads the daily_health_summary just parsed. Non-fatal on failure.
