@@ -11,7 +11,7 @@
 import { GarminAuth, DBTokenStore, type GarminClient } from "garmin-auth";
 import type { QueryFn } from "./db";
 import {
-  DAILY_ENDPOINTS, RANGE_ENDPOINTS, DISCOVERY_ENDPOINTS,
+  DAILY_ENDPOINTS, RANGE_ENDPOINTS, DISCOVERY_ENDPOINTS, ACTIVITY_DETAIL_ENDPOINTS,
   buildRequest, type GarminRequest,
 } from "./garmin-endpoints";
 import { processDay } from "./garmin-parse-day";
@@ -123,7 +123,30 @@ export async function syncDay(client: GarminClient, sql: QueryFn, display: strin
   return count;
 }
 
-/** Discover activities for a date, store list + per-activity summaries, return ids. */
+/**
+ * Fetch the per-activity detail endpoints (splits, HR zones, weather, gear, …) and
+ * upsert to garmin_activity_raw. Skips activities that already have details stored,
+ * so it only fetches new ones (avoids re-hitting the API + rate limits). Mirrors
+ * garmin_sync.sync_activity_details. Returns the count of detail endpoints saved.
+ */
+export async function syncActivityDetails(client: GarminClient, sql: QueryFn, activityId: number): Promise<number> {
+  const seen = await sql`
+    SELECT 1 FROM garmin_activity_raw WHERE activity_id = ${activityId} AND endpoint_name = 'details' LIMIT 1`;
+  if (seen.length) return 0; // already fetched
+  let count = 0;
+  for (const [name, spec] of Object.entries(ACTIVITY_DETAIL_ENDPOINTS)) {
+    try {
+      const req = buildRequest(spec, { aid: activityId });
+      const data = await client.connectapi(toPath(req));
+      if (hasData(data)) { await upsertActivityRaw(sql, activityId, name, data); count += 1; }
+    } catch (e) {
+      console.warn(`  Warning: ${name} failed for activity ${activityId}: ${(e as Error).message}`);
+    }
+  }
+  return count;
+}
+
+/** Discover activities for a date, store list + per-activity summaries + details, return ids. */
 export async function syncActivitiesForDate(client: GarminClient, sql: QueryFn, date: string): Promise<number[]> {
   try {
     const req = buildRequest(DISCOVERY_ENDPOINTS.activities_list, { cdate: date });
@@ -133,7 +156,11 @@ export async function syncActivitiesForDate(client: GarminClient, sql: QueryFn, 
     const ids: number[] = [];
     for (const a of activities) {
       const aid = a.activityId;
-      if (aid) { await upsertActivityRaw(sql, aid, "summary", a); ids.push(aid); }
+      if (aid) {
+        await upsertActivityRaw(sql, aid, "summary", a);
+        await syncActivityDetails(client, sql, aid);
+        ids.push(aid);
+      }
     }
     return ids;
   } catch (e) {
