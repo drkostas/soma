@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execFile } from "child_process";
-import { existsSync } from "fs";
-import path from "path";
 import { getDb } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -52,44 +49,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Spawn the push_single script (local dev only — requires sync/.venv)
-    const syncDir = path.resolve(process.cwd(), "..", "sync");
-    const pythonBin = path.join(syncDir, ".venv", "bin", "python");
-
-    if (!existsSync(pythonBin)) {
-      return NextResponse.json(
-        { started: false, error: "Local sync not available — this feature requires running Soma locally with the sync/.venv Python environment." },
-        { status: 503 }
-      );
-    }
-
-    const child = execFile(
-      pythonBin,
-      ["-m", "src.push_single", source_platform, String(source_id), destination],
+    // Single-activity push to Strava is now handled automatically by the TS
+    // Strava bridge (strava-bridge-ts.yml, 11/15/19 UTC): it forwards every
+    // recent Garmin activity not yet on Strava, deduped, and finalizes it
+    // (title/description/image). The old local `push_single` Python tool was
+    // retired with sync/ (#187), so there is no manual per-activity push here.
+    return NextResponse.json(
       {
-        cwd: syncDir,
-        timeout: 120_000,
-        env: {
-          ...process.env,
-          PYTHONPATH: syncDir,
-        },
+        started: false,
+        error: "Strava forwarding is automatic now — the bridge picks this up on its next run (11/15/19 UTC). No manual push needed.",
       },
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error("[sync/activity] Push error:", error.message);
-        }
-        if (stdout) {
-          console.log("[sync/activity] stdout:", stdout);
-        }
-        if (stderr) {
-          console.error("[sync/activity] stderr:", stderr);
-        }
-      }
+      { status: 503 }
     );
-
-    child.unref();
-
-    return NextResponse.json({ started: true });
   } catch (err) {
     console.error("Error triggering activity sync:", err);
     return NextResponse.json(
