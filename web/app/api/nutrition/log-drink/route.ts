@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { ETHANOL_DENSITY, fatOxidationPauseHours } from "macro-engine-core";
 
-export const runtime = "edge";
+// nodejs (not edge): imports the CJS macro-engine-core package for the alcohol
+// helpers, matching the other nutrition routes.
+export const runtime = "nodejs";
 
 // ---------------------------------------------------------------------------
 // Drink database — mirrors Python seed_data.DRINK_DATABASE (9 types)
@@ -82,24 +85,8 @@ const DRINK_DB: Record<
   },
 };
 
-// Ethanol density: 0.789 g/ml
-const ETHANOL_DENSITY = 0.789;
-
-/**
- * Estimate how long fat oxidation is suppressed by alcohol intake.
- *   0g        -> 0h
- *   1-14g     -> 0-4h (linear)
- *   14-28g    -> 4-6h (linear)
- *   28-56g    -> 6-12h (linear)
- *   56g+      -> 12-24h (linear, capped)
- */
-function fatOxidationPause(alcoholGrams: number): number {
-  if (alcoholGrams <= 0) return 0;
-  if (alcoholGrams <= 14) return (alcoholGrams / 14) * 4;
-  if (alcoholGrams <= 28) return 4 + ((alcoholGrams - 14) / 14) * 2;
-  if (alcoholGrams <= 56) return 6 + ((alcoholGrams - 28) / 28) * 6;
-  return Math.min(24, 12 + ((alcoholGrams - 56) / 56) * 12);
-}
+// ETHANOL_DENSITY (0.789 g/ml) and the fat-oxidation-pause curve now come from
+// macro-engine-core so soma and the package can't drift apart.
 
 export async function GET() {
   return NextResponse.json({ drinks: DRINK_DB });
@@ -133,7 +120,7 @@ export async function POST(req: NextRequest) {
   const carbs = Math.round(((drink.carbs_per_100ml * totalMl) / 100) * 10) / 10;
   const alcoholGrams =
     Math.round(totalMl * (drink.alcohol_pct / 100) * ETHANOL_DENSITY * 10) / 10;
-  const pauseHours = Math.round(fatOxidationPause(alcoholGrams) * 10) / 10;
+  const pauseHours = Math.round(fatOxidationPauseHours(alcoholGrams) * 10) / 10;
 
   // Ensure nutrition_day row exists for this date
   await sql`
