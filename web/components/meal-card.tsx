@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { MACRO_COLORS } from "soma-style";
 import { Trash2, Plus, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -796,15 +797,15 @@ export function MealCard({
                     <div className="text-muted-foreground">kcal</div>
                   </div>
                   <div>
-                    <div className="font-bold tabular-nums text-blue-500">{previewMacros.protein}g</div>
+                    <div className={`font-bold tabular-nums ${MACRO_COLORS.protein.text}`}>{previewMacros.protein}g</div>
                     <div className="text-muted-foreground">P</div>
                   </div>
                   <div>
-                    <div className="font-bold tabular-nums text-amber-500">{previewMacros.carbs}g</div>
+                    <div className={`font-bold tabular-nums ${MACRO_COLORS.carbs.text}`}>{previewMacros.carbs}g</div>
                     <div className="text-muted-foreground">C</div>
                   </div>
                   <div>
-                    <div className="font-bold tabular-nums text-rose-500">{previewMacros.fat}g</div>
+                    <div className={`font-bold tabular-nums ${MACRO_COLORS.fat.text}`}>{previewMacros.fat}g</div>
                     <div className="text-muted-foreground">F</div>
                   </div>
                 </div>
