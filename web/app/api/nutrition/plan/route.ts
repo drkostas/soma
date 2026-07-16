@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { computeMacroTargetsFromContext } from "@/lib/macro-targets";
 import type { Mode } from "@/lib/mode-engine";
 import type { SlotBudgets } from "@/lib/nutrition-types";
+import { computeAdaptiveContext } from "@/lib/adaptive-tdee";
 
 export const runtime = "edge";
 
@@ -533,6 +534,9 @@ export async function GET(req: NextRequest) {
       .length * goalDeficit,
   };
 
+  // Adaptive TDEE + deficit-duration (display-only — never changes targets).
+  const adaptive = await computeAdaptiveContext(sql).catch(() => null);
+
   return NextResponse.json({
     plan,
     meals: mealRows,
@@ -546,5 +550,6 @@ export async function GET(req: NextRequest) {
     gymCalories,
     breakdown,
     trend7d,
+    adaptive,
   });
 }
