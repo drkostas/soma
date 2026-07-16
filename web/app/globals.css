@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* soma-style design tokens. Direct relative path — Tailwind v4's CSS @import
+   doesn't resolve the package's `exports` subpath, but the file path is reliable. */
+@import "../node_modules/soma-style/css/theme.css";
+/* Scan soma-style so the macro utility classes it names (bg-warm, text-indigo,
+   text-success, …) are generated even though they only appear in node_modules. */
+@source "../node_modules/soma-style/dist";
 
 @custom-variant dark (&:is(.dark *));
 
