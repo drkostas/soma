@@ -18,19 +18,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
+          node-version: '22'
 
-      - name: Install dependencies
-        working-directory: sync
-        run: pip install -e .
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
 
-      - name: Re-send notifications
-        working-directory: sync
+      - name: Re-send notifications (TS)
+        working-directory: web
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
-        run: python -m src.resend_telegram ${{ github.event.inputs.ids }}
+        run: npx tsx scripts/resend-telegram.mts ${{ github.event.inputs.ids }}
