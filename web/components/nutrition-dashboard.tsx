@@ -335,6 +335,7 @@ export function NutritionDashboard({
   const [budgetExpanded, setBudgetExpanded] = useState(false);
   const [breakdown, setBreakdown] = useState<any>(null);
   const [trend7d, setTrend7d] = useState<any>(null);
+  const [adaptive, setAdaptive] = useState<any>(null);
   const [dataReady, setDataReady] = useState(false);
   const [rebalanceToast, setRebalanceToast] = useState<string | null>(null);
 
@@ -358,6 +359,7 @@ export function NutritionDashboard({
         if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
         if (data.breakdown) setBreakdown(data.breakdown);
         if (data.trend7d) setTrend7d(data.trend7d);
+        setAdaptive(data.adaptive ?? null);
       }
       if (presetsRes.ok) {
         const presetsData = await presetsRes.json();
@@ -811,6 +813,35 @@ export function NutritionDashboard({
                         )}
                       </div>
                     )}
+                    {adaptive && (adaptive.driftFlag || adaptive.dietBreakLevel !== "none") && (() => {
+                      const level = adaptive.dietBreakLevel as string;
+                      const levelColor = level === "mandatory" ? "text-red-500"
+                        : level === "strong" ? "text-orange-400"
+                        : level === "suggested" ? "text-amber-400" : "text-muted-foreground";
+                      const levelLabel = level === "mandatory" ? "Diet break due"
+                        : level === "strong" ? "Diet break strongly advised"
+                        : level === "suggested" ? "Diet break suggested" : null;
+                      return (
+                        <div className="mt-3 pt-3 border-t border-white/10 space-y-1">
+                          <div className="text-[10px] lg:text-xs font-medium text-muted-foreground uppercase tracking-wider">Adaptive</div>
+                          {levelLabel && (
+                            <div className="flex justify-between items-baseline text-xs">
+                              <span className={`font-medium ${levelColor}`}>{levelLabel}</span>
+                              <span className="text-muted-foreground tabular-nums">{adaptive.deficitDurationDays}d in deficit</span>
+                            </div>
+                          )}
+                          {adaptive.driftFlag && (
+                            <div className="flex justify-between items-baseline text-xs">
+                              <span className="text-amber-400">TDEE drift</span>
+                              <span className="text-muted-foreground tabular-nums">
+                                ~{Math.round(adaptive.effectiveTdee)} vs {Math.round(adaptive.reportedTdee)} kcal
+                              </span>
+                            </div>
+                          )}
+                          <div className="text-[9px] text-muted-foreground/60">Informational — your targets are unchanged.</div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
