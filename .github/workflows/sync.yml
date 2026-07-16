@@ -79,16 +79,19 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
+          node-version: '22'
 
-      - name: Install dependencies
-        working-directory: sync
-        run: pip install -e .
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
 
-      - name: Run sync pipeline (smart — auto-detects stale dates)
-        working-directory: sync
+      # Runs the TypeScript sync pipeline (#187 cutover — replaced
+      # `python -m src.pipeline`). Composes the same ported lib functions the
+      # Vercel crons use; no Vercel involvement → no 300s function limit.
+      - name: Run sync pipeline (TS — auto-detects stale dates)
+        working-directory: web
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
@@ -100,8 +103,9 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRIGGERED_BY: ${{ github.event_name }}
           SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
+          NEXT_PUBLIC_BASE_URL: ${{ secrets.SOMA_WEB_URL }}
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           MERGE_MODE: ${{ secrets.MERGE_MODE }}
-        run: python -m src.pipeline
+        run: npx tsx scripts/sync-pipeline.mts
