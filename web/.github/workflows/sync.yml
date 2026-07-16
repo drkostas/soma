@@ -1,0 +1,60 @@
+name: Sync Health Data
+
+on:
+  schedule:
+    - cron: '0 10,12,13,17,21,0,2,4 * * *'  # NYC: 5am 7am 8am noon 4pm 7pm 9pm 11pm
+  workflow_dispatch: {}  # Manual trigger from GitHub UI
+  repository_dispatch:
+    types: [sync-trigger]  # Trigger from API route
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Circuit breaker — skip if previous sync failed
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LAST=$(gh run list --workflow=sync.yml --status=completed --limit=5 \
+            --json conclusion \
+            --jq '[.[] | select(.conclusion == "success" or .conclusion == "failure")][0].conclusion // "none"' \
+            2>/dev/null || echo "unknown")
+          if [ "$LAST" = "failure" ]; then
+            echo "::error::Auto-sync paused after previous failure. Trigger a manual run to resume."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: sync
+        run: pip install -e .
+
+      - name: Run sync pipeline (smart — auto-detects stale dates)
+        working-directory: sync
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+          HEVY_API_KEY: ${{ secrets.HEVY_API_KEY }}
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRIGGERED_BY: ${{ github.event_name }}
+          SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+        run: python -m src.pipeline
