@@ -1,0 +1,49 @@
+import { NextResponse } from "next/server";
+import { HevyClient } from "hevy2garmin";
+import { getDb } from "@/lib/db";
+import { syncAllWorkouts, getHevyApiKey } from "@/lib/hevy-ingest";
+import { enrichNewWorkouts } from "@/lib/hevy-enrich-run";
+import { computeHevyLoads } from "@/lib/training-load";
+import { backfillLoadFromHistory, computeAndStorePmc } from "@/lib/pmc-stream";
+
+// HevyClient + enrichment need Node APIs (fetch/pg via garmin-auth downstream).
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+/**
+ * Hevy sync cron (#184, soma-core Stage 2 phase 1). Pulls Hevy workouts, then
+ * enriches them (HR + calories) and matches to existing Garmin activities.
+ * SAFE: only writes hevy_raw_data + workout_enrichment (idempotent) — NO Garmin
+ * upload. Runs alongside the Python sync. The dedup-gated FIT upload is separate.
+ *
+ * CRON_SECRET-gated (Vercel sends `Authorization: Bearer <secret>`).
+ */
+export async function GET(req: Request): Promise<Response> {
+  const secret = process.env.CRON_SECRET;
+  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const sql = getDb();
+  try {
+    const apiKey = await getHevyApiKey(sql);
+    if (!apiKey) return NextResponse.json({ error: "Hevy API key not configured" }, { status: 500 });
+    const client = new HevyClient(apiKey);
+    const pull = await syncAllWorkouts(client, sql);
+    const enrich = await enrichNewWorkouts(sql);
+    const loadsComputed = await computeHevyLoads(sql); // training_load for new Hevy workouts
+    // Backfill Garmin activity EPOC into training_load, then recompute the PMC
+    // (fitness/fatigue/form) curve the dashboard graphs. Both load sources are
+    // in the table before PMC runs. Idempotent (ON CONFLICT / upsert).
+    // PMC uses the classic Banister constants (42/7). The personal Banister tau
+    // is deliberately NOT used: with ~4 anchors it is unidentifiable (every fit
+    // seed gives a different tau at identical quality), so feeding it would make
+    // the curve drift arbitrarily. Matches the Python runner (which also stopped
+    // feeding personal tau into PMC).
+    const garminLoads = await backfillLoadFromHistory(sql);
+    const pmc = await computeAndStorePmc(sql);
+    return NextResponse.json({ ok: true, pull, enrich, loadsComputed, garminLoads, pmcDays: pmc.length });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+  }
+}

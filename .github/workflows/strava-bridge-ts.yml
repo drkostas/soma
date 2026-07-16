@@ -1,0 +1,58 @@
+name: Bridge activities to Strava (TS)
+
+# TypeScript port of the Strava bridge (bridge/). Same mechanism as the Python
+# strava-bridge.yml: finalized Garmin activities reach Strava via the facterino
+# account (Garmin forwards an uploaded FIT for free), finished by driving Strava's
+# web edit page HEADED under xvfb (headless is reCAPTCHA-blocked).
+#
+# Now the scheduled bridge (#187 cutover — replaced the Python strava-bridge.yml).
+# Scheduled runs forward live; manual dispatch defaults to a dry run. Dedup is
+# double-guarded (strava_bridge_uploads ledger + Strava external_ids), so it can
+# never duplicate an activity already on Strava.
+
+on:
+  schedule:
+    - cron: '0 11,15,19 * * *'   # a few times/day; forwards only new activities
+  workflow_dispatch:
+    inputs:
+      live:
+        description: "Actually forward + finalize on Strava (false = dry run)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: strava-bridge
+  cancel-in-progress: false
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        working-directory: bridge
+        run: npm ci || npm install
+
+      - name: Install Playwright Chromium + system deps
+        working-directory: bridge
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        working-directory: bridge
+        run: npx tsc -p tsconfig.json
+
+      - name: Run bridge (headed under xvfb)
+        working-directory: bridge
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STRAVA_WEB_EMAIL: ${{ secrets.STRAVA_WEB_EMAIL }}
+          STRAVA_WEB_PASSWORD: ${{ secrets.STRAVA_WEB_PASSWORD }}
+          SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
+          BRIDGE_LIVE: ${{ (github.event_name == 'schedule' || inputs.live) && '1' || '0' }}
+        run: xvfb-run -a node dist/main.js

@@ -1,0 +1,26 @@
+{
+  "name": "soma-strava-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Garmin→Strava facterino bridge (TypeScript, GitHub Actions + Playwright). Port of sync/src/strava_bridge*.",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "bridge": "node dist/main.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.18",
+    "garmin-auth": "^0.1.0",
+    "oauth-1.0a": "^2.2.6",
+    "pg": "^8.11.0",
+    "playwright": "^1.48.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
