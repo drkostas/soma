@@ -1,0 +1,36 @@
+name: Resend Telegram Notification
+
+# One-off corrective tool: re-send the Telegram activity image for specific
+# Garmin activities (e.g. after a wrong "Run" label or a 0-jumps image went out).
+# Runs on the cloud — no local dependency.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: "Space-separated Garmin activity ids to re-send"
+        required: true
+
+jobs:
+  resend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Re-send notifications (TS)
+        working-directory: web
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
+        run: npx tsx scripts/resend-telegram.mts ${{ github.event.inputs.ids }}

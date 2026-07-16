@@ -1,3 +1,25 @@
 {
-  "buildCommand": "next build --webpack"
+  "buildCommand": "next build --webpack",
+  "crons": [
+    {
+      "path": "/api/cron/garmin-ingest",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/hevy-sync",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/notify",
+      "schedule": "45 5 * * *"
+    },
+    {
+      "path": "/api/cron/plan-push",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/garmin-enrich",
+      "schedule": "15 6 * * *"
+    }
+  ]
 }
