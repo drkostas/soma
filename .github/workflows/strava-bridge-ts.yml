@@ -5,10 +5,14 @@ name: Bridge activities to Strava (TS)
 # account (Garmin forwards an uploaded FIT for free), finished by driving Strava's
 # web edit page HEADED under xvfb (headless is reCAPTCHA-blocked).
 #
-# Manual dispatch only for now (dry-run by default). Flip `live` to true to fire.
-# A schedule is added once the live path is verified.
+# Now the scheduled bridge (#187 cutover — replaced the Python strava-bridge.yml).
+# Scheduled runs forward live; manual dispatch defaults to a dry run. Dedup is
+# double-guarded (strava_bridge_uploads ledger + Strava external_ids), so it can
+# never duplicate an activity already on Strava.
 
 on:
+  schedule:
+    - cron: '0 11,15,19 * * *'   # a few times/day; forwards only new activities
   workflow_dispatch:
     inputs:
       live:
@@ -17,7 +21,7 @@ on:
         default: false
 
 concurrency:
-  group: strava-bridge   # shares the group with the Python bridge so they never overlap
+  group: strava-bridge
   cancel-in-progress: false
 
 jobs:
@@ -50,5 +54,5 @@ jobs:
           STRAVA_WEB_EMAIL: ${{ secrets.STRAVA_WEB_EMAIL }}
           STRAVA_WEB_PASSWORD: ${{ secrets.STRAVA_WEB_PASSWORD }}
           SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
-          BRIDGE_LIVE: ${{ inputs.live && '1' || '0' }}
+          BRIDGE_LIVE: ${{ (github.event_name == 'schedule' || inputs.live) && '1' || '0' }}
         run: xvfb-run -a node dist/main.js
