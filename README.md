@@ -151,6 +151,114 @@ cd web && npm install && npm run dev    # → http://localhost:3456
 cd sync && python -m src.pipeline      # manual sync run
 ```
 
+### In-app Claude chat
+
+A floating chat bubble in the bottom-right of every soma page spawns a
+local `claude -p` subprocess per turn — no API key, no extra service. It
+reuses your Claude Code subscription auth from `~/.claude/`.
+
+Requirements:
+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`claude --version` should print a version).
+- soma running locally (`npm run dev` above). The widget makes a subprocess call, so it can't work on Vercel deployments — local-only by design.
+
+On the first message the route bootstraps a new session, captures its UUID,
+and stores it at `~/.soma/chat.json` so subsequent turns resume the same
+conversation. Click the pencil icon in the chat header to start a fresh
+thread.
+
+The assistant is primed by [`web/lib/chat-system-prompt.md`](web/lib/chat-system-prompt.md) — role, project layout, DB schemas, conventions. Edit that file to change how it behaves.
+
+#### Using the chat from your Vercel deployment (phone / anywhere)
+
+You can have the deployed soma forward chat requests to your Mac's local Claude
+Code via a Cloudflare tunnel. Vercel becomes a thin proxy; the actual
+`claude -p` still runs on your machine against your subscription auth.
+
+**On the Mac (one-time setup):**
+
+```bash
+brew install cloudflared
+cloudflared tunnel login                                    # browser auth
+cloudflared tunnel create soma-chat                         # creates UUID + creds
+cloudflared tunnel route dns soma-chat chat.your-domain.com # your subdomain
+```
+
+`~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: soma-chat
+credentials-file: /Users/<you>/.cloudflared/<UUID>.json
+ingress:
+  - hostname: chat.your-domain.com
+    service: http://localhost:3456
+  - service: http_status:404
+```
+
+Then run it (or `launchctl` it for autostart):
+
+```bash
+cloudflared tunnel run soma-chat
+```
+
+Add a shared secret to `web/.env.local`:
+
+```
+SOMA_CHAT_TOKEN=$(openssl rand -base64 32)
+```
+
+Keep `npm run dev` running on the Mac as usual.
+
+**On Vercel** (Settings → Environment Variables):
+
+| Var | Value |
+|---|---|
+| `SOMA_CHAT_TUNNEL_URL` | `https://chat.your-domain.com` |
+| `SOMA_CHAT_TOKEN` | same value as the Mac's `.env.local` |
+
+Redeploy. The widget now shows a status dot in the header:
+
+- 🟢 green — direct local subprocess (when you're on `localhost:3456`)
+- 🔵 blue — proxied via Vercel → your Mac's tunnel (when you're on the deployed URL)
+- 🔴 red — tunnel unreachable (Mac asleep, no internet, etc.)
+
+Rotate `SOMA_CHAT_TOKEN` on both sides if it ever leaks. The shared secret is
+the only thing standing between your tunnel's public DNS name and your
+local filesystem.
+
+##### Self-healing autostart with launchd (macOS)
+
+Two plists under `~/Library/LaunchAgents/` (per-user, no sudo) keep
+everything alive across Mac sleep/wake/reboot:
+
+| Plist | Purpose |
+|---|---|
+| `dev.gkos.soma.web.plist` | Runs `npm run dev` from `web/` on :3456, KeepAlive on crash |
+| `dev.gkos.soma.tunnel.plist` | Runs the cloudflared named tunnel (`tunnel run --token <connector>`), KeepAlive |
+
+Logs land in `~/Library/Logs/soma/`. Manage with
+`launchctl bootstrap gui/$UID <plist>` to load and
+`launchctl bootout gui/$UID dev.gkos.soma.web` to temporarily stop for
+hands-on development.
+
+###### Fallback when your domain isn't in Cloudflare DNS
+
+If your domain's authoritative DNS lives somewhere other than Cloudflare,
+you can still use a Cloudflare Quick Tunnel — but its `trycloudflare.com`
+URL rotates on every cloudflared restart. To keep the deployed Vercel
+chat pointed at the live URL automatically, add a third agent that tails
+the tunnel log and syncs URL changes into Vercel env:
+
+| Plist | Purpose |
+|---|---|
+| `dev.gkos.soma.tunnel-watch.plist` | Runs [`web/scripts/soma-tunnel-watch.sh`](web/scripts/soma-tunnel-watch.sh) — tails the tunnel log, detects URL rotation, runs `vercel env rm/add SOMA_CHAT_TUNNEL_URL production` + `vercel deploy --prod` |
+
+Prereq: the Vercel CLI must be logged in (`vercel login`) once on the Mac
+so the watcher's CLI calls work non-interactively.
+
+This becomes unnecessary once you migrate your zone to Cloudflare DNS (the
+named-tunnel route in the previous section), since the URL is then stable.
+
 ---
 
 ## License
