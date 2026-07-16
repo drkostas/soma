@@ -109,39 +109,40 @@ export async function backfillLoadFromHistory(sql: QueryFn): Promise<number> {
     SELECT activity_id, raw_json
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'`;
-  let inserted = 0;
+  // Build all candidate rows in JS, then batch-insert (a per-row loop is one
+  // Neon round-trip per activity — hundreds of them). ON CONFLICT DO NOTHING +
+  // RETURNING counts only the genuinely new activities.
+  type Tuple = [string, number, string, string, number, number | null, string];
+  const tuples: Tuple[] = [];
   for (const row of rows) {
     const raw = typeof row.raw_json === "string" ? JSON.parse(row.raw_json) : row.raw_json;
     const activityDateStr: string | undefined = raw.startTimeLocal;
     if (!activityDateStr) continue;
-    const activityDate = activityDateStr.slice(0, 10);
     const activityType = (raw.activityType || {}).typeKey || "unknown";
     const source = `garmin_${activityType}`;
     const load = computeActivityLoad(raw, source);
+    const trimp = computeTrimp(Math.max((raw.duration || 0) / 60, 0), raw.averageHR ?? null, raw.minHR || 50, raw.maxHR || 190);
+    const details = JSON.stringify({ activity_type: activityType, original_epoc: raw.activityTrainingLoad ?? null, trimp: trimp !== null ? r(trimp, 1) : null });
+    tuples.push([activityDateStr.slice(0, 10), row.activity_id, load.source, load.load_metric, load.load_value, load.duration_seconds === null ? null : Math.trunc(load.duration_seconds), details]);
+  }
 
-    const trimp = computeTrimp(
-      Math.max((raw.duration || 0) / 60, 0),
-      raw.averageHR ?? null,
-      raw.minHR || 50,
-      raw.maxHR || 190,
-    );
-
-    const details = JSON.stringify({
-      activity_type: activityType,
-      original_epoc: raw.activityTrainingLoad ?? null,
-      trimp: trimp !== null ? r(trimp, 1) : null,
+  const client = sql as unknown as { query(text: string, params: unknown[]): Promise<unknown[]> };
+  let inserted = 0;
+  const CHUNK = 500; // 7 params/row → 3500 params/chunk, well under the cap
+  for (let i = 0; i < tuples.length; i += CHUNK) {
+    const chunk = tuples.slice(i, i + CHUNK);
+    const params: unknown[] = [];
+    const values = chunk.map((t) => {
+      const b = params.length;
+      params.push(t[0], t[1], t[2], t[3], t[4], t[5], t[6]);
+      return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7}::jsonb)`;
     });
-    // RETURNING so the result array is non-empty only on a real insert
-    // (ON CONFLICT DO NOTHING yields [] when the activity is already present).
-    const res = await sql`
-      INSERT INTO training_load
-        (activity_date, activity_id, source, load_metric, load_value, duration_seconds, details)
-      VALUES (${activityDate}, ${row.activity_id}, ${load.source}, ${load.load_metric},
-              ${load.load_value}, ${load.duration_seconds === null ? null : Math.trunc(load.duration_seconds)},
-              ${details}::jsonb)
-      ON CONFLICT DO NOTHING
-      RETURNING activity_id`;
-    if (res.length > 0) inserted += 1;
+    const res = await client.query(
+      `INSERT INTO training_load (activity_date, activity_id, source, load_metric, load_value, duration_seconds, details)
+       VALUES ${values.join(",")} ON CONFLICT DO NOTHING RETURNING activity_id`,
+      params,
+    );
+    inserted += res.length;
   }
   return inserted;
 }
@@ -180,12 +181,23 @@ export async function computeAndStorePmc(sql: QueryFn, tauCtl = DEFAULT_TAU_CTL,
   }
 
   const pmc = computePmc(dailyLoads, tauCtl, tauAtl);
-  for (const e of pmc) {
-    await sql`
-      INSERT INTO pmc_daily (date, ctl, atl, tsb, daily_load)
-      VALUES (${e.date}, ${e.ctl}, ${e.atl}, ${e.tsb}, ${e.daily_load})
-      ON CONFLICT (date) DO UPDATE SET
-        ctl = EXCLUDED.ctl, atl = EXCLUDED.atl, tsb = EXCLUDED.tsb, daily_load = EXCLUDED.daily_load`;
+  // Batch the upsert (matches Python's execute_values): a per-row loop is ~4700
+  // sequential Neon round-trips. Chunk to stay well under Postgres' param cap.
+  const client = sql as unknown as { query(text: string, params: unknown[]): Promise<unknown[]> };
+  const CHUNK = 1000;
+  for (let i = 0; i < pmc.length; i += CHUNK) {
+    const chunk = pmc.slice(i, i + CHUNK);
+    const params: unknown[] = [];
+    const rows = chunk.map((e) => {
+      const b = params.length;
+      params.push(e.date, e.ctl, e.atl, e.tsb, e.daily_load);
+      return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5})`;
+    });
+    await client.query(
+      `INSERT INTO pmc_daily (date, ctl, atl, tsb, daily_load) VALUES ${rows.join(",")}
+       ON CONFLICT (date) DO UPDATE SET ctl=EXCLUDED.ctl, atl=EXCLUDED.atl, tsb=EXCLUDED.tsb, daily_load=EXCLUDED.daily_load`,
+      params,
+    );
   }
   return pmc;
 }
