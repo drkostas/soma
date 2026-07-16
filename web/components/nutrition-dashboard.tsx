@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useEffect } from "react";
+import { MACRO_COLORS } from "soma-style";
 import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -873,14 +874,14 @@ export function NutritionDashboard({
                 return (
                   <div className="grid gap-2 pt-1">
                     <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
-                      color="bg-blue-500" markers={proteinMarkers} />
+                      color={MACRO_COLORS.protein.bg} markers={proteinMarkers} />
                     <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
-                      color="bg-amber-500" markers={carbMarkers} />
+                      color={MACRO_COLORS.carbs.bg} markers={carbMarkers} />
                     <MacroBar label="Fat" current={consumedFat} target={targetFat}
-                      color="bg-rose-500" markers={fatMarkers} />
+                      color={MACRO_COLORS.fat.bg} markers={fatMarkers} />
                     {targetFiber > 0 && (
                       <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
-                        color="bg-green-500" markers={fiberMarkers} />
+                        color={MACRO_COLORS.fiber.bg} markers={fiberMarkers} />
                     )}
                   </div>
                 );

@@ -378,11 +378,14 @@ export function ComposeMealView({
 
         type Key = "kcal" | "P" | "C" | "F" | "Fi";
         const colorMap: Record<Key, { eaten: string; thisMeal: string; text: string }> = {
-          kcal: { eaten: "bg-primary/60", thisMeal: "bg-primary",     text: "text-foreground" },
-          P:    { eaten: "bg-blue-700",   thisMeal: "bg-blue-500",    text: "text-blue-400" },
-          C:    { eaten: "bg-amber-700",  thisMeal: "bg-amber-500",   text: "text-amber-400" },
-          F:    { eaten: "bg-rose-700",   thisMeal: "bg-rose-500",    text: "text-rose-400" },
-          Fi:   { eaten: "bg-green-700",  thisMeal: "bg-green-500",   text: "text-green-400" },
+          // Macro colors from soma-style/theme.css. Single-token palette, so
+          // "eaten" (already consumed) is the muted /50 variant and "thisMeal"
+          // (being added) is the full-strength token.
+          kcal: { eaten: "bg-primary/60",  thisMeal: "bg-primary",   text: "text-foreground" },
+          P:    { eaten: "bg-warm/50",       thisMeal: "bg-warm",       text: "text-warm" },
+          C:    { eaten: "bg-indigo/50",     thisMeal: "bg-indigo",     text: "text-indigo" },
+          F:    { eaten: "bg-lime/50",       thisMeal: "bg-lime",       text: "text-lime" },
+          Fi:   { eaten: "bg-teal-light/50", thisMeal: "bg-teal-light", text: "text-teal-light" },
         };
 
         const data: Record<Key, { eaten: number; thisMeal: number; suffix: string; extra?: React.ReactNode }> = {
