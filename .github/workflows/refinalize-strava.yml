@@ -23,28 +23,30 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
+          node-version: '20'
 
-      - name: Install deps (with the strava-web extra)
-        working-directory: sync
-        run: pip install -e ".[strava-web]"
+      - name: Install deps
+        working-directory: bridge
+        run: npm ci || npm install
 
       - name: Install Playwright Chromium + system deps
-        working-directory: sync
-        run: python -m playwright install --with-deps chromium
+        working-directory: bridge
+        run: npx playwright install --with-deps chromium
 
+      - name: Build
+        working-directory: bridge
+        run: npx tsc -p tsconfig.json
+
+      # TS port (#187): reuses the bridge's Strava-web session + the ported kite
+      # description. Headed under xvfb (Strava's reCAPTCHA blocks headless).
       - name: Re-finalize activities (headed under xvfb)
-        working-directory: sync
+        working-directory: bridge
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           STRAVA_WEB_EMAIL: ${{ secrets.STRAVA_WEB_EMAIL }}
           STRAVA_WEB_PASSWORD: ${{ secrets.STRAVA_WEB_PASSWORD }}
           SOMA_WEB_URL: ${{ secrets.SOMA_WEB_URL }}
           SOMA_BASE_URL: ${{ secrets.SOMA_WEB_URL }}
-          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
-          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
-          GARMIN_CF_WORKER_URL: ${{ secrets.GARMIN_CF_WORKER_URL }}
-          GARMIN_CF_WORKER_MFA_URL: ${{ secrets.GARMIN_CF_WORKER_MFA_URL }}
-        run: xvfb-run -a python -m src.refinalize_strava ${{ github.event.inputs.ids }}
+        run: xvfb-run -a node dist/refinalize.js ${{ github.event.inputs.ids }}
