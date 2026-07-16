@@ -808,6 +808,17 @@ export function NutritionDashboard({
                             );
                           })()}
                         </div>
+                        {trend7d.adherence && (() => {
+                          const a = trend7d.adherence;
+                          const label = a.status === "on_track" ? "on track" : a.status === "under" ? "under goal" : "over goal";
+                          const color = a.status === "on_track" ? "text-green-500" : "text-amber-400";
+                          return (
+                            <div className="flex justify-between items-baseline text-[10px] mt-1 pt-1 border-t border-white/10">
+                              <span className="text-muted-foreground">Weekly adherence</span>
+                              <span className={`${color} tabular-nums`}>{label} · {Math.round(a.ratio * 100)}%</span>
+                            </div>
+                          );
+                        })()}
                         {trend7d.days.some((d: any) => d.manual) && (
                           <div className="text-[9px] text-muted-foreground/60">* offset target in parentheses · +/− vs {trend7d.goalDeficit}/day goal</div>
                         )}
