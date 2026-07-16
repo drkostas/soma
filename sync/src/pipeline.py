@@ -887,14 +887,10 @@ def _run_pipeline_inner(dates_to_sync: list, log_id: int = None):
     except Exception as e:
         print(f"  Enrichment error: {e}")
 
-    # --- Generate today's nutrition plan ---
-    print(f"\nGenerating today's nutrition plan...")
-    try:
-        from nutrition_engine.generate_today import generate_today
-        generate_today()
-        print(f"  Nutrition plan: OK")
-    except Exception as e:
-        print(f"  Nutrition plan error (non-fatal): {e}")
+    # --- Nutrition plan ---
+    # The daily nutrition plan is now computed by soma/web on-demand via the
+    # macro-engine-core TS package (verified byte-equivalent to the old Python
+    # generate_today; soma#160). The Python nutrition_engine has been removed.
 
     # --- Upload enriched workouts to Garmin ---
     if client:

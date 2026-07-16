@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Jump viewpoint picker</title>
+<style>
+  body { margin: 0; background: #0b0d10; color: #fafafa; font-family: Inter, system-ui, sans-serif; overflow: hidden; }
+  #hud { position: fixed; top: 14px; left: 16px; z-index: 10; }
+  #hud h1 { font-size: 18px; margin: 0 0 2px; }
+  #hud .sub { font-size: 13px; color: #94a3b8; }
+  #controls { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 10px; }
+  button { background: #22d3ee; color: #06282e; border: 0; border-radius: 10px; padding: 10px 22px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  button.secondary { background: #1e293b; color: #cbd5e1; }
+  #done { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; font-size: 22px; background: #0b0d10; z-index: 20; }
+  #hint { position: fixed; top: 14px; right: 16px; z-index: 10; font-size: 12px; color: #64748b; text-align: right; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="hud"><h1 id="title">loading…</h1><div class="sub" id="sub"></div></div>
+<div id="hint">drag = rotate · wheel = zoom<br>frame the jump how you want the card to look, then Submit</div>
+<div id="controls">
+  <button class="secondary" id="skip">Skip</button>
+  <button id="submit">Submit view →</button>
+</div>
+<div id="done">All jumps done, thanks! You can close this tab.</div>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const Z_EXAG = 1.9;
+const data = await (await fetch("/jump-viewer-data.json")).json();
+let idx = 0;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0d10);
+
+// z-up world (matches the share-image maths: x=east, y=north, z=up)
+const aspect = innerWidth / innerHeight;
+const camSize = 30;
+const camera = new THREE.OrthographicCamera(-camSize * aspect, camSize * aspect, camSize, -camSize, -500, 500);
+camera.up.set(0, 0, 1);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
+controls.maxPolarAngle = Math.PI / 2 - 0.06; // never below the water
+controls.minPolarAngle = 0.15;
+
+let group = null;
+
+function lerpHex(a, b, t) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  return new THREE.Color(`rgb(${pa.map((v, i) => Math.round(v + (pb[i] - v) * t)).join(",")})`);
+}
+function zColor(z, peak) {
+  const t = Math.max(0, Math.min(1, z / peak));
+  return t < 0.5 ? lerpHex("#38bdf8", "#f59e0b", t * 2) : lerpHex("#f59e0b", "#fff5e6", (t - 0.5) * 2);
+}
+function line(pts, color, opts = {}) {
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  const m = opts.dashed
+    ? new THREE.LineDashedMaterial({ color, dashSize: 0.5, gapSize: 0.5, transparent: true, opacity: opts.opacity ?? 1 })
+    : new THREE.LineBasicMaterial({ color, transparent: true, opacity: opts.opacity ?? 1 });
+  const l = new THREE.Line(g, m);
+  if (opts.dashed) l.computeLineDistances();
+  return l;
+}
+function ball(p, color, r) {
+  const s = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 16), new THREE.MeshBasicMaterial({ color }));
+  s.position.copy(p);
+  return s;
+}
+
+function buildScene(entry) {
+  if (group) scene.remove(group);
+  group = new THREE.Group();
+  const j = entry.jump;
+  const traj = j.trajectory_m, air = j.airtime_s, path = j.path;
+  // GPS → local metres around the takeoff fix
+  const t0p = path.reduce((a, b) => (Math.abs(b[0]) < Math.abs(a[0]) ? b : a), path[0]);
+  const mPerLng = 111320 * Math.cos((t0p[1] * Math.PI) / 180), mPerLat = 110540;
+  const horiz = path.map(([t, la, lg]) => ({ t, x: (lg - t0p[2]) * mPerLng, y: (la - t0p[1]) * mPerLat }));
+  const hAt = (t) => {
+    if (t < 0 || t > air || traj.length < 2) return 0;
+    const f = (t / air) * (traj.length - 1), i = Math.min(traj.length - 2, Math.floor(f));
+    return traj[i] + (traj[i + 1] - traj[i]) * (f - i);
+  };
+  const xyAt = (t) => {
+    if (t <= horiz[0].t) return horiz[0];
+    for (let i = 0; i < horiz.length - 1; i++) {
+      if (t <= horiz[i + 1].t) {
+        const f = (t - horiz[i].t) / Math.max(0.001, horiz[i + 1].t - horiz[i].t);
+        return { x: horiz[i].x + (horiz[i + 1].x - horiz[i].x) * f, y: horiz[i].y + (horiz[i + 1].y - horiz[i].y) * f };
+      }
+    }
+    return horiz[horiz.length - 1];
+  };
+  const tMin = Math.max(horiz[0].t, -1.2), tMax = Math.min(horiz[horiz.length - 1].t, air + 1.5);
+  const S = [];
+  for (let t = tMin; t <= tMax + 1e-6; t += 0.25) S.push({ t, ...xyAt(t), z: hAt(t) * Z_EXAG });
+  const peakZ = Math.max(...S.map((p) => p.z), 0.01);
+  const cx = S.reduce((a, p) => a + p.x, 0) / S.length, cy = S.reduce((a, p) => a + p.y, 0) / S.length;
+  const v = (p, z = p.z) => new THREE.Vector3(p.x - cx, p.y - cy, z);
+
+  // water plane + 5m grid
+  const ext = Math.max(...S.map((p) => Math.hypot(p.x - cx, p.y - cy))) + 8;
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(ext * 2, ext * 2),
+    new THREE.MeshBasicMaterial({ color: 0x0e7490, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
+  );
+  group.add(water);
+  const gridPts = [];
+  const g0 = Math.floor(-ext / 5) * 5, g1 = Math.ceil(ext / 5) * 5;
+  for (let g = g0; g <= g1; g += 5) {
+    gridPts.push(new THREE.Vector3(g, g0, 0.01), new THREE.Vector3(g, g1, 0.01));
+    gridPts.push(new THREE.Vector3(g0, g, 0.01), new THREE.Vector3(g1, g, 0.01));
+  }
+  const gridGeo = new THREE.BufferGeometry().setFromPoints(gridPts);
+  group.add(new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16 })));
+
+  // phases
+  const iT = S.findIndex((p) => p.t >= 0);
+  let iL = S.findIndex((p) => p.t >= air); if (iL < 0) iL = S.length - 1;
+  group.add(line(S.slice(0, iT + 1).map((p) => v(p, 0.05)), 0x7dd3fc, { opacity: 0.95 }));
+  group.add(line(S.slice(iL).map((p) => v(p, 0.05)), 0x7dd3fc, { opacity: 0.95 }));
+  group.add(line(S.slice(iT, iL + 1).map((p) => v(p, 0.03)), 0x0a0a0a, { dashed: true, opacity: 0.6 }));
+  // flight: per-segment altitude colors (fat via multiple offset lines is overkill; tube it)
+  const flightPts = S.slice(iT, iL + 1).map((p) => v(p));
+  const curve = new THREE.CatmullRomCurve3(flightPts);
+  const tube = new THREE.TubeGeometry(curve, 60, 0.22, 8, false);
+  const pos = tube.attributes.position, colors = [];
+  for (let i = 0; i < pos.count; i++) {
+    const c = zColor(pos.getZ(i), peakZ);
+    colors.push(c.r, c.g, c.b);
+  }
+  tube.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  group.add(new THREE.Mesh(tube, new THREE.MeshBasicMaterial({ vertexColors: true })));
+  // drop lines each second
+  S.forEach((p) => {
+    if (p.z > 0.3 && Math.abs((p.t * 4) % 4) < 0.5)
+      group.add(line([v(p), v(p, 0)], 0xffffff, { dashed: true, opacity: 0.3 }));
+  });
+  // markers
+  const iP = S.reduce((a, p, i) => (p.z > S[a].z ? i : a), 0);
+  group.add(ball(v(S[iT], 0.05), 0x22c55e, 0.45));
+  group.add(ball(v(S[iL], 0.05), 0xef4444, 0.45));
+  group.add(ball(v(S[iP]), 0xffffff, 0.55));
+  // wind arrow
+  if (entry.wind_from_deg != null) {
+    const b = ((entry.wind_from_deg + 180) * Math.PI) / 180;
+    const dir = new THREE.Vector3(Math.sin(b), Math.cos(b), 0).normalize();
+    group.add(new THREE.ArrowHelper(dir, new THREE.Vector3(-ext + 3, -ext + 3, 0.3), 5, 0xbae6fd, 1.6, 1));
+  }
+  scene.add(group);
+  // reset camera to the current auto-ish view
+  camera.position.set(10, -24, 18);
+  controls.target.set(0, 0, peakZ / 3);
+  controls.update();
+  const zoomExt = Math.max(ext * 0.9, 12);
+  camera.left = -zoomExt * aspect; camera.right = zoomExt * aspect;
+  camera.top = zoomExt; camera.bottom = -zoomExt;
+  camera.zoom = 1.6; camera.updateProjectionMatrix();
+
+  document.getElementById("title").textContent = `${entry.title} — ${j.height_m}m`;
+  document.getElementById("sub").textContent = `jump ${idx + 1} / ${data.length} · ${j.airtime_s ?? "?"}s air · ${j.distance_m ?? "?"}m flight · wind ${entry.wind_from_deg ?? "?"}°`;
+}
+
+async function submit(skip) {
+  if (!skip) {
+    const off = camera.position.clone().sub(controls.target);
+    const r = off.length();
+    const azimuthDeg = (Math.atan2(off.x, off.y) * 180) / Math.PI; // compass-ish: 0 = camera north of scene
+    const elevationDeg = (Math.asin(off.z / r) * 180) / Math.PI;
+    await fetch("/api/jump-viewpoints", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        activity_id: data[idx].activity_id, title: data[idx].title,
+        height_m: data[idx].jump.height_m, wind_from_deg: data[idx].wind_from_deg,
+        azimuth_deg: azimuthDeg, elevation_deg: elevationDeg,
+        camera_offset: { x: off.x, y: off.y, z: off.z }, zoom: camera.zoom,
+      }),
+    });
+  }
+  idx++;
+  if (idx >= data.length) { document.getElementById("done").style.display = "flex"; return; }
+  buildScene(data[idx]);
+}
+document.getElementById("submit").onclick = () => submit(false);
+document.getElementById("skip").onclick = () => submit(true);
+
+buildScene(data[0]);
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+addEventListener("resize", () => {
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
