@@ -282,6 +282,11 @@ export async function extractKiteJumpsForActivity(
   sql: QueryFn, client: GarminClient, activityId: number, typeKey: string | null, startGmt: string | null,
 ): Promise<KitePayload | null> {
   if (!typeKey || !typeKey.toLowerCase().includes("kite")) return null;
+  // Dedup: a completed activity's jumps never change, so skip the FIT download
+  // if we've already extracted them (mirrors syncActivityDetails' 'details' skip).
+  const seen = await sql`
+    SELECT 1 FROM garmin_activity_raw WHERE activity_id = ${activityId} AND endpoint_name = 'kite_jumps' LIMIT 1`;
+  if (seen.length) return null;
   const fitBytes = await downloadFit(client, activityId);
   const desc = await surfrDescription(sql, startGmt);
   const payload = buildKiteJumps(fitBytes, desc);
