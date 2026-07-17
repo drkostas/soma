@@ -1,11 +1,28 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
-export default auth((req) => {
-  // Demo mode: no auth required
-  if (process.env.DEMO_MODE?.trim() === "true") return NextResponse.next();
+const isDev = process.env.NODE_ENV !== "production";
 
+/** Dev-only CORS so the universal Expo app can consume this API cross-origin. */
+function withDevCors(res: NextResponse, isApi: boolean): NextResponse {
+  if (isDev && isApi) {
+    res.headers.set("Access-Control-Allow-Origin", "*");
+    res.headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  }
+  return res;
+}
+
+export default auth((req) => {
   const { pathname } = req.nextUrl;
+  const isApi = pathname.startsWith("/api/");
+
+  if (isDev && isApi && req.method === "OPTIONS") {
+    return withDevCors(new NextResponse(null, { status: 204 }), true);
+  }
+
+  // Demo mode: no auth required
+  if (process.env.DEMO_MODE?.trim() === "true") return withDevCors(NextResponse.next(), isApi);
 
   // Always allow auth routes, login page, and image API (used by sync pipeline)
   if (
