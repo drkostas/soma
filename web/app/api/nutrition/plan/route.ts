@@ -3,6 +3,9 @@ import { getDb } from "@/lib/db";
 import { computeMacroTargetsFromContext } from "@/lib/macro-targets";
 import type { Mode } from "@/lib/mode-engine";
 import type { SlotBudgets } from "@/lib/nutrition-types";
+import { computeAdaptiveContext } from "@/lib/adaptive-tdee";
+import { computeWeeklyAdherence } from "@/lib/adherence";
+import { computeAlcoholDisplacement } from "macro-engine-core";
 
 export const runtime = "edge";
 
@@ -384,16 +387,13 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Alcohol offset: reduce food macro targets by drink calories ──
+    // Parity with macro-engine-core: alcohol kcal displace fat first (65%) then
+    // carbs, capped at the day's budget, never protein.
     if (drinkCalories > 0) {
       dayTargets.calories = Math.max(0, dayTargets.calories - drinkCalories);
-      // Reduce carbs first (alcohol inhibits carb oxidation), then fat
-      const carbGramsToRemove = Math.min(Math.round(drinkCalories / 4), dayTargets.carbs);
-      dayTargets.carbs -= carbGramsToRemove;
-      const remainingDrinkCal = drinkCalories - carbGramsToRemove * 4;
-      if (remainingDrinkCal > 0) {
-        const fatGramsToRemove = Math.min(Math.round(remainingDrinkCal / 9), dayTargets.fat);
-        dayTargets.fat -= fatGramsToRemove;
-      }
+      const disp = computeAlcoholDisplacement(drinkCalories, dayTargets.fat, dayTargets.carbs);
+      dayTargets.fat = Math.max(0, dayTargets.fat - disp.fat_reduction_g);
+      dayTargets.carbs = Math.max(0, dayTargets.carbs - disp.carbs_reduction_g);
     }
 
     remaining = {
@@ -531,7 +531,21 @@ export async function GET(req: NextRequest) {
     goalExpectedDeficit: trendRows
       .filter((r: Record<string, unknown>) => r.status === "closed")
       .length * goalDeficit,
+    // Weekly adherence (±10% band). Achieved deficit = burn − ate, summed over
+    // closed days (positive = in deficit); goal = closed days × goal/day.
+    adherence: (() => {
+      const closed = trendRows.filter((r: Record<string, unknown>) => r.status === "closed");
+      const weeklyActual = closed.reduce((s: number, r: Record<string, unknown>) => {
+        const ate = Number(r.actual_calories) || 0;
+        const burn = Math.round(computeBurn(r, false));
+        return s + (burn - ate);
+      }, 0);
+      return computeWeeklyAdherence(weeklyActual, closed.length * goalDeficit);
+    })(),
   };
+
+  // Adaptive TDEE + deficit-duration (display-only — never changes targets).
+  const adaptive = await computeAdaptiveContext(sql).catch(() => null);
 
   return NextResponse.json({
     plan,
@@ -546,5 +560,6 @@ export async function GET(req: NextRequest) {
     gymCalories,
     breakdown,
     trend7d,
+    adaptive,
   });
 }

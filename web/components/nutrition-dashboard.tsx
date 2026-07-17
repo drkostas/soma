@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useEffect } from "react";
+import { MACRO_COLORS } from "soma-style";
 import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -334,6 +335,7 @@ export function NutritionDashboard({
   const [budgetExpanded, setBudgetExpanded] = useState(false);
   const [breakdown, setBreakdown] = useState<any>(null);
   const [trend7d, setTrend7d] = useState<any>(null);
+  const [adaptive, setAdaptive] = useState<any>(null);
   const [dataReady, setDataReady] = useState(false);
   const [rebalanceToast, setRebalanceToast] = useState<string | null>(null);
 
@@ -357,6 +359,7 @@ export function NutritionDashboard({
         if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
         if (data.breakdown) setBreakdown(data.breakdown);
         if (data.trend7d) setTrend7d(data.trend7d);
+        setAdaptive(data.adaptive ?? null);
       }
       if (presetsRes.ok) {
         const presetsData = await presetsRes.json();
@@ -805,11 +808,51 @@ export function NutritionDashboard({
                             );
                           })()}
                         </div>
+                        {trend7d.adherence && (() => {
+                          const a = trend7d.adherence;
+                          const label = a.status === "on_track" ? "on track" : a.status === "under" ? "under goal" : "over goal";
+                          const color = a.status === "on_track" ? "text-green-500" : "text-amber-400";
+                          return (
+                            <div className="flex justify-between items-baseline text-[10px] mt-1 pt-1 border-t border-white/10">
+                              <span className="text-muted-foreground">Weekly adherence</span>
+                              <span className={`${color} tabular-nums`}>{label} · {Math.round(a.ratio * 100)}%</span>
+                            </div>
+                          );
+                        })()}
                         {trend7d.days.some((d: any) => d.manual) && (
                           <div className="text-[9px] text-muted-foreground/60">* offset target in parentheses · +/− vs {trend7d.goalDeficit}/day goal</div>
                         )}
                       </div>
                     )}
+                    {adaptive && (adaptive.driftFlag || adaptive.dietBreakLevel !== "none") && (() => {
+                      const level = adaptive.dietBreakLevel as string;
+                      const levelColor = level === "mandatory" ? "text-red-500"
+                        : level === "strong" ? "text-orange-400"
+                        : level === "suggested" ? "text-amber-400" : "text-muted-foreground";
+                      const levelLabel = level === "mandatory" ? "Diet break due"
+                        : level === "strong" ? "Diet break strongly advised"
+                        : level === "suggested" ? "Diet break suggested" : null;
+                      return (
+                        <div className="mt-3 pt-3 border-t border-white/10 space-y-1">
+                          <div className="text-[10px] lg:text-xs font-medium text-muted-foreground uppercase tracking-wider">Adaptive</div>
+                          {levelLabel && (
+                            <div className="flex justify-between items-baseline text-xs">
+                              <span className={`font-medium ${levelColor}`}>{levelLabel}</span>
+                              <span className="text-muted-foreground tabular-nums">{adaptive.deficitDurationDays}d in deficit</span>
+                            </div>
+                          )}
+                          {adaptive.driftFlag && (
+                            <div className="flex justify-between items-baseline text-xs">
+                              <span className="text-amber-400">TDEE drift</span>
+                              <span className="text-muted-foreground tabular-nums">
+                                ~{Math.round(adaptive.effectiveTdee)} vs {Math.round(adaptive.reportedTdee)} kcal
+                              </span>
+                            </div>
+                          )}
+                          <div className="text-[9px] text-muted-foreground/60">Informational — your targets are unchanged.</div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -873,14 +916,14 @@ export function NutritionDashboard({
                 return (
                   <div className="grid gap-2 pt-1">
                     <MacroBar label="Protein" current={consumedProtein} target={targetProtein}
-                      color="bg-blue-500" markers={proteinMarkers} />
+                      color={MACRO_COLORS.protein.bg} markers={proteinMarkers} />
                     <MacroBar label="Carbs" current={consumedCarbs} target={targetCarbs}
-                      color="bg-amber-500" markers={carbMarkers} />
+                      color={MACRO_COLORS.carbs.bg} markers={carbMarkers} />
                     <MacroBar label="Fat" current={consumedFat} target={targetFat}
-                      color="bg-rose-500" markers={fatMarkers} />
+                      color={MACRO_COLORS.fat.bg} markers={fatMarkers} />
                     {targetFiber > 0 && (
                       <MacroBar label="Fiber" current={consumedFiber} target={targetFiber}
-                        color="bg-green-500" markers={fiberMarkers} />
+                        color={MACRO_COLORS.fiber.bg} markers={fiberMarkers} />
                     )}
                   </div>
                 );
