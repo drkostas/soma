@@ -85,6 +85,38 @@ export function useTraining(date: string) {
   return { data, error };
 }
 
+export interface Calibration {
+  phase: number;
+  dataDays: number;
+  weights: { hrv: number; sleep: number; rhr: number; bb: number };
+  forceEqual: boolean;
+}
+
+/** Readiness calibration state (from the training graph endpoint). */
+export function useCalibration(date: string) {
+  const [cal, setCal] = useState<Calibration | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/api/training/graph?date=${date}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: { calibration: Calibration }) => alive && setCal(d.calibration ?? null))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [date, reload]);
+  return { cal, refetch: () => setReload((n) => n + 1) };
+}
+
+/** Toggle readiness weighting between adaptive and force-equal. Returns true on success. */
+export async function toggleCalibration(forceEqual: boolean): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/training/calibration/toggle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ forceEqual }),
+  });
+  return res.ok;
+}
+
 export function useSomaPlan(date: string) {
   const [data, setData] = useState<SomaPlan | null>(null);
   const [loading, setLoading] = useState(true);
