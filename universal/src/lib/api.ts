@@ -129,6 +129,51 @@ export function usePresets() {
   return { presets, error };
 }
 
+export interface Drink {
+  key: string;
+  name: string;
+  calories_per_100ml: number;
+  alcohol_pct: number;
+  default_ml: number;
+}
+
+/** soma's drink catalog (alcohol tracking). */
+export function useDrinks() {
+  const [drinks, setDrinks] = useState<Drink[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/api/nutrition/log-drink`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: { drinks: Record<string, Omit<Drink, "key">> }) =>
+        alive && setDrinks(Object.entries(d.drinks ?? {}).map(([key, v]) => ({ key, ...v }))))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return { drinks };
+}
+
+/** Log a drink (quantity of the drink's default serving). Returns true on success. */
+export async function logDrink(date: string, drinkType: string, quantity = 1): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/log-drink`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date, drink_type: drinkType, quantity }),
+  });
+  return res.ok;
+}
+
+/** Close (finalize) a day. Returns the resulting status ("closed" | "already_closed"). */
+export async function closeDay(date: string): Promise<string | null> {
+  const res = await fetch(`${API_BASE}/api/nutrition/close-day`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date }),
+  });
+  if (!res.ok) return null;
+  const d = (await res.json()) as { status?: string };
+  return d.status ?? null;
+}
+
 /** Log a preset meal into a slot. Returns true on success. */
 export async function logPresetMeal(
   date: string,
