@@ -69,13 +69,19 @@ See exactly what synced, configure push rules (e.g. Hevy strength → Strava), a
 
 ```
 Garmin Connect ──┐
-                 ├──▶  sync/ (Python, hourly)  ──▶  Neon PostgreSQL  ◀──  web/ (Next.js)  ──▶  Vercel
-Hevy API ────────┘                                                                │
-                                                                                  ▼
-                                                                             Strava (push)
+                 ├──▶  TS sync (Actions + Vercel crons)  ──▶  Neon PostgreSQL  ◀──  web/ (Next.js)  ──▶  Vercel
+Hevy API ────────┘                                                                       │
+                                                                                         ▼
+                                                                                    Strava (push)
 ```
 
-`sync/` writes. `web/` reads. That boundary never crosses.
+The stack is **all TypeScript**. The ingest/routing pipeline runs as GitHub Actions
+([`.github/workflows/sync.yml`](.github/workflows/sync.yml) → `scripts/sync-pipeline.mts`)
+plus Vercel cron functions, composing the same lib modules the `web/` app reads.
+Shared logic is published as npm packages — [`macro-engine-core`](https://github.com/drkostas/macro-engine),
+[`banister`](https://github.com/drkostas/banister), [`run-dj`](https://github.com/drkostas/run-dj),
+[`garmin-auth`](https://github.com/drkostas/garmin-auth) — and the UI (`web/` + the cross-platform
+`universal/` Expo app) renders from the shared [`soma-style`](https://github.com/drkostas/soma-style) design system.
 
 ---
 
@@ -93,7 +99,8 @@ Hevy API ────────┘                                            
 ### 1 — Database
 
 ```bash
-psql "$DATABASE_URL" -f sync/schema.sql
+# Apply the schema migrations (in order)
+for f in web/lib/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
 ### 2 — Web app
@@ -147,8 +154,9 @@ Runs every 4 hours via [`.github/workflows/sync.yml`](.github/workflows/sync.yml
 ## Development
 
 ```bash
-cd web && npm install && npm run dev    # → http://localhost:3456
-cd sync && python -m src.pipeline      # manual sync run
+cd web && npm install && npm run dev          # → http://localhost:3456
+cd web && npx tsx scripts/sync-pipeline.mts    # manual sync run (TS pipeline)
+cd universal && npm install && npm run web     # cross-platform Expo app (RN Web)
 ```
 
 ### In-app Claude chat
