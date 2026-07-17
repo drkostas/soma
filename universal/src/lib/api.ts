@@ -89,6 +89,7 @@ export function useSomaPlan(date: string) {
   const [data, setData] = useState<SomaPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -98,6 +99,60 @@ export function useSomaPlan(date: string) {
       .catch((e) => alive && setError(String(e.message ?? e)))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [date]);
-  return { data, loading, error };
+  }, [date, reload]);
+  return { data, loading, error, refetch: () => setReload((n) => n + 1) };
+}
+
+export interface Preset {
+  id: string;
+  name: string;
+  meal_slot: string | null;
+  total_calories: number;
+  total_protein: number;
+  total_carbs: number;
+  total_fat: number;
+  total_fiber: number;
+}
+
+/** soma's saved preset meals (log-meal is preset-based, not free-food search). */
+export function usePresets() {
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/api/nutrition/presets`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: { presets: Preset[] }) => alive && (setPresets(d.presets ?? []), setError(null)))
+      .catch((e) => alive && setError(String(e.message ?? e)));
+    return () => { alive = false; };
+  }, []);
+  return { presets, error };
+}
+
+/** Log a preset meal into a slot. Returns true on success. */
+export async function logPresetMeal(
+  date: string,
+  slot: string,
+  preset: Preset,
+  portion = 1,
+): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/log-meal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      date,
+      meal_slot: slot,
+      preset_meal_id: preset.id,
+      portion_multiplier: portion,
+      items: [],
+      preset_macros: {
+        calories: preset.total_calories,
+        protein: preset.total_protein,
+        carbs: preset.total_carbs,
+        fat: preset.total_fat,
+        fiber: preset.total_fiber,
+      },
+    }),
+  });
+  return res.ok;
 }
