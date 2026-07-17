@@ -58,3 +58,5 @@ web/.agents/
 web/.claude
 prompt.md
 multiple_messages
+# Vercel CLI-generated OIDC token (never commit)
+.env.vercel
