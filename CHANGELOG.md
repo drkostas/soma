@@ -4,22 +4,29 @@ Soma is a continuously-deployed self-hosted training stack. This changelog
 documents notable changes to the codebase organized by theme. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Modularization (ongoing)
+## TypeScript consolidation ([#159](https://github.com/drkostas/soma/issues/159))
 
-Extracting self-contained subsystems from `sync/src/` into standalone PyPI
-packages so other people can use them without running all of soma. Cross-repo
-progress is tracked in the [Soma Ecosystem project](https://github.com/users/drkostas/projects/9).
+The whole stack moved to **one language, TypeScript**. The Python `sync/` was
+deleted; the ingest/routing/notification pipeline now runs as GitHub Actions
+(`scripts/sync-pipeline.mts`) + Vercel cron functions. Self-contained subsystems
+are published as **npm packages** that soma imports as thin re-export shims.
+Cross-repo progress is tracked in the [Soma Ecosystem project](https://github.com/users/drkostas/projects/9).
 
 ### Shipped
 
-- **hevy2garmin integration** ([#2](https://github.com/drkostas/soma/issues/2), [#1](https://github.com/drkostas/soma/pull/1)) — replaced `hevy_client.py`, `exercise_mapper.py`, `fit_generator.py` with thin re-export wrappers from the published `hevy2garmin` PyPI package. `activity_replacer` uses hevy2garmin for FIT generation, upload, and rename. Added browser-based Garmin auth to the Next.js web app via the hevy2garmin Cloudflare Worker flow. Removed ~1073 lines of duplicate code.
-- **garmin-auth package** ([#3](https://github.com/drkostas/soma/issues/3), [#1](https://github.com/drkostas/soma/pull/1)) — extracted the Garmin SSO + token storage layer into the standalone `garmin-auth` package. `sync/src/garmin_client.py` now imports `GarminAuth`. Removed duplicate Vercel SSO middleware. Bumped to `garmin-auth==0.2.1` for the cloud `expires_at` fix.
+- **macro-engine-core** `0.1.1` ([#160](https://github.com/drkostas/soma/issues/160)) — nutrition math (TDEE, deficit, sleep/alcohol/day-close, macro targets) with 2322 golden-parity cases. Deleted the Python `sync/src/nutrition_engine`.
+- **banister** `0.2.0` ([#161](https://github.com/drkostas/soma/issues/161)) — fitness/fatigue predict + differential-evolution fit, VDOT, calibration.
+- **run-dj** `0.3.0` ([#162](https://github.com/drkostas/soma/issues/162)) — HR→BPM formula, interleaved shuffle, segment playlist scoring. `web/lib/{bpm-formula,dj-shuffle,playlist-algorithm}.ts` re-export from it.
+- **garmin-auth** `0.4.1` ([#164](https://github.com/drkostas/soma/issues/164)) — self-healing Garmin OAuth + token store (TS).
+- **hevy2garmin core** ([#163](https://github.com/drkostas/soma/issues/163)) — Hevy→FIT→Garmin in TS.
+- **soma-core** ([#165](https://github.com/drkostas/soma/issues/165)) — the whole `sync/` pipeline ported to TS crons; Python `sync/` deleted.
+- **hevy2garmin integration** ([#2](https://github.com/drkostas/soma/issues/2)) and **garmin-auth** ([#3](https://github.com/drkostas/soma/issues/3)) — the earlier Python-package extractions (predecessors to the TS move above).
 
-### Planned
+## Universal UI ([#223](https://github.com/drkostas/soma/issues/223))
 
-- **run-dj** ([#4](https://github.com/drkostas/soma/issues/4)) — HR-driven Spotify song selection during runs. Extracted from `sync/src/dj_daemon.py`.
-- **banister** ([#5](https://github.com/drkostas/soma/issues/5)) — Banister fitness/fatigue model, VDOT, readiness scoring, plan generation. Extracted from `sync/src/training_engine/`.
-- **macro-engine** ([#6](https://github.com/drkostas/soma/issues/6)) — TDEE, carb periodization, meal slot distribution. Extracted from `sync/src/nutrition_engine/`.
+- Unified all product UIs (soma, macro-engine, hevy2garmin) onto **one** RN framework — Expo + React Native Web + NativeWind — consuming the shared [`soma-style`](https://github.com/drkostas/soma-style) design system. Each repo gains a cross-platform `universal/` app.
+- soma `universal/`: Overview (live health), Nutrition (+ preset meal-logging, log-a-drink, close-day writes), Training (PMC/readiness/fitness + a readiness-weighting toggle).
+- New read-only endpoint `GET /api/hevy/status` (recent Hevy workouts + Garmin sync counts) powering the hevy2garmin universal dashboard.
 
 ## Sync pipeline
 
