@@ -51,6 +51,40 @@ export function useToday() {
   return { data, error };
 }
 
+export interface TrainingBreakdown {
+  date: string;
+  readiness: {
+    traffic_light: string;
+    composite_score: number | null;
+    hrv_z_score: number | null;
+    sleep_z_score: number | null;
+    rhr_z_score: number | null;
+    body_battery_z_score: number | null;
+  };
+  pmc: { ctl: number; atl: number; tsb: number };
+  fitness: {
+    vo2max: number | null;
+    decoupling_pct: number | null;
+    weight_kg: number | null;
+    vdot_adjusted: number | null;
+  };
+}
+
+/** soma's training breakdown: PMC (fitness/fatigue/form), readiness, fitness markers. */
+export function useTraining(date: string) {
+  const [data, setData] = useState<TrainingBreakdown | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/api/training/breakdown?date=${date}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: TrainingBreakdown) => alive && (setData(d), setError(null)))
+      .catch((e) => alive && setError(String(e.message ?? e)));
+    return () => { alive = false; };
+  }, [date]);
+  return { data, error };
+}
+
 export function useSomaPlan(date: string) {
   const [data, setData] = useState<SomaPlan | null>(null);
   const [loading, setLoading] = useState(true);
