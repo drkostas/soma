@@ -20,6 +20,37 @@ export interface SomaPlan {
   trend7d?: { adherence?: { ratio: number; status: string; weeklyActual: number; weeklyGoal: number } | null };
 }
 
+export interface Today {
+  total_steps?: number;
+  total_distance_meters?: number;
+  active_kilocalories?: number;
+  total_kilocalories?: number;
+  resting_heart_rate?: number;
+  min_heart_rate?: number;
+  max_heart_rate?: number;
+  avg_stress_level?: number;
+  max_stress_level?: number;
+  body_battery_max?: number;
+  body_battery_drained?: number;
+  moderate_intensity_minutes?: number;
+  vigorous_intensity_minutes?: number;
+}
+
+/** soma's daily health metrics (Overview). */
+export function useToday() {
+  const [data, setData] = useState<Today | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/api/health/today`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: Today) => alive && (setData(d), setError(null)))
+      .catch((e) => alive && setError(String(e.message ?? e)));
+    return () => { alive = false; };
+  }, []);
+  return { data, error };
+}
+
 export function useSomaPlan(date: string) {
   const [data, setData] = useState<SomaPlan | null>(null);
   const [loading, setLoading] = useState(true);
