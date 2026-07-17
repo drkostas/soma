@@ -1,6 +1,6 @@
 import { ScrollView, View } from "react-native";
-import { Text, Card, Badge, ProgressBar } from "soma-style";
-import { useTraining } from "../../lib/api";
+import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
+import { useTraining, useCalibration, toggleCalibration } from "../../lib/api";
 
 /** Today (local), YYYY-MM-DD — training data is computed daily by the Garmin cron. */
 function todayISO(): string {
@@ -20,9 +20,15 @@ const tsbPct = (tsb: number) => Math.max(0, Math.min(1, (tsb + 30) / 60));
 
 export default function TrainingScreen() {
   const { data, error } = useTraining(todayISO());
+  const { cal, refetch: refetchCal } = useCalibration(todayISO());
   const pmc = data?.pmc;
   const fit = data?.fitness;
   const readiness = data?.readiness;
+
+  async function onToggleWeighting(mode: "Adaptive" | "Equal") {
+    const ok = await toggleCalibration(mode === "Equal");
+    if (ok) refetchCal();
+  }
 
   const tsb = pmc?.tsb ?? 0;
   const load = [
@@ -117,6 +123,38 @@ export default function TrainingScreen() {
             ) : (
               <Text variant="micro">No baseline z-scores yet (needs ~14 days of history).</Text>
             )}
+          </Card>
+        ) : null}
+
+        {cal ? (
+          <Card className="gap-3">
+            <View className="flex-row items-center justify-between">
+              <Text variant="eyebrow">Readiness weighting</Text>
+              <Text variant="micro" className="tabular-nums">phase {cal.phase} · {cal.dataDays}d data</Text>
+            </View>
+            <SegmentedControl
+              options={["Adaptive", "Equal"] as const}
+              value={cal.forceEqual ? "Equal" : "Adaptive"}
+              onChange={onToggleWeighting}
+            />
+            <View className="flex-row justify-between">
+              {([
+                ["HRV", cal.weights.hrv],
+                ["Sleep", cal.weights.sleep],
+                ["RHR", cal.weights.rhr],
+                ["Body Batt", cal.weights.bb],
+              ] as const).map(([label, w]) => (
+                <View key={label} className="items-center gap-0.5">
+                  <Text variant="micro" className="text-text-muted">{label}</Text>
+                  <Text variant="caption" className="tabular-nums text-text">{Math.round(w * 100)}%</Text>
+                </View>
+              ))}
+            </View>
+            <Text variant="micro">
+              {cal.forceEqual
+                ? "Equal — each signal weighted 25%."
+                : "Adaptive — weights learn from your history as data accrues."}
+            </Text>
           </Card>
         ) : null}
       </View>
