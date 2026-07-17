@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
-import { Text, Card, Badge, SegmentedControl, ProgressBar, MacroBar, Button, Modal } from "soma-style";
-import { useSomaPlan, type MacroSet } from "../../lib/api";
+import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup } from "soma-style";
+import { useSomaPlan, usePresets, logPresetMeal, type MacroSet, type Preset } from "../../lib/api";
 
 const DATE = "2026-07-16";
 
@@ -12,10 +12,18 @@ const MACROS = [
   { key: "fiber", label: "Fiber", color: "#82d0c8", tKey: "target_fiber" },
 ] as const;
 
+const SLOT_ORDER = ["breakfast", "lunch", "dinner", "pre_sleep", "during_workout"];
+const slotLabel = (s: string) => s.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
 export default function NutritionScreen() {
-  const { data, loading, error } = useSomaPlan(DATE);
+  const { data, loading, error, refetch } = useSomaPlan(DATE);
+  const { presets } = usePresets();
   const [tab, setTab] = useState<"Day" | "Trajectory">("Day");
   const [refeed, setRefeed] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [slot, setSlot] = useState("lunch");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [loggedId, setLoggedId] = useState<string | null>(null);
 
   const plan = data?.plan;
   const consumed = data?.consumed;
@@ -23,6 +31,19 @@ export default function NutritionScreen() {
   const adaptive = data?.adaptive;
   const adherence = data?.trend7d?.adherence;
   const targetCal = plan?.target_calories ?? 0;
+
+  const availSlots = SLOT_ORDER.filter((s) => data?.slotBudgets?.[s] != null);
+  const slots = availSlots.length ? availSlots : SLOT_ORDER;
+
+  async function onLog(preset: Preset) {
+    setBusyId(preset.id);
+    const ok = await logPresetMeal(DATE, slot, preset);
+    setBusyId(null);
+    if (ok) {
+      setLoggedId(preset.id);
+      refetch();
+    }
+  }
 
   return (
     <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
@@ -97,16 +118,56 @@ export default function NutritionScreen() {
           <Text variant="eyebrow">Per-meal kcal</Text>
           {Object.entries(data?.slotBudgets ?? {})
             .filter(([, v]) => (v?.calories ?? 0) > 0)
-            .map(([slot, v]) => (
-              <View key={slot} className="flex-row items-center justify-between border-b border-border-subtle py-2">
-                <Text variant="body" className="capitalize text-text-secondary">{slot.replace("_", " ")}</Text>
+            .map(([s, v]) => (
+              <View key={s} className="flex-row items-center justify-between border-b border-border-subtle py-2">
+                <Text variant="body" className="capitalize text-text-secondary">{s.replace("_", " ")}</Text>
                 <Text variant="body" className="tabular-nums text-text">{Math.round(v.calories)} kcal</Text>
               </View>
             ))}
         </Card>
 
-        <Button label="Plan a refeed" variant="primary" onPress={() => setRefeed(true)} />
+        <Button label="Log a meal" variant="primary" onPress={() => setLogOpen(true)} />
+        <Button label="Plan a refeed" variant="ghost" onPress={() => setRefeed(true)} />
       </View>
+
+      {/* Log-meal modal — preset-based (soma logs saved meals, not free foods) */}
+      <Modal visible={logOpen} onClose={() => setLogOpen(false)} title="Log a meal">
+        <Text variant="caption" className="mb-2 text-text-secondary">Add a saved meal to a slot.</Text>
+        <PillGroup className="mb-3">
+          {slots.map((s) => (
+            <Pill key={s} label={slotLabel(s)} active={slot === s} onPress={() => setSlot(s)} />
+          ))}
+        </PillGroup>
+        <ScrollView className="max-h-80">
+          {presets.map((p) => {
+            const done = loggedId === p.id;
+            return (
+              <View key={p.id} className="flex-row items-center gap-2 border-b border-border-subtle py-2.5">
+                <View className="flex-1">
+                  <Text variant="body" className="text-text" numberOfLines={1}>{p.name}</Text>
+                  <Text variant="micro" className="tabular-nums">
+                    {Math.round(p.total_calories)} kcal · P{Math.round(p.total_protein)} C{Math.round(p.total_carbs)} F{Math.round(p.total_fat)}
+                  </Text>
+                </View>
+                {done ? (
+                  <Badge label="Logged" tone="success" />
+                ) : (
+                  <Button
+                    label={busyId === p.id ? "…" : "Log"}
+                    variant="secondary"
+                    size="sm"
+                    disabled={busyId != null}
+                    onPress={() => onLog(p)}
+                  />
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+        <View className="mt-4 flex-row justify-end">
+          <Button label="Done" variant="primary" onPress={() => setLogOpen(false)} />
+        </View>
+      </Modal>
 
       <Modal visible={refeed} onClose={() => setRefeed(false)} title="Plan a refeed">
         <Text variant="body" className="text-text-secondary">A refeed raises carbs for a day to ease a long deficit.</Text>
