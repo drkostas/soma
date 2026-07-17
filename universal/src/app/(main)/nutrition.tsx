@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup } from "soma-style";
-import { useSomaPlan, usePresets, logPresetMeal, type MacroSet, type Preset } from "../../lib/api";
+import { useSomaPlan, usePresets, logPresetMeal, useDrinks, logDrink, closeDay, type Preset } from "../../lib/api";
 
 const DATE = "2026-07-16";
 
@@ -18,12 +18,19 @@ const slotLabel = (s: string) => s.replace("_", " ").replace(/\b\w/g, (c) => c.t
 export default function NutritionScreen() {
   const { data, loading, error, refetch } = useSomaPlan(DATE);
   const { presets } = usePresets();
+  const { drinks } = useDrinks();
   const [tab, setTab] = useState<"Day" | "Trajectory">("Day");
   const [refeed, setRefeed] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [slot, setSlot] = useState("lunch");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loggedId, setLoggedId] = useState<string | null>(null);
+  const [drinkOpen, setDrinkOpen] = useState(false);
+  const [drinkBusy, setDrinkBusy] = useState<string | null>(null);
+  const [drinkLogged, setDrinkLogged] = useState<string | null>(null);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [closeStatus, setCloseStatus] = useState<string | null>(null);
 
   const plan = data?.plan;
   const consumed = data?.consumed;
@@ -41,6 +48,27 @@ export default function NutritionScreen() {
     setBusyId(null);
     if (ok) {
       setLoggedId(preset.id);
+      refetch();
+    }
+  }
+
+  async function onLogDrink(key: string) {
+    setDrinkBusy(key);
+    const ok = await logDrink(DATE, key);
+    setDrinkBusy(null);
+    if (ok) {
+      setDrinkLogged(key);
+      refetch();
+    }
+  }
+
+  async function onCloseDay() {
+    setClosing(true);
+    const status = await closeDay(DATE);
+    setClosing(false);
+    setCloseStatus(status);
+    if (status) {
+      setCloseOpen(false);
       refetch();
     }
   }
@@ -126,7 +154,17 @@ export default function NutritionScreen() {
             ))}
         </Card>
 
+        {closeStatus ? (
+          <View className="flex-row items-center justify-center gap-2">
+            <Badge label={closeStatus === "closed" ? "Day closed" : "Already closed"} tone="success" />
+          </View>
+        ) : null}
+
         <Button label="Log a meal" variant="primary" onPress={() => setLogOpen(true)} />
+        <View className="flex-row gap-3">
+          <Button label="Log a drink" variant="secondary" className="flex-1" onPress={() => setDrinkOpen(true)} />
+          <Button label="Close day" variant="secondary" className="flex-1" onPress={() => setCloseOpen(true)} />
+        </View>
         <Button label="Plan a refeed" variant="ghost" onPress={() => setRefeed(true)} />
       </View>
 
@@ -166,6 +204,49 @@ export default function NutritionScreen() {
         </ScrollView>
         <View className="mt-4 flex-row justify-end">
           <Button label="Done" variant="primary" onPress={() => setLogOpen(false)} />
+        </View>
+      </Modal>
+
+      {/* Log-drink modal — soma's alcohol tracking */}
+      <Modal visible={drinkOpen} onClose={() => setDrinkOpen(false)} title="Log a drink">
+        <Text variant="caption" className="mb-2 text-text-secondary">One default serving is logged per tap.</Text>
+        <ScrollView className="max-h-80">
+          {drinks.map((d) => {
+            const done = drinkLogged === d.key;
+            return (
+              <View key={d.key} className="flex-row items-center gap-2 border-b border-border-subtle py-2.5">
+                <View className="flex-1">
+                  <Text variant="body" className="text-text" numberOfLines={1}>{d.name}</Text>
+                  <Text variant="micro" className="tabular-nums">
+                    {Math.round((d.calories_per_100ml * d.default_ml) / 100)} kcal · {d.alcohol_pct}% · {d.default_ml}ml
+                  </Text>
+                </View>
+                {done ? (
+                  <Badge label="Logged" tone="success" />
+                ) : (
+                  <Button
+                    label={drinkBusy === d.key ? "…" : "Log"}
+                    variant="secondary"
+                    size="sm"
+                    disabled={drinkBusy != null}
+                    onPress={() => onLogDrink(d.key)}
+                  />
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+        <View className="mt-4 flex-row justify-end">
+          <Button label="Done" variant="primary" onPress={() => setDrinkOpen(false)} />
+        </View>
+      </Modal>
+
+      {/* Close-day confirm */}
+      <Modal visible={closeOpen} onClose={() => setCloseOpen(false)} title="Close this day?">
+        <Text variant="body" className="text-text-secondary">Finalizing locks in today&apos;s totals and updates your trend. You can reopen it later.</Text>
+        <View className="mt-4 flex-row justify-end gap-2">
+          <Button label="Cancel" variant="ghost" onPress={() => setCloseOpen(false)} />
+          <Button label={closing ? "Closing…" : "Close day"} variant="primary" disabled={closing} onPress={onCloseDay} />
         </View>
       </Modal>
 
