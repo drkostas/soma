@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { MACRO_COLORS } from "soma-style";
+import { MACRO_COLORS } from "soma-style/colors";
 import { Trash2, Plus, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
