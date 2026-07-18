@@ -4,8 +4,15 @@ import { NavBar } from "soma-style";
 
 const ITEMS = [
   { key: "overview", label: "Overview" },
-  { key: "nutrition", label: "Nutrition" },
   { key: "training", label: "Training" },
+  { key: "running", label: "Running" },
+  { key: "workouts", label: "Workouts" },
+  { key: "activities", label: "Activities" },
+  { key: "sleep", label: "Sleep" },
+  { key: "nutrition", label: "Nutrition" },
+  { key: "playlist", label: "Playlist" },
+  { key: "connections", label: "Sync" },
+  { key: "status", label: "Status" },
 ];
 
 export default function MainLayout() {
