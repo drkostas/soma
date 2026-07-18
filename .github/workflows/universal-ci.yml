@@ -1,0 +1,30 @@
+name: universal-ci
+
+on:
+  pull_request:
+    paths:
+      - "universal/**"
+      - ".github/workflows/universal-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "universal/**"
+
+jobs:
+  test:
+    name: Universal — Typecheck + Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: universal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: npm ci || npm install
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
