@@ -147,6 +147,10 @@ export default function PlaylistScreen() {
           </Card>
         ) : null}
 
+        {/* Data-dependent content — hidden during the initial load so the 0-value
+            Library card never flashes as if it were real empty data. */}
+        {data ? (
+        <>
         {/* Library analysis status — the onboarding "analyse library" surface */}
         <Card className="gap-3">
           <View className="flex-row items-center justify-between">
@@ -258,6 +262,8 @@ export default function PlaylistScreen() {
               </Text>
             </Card>
           )
+        ) : null}
+        </>
         ) : null}
       </View>
     </ScrollView>

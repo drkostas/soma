@@ -12,7 +12,7 @@ const ITEMS = [
   { key: "nutrition", label: "Nutrition" },
   { key: "playlist", label: "Playlist" },
   { key: "connections", label: "Sync" },
-  { key: "status", label: "Status" },
+  { key: "system", label: "Status" },
 ];
 
 export default function MainLayout() {
