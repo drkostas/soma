@@ -9,6 +9,7 @@ const withSerwist = withSerwistInit({
 
 const nextConfig: NextConfig = {
   turbopack: {},
+  transpilePackages: ["soma-style"],
 };
 
 export default withSerwist(nextConfig);

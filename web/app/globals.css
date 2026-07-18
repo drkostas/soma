@@ -7,9 +7,11 @@
    theme.css = macro + status colors. */
 @import "../node_modules/soma-style/css/base.css";
 @import "../node_modules/soma-style/css/theme.css";
+/* shadcn token mapping onto the soma palette (defines --color-ring etc.) */
+@import "../node_modules/soma-style/css/shadcn-compat.css";
 /* Scan soma-style so the macro utility classes it names (bg-warm, text-indigo,
    text-success, …) are generated even though they only appear in node_modules. */
-@source "../node_modules/soma-style/dist";
+@source "../node_modules/soma-style/src";
 
 
 @layer base {
