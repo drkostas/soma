@@ -1,11 +1,19 @@
 import { Slot, usePathname, useRouter } from "expo-router";
 import { View } from "react-native";
 import { NavBar } from "soma-style";
+import { ChatSheet } from "../../components/ChatSheet";
 
 const ITEMS = [
   { key: "overview", label: "Overview" },
-  { key: "nutrition", label: "Nutrition" },
   { key: "training", label: "Training" },
+  { key: "running", label: "Running" },
+  { key: "workouts", label: "Workouts" },
+  { key: "activities", label: "Activities" },
+  { key: "sleep", label: "Sleep" },
+  { key: "nutrition", label: "Nutrition" },
+  { key: "playlist", label: "Playlist" },
+  { key: "connections", label: "Sync" },
+  { key: "system", label: "Status" },
 ];
 
 export default function MainLayout() {
@@ -16,6 +24,7 @@ export default function MainLayout() {
     <View className="flex-1 bg-base">
       <NavBar brand="soma" items={ITEMS} active={active} onSelect={(k) => router.push(`/${k}` as never)} />
       <Slot />
+      <ChatSheet />
     </View>
   );
 }
