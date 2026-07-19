@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.6",
+    "@expo/vector-icons": "^15.0.2",
     "expo": "~57.0.6",
     "expo-constants": "~57.0.5",
     "expo-device": "~57.0.1",
