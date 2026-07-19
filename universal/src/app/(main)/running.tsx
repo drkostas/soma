@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, ProgressBar } from "soma-style";
+import { Sparkline } from "../../components/Sparkline";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
@@ -84,6 +85,7 @@ interface RunningPayload {
   records: Records | null;
   shoeMileage: ShoeMileage[];
   recentRuns: RecentRun[];
+  trends: { pace: number[]; vo2max: number[]; mileage: number[] } | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -161,19 +163,28 @@ export default function RunningScreen() {
   const recent = data?.recentRuns ?? [];
 
   const zoneTotal = zones.reduce((s, z) => s + num(z.count), 0);
+  const trends = data?.trends;
 
-  const summaryCards: { label: string; value: string; sub: string; cls: string }[] = [
+  const summaryCards: {
+    label: string;
+    value: string;
+    sub: string;
+    cls: string;
+    spark?: { data: number[]; color: string };
+  }[] = [
     {
       label: "Total Distance",
       value: stats?.total_km != null ? `${num(stats.total_km).toFixed(0)} km` : "—",
       sub: `${num(stats?.total_runs)} runs`,
       cls: "text-teal",
+      spark: trends?.mileage?.length ? { data: trends.mileage, color: "#77c8d1" } : undefined,
     },
     {
       label: "Avg Pace",
       value: stats?.avg_pace != null ? `${formatPace(num(stats.avg_pace))}/km` : "—",
       sub: "per kilometre",
       cls: "text-lime",
+      spark: trends?.pace?.length ? { data: trends.pace, color: "#cbe896" } : undefined,
     },
     {
       label: "Avg Heart Rate",
@@ -186,6 +197,7 @@ export default function RunningScreen() {
       value: stats?.peak_vo2max != null ? num(stats.peak_vo2max).toFixed(1) : "—",
       sub: "ml/kg/min",
       cls: "text-warning",
+      spark: trends?.vo2max?.length ? { data: trends.vo2max, color: "#e0a458" } : undefined,
     },
   ];
 
@@ -224,6 +236,11 @@ export default function RunningScreen() {
                 {s.value}
               </Text>
               <Text variant="micro">{s.sub}</Text>
+              {s.spark ? (
+                <View className="mt-1">
+                  <Sparkline data={s.spark.data} color={s.spark.color} height={28} baseline />
+                </View>
+              ) : null}
             </Card>
           ))}
         </View>
