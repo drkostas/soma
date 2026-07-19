@@ -1,6 +1,29 @@
+import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
 import { useTraining, useCalibration, toggleCalibration } from "../../lib/api";
+import { Sparkline } from "../../components/Sparkline";
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+
+/** VO2max trend (last year, chronological) from the shared stats endpoint. */
+function useVo2Trend() {
+  const [series, setSeries] = useState<number[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/api/stats/vo2max?range=1y`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { current?: { value: number | null }[] }) => {
+        if (!alive) return;
+        setSeries((d.current ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v)));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return series;
+}
 
 /** Today (local), YYYY-MM-DD — training data is computed daily by the Garmin cron. */
 function todayISO(): string {
@@ -24,6 +47,7 @@ export default function TrainingScreen() {
   const pmc = data?.pmc;
   const fit = data?.fitness;
   const readiness = data?.readiness;
+  const vo2Trend = useVo2Trend();
 
   async function onToggleWeighting(mode: "Adaptive" | "Equal") {
     const ok = await toggleCalibration(mode === "Equal");
@@ -99,6 +123,16 @@ export default function TrainingScreen() {
             <Text variant="micro">kg</Text>
           </Card>
         </View>
+
+        {vo2Trend.length >= 2 ? (
+          <Card className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <Text variant="eyebrow">VO2max trend</Text>
+              <Text variant="micro" className="text-text-muted">last 12 months</Text>
+            </View>
+            <Sparkline data={vo2Trend} color="#77c8d1" height={44} baseline />
+          </Card>
+        ) : null}
 
         {readiness ? (
           <Card className="gap-2">
