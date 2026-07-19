@@ -28,8 +28,8 @@ function CenterLogButton() {
       <Pressable
         onPress={openChat}
         accessibilityLabel="Log or ask Claude"
-        className="h-14 w-14 items-center justify-center rounded-full bg-teal"
-        style={{ marginTop: -18, shadowColor: TEAL, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 }}
+        className="h-14 w-14 items-center justify-center rounded-full border-2 border-base bg-teal"
+        style={{ marginTop: -14 }}
       >
         <Ionicons name="add" size={30} color={INK} />
       </Pressable>
