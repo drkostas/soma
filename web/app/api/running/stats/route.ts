@@ -16,7 +16,8 @@ export async function GET() {
   const sql = getDb();
 
   try {
-    const [statsRows, trainingRows, hrRows, recentRows, shoeRows, ...records] = await Promise.all([
+    const [statsRows, trainingRows, hrRows, recentRows, shoeRows, paceRows, vo2Rows, mileageRows, ...records] =
+      await Promise.all([
       // Aggregate stats
       sql`
         SELECT
@@ -129,6 +130,38 @@ export async function GET() {
         GROUP BY gear_pk, shoe_name, status, max_km
         ORDER BY total_km DESC
       `,
+      // Trend series for tier-1 sparklines (recent → chronological), value-only.
+      sql`
+        SELECT (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as v
+        FROM garmin_activity_raw
+        WHERE endpoint_name = 'summary'
+          AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+          AND (raw_json->>'distance')::float > 1000
+        ORDER BY (raw_json->>'startTimeLocal')::text DESC LIMIT 40
+      `,
+      sql`
+        SELECT v FROM (
+          SELECT DISTINCT ON (LEFT((raw_json->>'startTimeLocal')::text, 10))
+            LEFT((raw_json->>'startTimeLocal')::text, 10) as d,
+            (raw_json->>'vO2MaxValue')::float as v
+          FROM garmin_activity_raw
+          WHERE endpoint_name = 'summary'
+            AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+            AND raw_json->>'vO2MaxValue' IS NOT NULL
+          ORDER BY LEFT((raw_json->>'startTimeLocal')::text, 10) DESC
+          LIMIT 40
+        ) t ORDER BY d ASC
+      `,
+      sql`
+        SELECT v FROM (
+          SELECT TO_CHAR((raw_json->>'startTimeLocal')::timestamp, 'YYYY-MM') as m,
+            SUM((raw_json->>'distance')::float) / 1000.0 as v
+          FROM garmin_activity_raw
+          WHERE endpoint_name = 'summary'
+            AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+          GROUP BY m ORDER BY m DESC LIMIT 12
+        ) t ORDER BY m ASC
+      `,
       // Personal records — six independent one-row queries
       sql`
         SELECT (raw_json->>'startTimeLocal')::text as date, (raw_json->>'activityName')::text as name,
@@ -200,6 +233,12 @@ export async function GET() {
       },
       shoeMileage: shoeRows,
       recentRuns: recentRows,
+      trends: {
+        // pace query is recent-first; reverse to chronological for the sparkline
+        pace: paceRows.map((r) => Number(r.v)).reverse(),
+        vo2max: vo2Rows.map((r) => Number(r.v)),
+        mileage: mileageRows.map((r) => Number(r.v)),
+      },
     });
   } catch (err) {
     console.error("running/stats error:", err);
