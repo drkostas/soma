@@ -1,6 +1,7 @@
 import { ScrollView, View } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar } from "soma-style";
+import { Sparkline } from "../../components/Sparkline";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
@@ -75,7 +76,13 @@ export default function WorkoutsScreen() {
     return Math.round(withEx.reduce((s, w) => s + w.exercises, 0) / withEx.length);
   })();
 
-  const stats: { label: string; value: string; sub: string; cls: string }[] = [
+  // Per-session calories, oldest→newest, for the Avg-Calories trend sparkline.
+  const kcalTrend = recent
+    .map((w) => w.kcal)
+    .filter((k) => k > 0)
+    .reverse();
+
+  const stats: { label: string; value: string; sub: string; cls: string; spark?: { data: number[]; color: string } }[] = [
     {
       label: "Total Synced",
       value: `${totalSynced}`,
@@ -93,6 +100,7 @@ export default function WorkoutsScreen() {
       value: avgKcal != null ? `${avgKcal}` : "—",
       sub: "kcal via Garmin HR",
       cls: "text-warm",
+      spark: { data: kcalTrend, color: "#b17850" },
     },
     {
       label: "Avg Exercises",
@@ -135,6 +143,11 @@ export default function WorkoutsScreen() {
                 {s.value}
               </Text>
               <Text variant="micro">{s.sub}</Text>
+              {s.spark && s.spark.data.length >= 2 ? (
+                <View className="mt-1">
+                  <Sparkline data={s.spark.data} color={s.spark.color} height={24} baseline />
+                </View>
+              ) : null}
             </Card>
           ))}
         </View>
