@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { fetch as expoFetch } from "expo/fetch";
 import { Text, Card, Badge, type BadgeTone } from "soma-style";
+import { useChat as useChatSheet } from "./ChatContext";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
@@ -64,7 +65,7 @@ function summarizeToolInput(name: string, input: Record<string, unknown> | null)
 /* Streaming hook                                                      */
 /* ------------------------------------------------------------------ */
 
-function useChat() {
+function useChatStream() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
   const [transport, setTransport] = useState<"unknown" | "local" | "proxy" | "offline">("unknown");
@@ -353,9 +354,9 @@ function Bubble({ msg }: { msg: Message }) {
 /* ------------------------------------------------------------------ */
 
 export function ChatSheet() {
-  const [open, setOpen] = useState(false);
+  const { open, closeChat } = useChatSheet();
   const [input, setInput] = useState("");
-  const { messages, busy, transport, send, cancel, reset } = useChat();
+  const { messages, busy, transport, send, cancel, reset } = useChatStream();
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -371,19 +372,7 @@ export function ChatSheet() {
 
   return (
     <>
-      {!open ? (
-        <Pressable
-          onPress={() => setOpen(true)}
-          accessibilityLabel="Open chat"
-          className="absolute bottom-6 right-6 h-14 w-14 items-center justify-center rounded-full bg-teal shadow-lg"
-        >
-          <Text variant="title" className="text-ink">
-            ✦
-          </Text>
-        </Pressable>
-      ) : null}
-
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} animationType="slide" transparent onRequestClose={closeChat}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           className="flex-1 justify-end"
@@ -403,7 +392,7 @@ export function ChatSheet() {
                     New
                   </Text>
                 </Pressable>
-                <Pressable onPress={() => setOpen(false)} accessibilityLabel="Close chat">
+                <Pressable onPress={closeChat} accessibilityLabel="Close chat">
                   <Text variant="caption" className="text-text-muted">
                     Close
                   </Text>
