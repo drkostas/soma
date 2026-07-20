@@ -1,7 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup } from "soma-style";
 import { useSomaPlan, usePresets, logPresetMeal, useDrinks, logDrink, closeDay, type Preset } from "../../lib/api";
+import { Sparkline } from "../../components/Sparkline";
+
+const NUTR_API = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+
+/** 14-day daily-calories series for the adherence trend sparkline. */
+function useCaloriesTrend() {
+  const [series, setSeries] = useState<number[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${NUTR_API}/api/overview/trends`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { calories?: number[] }) => alive && setSeries((d.calories ?? []).filter((v) => isFinite(v))))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return series;
+}
 
 const DATE = "2026-07-16";
 
@@ -37,6 +56,7 @@ export default function NutritionScreen() {
   const remaining = data?.remaining;
   const adaptive = data?.adaptive;
   const adherence = data?.trend7d?.adherence;
+  const caloriesTrend = useCaloriesTrend();
   const targetCal = plan?.target_calories ?? 0;
 
   const availSlots = SLOT_ORDER.filter((s) => data?.slotBudgets?.[s] != null);
@@ -135,9 +155,15 @@ export default function NutritionScreen() {
             <Text variant="eyebrow">Weekly adherence</Text>
             <ProgressBar pct={Math.min(adherence.ratio, 1)} color="#6ad4a0" />
             <View className="flex-row justify-between">
-              <Text variant="caption" className="text-text-secondary">{adherence.weeklyActual} / {adherence.weeklyGoal} kcal</Text>
-              <Text variant="caption" className="text-warning">{adherence.status.replace("_", " ")} · {Math.round(adherence.ratio * 100)}%</Text>
+              <Text variant="caption" className="text-text-secondary tabular-nums">{adherence.weeklyActual} / {adherence.weeklyGoal} kcal</Text>
+              <Text variant="caption" className="text-warning tabular-nums">{adherence.status.replace("_", " ")} · {Math.round(adherence.ratio * 100)}%</Text>
             </View>
+            {caloriesTrend.length >= 2 ? (
+              <View className="mt-1 gap-1">
+                <Text variant="micro" className="text-text-muted">14-day calories</Text>
+                <Sparkline data={caloriesTrend} color="#b17850" height={28} baseline />
+              </View>
+            ) : null}
           </Card>
         ) : null}
 

@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
+import { Sparkline } from "../../components/Sparkline";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+
+/** Value series from a StatSeries.current, dropping nulls (for sparklines). */
+const seriesVals = (pts?: { value: number | null }[]) =>
+  (pts ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v));
+const series2Vals = (pts?: { value2?: number | null }[]) =>
+  (pts ?? []).map((p) => Number(p.value2)).filter((v) => isFinite(v));
 
 /** One point on a metric series from /api/stats/[metric]. */
 interface StatPoint {
@@ -117,12 +124,14 @@ export default function SleepScreen() {
     value: string;
     sub: string;
     cls: string;
+    spark?: { data: number[]; color: string };
   }[] = [
     {
       label: "Avg Sleep",
       value: fmt1(sleep?.summary.current_avg, "h"),
       sub: `${fmt1(sleep?.summary.current_min, "h")}–${fmt1(sleep?.summary.current_max, "h")}`,
       cls: "text-indigo",
+      spark: { data: seriesVals(sleep?.current), color: "#6366b0" },
     },
     {
       label: "Last Night",
@@ -138,12 +147,14 @@ export default function SleepScreen() {
           ? "avg"
           : `${rhrDelta >= 0 ? "+" : ""}${rhrDelta.toFixed(1)} vs prev`,
       cls: "text-danger",
+      spark: { data: seriesVals(rhr?.current), color: "#e06060" },
     },
     {
       label: "HRV (weekly)",
       value: fmt0(lastRecovery?.value2, " ms"),
       sub: "last night",
       cls: "text-lime",
+      spark: { data: series2Vals(recovery?.current), color: "#cbe896" },
     },
   ];
 
@@ -191,6 +202,11 @@ export default function SleepScreen() {
                 {s.value}
               </Text>
               <Text variant="micro">{s.sub}</Text>
+              {s.spark && s.spark.data.length >= 2 ? (
+                <View className="mt-1">
+                  <Sparkline data={s.spark.data} color={s.spark.color} height={26} baseline />
+                </View>
+              ) : null}
             </Card>
           ))}
         </View>

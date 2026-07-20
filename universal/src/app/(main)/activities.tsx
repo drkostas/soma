@@ -1,8 +1,28 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
+import { Sparkline } from "../../components/Sparkline";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+
+/** Daily activity-count series (per-day sessions) for the Sessions trend. */
+function useSessionsTrend() {
+  const [series, setSeries] = useState<number[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE}/api/stats/activities?range=90d`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { current?: { value: number | null }[] }) => {
+        if (!alive) return;
+        setSeries((d.current ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v)));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return series;
+}
 
 type RangeKey = "30d" | "90d" | "1y" | "all";
 const RANGES: readonly RangeKey[] = ["30d", "90d", "1y", "all"] as const;
@@ -101,8 +121,9 @@ export default function ActivitiesScreen() {
   const { data, loading, error } = useActivities(range);
 
   const totals = data?.totals;
-  const overview: { label: string; value: string; cls: string }[] = [
-    { label: "Sessions", value: `${totals?.sessions ?? "—"}`, cls: "text-teal" },
+  const sessionsTrend = useSessionsTrend();
+  const overview: { label: string; value: string; cls: string; spark?: { data: number[]; color: string } }[] = [
+    { label: "Sessions", value: `${totals?.sessions ?? "—"}`, cls: "text-teal", spark: { data: sessionsTrend, color: "#77c8d1" } },
     { label: "Distance", value: totals && totals.km > 0 ? `${totals.km.toFixed(0)} km` : "—", cls: "text-indigo" },
     { label: "Time", value: totals && totals.hours > 0 ? `${totals.hours.toFixed(0)}h` : "—", cls: "text-lime" },
     { label: "Calories", value: totals && totals.cal > 0 ? `${Math.round(totals.cal).toLocaleString()}` : "—", cls: "text-warm" },
@@ -146,6 +167,11 @@ export default function ActivitiesScreen() {
             <Card key={s.label} className="min-w-[46%] flex-1 gap-1">
               <Text variant="eyebrow">{s.label}</Text>
               <Text variant="headline" className={s.cls}>{s.value}</Text>
+              {s.spark && s.spark.data.length >= 2 ? (
+                <View className="mt-1">
+                  <Sparkline data={s.spark.data} color={s.spark.color} height={24} baseline />
+                </View>
+              ) : null}
             </Card>
           ))}
         </View>
