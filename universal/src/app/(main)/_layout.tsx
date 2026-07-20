@@ -1,17 +1,10 @@
 import { Tabs } from "expo-router";
-import { Pressable, View, type ColorValue } from "react-native";
+import { type ColorValue } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { tabBarScreenOptions, CenterTabButton } from "soma-style";
 import { ChatProvider, useChat } from "../../components/ChatContext";
 import { ChatSheet } from "../../components/ChatSheet";
-
-/* soma-style tokens (mirrored from soma-style/preset.js — the tab bar is native
-   chrome so it reads them directly rather than via NativeWind classes). */
-const TEAL = "#77c8d1";
-const MUTED = "#5a7a8a";
-const SURFACE = "#0e1a26";
-const BORDER = "#1a3040";
-const INK = "#0a1720";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 const tabIcon =
@@ -20,35 +13,16 @@ const tabIcon =
     <Ionicons name={name} size={size} color={color as string} />
   );
 
-/** Center ⊕ — opens the Claude chat as a quick log/ask action (not a route). */
+/** Center ⊕ — opens the Claude chat as a quick log/ask action (not a route).
+    Uses the shared soma-style CenterTabButton, wired to the chat context. */
 function CenterLogButton() {
   const { openChat } = useChat();
-  return (
-    <View className="flex-1 items-center justify-center">
-      <Pressable
-        onPress={openChat}
-        accessibilityLabel="Log or ask Claude"
-        className="h-14 w-14 items-center justify-center rounded-full border-2 border-base bg-teal"
-        style={{ marginTop: -14 }}
-      >
-        <Ionicons name="add" size={30} color={INK} />
-      </Pressable>
-    </View>
-  );
+  return <CenterTabButton onPress={openChat} accessibilityLabel="Log or ask Claude" />;
 }
 
 function TabsNav() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: TEAL,
-        tabBarInactiveTintColor: MUTED,
-        tabBarStyle: { backgroundColor: SURFACE, borderTopColor: BORDER, borderTopWidth: 1 },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
-        sceneStyle: { backgroundColor: "#0a1720" },
-      }}
-    >
+    <Tabs screenOptions={tabBarScreenOptions}>
       <Tabs.Screen name="overview" options={{ title: "Home", tabBarIcon: tabIcon("home-outline") }} />
       <Tabs.Screen name="training" options={{ title: "Training", tabBarIcon: tabIcon("barbell-outline") }} />
       <Tabs.Screen name="log" options={{ title: "", tabBarButton: () => <CenterLogButton /> }} />
