@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# Widget API token (secret — never commit)
+targets/**/token.swift
