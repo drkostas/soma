@@ -1,19 +1,16 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup } from "soma-style";
-import { useSomaPlan, usePresets, logPresetMeal, useDrinks, logDrink, closeDay, type Preset } from "../../lib/api";
+import { useSomaPlan, usePresets, logPresetMeal, useDrinks, logDrink, closeDay, fetchJson, usePullRefresh, type Preset } from "../../lib/api";
 import { Sparkline } from "../../components/Sparkline";
-
-const NUTR_API = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
   const [series, setSeries] = useState<number[]>([]);
   useEffect(() => {
     let alive = true;
-    fetch(`${NUTR_API}/api/overview/trends`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: { calories?: number[] }) => alive && setSeries((d.calories ?? []).filter((v) => isFinite(v))))
+    fetchJson<{ calories?: number[] }>("/api/overview/trends")
+      .then((d) => alive && setSeries((d.calories ?? []).filter((v) => isFinite(v))))
       .catch(() => {});
     return () => {
       alive = false;
@@ -36,6 +33,7 @@ const slotLabel = (s: string) => s.replace("_", " ").replace(/\b\w/g, (c) => c.t
 
 export default function NutritionScreen() {
   const { data, loading, error, refetch } = useSomaPlan(DATE);
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
   const { presets } = usePresets();
   const { drinks } = useDrinks();
   const [tab, setTab] = useState<"Day" | "Trajectory">("Day");
@@ -94,7 +92,11 @@ export default function NutritionScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
+    <ScrollView
+      className="flex-1 bg-base"
+      contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
+    >
       <View className="w-full max-w-2xl gap-4">
         <View className="flex-row items-center gap-2">
           <Text variant="title">Thursday, Jul 16</Text>

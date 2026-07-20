@@ -12,6 +12,7 @@ import {
 import { fetch as expoFetch } from "expo/fetch";
 import { Text, Card, Badge, type BadgeTone } from "soma-style";
 import { useChat as useChatSheet } from "./ChatContext";
+import { MarkdownText } from "./MarkdownText";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
@@ -326,11 +327,7 @@ function Bubble({ msg }: { msg: Message }) {
         ) : null}
         {msg.steps.map((s) => {
           if (s.kind === "text")
-            return s.text ? (
-              <Text key={s.id} variant="body" className="text-text">
-                {s.text}
-              </Text>
-            ) : null;
+            return s.text ? <MarkdownText key={s.id} text={s.text} /> : null;
           if (s.kind === "thinking")
             return s.text ? (
               <Text key={s.id} variant="micro" className="italic text-text-muted">

@@ -1,6 +1,26 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+
+/**
+ * GET JSON with one automatic retry. Serverless DBs (Neon) can return a transient
+ * 5xx or a "fetch failed" on cold start; a single-shot fetch would leave the screen
+ * blank until manual reload. One short-delay retry smooths that over. `path` is
+ * relative to API_BASE.
+ */
+export async function fetchJson<T>(path: string, retries = 1): Promise<T> {
+  try {
+    const r = await fetch(`${API_BASE}${path}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return (await r.json()) as T;
+  } catch (e) {
+    if (retries > 0) {
+      await new Promise((res) => setTimeout(res, 600));
+      return fetchJson<T>(path, retries - 1);
+    }
+    throw e;
+  }
+}
 
 export interface MacroSet {
   calories: number;
@@ -36,19 +56,34 @@ export interface Today {
   vigorous_intensity_minutes?: number;
 }
 
+/**
+ * Wire a hook's refetch() to a pull-to-refresh RefreshControl. The GET hooks
+ * don't expose a completion promise, so we clear the spinner after a short beat
+ * (the retry-aware fetchJson usually resolves well within it).
+ */
+export function usePullRefresh(refetch: () => void) {
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    refetch();
+    setTimeout(() => setRefreshing(false), 900);
+  }, [refetch]);
+  return { refreshing, onRefresh };
+}
+
 /** soma's daily health metrics (Overview). */
 export function useToday() {
   const [data, setData] = useState<Today | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/health/today`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: Today) => alive && (setData(d), setError(null)))
+    fetchJson<Today>("/api/health/today")
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => { alive = false; };
-  }, []);
-  return { data, error };
+  }, [reload]);
+  return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
 export interface TrainingBreakdown {
@@ -74,15 +109,15 @@ export interface TrainingBreakdown {
 export function useTraining(date: string) {
   const [data, setData] = useState<TrainingBreakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/training/breakdown?date=${date}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: TrainingBreakdown) => alive && (setData(d), setError(null)))
+    fetchJson<TrainingBreakdown>(`/api/training/breakdown?date=${date}`)
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => { alive = false; };
-  }, [date]);
-  return { data, error };
+  }, [date, reload]);
+  return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
 export interface Calibration {
@@ -98,9 +133,8 @@ export function useCalibration(date: string) {
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/training/graph?date=${date}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { calibration: Calibration }) => alive && setCal(d.calibration ?? null))
+    fetchJson<{ calibration: Calibration }>(`/api/training/graph?date=${date}`)
+      .then((d) => alive && setCal(d.calibration ?? null))
       .catch(() => {});
     return () => { alive = false; };
   }, [date, reload]);
@@ -125,9 +159,8 @@ export function useSomaPlan(date: string) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch(`${API_BASE}/api/nutrition/plan?date=${date}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: SomaPlan) => alive && (setData(d), setError(null)))
+    fetchJson<SomaPlan>(`/api/nutrition/plan?date=${date}`)
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
@@ -152,9 +185,8 @@ export function usePresets() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/nutrition/presets`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { presets: Preset[] }) => alive && (setPresets(d.presets ?? []), setError(null)))
+    fetchJson<{ presets: Preset[] }>("/api/nutrition/presets")
+      .then((d) => alive && (setPresets(d.presets ?? []), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => { alive = false; };
   }, []);
@@ -174,9 +206,8 @@ export function useDrinks() {
   const [drinks, setDrinks] = useState<Drink[]>([]);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/nutrition/log-drink`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: { drinks: Record<string, Omit<Drink, "key">> }) =>
+    fetchJson<{ drinks: Record<string, Omit<Drink, "key">> }>("/api/nutrition/log-drink")
+      .then((d) =>
         alive && setDrinks(Object.entries(d.drinks ?? {}).map(([key, v]) => ({ key, ...v }))))
       .catch(() => {});
     return () => { alive = false; };

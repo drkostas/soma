@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { fetchJson } from "../../lib/api";
 
 /** Library analysis status — how much of the Spotify library has BPM data. */
 interface LibraryStatus {
@@ -47,10 +46,7 @@ function usePlaylist() {
     let alive = true;
     setLoading(true);
 
-    const json = (path: string) =>
-      fetch(`${API_BASE}${path}`).then((r) =>
-        r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
-      );
+    const json = (path: string) => fetchJson<unknown>(path);
 
     Promise.all([
       json("/api/playlist/spotify/library"),

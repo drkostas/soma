@@ -1,19 +1,16 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
-import { useTraining, useCalibration, toggleCalibration } from "../../lib/api";
+import { useTraining, useCalibration, toggleCalibration, fetchJson, usePullRefresh } from "../../lib/api";
 import { Sparkline } from "../../components/Sparkline";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
 /** VO2max trend (last year, chronological) from the shared stats endpoint. */
 function useVo2Trend() {
   const [series, setSeries] = useState<number[]>([]);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/stats/vo2max?range=1y`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: { current?: { value: number | null }[] }) => {
+    fetchJson<{ current?: { value: number | null }[] }>("/api/stats/vo2max?range=1y")
+      .then((d) => {
         if (!alive) return;
         setSeries((d.current ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v)));
       })
@@ -42,8 +39,12 @@ const TL_TONE: Record<string, "success" | "warm" | "danger" | "teal"> = {
 const tsbPct = (tsb: number) => Math.max(0, Math.min(1, (tsb + 30) / 60));
 
 export default function TrainingScreen() {
-  const { data, error } = useTraining(todayISO());
+  const { data, error, refetch } = useTraining(todayISO());
   const { cal, refetch: refetchCal } = useCalibration(todayISO());
+  const { refreshing, onRefresh } = usePullRefresh(() => {
+    refetch();
+    refetchCal();
+  });
   const pmc = data?.pmc;
   const fit = data?.fitness;
   const readiness = data?.readiness;
@@ -72,7 +73,11 @@ export default function TrainingScreen() {
     v == null ? "—" : `${v.toFixed(dp)}${unit}`;
 
   return (
-    <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
+    <ScrollView
+      className="flex-1 bg-base"
+      contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
+    >
       <View className="w-full max-w-2xl gap-4">
         <View className="flex-row items-center gap-2">
           <Text variant="headline">Training</Text>

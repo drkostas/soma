@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, type BadgeTone } from "soma-style";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { fetchJson, usePullRefresh } from "../../lib/api";
 
 interface PlatformStatus {
   platform: string;
@@ -44,34 +43,34 @@ interface SyncStatusResponse {
 function useConnections() {
   const [data, setData] = useState<ConnectionsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/connections`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: ConnectionsResponse) => alive && (setData(d), setError(null)))
+    fetchJson<ConnectionsResponse>("/api/connections")
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => {
       alive = false;
     };
-  }, []);
-  return { data, error };
+  }, [reload]);
+  return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
 /** soma's data-pipeline sync status (last run per source). */
 function useSyncStatus() {
   const [data, setData] = useState<SyncStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/sync/status`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: SyncStatusResponse) => alive && (setData(d), setError(null)))
+    fetchJson<SyncStatusResponse>("/api/sync/status")
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => {
       alive = false;
     };
-  }, []);
-  return { data, error };
+  }, [reload]);
+  return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -127,8 +126,12 @@ function fmtDateTime(iso: string | null): string {
 }
 
 export default function StatusScreen() {
-  const { data: conn, error: connError } = useConnections();
-  const { data: sync, error: syncError } = useSyncStatus();
+  const { data: conn, error: connError, refetch: refetchConn } = useConnections();
+  const { data: sync, error: syncError, refetch: refetchSync } = useSyncStatus();
+  const { refreshing, onRefresh } = usePullRefresh(() => {
+    refetchConn();
+    refetchSync();
+  });
 
   const platforms = conn?.platforms ?? [];
   const rules = conn?.rules ?? [];
@@ -148,7 +151,11 @@ export default function StatusScreen() {
   ];
 
   return (
-    <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
+    <ScrollView
+      className="flex-1 bg-base"
+      contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
+    >
       <View className="w-full max-w-2xl gap-4">
         <View className="gap-1">
           <Text variant="headline">Sync Hub</Text>
