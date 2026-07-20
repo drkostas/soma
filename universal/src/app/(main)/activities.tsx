@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
 import { Sparkline } from "../../components/Sparkline";
-import { fetchJson } from "../../lib/api";
+import { fetchJson, usePullRefresh } from "../../lib/api";
 
 /** Daily activity-count series (per-day sessions) for the Sessions trend. */
 function useSessionsTrend() {
@@ -74,6 +74,7 @@ function useActivities(range: RangeKey) {
   const [data, setData] = useState<ActivitiesSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -84,8 +85,8 @@ function useActivities(range: RangeKey) {
     return () => {
       alive = false;
     };
-  }, [range]);
-  return { data, loading, error };
+  }, [range, reload]);
+  return { data, loading, error, refetch: () => setReload((n) => n + 1) };
 }
 
 /** Category → bar color, mirroring the web catColors palette. */
@@ -115,7 +116,8 @@ function fmtDate(iso: string): string {
 
 export default function ActivitiesScreen() {
   const [range, setRange] = useState<RangeKey>("1y");
-  const { data, loading, error } = useActivities(range);
+  const { data, loading, error, refetch } = useActivities(range);
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const totals = data?.totals;
   const sessionsTrend = useSessionsTrend();
@@ -129,7 +131,11 @@ export default function ActivitiesScreen() {
   const timeTotal = (data?.timeBreakdown ?? []).reduce((s, t) => s + t.hours, 0);
 
   return (
-    <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
+    <ScrollView
+      className="flex-1 bg-base"
+      contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
+    >
       <View className="w-full max-w-2xl gap-4">
         <View className="gap-1">
           <Text variant="headline">Activities</Text>

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
 import { Sparkline } from "../../components/Sparkline";
-import { fetchJson } from "../../lib/api";
+import { fetchJson, usePullRefresh } from "../../lib/api";
 
 /** Value series from a StatSeries.current, dropping nulls (for sparklines). */
 const seriesVals = (pts?: { value: number | null }[]) =>
@@ -43,6 +43,7 @@ function useSleepRecovery(range: Range) {
   const [recovery, setRecovery] = useState<StatSeries | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -71,9 +72,9 @@ function useSleepRecovery(range: Range) {
     return () => {
       alive = false;
     };
-  }, [range]);
+  }, [range, reload]);
 
-  return { sleep, rhr, stress, battery, recovery, loading, error };
+  return { sleep, rhr, stress, battery, recovery, loading, error, refetch: () => setReload((n) => n + 1) };
 }
 
 const fmt1 = (v: number | null | undefined, unit = "") =>
@@ -96,8 +97,9 @@ function delta(series: StatSeries | null): number | null {
 
 export default function SleepScreen() {
   const [range, setRange] = useState<Range>("30d");
-  const { sleep, rhr, stress, battery, recovery, loading, error } =
+  const { sleep, rhr, stress, battery, recovery, loading, error, refetch } =
     useSleepRecovery(range);
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const lastSleep = last(sleep);
   const nights = sleep?.current.length ?? 0;
@@ -158,6 +160,7 @@ export default function SleepScreen() {
     <ScrollView
       className="flex-1 bg-base"
       contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
     >
       <View className="w-full max-w-2xl gap-4">
         <View className="flex-row items-center gap-2">
