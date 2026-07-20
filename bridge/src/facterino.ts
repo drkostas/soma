@@ -10,16 +10,10 @@
  * upload; when it expires garth re-exchanges via an OAuth1-signed request (NOT the
  * oauth2 refresh_token), so this mirrors that exactly.
  */
-import crypto from "node:crypto";
-import OAuth from "oauth-1.0a";
-
 const DOMAIN = "garmin.com";
 const CONNECTAPI = `https://connectapi.${DOMAIN}`;
 const UPLOAD_UA = "GCM-iOS-5.7.2.1";
-const EXCHANGE_UA = "com.garmin.android.apps.connectmobile";
-const EXCHANGE_URL = `${CONNECTAPI}/oauth-service/oauth/exchange/user/2.0`;
 const UPLOAD_URL = `${CONNECTAPI}/upload-service/upload`;
-const CONSUMER_URL = "https://thegarth.s3.amazonaws.com/oauth_consumer.json";
 
 export interface OAuth1Token {
   oauth_token: string;
@@ -57,15 +51,6 @@ export function isOauth2Expired(oauth2: OAuth2Token, nowSec: number = Date.now()
   return !oauth2.expires_at || oauth2.expires_at <= nowSec + 60;
 }
 
-let consumerCache: { consumer_key: string; consumer_secret: string } | null = null;
-async function fetchConsumer(): Promise<{ consumer_key: string; consumer_secret: string }> {
-  if (consumerCache) return consumerCache;
-  const r = await fetch(CONSUMER_URL);
-  if (!r.ok) throw new Error(`consumer fetch ${r.status}`);
-  consumerCache = (await r.json()) as { consumer_key: string; consumer_secret: string };
-  return consumerCache;
-}
-
 function setExpirations(token: any, nowSec: number): OAuth2Token {
   return {
     ...token,
@@ -76,34 +61,30 @@ function setExpirations(token: any, nowSec: number): OAuth2Token {
   };
 }
 
+/** oauth1→oauth2 proxy (Cloudflare edge egress). Garmin rate-limits this exchange
+ *  from cloud (GitHub Actions / AWS) IPs, so it's routed through the CF Worker. */
+const EXCHANGE_WORKER_URL =
+  process.env.GARMIN_EXCHANGE_WORKER_URL || "https://hevy2garmin-exchange.gkos.workers.dev/oauth2";
+
 /**
- * Refresh the oauth2 token via garth's OAuth1-signed exchange (HMAC-SHA1). Mirrors
- * garth.sso.exchange: sign with the consumer creds + oauth1 resource-owner token,
- * POST to the exchange endpoint (mfa_token in the body if present).
+ * Refresh the oauth2 token via garth's OAuth1-signed exchange. The signing +
+ * exchange happen inside the Cloudflare Worker (residential-class egress) because
+ * Garmin returns 429 for the exchange from GitHub Actions' cloud IPs. facterino's
+ * oauth1.mfa_token is null, so no mfa_token is needed in the exchange body.
  */
 export async function refreshOauth2(oauth1: OAuth1Token, nowSec: number = Date.now() / 1000): Promise<OAuth2Token> {
-  const consumer = await fetchConsumer();
-  const oauth = new OAuth({
-    consumer: { key: consumer.consumer_key, secret: consumer.consumer_secret },
-    signature_method: "HMAC-SHA1",
-    hash_function: (base, key) => crypto.createHmac("sha1", key).update(base).digest("base64"),
-  });
-  const token = { key: oauth1.oauth_token, secret: oauth1.oauth_token_secret };
-  const body: Record<string, string> = oauth1.mfa_token ? { mfa_token: oauth1.mfa_token } : {};
-  const requestData = { url: EXCHANGE_URL, method: "POST", data: body };
-  const authHeader = oauth.toHeader(oauth.authorize(requestData, token));
-
-  const resp = await fetch(EXCHANGE_URL, {
+  const resp = await fetch(EXCHANGE_WORKER_URL, {
     method: "POST",
-    headers: {
-      ...authHeader,
-      "User-Agent": EXCHANGE_UA,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams(body).toString(),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      oauth_token: oauth1.oauth_token,
+      oauth_token_secret: oauth1.oauth_token_secret,
+    }),
   });
-  if (!resp.ok) throw new Error(`oauth2 exchange ${resp.status}: ${(await resp.text()).slice(0, 120)}`);
-  return setExpirations(await resp.json(), nowSec);
+  if (!resp.ok) throw new Error(`oauth2 exchange (worker) ${resp.status}: ${(await resp.text()).slice(0, 120)}`);
+  const { oauth2 } = (await resp.json()) as { oauth2?: OAuth2Token & { expires_in: number } };
+  if (!oauth2?.access_token) throw new Error("oauth2 exchange (worker): no token in response");
+  return setExpirations(oauth2, nowSec);
 }
 
 /** Upload a FIT to facterino Garmin (multipart). Garmin forwards it to Strava. */
