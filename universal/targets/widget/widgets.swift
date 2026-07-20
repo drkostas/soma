@@ -37,18 +37,34 @@ private func authedRequest(_ path: String) -> URLRequest {
     return req
 }
 
-private func todayString() -> String {
+private func dateString(offsetDays: Int = 0) -> String {
     let f = DateFormatter()
     f.dateFormat = "yyyy-MM-dd"
     f.timeZone = TimeZone.current
-    return f.string(from: Date())
+    let d = Calendar.current.date(byAdding: .day, value: offsetDays, to: Date()) ?? Date()
+    return f.string(from: d)
+}
+
+/// Training readiness for the most recent day that has it. Early in a new day the
+/// current day's readiness isn't computed yet, so fall back to the prior days
+/// rather than show "unknown".
+private func fetchReadiness() async -> String {
+    for offset in [0, -1, -2] {
+        if let (d, _) = try? await URLSession.shared.data(for: authedRequest("/api/training/breakdown?date=\(dateString(offsetDays: offset))")),
+           let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+           let readiness = j["readiness"] as? [String: Any],
+           let light = readiness["traffic_light"] as? String {
+            return light
+        }
+    }
+    return "unknown"
 }
 
 private func fetchEntry() async -> SomaEntry {
     var entry = SomaEntry(date: Date())
     do {
         async let healthData = URLSession.shared.data(for: authedRequest("/api/health/today"))
-        async let readyData = URLSession.shared.data(for: authedRequest("/api/training/breakdown?date=\(todayString())"))
+        async let readiness = fetchReadiness()
 
         let (hData, _) = try await healthData
         if let h = try JSONSerialization.jsonObject(with: hData) as? [String: Any] {
@@ -58,12 +74,7 @@ private func fetchEntry() async -> SomaEntry {
             entry.stress = (h["avg_stress_level"] as? Int) ?? Int((h["avg_stress_level"] as? Double) ?? 0)
             entry.ok = true
         }
-        if let (rData, _) = try? await readyData,
-           let r = try? JSONSerialization.jsonObject(with: rData) as? [String: Any],
-           let readiness = r["readiness"] as? [String: Any],
-           let light = readiness["traffic_light"] as? String {
-            entry.readiness = light
-        }
+        entry.readiness = await readiness
     } catch {
         entry.ok = false
     }
