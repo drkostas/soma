@@ -2,17 +2,15 @@ import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
 import { Sparkline } from "../../components/Sparkline";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { fetchJson } from "../../lib/api";
 
 /** Daily activity-count series (per-day sessions) for the Sessions trend. */
 function useSessionsTrend() {
   const [series, setSeries] = useState<number[]>([]);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/stats/activities?range=90d`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: { current?: { value: number | null }[] }) => {
+    fetchJson<{ current?: { value: number | null }[] }>("/api/stats/activities?range=90d")
+      .then((d) => {
         if (!alive) return;
         setSeries((d.current ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v)));
       })
@@ -79,9 +77,8 @@ function useActivities(range: RangeKey) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch(`${API_BASE}/api/activities/summary?range=${range}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: ActivitiesSummary) => alive && (setData(d), setError(null)))
+    fetchJson<ActivitiesSummary>(`/api/activities/summary?range=${range}`)
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)))
       .finally(() => alive && setLoading(false));
     return () => {

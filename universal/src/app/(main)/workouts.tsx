@@ -2,8 +2,7 @@ import { ScrollView, View } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar } from "soma-style";
 import { Sparkline } from "../../components/Sparkline";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { fetchJson } from "../../lib/api";
 
 interface RecentWorkout {
   title: string;
@@ -33,9 +32,8 @@ function useWorkouts() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/hevy/status`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: HevyStatus) => alive && (setData(d), setError(null)))
+    fetchJson<HevyStatus>("/api/hevy/status")
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => {
       alive = false;

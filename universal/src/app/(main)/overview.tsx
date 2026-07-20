@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card } from "soma-style";
-import { useToday } from "../../lib/api";
+import { useToday, fetchJson } from "../../lib/api";
 import { Sparkline } from "../../components/Sparkline";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
 interface OverviewTrends {
   steps: number[];
@@ -20,9 +18,8 @@ function useOverviewTrends() {
   const [trends, setTrends] = useState<OverviewTrends | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/overview/trends`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: OverviewTrends) => alive && setTrends(d))
+    fetchJson<OverviewTrends>("/api/overview/trends")
+      .then((d) => alive && setTrends(d))
       .catch(() => {});
     return () => {
       alive = false;

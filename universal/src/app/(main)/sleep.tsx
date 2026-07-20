@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
 import { Sparkline } from "../../components/Sparkline";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { fetchJson } from "../../lib/api";
 
 /** Value series from a StatSeries.current, dropping nulls (for sparklines). */
 const seriesVals = (pts?: { value: number | null }[]) =>
@@ -48,10 +47,7 @@ function useSleepRecovery(range: Range) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    const get = (m: string) =>
-      fetch(`${API_BASE}/api/stats/${m}?range=${range}`).then((r) =>
-        r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
-      );
+    const get = (m: string) => fetchJson<StatSeries>(`/api/stats/${m}?range=${range}`);
 
     Promise.all([
       get("sleep"),

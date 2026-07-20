@@ -1,19 +1,16 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
-import { useTraining, useCalibration, toggleCalibration } from "../../lib/api";
+import { useTraining, useCalibration, toggleCalibration, fetchJson } from "../../lib/api";
 import { Sparkline } from "../../components/Sparkline";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
 /** VO2max trend (last year, chronological) from the shared stats endpoint. */
 function useVo2Trend() {
   const [series, setSeries] = useState<number[]>([]);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/stats/vo2max?range=1y`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: { current?: { value: number | null }[] }) => {
+    fetchJson<{ current?: { value: number | null }[] }>("/api/stats/vo2max?range=1y")
+      .then((d) => {
         if (!alive) return;
         setSeries((d.current ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v)));
       })

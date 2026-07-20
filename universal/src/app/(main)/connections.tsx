@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Text, Card, Badge, type BadgeTone } from "soma-style";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { fetchJson } from "../../lib/api";
 
 // ---- Types (subset of the web /connections page, from fetchable endpoints) ----
 
@@ -52,9 +51,8 @@ function useConnections() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/connections`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: ConnectionsResponse) => alive && (setData(d), setError(null)))
+    fetchJson<ConnectionsResponse>("/api/connections")
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => {
       alive = false;
@@ -69,9 +67,8 @@ function useSyncStatus() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/sync/status`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: SyncStatusResponse) => alive && (setData(d), setError(null)))
+    fetchJson<SyncStatusResponse>("/api/sync/status")
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => {
       alive = false;
