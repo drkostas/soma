@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
@@ -56,18 +56,34 @@ export interface Today {
   vigorous_intensity_minutes?: number;
 }
 
+/**
+ * Wire a hook's refetch() to a pull-to-refresh RefreshControl. The GET hooks
+ * don't expose a completion promise, so we clear the spinner after a short beat
+ * (the retry-aware fetchJson usually resolves well within it).
+ */
+export function usePullRefresh(refetch: () => void) {
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    refetch();
+    setTimeout(() => setRefreshing(false), 900);
+  }, [refetch]);
+  return { refreshing, onRefresh };
+}
+
 /** soma's daily health metrics (Overview). */
 export function useToday() {
   const [data, setData] = useState<Today | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
     fetchJson<Today>("/api/health/today")
       .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => { alive = false; };
-  }, []);
-  return { data, error };
+  }, [reload]);
+  return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
 export interface TrainingBreakdown {
@@ -93,14 +109,15 @@ export interface TrainingBreakdown {
 export function useTraining(date: string) {
   const [data, setData] = useState<TrainingBreakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
     fetchJson<TrainingBreakdown>(`/api/training/breakdown?date=${date}`)
       .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => { alive = false; };
-  }, [date]);
-  return { data, error };
+  }, [date, reload]);
+  return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
 export interface Calibration {
