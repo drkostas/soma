@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card } from "soma-style";
-import { useToday, fetchJson } from "../../lib/api";
+import { useToday, fetchJson, usePullRefresh } from "../../lib/api";
 import { Sparkline } from "../../components/Sparkline";
 
 interface OverviewTrends {
@@ -29,7 +29,8 @@ function useOverviewTrends() {
 }
 
 export default function OverviewScreen() {
-  const { data, error } = useToday();
+  const { data, error, refetch } = useToday();
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
   const trends = useOverviewTrends();
 
   const km = data?.total_distance_meters ? (data.total_distance_meters / 1000).toFixed(1) : "—";
@@ -43,7 +44,11 @@ export default function OverviewScreen() {
   ];
 
   return (
-    <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
+    <ScrollView
+      className="flex-1 bg-base"
+      contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
+    >
       <View className="w-full max-w-3xl gap-4">
         <View className="gap-1">
           <Text variant="headline">Overview</Text>
