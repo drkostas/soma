@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
+/** Personal API token for prod (soma.gkos.dev gates /api/* behind a session;
+    the token bypasses that for this native client). Empty in local dev. */
+const API_TOKEN = process.env.EXPO_PUBLIC_API_TOKEN;
+const AUTH_HEADERS: Record<string, string> = API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
+
 /**
  * GET JSON with one automatic retry. Serverless DBs (Neon) can return a transient
  * 5xx or a "fetch failed" on cold start; a single-shot fetch would leave the screen
@@ -10,7 +15,7 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
  */
 export async function fetchJson<T>(path: string, retries = 1): Promise<T> {
   try {
-    const r = await fetch(`${API_BASE}${path}`);
+    const r = await fetch(`${API_BASE}${path}`, { headers: AUTH_HEADERS });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return (await r.json()) as T;
   } catch (e) {
@@ -145,7 +150,7 @@ export function useCalibration(date: string) {
 export async function toggleCalibration(forceEqual: boolean): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/training/calibration/toggle`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
     body: JSON.stringify({ forceEqual }),
   });
   return res.ok;
@@ -219,7 +224,7 @@ export function useDrinks() {
 export async function logDrink(date: string, drinkType: string, quantity = 1): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/nutrition/log-drink`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
     body: JSON.stringify({ date, drink_type: drinkType, quantity }),
   });
   return res.ok;
@@ -229,7 +234,7 @@ export async function logDrink(date: string, drinkType: string, quantity = 1): P
 export async function closeDay(date: string): Promise<string | null> {
   const res = await fetch(`${API_BASE}/api/nutrition/close-day`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
     body: JSON.stringify({ date }),
   });
   if (!res.ok) return null;
@@ -246,7 +251,7 @@ export async function logPresetMeal(
 ): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/nutrition/log-meal`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
     body: JSON.stringify({
       date,
       meal_slot: slot,
