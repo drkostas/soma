@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
-import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
+import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { useTraining, useCalibration, toggleCalibration, fetchJson, usePullRefresh } from "../../lib/api";
-import { Sparkline } from "../../components/Sparkline";
 
 /** VO2max trend (last year, chronological) from the shared stats endpoint. */
 function useVo2Trend() {

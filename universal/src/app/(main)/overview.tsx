@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
-import { Text, Card } from "soma-style";
+import { Text, Card, Sparkline } from "soma-style";
 import { useToday, fetchJson, usePullRefresh } from "../../lib/api";
-import { Sparkline } from "../../components/Sparkline";
 
 interface OverviewTrends {
   steps: number[];

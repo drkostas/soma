@@ -1,7 +1,6 @@
 import { ScrollView, View, RefreshControl } from "react-native";
 import { useEffect, useState } from "react";
-import { Text, Card, Badge, ProgressBar } from "soma-style";
-import { Sparkline } from "../../components/Sparkline";
+import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
 import { fetchJson, usePullRefresh } from "../../lib/api";
 
 interface RecentWorkout {

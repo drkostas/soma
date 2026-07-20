@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
-import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
-import { Sparkline } from "../../components/Sparkline";
+import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { fetchJson, usePullRefresh } from "../../lib/api";
 
 /** Daily activity-count series (per-day sessions) for the Sessions trend. */
