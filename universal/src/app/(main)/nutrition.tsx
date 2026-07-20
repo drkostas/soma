@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
-import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup } from "soma-style";
+import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import { useSomaPlan, usePresets, logPresetMeal, useDrinks, logDrink, closeDay, fetchJson, usePullRefresh, type Preset } from "../../lib/api";
-import { Sparkline } from "../../components/Sparkline";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
