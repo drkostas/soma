@@ -1,9 +1,8 @@
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar } from "soma-style";
 import { Sparkline } from "../../components/Sparkline";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { fetchJson, usePullRefresh } from "../../lib/api";
 
 interface RecentWorkout {
   title: string;
@@ -31,17 +30,17 @@ interface HevyStatus {
 function useWorkouts() {
   const [data, setData] = useState<HevyStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/hevy/status`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: HevyStatus) => alive && (setData(d), setError(null)))
+    fetchJson<HevyStatus>("/api/hevy/status")
+      .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => {
       alive = false;
     };
-  }, []);
-  return { data, error };
+  }, [reload]);
+  return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
 function formatDate(dateStr: string): string {
@@ -57,7 +56,8 @@ function formatDate(dateStr: string): string {
 }
 
 export default function WorkoutsScreen() {
-  const { data, error } = useWorkouts();
+  const { data, error, refetch } = useWorkouts();
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const recent = data?.recent ?? [];
   const totalSynced = data?.totalSynced ?? 0;
@@ -111,7 +111,11 @@ export default function WorkoutsScreen() {
   ];
 
   return (
-    <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
+    <ScrollView
+      className="flex-1 bg-base"
+      contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
+    >
       <View className="w-full max-w-2xl gap-4">
         <View className="flex-row items-center gap-2">
           <Text variant="headline">Workouts</Text>

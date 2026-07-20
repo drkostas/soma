@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card } from "soma-style";
-import { useToday } from "../../lib/api";
+import { useToday, fetchJson, usePullRefresh } from "../../lib/api";
 import { Sparkline } from "../../components/Sparkline";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
 interface OverviewTrends {
   steps: number[];
@@ -20,9 +18,8 @@ function useOverviewTrends() {
   const [trends, setTrends] = useState<OverviewTrends | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(`${API_BASE}/api/overview/trends`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: OverviewTrends) => alive && setTrends(d))
+    fetchJson<OverviewTrends>("/api/overview/trends")
+      .then((d) => alive && setTrends(d))
       .catch(() => {});
     return () => {
       alive = false;
@@ -32,7 +29,8 @@ function useOverviewTrends() {
 }
 
 export default function OverviewScreen() {
-  const { data, error } = useToday();
+  const { data, error, refetch } = useToday();
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
   const trends = useOverviewTrends();
 
   const km = data?.total_distance_meters ? (data.total_distance_meters / 1000).toFixed(1) : "—";
@@ -46,7 +44,11 @@ export default function OverviewScreen() {
   ];
 
   return (
-    <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
+    <ScrollView
+      className="flex-1 bg-base"
+      contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
+    >
       <View className="w-full max-w-3xl gap-4">
         <View className="gap-1">
           <Text variant="headline">Overview</Text>
