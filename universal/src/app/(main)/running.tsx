@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar } from "soma-style";
 import { Sparkline } from "../../components/Sparkline";
-import { fetchJson } from "../../lib/api";
+import { fetchJson, usePullRefresh } from "../../lib/api";
 
 /* ------------------------------------------------------------------ */
 /* Types — mirror the fields the web /running page renders             */
@@ -94,6 +94,7 @@ interface RunningPayload {
 function useRunning() {
   const [data, setData] = useState<RunningPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
     fetchJson<RunningPayload>("/api/running/stats")
@@ -102,8 +103,8 @@ function useRunning() {
     return () => {
       alive = false;
     };
-  }, []);
-  return { data, error };
+  }, [reload]);
+  return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -151,7 +152,8 @@ const ZONE_HEX = ["#77c8d1", "#6ad4a0", "#e0c458", "#e0a458", "#e06060"];
 /* ------------------------------------------------------------------ */
 
 export default function RunningScreen() {
-  const { data, error } = useRunning();
+  const { data, error, refetch } = useRunning();
+  const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const stats = data?.stats;
   const ts = data?.trainingStatus;
@@ -205,7 +207,11 @@ export default function RunningScreen() {
       : null;
 
   return (
-    <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
+    <ScrollView
+      className="flex-1 bg-base"
+      contentContainerClassName="items-center px-5 py-6"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
+    >
       <View className="w-full max-w-2xl gap-4">
         {/* Header */}
         <View className="gap-1">
