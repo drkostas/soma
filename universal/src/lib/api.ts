@@ -35,14 +35,37 @@ export interface MacroSet {
   fiber: number;
 }
 
+export interface SomaMealItem { name?: string; grams?: number }
+export interface SomaMeal {
+  id: number;
+  meal_slot: string;
+  source?: string | null;
+  preset_meal_id?: string | null;
+  calories: number; protein: number; carbs: number; fat: number; fiber: number;
+  items?: SomaMealItem[];
+  logged_at?: string;
+}
+export interface SomaBreakdown {
+  totalBurn?: number; bmr?: number;
+  stepCalories?: number; stepCaloriesPredicted?: number; expectedSteps?: number; actualSteps?: number;
+  runCalories?: number; runActual?: number; runPredicted?: number; runEnabled?: boolean; runActualDistKm?: number; runDistanceKm?: number;
+  gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: number }[];
+  drinkCalories?: number; deficit?: number;
+}
+export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean }
 export interface SomaPlan {
-  plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number };
+  plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number } | null;
   consumed: MacroSet;
-  remaining: MacroSet;
-  slotBudgets: Record<string, { calories: number; protein?: number; carbs?: number; fat?: number; fiber?: number }>;
-  breakdown?: { totalBurn?: number; bmr?: number };
+  remaining: MacroSet | null;
+  slotBudgets: Record<string, { calories: number; protein?: number; carbs?: number; fat?: number; fiber?: number }> | null;
+  meals?: SomaMeal[];
+  breakdown?: SomaBreakdown | null;
   adaptive: { effectiveTdee: number; reportedTdee: number; driftFlag: boolean; deficitDurationDays: number; dietBreakLevel: string } | null;
-  trend7d?: { adherence?: { ratio: number; status: string; weeklyActual: number; weeklyGoal: number } | null };
+  trend7d?: {
+    adherence?: { ratio: number; status: string; weeklyActual: number; weeklyGoal: number } | null;
+    days?: TrendDay[];
+    totalDeficit?: number; goalDeficit?: number;
+  };
 }
 
 export interface Today {
@@ -268,4 +291,20 @@ export async function logPresetMeal(
     }),
   });
   return res.ok;
+}
+
+/** Delete a logged meal by its id. */
+export async function deleteMeal(mealId: number): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/log-meal?id=${mealId}`, {
+    method: "DELETE",
+    headers: AUTH_HEADERS,
+  });
+  return res.ok;
+}
+
+/** Today's date as YYYY-MM-DD in the device's local timezone. */
+export function todayLocal(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
