@@ -179,6 +179,134 @@ export async function toggleCalibration(forceEqual: boolean): Promise<boolean> {
   return res.ok;
 }
 
+// ---- Forward simulation: full training-plan schedule + PMC/readiness/fitness/comparison ----
+export interface WorkoutStep {
+  step_type: string;
+  description?: string | null;
+  hr_zone?: number | null;
+  target_type?: string | null;
+  duration_type?: string | null;
+  duration_value?: number | null;
+}
+export interface PlanDay {
+  id: number;
+  dayDate: string;
+  weekNumber: number;
+  runType: string;
+  runTitle: string;
+  targetDistanceKm: number | null;
+  workoutSteps: WorkoutStep[] | null;
+  loadLevel?: string | null;
+  gymWorkout?: string | null;
+  gymNotes?: string | null;
+  completed: boolean;
+  garminWorkoutId?: string | null;
+  garminPushStatus?: string | null;
+  actualDistanceKm?: number | null;
+}
+export interface ComparisonPoint { date: string; [k: string]: number | string }
+export interface ForwardSim {
+  today: string;
+  pmc: { ctl: number; atl: number; tsb: number } | null;
+  readiness: { compositeZ: number | null; trafficLight: string } | null;
+  calibration: Calibration | null;
+  fitness: { vo2max: number | null; vdotAdjusted: number | null; weightKg: number | null } | null;
+  planDays: PlanDay[];
+  comparison: {
+    load: ComparisonPoint[];
+    readiness: ComparisonPoint[];
+    fitness: ComparisonPoint[];
+    racePrediction: ComparisonPoint[];
+  } | null;
+}
+
+/** The full forward-simulation payload: schedule + PMC + readiness + fitness + comparison. */
+export function useForwardSim(date: string) {
+  const [data, setData] = useState<ForwardSim | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetchJson<ForwardSim>(`/api/training/forward-sim?date=${date}`)
+      .then((d) => alive && (setData(d), setError(null)))
+      .catch((e) => alive && setError(String(e.message ?? e)))
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [date, reload]);
+  return { data, loading, error, refetch: () => setReload((n) => n + 1) };
+}
+
+/** Toggle a plan day's completion. Passes the existing actual distance through so
+    the PATCH route (which nulls it when omitted) doesn't wipe matched-activity data. */
+export async function setDayCompletion(
+  dayId: number,
+  completed: boolean,
+  actualDistanceKm?: number | null,
+): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/training/day/${dayId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ completed, actual_distance_km: actualDistanceKm ?? null }),
+  });
+  return res.ok;
+}
+
+// ---- Per-night sleep data (stages, score, sleep HR, SpO2) for the sleep dashboard ----
+export interface SleepNight {
+  date: string;
+  total: number | null; deep: number | null; light: number | null; rem: number | null; awake: number | null;
+  score: number | null; hr: number | null; spo2: number | null;
+}
+export interface SleepSummary {
+  trend: SleepNight[];
+  stats: {
+    nights: number;
+    avg_hours: number | null; avg_score: number | null;
+    avg_deep_pct: number | null; avg_rem_pct: number | null;
+    avg_sleep_hr: number | null; avg_spo2: number | null;
+  };
+  lastNight: SleepNight | null;
+}
+
+/** Per-night sleep stages + score + sleep HR/SpO2 from /api/sleep/summary. */
+export function useSleepSummary(range: string) {
+  const [data, setData] = useState<SleepSummary | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<SleepSummary>(`/api/sleep/summary?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
+// ---- Training computation graph (nodes → the mobile pace-computation breakdown) ----
+export interface GraphNode { id: string; label: string; value: number | null }
+
+/** The computation-graph nodes keyed by id (readiness_factor, tsb, adjusted_pace, …). */
+export function useTrainingGraph(date: string) {
+  const [nodes, setNodes] = useState<Record<string, GraphNode>>({});
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<{ graph?: { nodes?: GraphNode[] }; nodes?: GraphNode[] }>(`/api/training/graph?date=${date}`)
+      .then((d) => {
+        if (!alive) return;
+        const arr = d.graph?.nodes ?? d.nodes ?? [];
+        const map: Record<string, GraphNode> = {};
+        for (const nd of arr) map[nd.id] = nd;
+        setNodes(map);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [date, reload]);
+  return { nodes, refetch: () => setReload((n) => n + 1) };
+}
+
 export function useSomaPlan(date: string) {
   const [data, setData] = useState<SomaPlan | null>(null);
   const [loading, setLoading] = useState(true);
