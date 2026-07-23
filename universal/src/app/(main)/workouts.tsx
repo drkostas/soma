@@ -1,7 +1,8 @@
 import { ScrollView, View, RefreshControl } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh } from "../../lib/api";
+import { fetchJson, usePullRefresh, useWorkoutsSummary } from "../../lib/api";
+import { WorkoutsDashboard } from "../../components/workouts-dashboard";
 
 interface RecentWorkout {
   title: string;
@@ -56,6 +57,7 @@ function formatDate(dateStr: string): string {
 
 export default function WorkoutsScreen() {
   const { data, error, refetch } = useWorkouts();
+  const { data: wkSum } = useWorkoutsSummary("90d");
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const recent = data?.recent ?? [];
@@ -154,6 +156,9 @@ export default function WorkoutsScreen() {
             </Card>
           ))}
         </View>
+
+        {/* Workout data — volume, stats, top exercises, recent (new /api/workouts/summary) */}
+        <WorkoutsDashboard summary={wkSum} />
 
         {/* Sync coverage bar */}
         {recent.length > 0 ? (

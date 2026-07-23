@@ -253,6 +253,33 @@ export async function setDayCompletion(
   return res.ok;
 }
 
+// ---- Strength-training data (volume, stats, recent, top exercises) ----
+export interface WorkoutSummary {
+  stats: {
+    total_workouts: number | string;
+    training_days: number | string;
+    avg_duration_min: number | string | null;
+    avg_exercises: number | string | null;
+  } | null;
+  weeklyVolume: { week: string; total_volume: number | string }[];
+  recent: { id: string; title: string; start_time: string; exercise_count: number; duration_min: number | null; volume: number }[];
+  topExercises: { name: string; sessions: number }[];
+}
+
+/** Strength-training summary from /api/workouts/summary. */
+export function useWorkoutsSummary(range: string) {
+  const [data, setData] = useState<WorkoutSummary | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<WorkoutSummary>(`/api/workouts/summary?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Per-night sleep data (stages, score, sleep HR, SpO2) for the sleep dashboard ----
 export interface SleepNight {
   date: string;
