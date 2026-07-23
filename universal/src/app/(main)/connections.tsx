@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View, RefreshControl } from "react-native";
+import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, type BadgeTone } from "soma-style";
-import { fetchJson, usePullRefresh } from "../../lib/api";
+import { fetchJson, usePullRefresh, setRuleEnabled } from "../../lib/api";
 
 // ---- Types (subset of the web /connections page, from fetchable endpoints) ----
 
@@ -153,7 +153,17 @@ export default function ConnectionsScreen() {
   });
 
   const platforms = conn?.platforms ?? [];
-  const rules = conn?.rules ?? [];
+  // optimistic enable/disable overrides so the toggle flips instantly
+  const [ruleOverride, setRuleOverride] = useState<Record<number, boolean>>({});
+  const rules = (conn?.rules ?? []).map((r) =>
+    r.id in ruleOverride ? { ...r, enabled: ruleOverride[r.id] } : r,
+  );
+  async function toggleRule(id: number, current: boolean) {
+    const next = !current;
+    setRuleOverride((m) => ({ ...m, [id]: next }));
+    const ok = await setRuleEnabled(id, next);
+    if (!ok) setRuleOverride((m) => ({ ...m, [id]: current })); // revert on failure
+  }
   const credMap: Record<string, PlatformStatus> = Object.fromEntries(
     platforms.map((p) => [p.platform, p]),
   );
@@ -284,10 +294,12 @@ export default function ConnectionsScreen() {
                     {Object.keys(r.destinations ?? {}).join(", ") || r.activity_type}
                   </Text>
                 </View>
-                <Badge
-                  label={r.enabled ? "On" : "Off"}
-                  tone={r.enabled ? "success" : "neutral"}
-                />
+                <Pressable onPress={() => toggleRule(r.id, r.enabled)} hitSlop={8}>
+                  <Badge
+                    label={r.enabled ? "On" : "Off"}
+                    tone={r.enabled ? "success" : "neutral"}
+                  />
+                </Pressable>
               </View>
             ))
           )}

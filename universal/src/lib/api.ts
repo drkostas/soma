@@ -253,6 +253,16 @@ export async function setDayCompletion(
   return res.ok;
 }
 
+/** Toggle a sync rule on/off (PATCH /api/connections/rules/[id]). Returns true on success. */
+export async function setRuleEnabled(id: number, enabled: boolean): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/connections/rules/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ enabled }),
+  });
+  return res.ok;
+}
+
 // ---- Strength-training data (volume, stats, recent, top exercises) ----
 export interface WorkoutSummary {
   stats: {
