@@ -35,14 +35,37 @@ export interface MacroSet {
   fiber: number;
 }
 
+export interface SomaMealItem { name?: string; grams?: number }
+export interface SomaMeal {
+  id: number;
+  meal_slot: string;
+  source?: string | null;
+  preset_meal_id?: string | null;
+  calories: number; protein: number; carbs: number; fat: number; fiber: number;
+  items?: SomaMealItem[];
+  logged_at?: string;
+}
+export interface SomaBreakdown {
+  totalBurn?: number; bmr?: number;
+  stepCalories?: number; stepCaloriesPredicted?: number; expectedSteps?: number; actualSteps?: number;
+  runCalories?: number; runActual?: number; runPredicted?: number; runEnabled?: boolean; runActualDistKm?: number; runDistanceKm?: number;
+  gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: number }[];
+  drinkCalories?: number; deficit?: number;
+}
+export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean }
 export interface SomaPlan {
-  plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number };
+  plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number } | null;
   consumed: MacroSet;
-  remaining: MacroSet;
-  slotBudgets: Record<string, { calories: number; protein?: number; carbs?: number; fat?: number; fiber?: number }>;
-  breakdown?: { totalBurn?: number; bmr?: number };
+  remaining: MacroSet | null;
+  slotBudgets: Record<string, { calories: number; protein?: number; carbs?: number; fat?: number; fiber?: number }> | null;
+  meals?: SomaMeal[];
+  breakdown?: SomaBreakdown | null;
   adaptive: { effectiveTdee: number; reportedTdee: number; driftFlag: boolean; deficitDurationDays: number; dietBreakLevel: string } | null;
-  trend7d?: { adherence?: { ratio: number; status: string; weeklyActual: number; weeklyGoal: number } | null };
+  trend7d?: {
+    adherence?: { ratio: number; status: string; weeklyActual: number; weeklyGoal: number } | null;
+    days?: TrendDay[];
+    totalDeficit?: number; goalDeficit?: number;
+  };
 }
 
 export interface Today {
@@ -154,6 +177,134 @@ export async function toggleCalibration(forceEqual: boolean): Promise<boolean> {
     body: JSON.stringify({ forceEqual }),
   });
   return res.ok;
+}
+
+// ---- Forward simulation: full training-plan schedule + PMC/readiness/fitness/comparison ----
+export interface WorkoutStep {
+  step_type: string;
+  description?: string | null;
+  hr_zone?: number | null;
+  target_type?: string | null;
+  duration_type?: string | null;
+  duration_value?: number | null;
+}
+export interface PlanDay {
+  id: number;
+  dayDate: string;
+  weekNumber: number;
+  runType: string;
+  runTitle: string;
+  targetDistanceKm: number | null;
+  workoutSteps: WorkoutStep[] | null;
+  loadLevel?: string | null;
+  gymWorkout?: string | null;
+  gymNotes?: string | null;
+  completed: boolean;
+  garminWorkoutId?: string | null;
+  garminPushStatus?: string | null;
+  actualDistanceKm?: number | null;
+}
+export interface ComparisonPoint { date: string; [k: string]: number | string }
+export interface ForwardSim {
+  today: string;
+  pmc: { ctl: number; atl: number; tsb: number } | null;
+  readiness: { compositeZ: number | null; trafficLight: string } | null;
+  calibration: Calibration | null;
+  fitness: { vo2max: number | null; vdotAdjusted: number | null; weightKg: number | null } | null;
+  planDays: PlanDay[];
+  comparison: {
+    load: ComparisonPoint[];
+    readiness: ComparisonPoint[];
+    fitness: ComparisonPoint[];
+    racePrediction: ComparisonPoint[];
+  } | null;
+}
+
+/** The full forward-simulation payload: schedule + PMC + readiness + fitness + comparison. */
+export function useForwardSim(date: string) {
+  const [data, setData] = useState<ForwardSim | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetchJson<ForwardSim>(`/api/training/forward-sim?date=${date}`)
+      .then((d) => alive && (setData(d), setError(null)))
+      .catch((e) => alive && setError(String(e.message ?? e)))
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [date, reload]);
+  return { data, loading, error, refetch: () => setReload((n) => n + 1) };
+}
+
+/** Toggle a plan day's completion. Passes the existing actual distance through so
+    the PATCH route (which nulls it when omitted) doesn't wipe matched-activity data. */
+export async function setDayCompletion(
+  dayId: number,
+  completed: boolean,
+  actualDistanceKm?: number | null,
+): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/training/day/${dayId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ completed, actual_distance_km: actualDistanceKm ?? null }),
+  });
+  return res.ok;
+}
+
+// ---- Per-night sleep data (stages, score, sleep HR, SpO2) for the sleep dashboard ----
+export interface SleepNight {
+  date: string;
+  total: number | null; deep: number | null; light: number | null; rem: number | null; awake: number | null;
+  score: number | null; hr: number | null; spo2: number | null;
+}
+export interface SleepSummary {
+  trend: SleepNight[];
+  stats: {
+    nights: number;
+    avg_hours: number | null; avg_score: number | null;
+    avg_deep_pct: number | null; avg_rem_pct: number | null;
+    avg_sleep_hr: number | null; avg_spo2: number | null;
+  };
+  lastNight: SleepNight | null;
+}
+
+/** Per-night sleep stages + score + sleep HR/SpO2 from /api/sleep/summary. */
+export function useSleepSummary(range: string) {
+  const [data, setData] = useState<SleepSummary | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<SleepSummary>(`/api/sleep/summary?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
+// ---- Training computation graph (nodes → the mobile pace-computation breakdown) ----
+export interface GraphNode { id: string; label: string; value: number | null }
+
+/** The computation-graph nodes keyed by id (readiness_factor, tsb, adjusted_pace, …). */
+export function useTrainingGraph(date: string) {
+  const [nodes, setNodes] = useState<Record<string, GraphNode>>({});
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<{ graph?: { nodes?: GraphNode[] }; nodes?: GraphNode[] }>(`/api/training/graph?date=${date}`)
+      .then((d) => {
+        if (!alive) return;
+        const arr = d.graph?.nodes ?? d.nodes ?? [];
+        const map: Record<string, GraphNode> = {};
+        for (const nd of arr) map[nd.id] = nd;
+        setNodes(map);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [date, reload]);
+  return { nodes, refetch: () => setReload((n) => n + 1) };
 }
 
 export function useSomaPlan(date: string) {
@@ -268,4 +419,20 @@ export async function logPresetMeal(
     }),
   });
   return res.ok;
+}
+
+/** Delete a logged meal by its id. */
+export async function deleteMeal(mealId: number): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/log-meal?id=${mealId}`, {
+    method: "DELETE",
+    headers: AUTH_HEADERS,
+  });
+  return res.ok;
+}
+
+/** Today's date as YYYY-MM-DD in the device's local timezone. */
+export function todayLocal(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }

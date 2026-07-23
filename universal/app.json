@@ -4,11 +4,10 @@
     "slug": "universal",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/soma-app-icon.png",
     "scheme": "universal",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
       "bundleIdentifier": "dev.gkos.soma"
     },
     "android": {

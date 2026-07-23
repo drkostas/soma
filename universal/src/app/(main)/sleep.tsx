@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh } from "../../lib/api";
+import { fetchJson, usePullRefresh, useSleepSummary } from "../../lib/api";
+import { SleepDashboard } from "../../components/sleep-dashboard";
 
 /** Value series from a StatSeries.current, dropping nulls (for sparklines). */
 const seriesVals = (pts?: { value: number | null }[]) =>
@@ -98,6 +99,7 @@ export default function SleepScreen() {
   const [range, setRange] = useState<Range>("30d");
   const { sleep, rhr, stress, battery, recovery, loading, error, refetch } =
     useSleepRecovery(range);
+  const { data: sleepSum } = useSleepSummary(range);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const lastSleep = last(sleep);
@@ -208,6 +210,9 @@ export default function SleepScreen() {
             </Card>
           ))}
         </View>
+
+        {/* Sleep dashboard — last night + stages + score (new /api/sleep/summary) */}
+        <SleepDashboard summary={sleepSum} />
 
         {/* Sleep duration trend (bar approximation) */}
         <Card className="gap-3">
