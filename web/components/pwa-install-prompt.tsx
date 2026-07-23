@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, Download, Share } from "lucide-react";
+import { X, Download, Share, Apple, Smartphone } from "lucide-react";
+
+/** GitHub releases host the sideloadable native builds (widgets need native). */
+const RELEASES_URL = "https://github.com/drkostas/soma/releases/latest";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -121,6 +124,30 @@ export function PWAInstallPrompt() {
               Install
             </button>
           )}
+          {/* Native app (home-screen widgets need a real native build). */}
+          <div className="mt-2.5 pt-2.5 border-t border-border/60">
+            <p className="text-[11px] text-muted-foreground mb-1.5">
+              Or get the native app for home-screen widgets:
+            </p>
+            <div className="flex gap-2">
+              <a
+                href={RELEASES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-medium bg-accent/60 text-foreground px-2.5 py-1 rounded-md hover:bg-accent transition-colors"
+              >
+                <Apple className="h-3 w-3" /> iOS (IPA)
+              </a>
+              <a
+                href={RELEASES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-medium bg-accent/60 text-foreground px-2.5 py-1 rounded-md hover:bg-accent transition-colors"
+              >
+                <Smartphone className="h-3 w-3" /> Android (APK)
+              </a>
+            </div>
+          </div>
         </div>
         <button
           onClick={handleDismiss}

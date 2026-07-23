@@ -1,7 +1,22 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
-import { useTraining, useCalibration, toggleCalibration, fetchJson, usePullRefresh } from "../../lib/api";
+import {
+  useTraining,
+  useCalibration,
+  useForwardSim,
+  useTrainingGraph,
+  setDayCompletion,
+  toggleCalibration,
+  fetchJson,
+  usePullRefresh,
+  type PlanDay,
+} from "../../lib/api";
+import { TrainingSchedule } from "../../components/training-schedule";
+import { TrainingPaces } from "../../components/training-paces";
+import { RaceProtocol } from "../../components/race-protocol";
+import { TrainingTrends } from "../../components/training-trends";
+import { PaceComputation } from "../../components/pace-computation";
 
 /** VO2max trend (last year, chronological) from the shared stats endpoint. */
 function useVo2Trend() {
@@ -40,13 +55,32 @@ const tsbPct = (tsb: number) => Math.max(0, Math.min(1, (tsb + 30) / 60));
 export default function TrainingScreen() {
   const { data, error, refetch } = useTraining(todayISO());
   const { cal, refetch: refetchCal } = useCalibration(todayISO());
+  const { data: sim, refetch: refetchSim } = useForwardSim(todayISO());
+  const { nodes: graphNodes } = useTrainingGraph(todayISO());
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
     refetchCal();
+    refetchSim();
   });
-  const pmc = data?.pmc;
+
+  // Optimistic completion overrides so the checkbox flips instantly (the
+  // forward-sim recompute is heavy — we don't refetch on every tap).
+  const [doneOverride, setDoneOverride] = useState<Record<number, boolean>>({});
+  const planDays: PlanDay[] = (sim?.planDays ?? []).map((d) =>
+    d.id in doneOverride ? { ...d, completed: doneOverride[d.id] } : d,
+  );
+  async function onToggleComplete(day: PlanDay) {
+    const next = !day.completed;
+    setDoneOverride((m) => ({ ...m, [day.id]: next }));
+    const ok = await setDayCompletion(day.id, next, day.actualDistanceKm);
+    if (!ok) setDoneOverride((m) => ({ ...m, [day.id]: day.completed })); // revert on failure
+  }
+  // breakdown can return null pmc on days the daily cron hasn't filled; the
+  // forward-sim always computes it, so fall back to that (same {ctl,atl,tsb} shape).
+  const pmc = data?.pmc ?? sim?.pmc ?? null;
   const fit = data?.fitness;
   const readiness = data?.readiness;
+  const vdot = fit?.vdot_adjusted ?? sim?.fitness?.vdotAdjusted ?? null;
   const vo2Trend = useVo2Trend();
 
   async function onToggleWeighting(mode: "Adaptive" | "Equal") {
@@ -110,6 +144,15 @@ export default function TrainingScreen() {
           </Text>
         </Card>
 
+        {/* Training plan schedule — weeks → days → workout steps (Tier 1 parity) */}
+        {planDays.length ? (
+          <TrainingSchedule
+            planDays={planDays}
+            today={sim?.today ?? todayISO()}
+            onToggleComplete={onToggleComplete}
+          />
+        ) : null}
+
         <View className="flex-row gap-3">
           <Card className="flex-1 gap-1">
             <Text variant="eyebrow">VO2max</Text>
@@ -128,6 +171,12 @@ export default function TrainingScreen() {
           </Card>
         </View>
 
+        {/* Training paces (VDOT → Daniels zones + A/B/C HM goals) */}
+        <TrainingPaces vdot={vdot} />
+
+        {/* Pace computation breakdown — mobile replacement for the web DAG */}
+        <PaceComputation nodes={graphNodes} />
+
         {vo2Trend.length >= 2 ? (
           <Card className="gap-2">
             <View className="flex-row items-center justify-between">
@@ -137,6 +186,9 @@ export default function TrainingScreen() {
             <Sparkline data={vo2Trend} color="#77c8d1" height={44} baseline />
           </Card>
         ) : null}
+
+        {/* Compact model-vs-Garmin comparison trends (Tier 2/3 adapted) */}
+        <TrainingTrends comparison={sim?.comparison} />
 
         {readiness ? (
           <Card className="gap-2">
@@ -195,6 +247,9 @@ export default function TrainingScreen() {
             </Text>
           </Card>
         ) : null}
+
+        {/* Race day protocol */}
+        <RaceProtocol />
       </View>
     </ScrollView>
   );
