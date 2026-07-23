@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
 import { fetchJson, usePullRefresh } from "../../lib/api";
+import { RunningMileage } from "../../components/running-mileage";
 
 /* ------------------------------------------------------------------ */
 /* Types — mirror the fields the web /running page renders             */
@@ -312,6 +313,9 @@ export default function RunningScreen() {
             </View>
           </Card>
         ) : null}
+
+        {/* Monthly mileage bar chart (web parity) */}
+        <RunningMileage mileage={trends?.mileage} />
 
         {/* Training Intensity Distribution (approximated with ProgressBars) */}
         {zones.length > 0 ? (
