@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory } from "../../lib/api";
+import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule } from "../../lib/api";
 import { SleepDashboard } from "../../components/sleep-dashboard";
 import { RecoveryVitals } from "../../components/recovery-vitals";
 import { SleepRespiratory } from "../../components/sleep-respiratory";
+import { SleepRegularity } from "../../components/sleep-regularity";
 
 /** Value series from a StatSeries.current, dropping nulls (for sparklines). */
 const seriesVals = (pts?: { value: number | null }[]) =>
@@ -104,6 +105,7 @@ export default function SleepScreen() {
   const { data: sleepSum } = useSleepSummary(range);
   const { data: recoveryVitals } = useRecoverySummary(range);
   const { data: respiratory } = useRespiratory(range);
+  const { data: schedule } = useSleepSchedule(range);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const lastSleep = last(sleep);
@@ -223,6 +225,9 @@ export default function SleepScreen() {
 
         {/* Blood oxygen + respiration (new /api/sleep/respiratory) */}
         <SleepRespiratory data={respiratory} />
+
+        {/* Sleep regularity — bedtime/wake consistency (new /api/sleep/schedule) */}
+        <SleepRegularity data={schedule} />
 
         {/* Sleep duration trend (bar approximation) */}
         <Card className="gap-3">
