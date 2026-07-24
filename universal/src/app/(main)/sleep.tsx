@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule } from "../../lib/api";
+import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
 import { SleepDashboard } from "../../components/sleep-dashboard";
 import { RecoveryVitals } from "../../components/recovery-vitals";
 import { SleepRespiratory } from "../../components/sleep-respiratory";
 import { SleepRegularity } from "../../components/sleep-regularity";
+import { SleepWeekdayWeekend } from "../../components/sleep-weekday-weekend";
 
 /** Value series from a StatSeries.current, dropping nulls (for sparklines). */
 const seriesVals = (pts?: { value: number | null }[]) =>
@@ -106,6 +107,7 @@ export default function SleepScreen() {
   const { data: recoveryVitals } = useRecoverySummary(range);
   const { data: respiratory } = useRespiratory(range);
   const { data: schedule } = useSleepSchedule(range);
+  const { data: weekdayWeekend } = useWeekdayWeekend(range);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const lastSleep = last(sleep);
@@ -228,6 +230,9 @@ export default function SleepScreen() {
 
         {/* Sleep regularity — bedtime/wake consistency (new /api/sleep/schedule) */}
         <SleepRegularity data={schedule} />
+
+        {/* Weekday vs weekend comparison (new /api/sleep/weekday-weekend) */}
+        <SleepWeekdayWeekend data={weekdayWeekend} />
 
         {/* Sleep duration trend (bar approximation) */}
         <Card className="gap-3">
