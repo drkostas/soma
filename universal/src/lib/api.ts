@@ -282,6 +282,28 @@ export function useRunningTrends(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Running fitness scores (endurance + hill) ----
+export interface EndurancePoint { date: string; score: number | null; classification: number | null }
+export interface HillPoint { date: string; score: number | null; strength: number | null; endurance: number | null }
+export interface FitnessScores {
+  endurance: { trend: EndurancePoint[]; latest: EndurancePoint | null };
+  hill: { trend: HillPoint[]; latest: HillPoint | null };
+}
+
+/** Endurance + hill fitness scores from /api/running/fitness-scores. */
+export function useFitnessScores(range: string) {
+  const [data, setData] = useState<FitnessScores | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<FitnessScores>(`/api/running/fitness-scores?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Strength-training data (volume, stats, recent, top exercises) ----
 export interface WorkoutSummary {
   stats: {
