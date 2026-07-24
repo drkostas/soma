@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh } from "../../lib/api";
+import { fetchJson, usePullRefresh, useRunningTrends } from "../../lib/api";
 import { RunningMileage } from "../../components/running-mileage";
+import { RunningDeepTrends } from "../../components/running-deep-trends";
 
 /* ------------------------------------------------------------------ */
 /* Types — mirror the fields the web /running page renders             */
@@ -153,6 +154,7 @@ const ZONE_HEX = ["#77c8d1", "#6ad4a0", "#e0c458", "#e0a458", "#e06060"];
 
 export default function RunningScreen() {
   const { data, error, refetch } = useRunning();
+  const { data: runTrends } = useRunningTrends("180d");
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const stats = data?.stats;
@@ -316,6 +318,9 @@ export default function RunningScreen() {
 
         {/* Monthly mileage bar chart (web parity) */}
         <RunningMileage mileage={trends?.mileage} />
+
+        {/* Training load/ACWR + cadence trends (new /api/running/trends) */}
+        <RunningDeepTrends trends={runTrends} />
 
         {/* Training Intensity Distribution (approximated with ProgressBars) */}
         {zones.length > 0 ? (
