@@ -321,6 +321,32 @@ export function useSleepSummary(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- HRV + training-readiness (recovery vitals) ----
+export interface HrvPoint { date: string; weekly_avg: number | null; last_night_avg: number | null; status: string | null }
+export interface ReadinessPoint {
+  date: string; score: number | null; level: string | null;
+  hrv_pct: number | null; stress_pct: number | null; acwr_pct: number | null;
+  recovery_pct: number | null; sleep_history_pct: number | null;
+}
+export interface RecoverySummary {
+  hrv: { trend: HrvPoint[]; latest: HrvPoint | null };
+  readiness: { trend: ReadinessPoint[]; latest: ReadinessPoint | null };
+}
+
+/** HRV + training-readiness from /api/recovery/summary. */
+export function useRecoverySummary(range: string) {
+  const [data, setData] = useState<RecoverySummary | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<RecoverySummary>(`/api/recovery/summary?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Training computation graph (nodes → the mobile pace-computation breakdown) ----
 export interface GraphNode { id: string; label: string; value: number | null }
 
