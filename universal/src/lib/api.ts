@@ -304,6 +304,25 @@ export function useFitnessScores(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Per-km split analysis + fastest splits ----
+export interface KmSplit { km: number; runs: number | string; avg_pace: number | null; avg_hr: number | null; avg_cadence: number | null; fast_pace: number | null; slow_pace: number | null }
+export interface BestSplit { km: number; pace: number; date: string; activity_name: string | null }
+export interface RunningSplits { perKm: KmSplit[]; best: BestSplit[] }
+
+/** Per-km split analysis + fastest splits from /api/running/splits. */
+export function useRunningSplits(range: string) {
+  const [data, setData] = useState<RunningSplits | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<RunningSplits>(`/api/running/splits?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Strength-training data (volume, stats, recent, top exercises) ----
 export interface WorkoutSummary {
   stats: {
