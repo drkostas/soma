@@ -304,6 +304,23 @@ export function useFitnessScores(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- HR-vs-pace scatter points ----
+export interface HrPacePoint { date: string; name: string | null; pace: number | null; hr: number | null; distance: number | null }
+
+/** Per-run pace/HR points from /api/running/hr-pace (for the scatter). */
+export function useHrPace(range: string) {
+  const [data, setData] = useState<{ points: HrPacePoint[] } | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<{ points: HrPacePoint[] }>(`/api/running/hr-pace?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Per-km split analysis + fastest splits ----
 export interface KmSplit { km: number; runs: number | string; avg_pace: number | null; avg_hr: number | null; avg_cadence: number | null; fast_pace: number | null; slow_pace: number | null }
 export interface BestSplit { km: number; pace: number; date: string; activity_name: string | null }
