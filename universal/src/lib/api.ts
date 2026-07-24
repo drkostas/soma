@@ -388,6 +388,31 @@ export function useRespiratory(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Sleep schedule + regularity (bedtime/wake variability) ----
+export interface SchedulePoint { date: string; bedtimeHour: number; wakeHour: number; durationHour: number }
+export interface SleepScheduleData {
+  schedule: SchedulePoint[];
+  regularity: {
+    avg_bedtime: number; avg_waketime: number; avg_duration: number;
+    bedtime_stddev: number; waketime_stddev: number; duration_stddev: number;
+    regularity_score: number | null;
+  } | null;
+}
+
+/** Sleep schedule + regularity from /api/sleep/schedule. */
+export function useSleepSchedule(range: string) {
+  const [data, setData] = useState<SleepScheduleData | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<SleepScheduleData>(`/api/sleep/schedule?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Training computation graph (nodes → the mobile pace-computation breakdown) ----
 export interface GraphNode { id: string; label: string; value: number | null }
 
