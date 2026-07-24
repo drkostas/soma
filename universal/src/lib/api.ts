@@ -471,6 +471,24 @@ export function useSleepSchedule(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Weekday vs weekend sleep ----
+export interface DayTypeSleep { avg_hours: number | null; avg_score: number | null; avg_deep_pct: number | null; nights: number | string }
+export interface WeekdayWeekend { weekday: DayTypeSleep | null; weekend: DayTypeSleep | null }
+
+/** Weekday vs weekend sleep comparison from /api/sleep/weekday-weekend. */
+export function useWeekdayWeekend(range: string) {
+  const [data, setData] = useState<WeekdayWeekend | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<WeekdayWeekend>(`/api/sleep/weekday-weekend?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Training computation graph (nodes → the mobile pace-computation breakdown) ----
 export interface GraphNode { id: string; label: string; value: number | null }
 
