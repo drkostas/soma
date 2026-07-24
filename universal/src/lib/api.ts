@@ -263,6 +263,25 @@ export async function setRuleEnabled(id: number, enabled: boolean): Promise<bool
   return res.ok;
 }
 
+// ---- Running trends: training-load/ACWR + cadence/stride ----
+export interface LoadPoint { date: string; acute: number | null; chronic: number | null; acwr: number | null }
+export interface CadencePoint { date: string; cadence: number | null; stride: number | null }
+export interface RunningTrends { loadTrend: LoadPoint[]; cadenceStride: CadencePoint[] }
+
+/** Training-load/ACWR trend + cadence/stride from /api/running/trends. */
+export function useRunningTrends(range: string) {
+  const [data, setData] = useState<RunningTrends | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<RunningTrends>(`/api/running/trends?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Strength-training data (volume, stats, recent, top exercises) ----
 export interface WorkoutSummary {
   stats: {
