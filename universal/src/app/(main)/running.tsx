@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores } from "../../lib/api";
+import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores, useRunningSplits } from "../../lib/api";
 import { RunningMileage } from "../../components/running-mileage";
 import { RunningDeepTrends } from "../../components/running-deep-trends";
 import { RunningFitnessScores } from "../../components/running-fitness-scores";
+import { RunningSplits } from "../../components/running-splits";
 
 /* ------------------------------------------------------------------ */
 /* Types — mirror the fields the web /running page renders             */
@@ -157,6 +158,7 @@ export default function RunningScreen() {
   const { data, error, refetch } = useRunning();
   const { data: runTrends } = useRunningTrends("180d");
   const { data: fitScores } = useFitnessScores("1y");
+  const { data: splits } = useRunningSplits("1y");
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const stats = data?.stats;
@@ -326,6 +328,9 @@ export default function RunningScreen() {
 
         {/* Endurance + hill fitness scores (new /api/running/fitness-scores) */}
         <RunningFitnessScores scores={fitScores} />
+
+        {/* Per-km splits + fastest splits (new /api/running/splits) */}
+        <RunningSplits data={splits} />
 
         {/* Training Intensity Distribution (approximated with ProgressBars) */}
         {zones.length > 0 ? (
