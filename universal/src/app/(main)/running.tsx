@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh, useRunningTrends } from "../../lib/api";
+import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores } from "../../lib/api";
 import { RunningMileage } from "../../components/running-mileage";
 import { RunningDeepTrends } from "../../components/running-deep-trends";
+import { RunningFitnessScores } from "../../components/running-fitness-scores";
 
 /* ------------------------------------------------------------------ */
 /* Types — mirror the fields the web /running page renders             */
@@ -155,6 +156,7 @@ const ZONE_HEX = ["#77c8d1", "#6ad4a0", "#e0c458", "#e0a458", "#e06060"];
 export default function RunningScreen() {
   const { data, error, refetch } = useRunning();
   const { data: runTrends } = useRunningTrends("180d");
+  const { data: fitScores } = useFitnessScores("1y");
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const stats = data?.stats;
@@ -321,6 +323,9 @@ export default function RunningScreen() {
 
         {/* Training load/ACWR + cadence trends (new /api/running/trends) */}
         <RunningDeepTrends trends={runTrends} />
+
+        {/* Endurance + hill fitness scores (new /api/running/fitness-scores) */}
+        <RunningFitnessScores scores={fitScores} />
 
         {/* Training Intensity Distribution (approximated with ProgressBars) */}
         {zones.length > 0 ? (
