@@ -304,6 +304,27 @@ export function useFitnessScores(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Recent route GPS paths (for SVG route thumbnails) ----
+export interface RoutePoint { lat: number; lng: number }
+export interface RouteItem {
+  activity_id: string; date: string; name: string | null;
+  distance_km: number | null; duration_s: number | null; gps_points: RoutePoint[];
+}
+
+/** Recent runs with GPS paths from /api/running/recent-routes (route thumbnails). */
+export function useRecentRoutes() {
+  const [data, setData] = useState<RouteItem[]>([]);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<RouteItem[]>("/api/running/recent-routes")
+      .then((d) => alive && setData(Array.isArray(d) ? d : []))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- HR-vs-pace scatter points ----
 export interface HrPacePoint { date: string; name: string | null; pace: number | null; hr: number | null; distance: number | null }
 
