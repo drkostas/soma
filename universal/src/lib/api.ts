@@ -366,6 +366,28 @@ export function useRecoverySummary(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Blood-oxygen (SpO2) + respiration trends ----
+export interface Spo2Point { date: string; avg_spo2: number | null; low_spo2: number | null; sleep_spo2: number | null }
+export interface RespPoint { date: string; awake_resp: number | null; sleep_resp: number | null; low_resp: number | null; high_resp: number | null }
+export interface Respiratory {
+  spo2: { trend: Spo2Point[]; latest: Spo2Point | null };
+  respiration: { trend: RespPoint[]; latest: RespPoint | null };
+}
+
+/** SpO2 + respiration trends from /api/sleep/respiratory. */
+export function useRespiratory(range: string) {
+  const [data, setData] = useState<Respiratory | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<Respiratory>(`/api/sleep/respiratory?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Training computation graph (nodes → the mobile pace-computation breakdown) ----
 export interface GraphNode { id: string; label: string; value: number | null }
 
