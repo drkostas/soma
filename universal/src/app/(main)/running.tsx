@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores, useRunningSplits } from "../../lib/api";
+import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores, useRunningSplits, useHrPace } from "../../lib/api";
 import { RunningMileage } from "../../components/running-mileage";
 import { RunningDeepTrends } from "../../components/running-deep-trends";
 import { RunningFitnessScores } from "../../components/running-fitness-scores";
 import { RunningSplits } from "../../components/running-splits";
+import { RunningHrPace } from "../../components/running-hr-pace";
 
 /* ------------------------------------------------------------------ */
 /* Types — mirror the fields the web /running page renders             */
@@ -159,6 +160,7 @@ export default function RunningScreen() {
   const { data: runTrends } = useRunningTrends("180d");
   const { data: fitScores } = useFitnessScores("1y");
   const { data: splits } = useRunningSplits("1y");
+  const { data: hrPace } = useHrPace("1y");
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const stats = data?.stats;
@@ -331,6 +333,9 @@ export default function RunningScreen() {
 
         {/* Per-km splits + fastest splits (new /api/running/splits) */}
         <RunningSplits data={splits} />
+
+        {/* HR vs pace scatter (new /api/running/hr-pace) */}
+        <RunningHrPace data={hrPace} />
 
         {/* Training Intensity Distribution (approximated with ProgressBars) */}
         {zones.length > 0 ? (
