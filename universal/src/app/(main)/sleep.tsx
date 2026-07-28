@@ -115,6 +115,13 @@ export default function SleepScreen() {
 
   // Sleep score isn't served by the stats API; recovery.value2 carries HRV weekly avg.
   const lastRecovery = last(recovery);
+  // HRV comes from /api/recovery/summary (same source as the RecoveryVitals card
+  // below) — /api/stats/recovery.value2 is null here, which rendered the top card
+  // as "—" while the card right beneath it showed 64ms. Wire both to one source.
+  const hrvLatest = recoveryVitals?.hrv?.latest ?? null;
+  const hrvTrend = (recoveryVitals?.hrv?.trend ?? [])
+    .map((p) => p.weekly_avg)
+    .filter((v): v is number => v != null);
   const lastRhr = last(rhr);
   const lastStress = last(stress);
   const lastBattery = last(battery);
@@ -158,10 +165,10 @@ export default function SleepScreen() {
     },
     {
       label: "HRV (weekly)",
-      value: fmt0(lastRecovery?.value2, " ms"),
-      sub: "last night",
+      value: fmt0(hrvLatest?.weekly_avg, " ms"),
+      sub: hrvLatest?.last_night_avg != null ? `last night ${hrvLatest.last_night_avg} ms` : "weekly avg",
       cls: "text-lime",
-      spark: { data: series2Vals(recovery?.current), color: "#cbe896" },
+      spark: { data: hrvTrend, color: "#cbe896" },
     },
   ];
 
@@ -175,7 +182,7 @@ export default function SleepScreen() {
         <View className="flex-row items-center gap-2">
           <Text variant="headline">Sleep & Recovery</Text>
           {nights > 0 ? (
-            <Badge label={`${nights} nights`} tone="teal" />
+            <Badge label={`${nights} nights logged`} tone="teal" />
           ) : null}
         </View>
 
@@ -285,12 +292,12 @@ export default function SleepScreen() {
                 rhr?.summary.current_avg,
               ],
               [
-                "Avg stress",
+                "Stress (latest)",
                 fmt0(lastStress?.value),
                 stress?.summary.current_avg,
               ],
               [
-                "Peak stress",
+                "Peak stress (latest)",
                 fmt0(lastStress?.value2),
                 stress?.summary.current_max,
               ],
