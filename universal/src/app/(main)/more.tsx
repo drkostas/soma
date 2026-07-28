@@ -13,8 +13,7 @@ const SECTIONS: { key: string; label: string; hint: string; icon: IconName }[] =
   { key: "workouts", label: "Workouts", hint: "Strength history + Garmin sync", icon: "barbell-outline" },
   { key: "sleep", label: "Sleep", hint: "Stages, HRV, respiration", icon: "moon-outline" },
   { key: "playlist", label: "Playlist", hint: "BPM-matched running playlists", icon: "musical-notes-outline" },
-  { key: "connections", label: "Sync", hint: "Integrations & sync rules", icon: "sync-outline" },
-  { key: "system", label: "Status", hint: "Pipeline & platform status", icon: "pulse-outline" },
+  { key: "connections", label: "Sync", hint: "Integrations, sync rules & pipeline status", icon: "sync-outline" },
 ];
 
 export default function MoreScreen() {
