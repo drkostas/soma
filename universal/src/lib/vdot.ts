@@ -60,18 +60,20 @@ export function pacesForVdot(vdot: number): VdotPaces {
   };
 }
 
-/** Seconds/km → "M:SS". */
+/** Seconds/km → "M:SS". Rounds total seconds first so :60 can never render. */
 export function paceStr(secPerKm: number): string {
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
+  const t = Math.round(secPerKm);
+  const m = Math.floor(t / 60);
+  const s = t % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 /** Total seconds → "H:MM:SS" (or "M:SS" under an hour). */
 export function timeStr(totalSec: number): string {
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = Math.round(totalSec % 60);
+  const t = Math.round(totalSec);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
   return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;

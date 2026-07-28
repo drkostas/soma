@@ -5,8 +5,9 @@ import type { RunningSplits } from "../lib/api";
 /** Decimal minutes → "M:SS". */
 function pace(mins: number | null | undefined): string {
   if (mins == null || !isFinite(mins)) return "—";
-  const m = Math.floor(mins);
-  const s = Math.round((mins - m) * 60);
+  const t = Math.round(mins * 60);
+  const m = Math.floor(t / 60);
+  const s = t % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 function shortDate(iso: string): string {
