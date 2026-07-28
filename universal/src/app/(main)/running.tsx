@@ -237,11 +237,6 @@ export default function RunningScreen() {
           </Text>
         </View>
 
-        <SegmentedControl
-          options={["90d", "1y", "2y"] as const}
-          value={range}
-          onChange={(v) => setRange(v as "90d" | "1y" | "2y")}
-        />
         {error ? (
           <Card>
             <Text variant="body" className="text-danger">
@@ -268,8 +263,9 @@ export default function RunningScreen() {
           ))}
         </View>
 
-        {/* Training Status */}
-        {ts ? (
+        {/* Training Status — only when Garmin actually populated it (else it was
+            a card full of dashes next to the live VO2max + load-trend below). */}
+        {ts && (ts.status_code != null || ts.vo2max != null || ts.acute_load != null) ? (
           <Card className="gap-3">
             <View className="flex-row items-center justify-between">
               <Text variant="eyebrow">Training Status</Text>
@@ -338,6 +334,16 @@ export default function RunningScreen() {
 
         {/* Recent route thumbnails (SVG shapes from /api/running/recent-routes) */}
         <RunningRoutes routes={routes} />
+
+        {/* Range governs the trend charts below (stats above are all-time). */}
+        <View className="gap-1">
+          <Text variant="eyebrow" className="text-text-muted">Trends — last {range}</Text>
+          <SegmentedControl
+            options={["90d", "1y", "2y"] as const}
+            value={range}
+            onChange={(v) => setRange(v as "90d" | "1y" | "2y")}
+          />
+        </View>
 
         {/* Training load/ACWR + cadence trends (new /api/running/trends) */}
         <RunningDeepTrends trends={runTrends} />
