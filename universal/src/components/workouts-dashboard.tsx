@@ -37,9 +37,9 @@ export function WorkoutsDashboard({ summary }: { summary: WorkoutSummary | null 
   const s = summary.stats;
   const stats: { label: string; value: string; sub: string }[] = s
     ? [
-        { label: "Workouts", value: `${num(s.total_workouts)}`, sub: `${num(s.training_days)} days` },
-        { label: "Avg duration", value: `${Math.round(num(s.avg_duration_min))}`, sub: "min" },
-        { label: "Avg exercises", value: num(s.avg_exercises).toFixed(1), sub: "per session" },
+        { label: "Sessions", value: `${num(s.total_workouts)}`, sub: `${num(s.training_days)} days` },
+        { label: "Duration", value: `${Math.round(num(s.avg_duration_min))}`, sub: "min avg" },
+        { label: "Exercise", value: num(s.avg_exercises).toFixed(1), sub: "avg / session" },
       ]
     : [];
   const peakVol = Math.max(0, ...summary.weeklyVolume.map((w) => num(w.total_volume)));
