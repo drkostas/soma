@@ -4,8 +4,9 @@ import { Text, Card } from "soma-style";
 import type { HrPacePoint } from "../lib/api";
 
 function pace(mins: number): string {
-  const m = Math.floor(mins);
-  const s = Math.round((mins - m) * 60);
+  const t = Math.round(mins * 60);
+  const m = Math.floor(t / 60);
+  const s = t % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
