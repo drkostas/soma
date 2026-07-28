@@ -31,8 +31,9 @@ function VolumeChart({ weeks }: { weeks: WorkoutSummary["weeklyVolume"] }) {
   );
 }
 
-/** Workouts dashboard: summary stats + weekly volume + top exercises + recent list. */
-export function WorkoutsDashboard({ summary }: { summary: WorkoutSummary | null | undefined }) {
+/** Workouts dashboard: summary stats + weekly volume + top exercises (+ optional
+    recent list — hidden on the workouts screen, which has its own sync-status list). */
+export function WorkoutsDashboard({ summary, showRecent = true }: { summary: WorkoutSummary | null | undefined; showRecent?: boolean }) {
   if (!summary) return null;
   const s = summary.stats;
   const stats: { label: string; value: string; sub: string }[] = s
@@ -81,7 +82,7 @@ export function WorkoutsDashboard({ summary }: { summary: WorkoutSummary | null 
         </Card>
       ) : null}
 
-      {summary.recent.length ? (
+      {showRecent && summary.recent.length ? (
         <Card className="gap-2">
           <Text variant="eyebrow">Recent workouts</Text>
           {summary.recent.slice(0, 10).map((w) => (
