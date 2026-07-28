@@ -118,15 +118,17 @@ function useRunning() {
 
 function formatPace(mins: number | null | undefined): string {
   if (mins == null || !isFinite(mins)) return "—";
-  const m = Math.floor(mins);
-  const s = Math.round((mins - m) * 60);
+  const t = Math.round(mins * 60); // round total seconds so :60 can never render
+  const m = Math.floor(t / 60);
+  const s = t % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function formatSeconds(secs: number | null | undefined): string {
   if (secs == null || !isFinite(secs)) return "—";
-  const m = Math.floor(secs / 60);
-  const s = Math.round(secs % 60);
+  const t = Math.round(secs);
+  const m = Math.floor(t / 60);
+  const s = t % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 

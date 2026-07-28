@@ -33,8 +33,9 @@ import {
 export const revalidate = 300;
 
 function formatPace(mins: number) {
-  const m = Math.floor(mins);
-  const s = Math.round((mins - m) * 60);
+  const t = Math.round(mins * 60); // round total seconds so :60 can never render
+  const m = Math.floor(t / 60);
+  const s = t % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
@@ -970,8 +971,9 @@ export default async function RunningPage({
                   <div className="text-2xl font-bold text-green-400">
                     {(() => {
                       const secs = Number(records.fastest5k.est_5k_seconds);
-                      const m = Math.floor(secs / 60);
-                      const s = Math.round(secs % 60);
+                      const t = Math.round(secs);
+                      const m = Math.floor(t / 60);
+                      const s = t % 60;
                       return `${m}:${s.toString().padStart(2, "0")}`;
                     })()}
                   </div>
@@ -991,8 +993,9 @@ export default async function RunningPage({
                   <div className="text-2xl font-bold text-blue-400">
                     {(() => {
                       const secs = Number(records.fastest10k.est_10k_seconds);
-                      const m = Math.floor(secs / 60);
-                      const s = Math.round(secs % 60);
+                      const t = Math.round(secs);
+                      const m = Math.floor(t / 60);
+                      const s = t % 60;
                       return `${m}:${s.toString().padStart(2, "0")}`;
                     })()}
                   </div>
