@@ -40,7 +40,7 @@ function useWeightTrend() {
   const [rows, setRows] = useState<WeightRow[]>([]);
   useEffect(() => {
     let alive = true;
-    fetchJson<WeightRow[]>("/api/health/weight?days=30")
+    fetchJson<WeightRow[]>("/api/health/weight?days=90")
       .then((d) => alive && setRows(Array.isArray(d) ? d : []))
       .catch(() => {});
     return () => {
@@ -121,14 +121,14 @@ export default function OverviewScreen() {
     { label: "Active Calories", value: `${Math.round(data?.active_kilocalories ?? 0)}`, sub: `${Math.round(data?.total_kilocalories ?? 0)} total`, cls: "text-warm", spark: trends?.calories, color: "#b17850" },
     { label: "Resting HR", value: `${data?.resting_heart_rate ?? "—"}`, sub: `${data?.min_heart_rate ?? "—"}–${data?.max_heart_rate ?? "—"} bpm`, cls: "text-danger", spark: trends?.rhr, color: "#e06060" },
     { label: "Avg Stress", value: `${data?.avg_stress_level ?? "—"}`, sub: `Peak ${data?.max_stress_level ?? "—"}`, cls: "text-warning", spark: trends?.stress, color: "#e0a458" },
-    { label: "Body Battery", value: `${data?.body_battery_max ?? "—"}`, sub: `−${data?.body_battery_drained ?? 0} drained`, cls: "text-lime", spark: trends?.bodyBattery, color: "#cbe896" },
+    { label: "Body Battery", value: `${data?.body_battery_max ?? "—"}`, sub: `−${Math.abs(data?.body_battery_drained ?? 0)} drained`, cls: "text-lime", spark: trends?.bodyBattery, color: "#cbe896" },
     { label: "Intensity min", value: `${(data?.moderate_intensity_minutes ?? 0) + (data?.vigorous_intensity_minutes ?? 0)}`, sub: `${data?.vigorous_intensity_minutes ?? 0} vigorous`, cls: "text-indigo", spark: trends?.intensity, color: "#6366b0" },
   ];
 
   return (
     <ScrollView
       className="flex-1 bg-base"
-      contentContainerClassName="items-center px-5 py-6"
+      contentContainerClassName="items-center px-5 pt-6 pb-28"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
     >
       <View className="w-full max-w-3xl gap-4">
@@ -151,10 +151,18 @@ export default function OverviewScreen() {
                 <Badge label={readiness.traffic_light.toUpperCase()} tone={TL_TONE[readiness.traffic_light] ?? "teal"} />
               </View>
               <View className="flex-row items-end gap-2">
-                <Text variant="display" style={{ color: TL_COLOR[readiness.traffic_light] ?? "#77c8d1" }}>
-                  {readiness.composite_score == null ? "—" : Math.round(readiness.composite_score * 100)}
-                </Text>
-                <Text variant="caption" className="text-text-muted mb-1">readiness score</Text>
+                {readiness.composite_score != null && readiness.composite_score > 0 ? (
+                  <>
+                    <Text variant="display" style={{ color: TL_COLOR[readiness.traffic_light] ?? "#77c8d1" }}>
+                      {Math.round(Math.min(1, readiness.composite_score) * 100)}
+                    </Text>
+                    <Text variant="caption" className="text-text-muted mb-1">readiness score</Text>
+                  </>
+                ) : (
+                  <Text variant="caption" className="text-text-muted">
+                    Calibrating — not enough baseline data for a score yet.
+                  </Text>
+                )}
               </View>
               {tsb != null ? (
                 <Text variant="micro" className="text-text-secondary">
@@ -178,14 +186,14 @@ export default function OverviewScreen() {
           </Card>
           <Card className="min-w-[30%] flex-1 gap-1">
             <Text variant="eyebrow">Sleep</Text>
-            <Text variant="headline" className="text-indigo">{sleepLatest != null ? sleepLatest.toFixed(0) : "—"}</Text>
-            <Text variant="micro">{sleepAvg != null ? `7d avg ${sleepAvg.toFixed(0)}` : "score"}</Text>
+            <Text variant="headline" className="text-indigo">{sleepLatest != null ? `${sleepLatest.toFixed(1)}h` : "—"}</Text>
+            <Text variant="micro">{sleepAvg != null ? `7d avg ${sleepAvg.toFixed(1)}h` : "hours"}</Text>
           </Card>
           <Card className="min-w-[30%] flex-1 gap-1">
             <Text variant="eyebrow">Weight</Text>
             <Text variant="headline" className="text-warm">{wLatest != null ? wLatest.toFixed(1) : "—"}</Text>
             <Text variant="micro">
-              {wDelta != null ? `${wDelta >= 0 ? "+" : ""}${wDelta.toFixed(1)} kg/30d` : bfLatest != null ? `${bfLatest.toFixed(1)}% bf` : "kg"}
+              {wDelta != null ? `${wDelta >= 0 ? "+" : ""}${wDelta.toFixed(1)} kg/90d` : bfLatest != null ? `${bfLatest.toFixed(1)}% bf` : "kg"}
             </Text>
             {wSeries.length >= 2 ? (
               <View className="mt-1"><Sparkline data={wSeries} color="#b17850" height={22} baseline /></View>
