@@ -238,6 +238,47 @@ export function useForwardSim(date: string) {
   return { data, loading, error, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Activity match: per plan-day matched Garmin activity + completion score ----
+export interface MatchedActivity {
+  distance_km: number | string | null; duration_min: number | string | null;
+  avg_pace_sec_km: number | null; avg_hr: number | null; max_hr: number | null;
+  calories: number | null; garmin_id: number | null;
+}
+export interface ActivityMatch {
+  dayId: number; dayDate: string; matched: boolean;
+  completionScore: number | null; activity: MatchedActivity | null;
+}
+
+/** Matched Garmin activities per plan day, keyed by dayId. */
+export function useActivityMatches() {
+  const [byDay, setByDay] = useState<Record<number, ActivityMatch>>({});
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<ActivityMatch[]>("/api/training/activity-match")
+      .then((d) => {
+        if (!alive) return;
+        const map: Record<number, ActivityMatch> = {};
+        for (const m of d ?? []) map[m.dayId] = m;
+        setByDay(map);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [reload]);
+  return { byDay, refetch: () => setReload((n) => n + 1) };
+}
+
+/** Queue a plan day's workout for Garmin push (the plan-push cron completes it).
+    Mirrors the web GarminPushButton: PATCH garmin_push_status → "pending". */
+export async function requestGarminPush(dayId: number): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/training/day/${dayId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ garmin_push_status: "pending" }),
+  });
+  return res.ok;
+}
+
 /** Toggle a plan day's completion. Passes the existing actual distance through so
     the PATCH route (which nulls it when omitted) doesn't wipe matched-activity data. */
 export async function setDayCompletion(

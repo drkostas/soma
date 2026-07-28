@@ -6,6 +6,7 @@ import {
   useCalibration,
   useForwardSim,
   useTrainingGraph,
+  useActivityMatches,
   setDayCompletion,
   toggleCalibration,
   fetchJson,
@@ -57,6 +58,7 @@ export default function TrainingScreen() {
   const { cal, refetch: refetchCal } = useCalibration(todayISO());
   const { data: sim, refetch: refetchSim } = useForwardSim(todayISO());
   const { nodes: graphNodes } = useTrainingGraph(todayISO());
+  const { byDay: matches } = useActivityMatches();
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
     refetchCal();
@@ -149,6 +151,7 @@ export default function TrainingScreen() {
           <TrainingSchedule
             planDays={planDays}
             today={sim?.today ?? todayISO()}
+            matches={matches}
             onToggleComplete={onToggleComplete}
           />
         ) : null}
