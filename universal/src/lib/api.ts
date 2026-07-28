@@ -304,6 +304,37 @@ export function useFitnessScores(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Deep activities data (monthly distribution, kite deep-dive, full list) ----
+export interface MonthSports { month: string; sports: Record<string, number> }
+export interface KiteSession {
+  date: string; spot: string | null; maxSpeedKts: number | null;
+  distanceKm: number | null; jumpM: number | null; windKts: number | null; gustKts: number | null;
+}
+export interface ActivityRow {
+  activity_id: string; type_key: string; sport: string; date: string; name: string | null;
+  distance_km: number | null; duration_min: number | null; avg_hr: number | null;
+  calories: number | null; elev_gain: number;
+}
+export interface ActivitiesDeep {
+  monthly: MonthSports[];
+  kite: { sessions: KiteSession[] };
+  all: ActivityRow[];
+}
+
+/** Deep activities data from /api/activities/deep. */
+export function useActivitiesDeep(range: string) {
+  const [data, setData] = useState<ActivitiesDeep | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<ActivitiesDeep>(`/api/activities/deep?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Recent route GPS paths (for SVG route thumbnails) ----
 export interface RoutePoint { lat: number; lng: number }
 export interface RouteItem {
