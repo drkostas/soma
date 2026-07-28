@@ -58,7 +58,6 @@ export async function GET(request: Request) {
   `) as { id: string; title: string; start_time: string; end_time: string; exercise_count: number; exercises: unknown }[];
 
   type Ex = { title?: string; sets?: { type?: string; weight_kg?: number; reps?: number }[] };
-  const exCount: Record<string, number> = {};
   const recent = recentRows.map((w) => {
     const exs: Ex[] = Array.isArray(w.exercises)
       ? (w.exercises as Ex[])
@@ -67,7 +66,6 @@ export async function GET(request: Request) {
       : [];
     let volume = 0;
     for (const e of exs) {
-      if (e.title) exCount[e.title] = (exCount[e.title] ?? 0) + 1;
       for (const st of e.sets ?? []) {
         if (st.type === "normal" && (st.weight_kg ?? 0) > 0 && (st.reps ?? 0) > 0) {
           volume += (st.weight_kg as number) * (st.reps as number);
@@ -84,10 +82,17 @@ export async function GET(request: Request) {
     };
   });
 
-  const topExercises = Object.entries(exCount)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([name, sessions]) => ({ name, sessions }));
+  // Count across the WHOLE range in SQL — the old JS loop only counted the
+  // 20 most-recent workouts, capping every exercise at the same number.
+  const topRows = (await sql`
+    SELECT e->>'title' as name, COUNT(*) as sessions
+    FROM hevy_raw_data, jsonb_array_elements(raw_json->'exercises') as e
+    WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - ${days}::int
+      AND e->>'title' IS NOT NULL
+    GROUP BY 1 ORDER BY 2 DESC LIMIT 8
+  `) as { name: string; sessions: number | string }[];
+  const topExercises = topRows.map((r) => ({ name: r.name, sessions: Number(r.sessions) }));
 
   return NextResponse.json({ stats: statsRows[0] ?? null, weeklyVolume, recent, topExercises });
 }
