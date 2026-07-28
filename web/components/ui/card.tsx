@@ -7,7 +7,10 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/20",
+        // Explicit border-border: Tailwind v4's bare `border` defaults the
+        // color to currentColor, and cards set text-card-foreground (near-white),
+        // so the resting border rendered WHITE. Pin it to the dark border token.
+        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border border-border py-6 shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/20",
         className
       )}
       {...props}
