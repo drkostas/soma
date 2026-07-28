@@ -108,7 +108,33 @@ export default function PlaylistScreen() {
   const analysed = total > 0;
   const bpmPct = total > 0 ? withBpm / total : 0;
 
-  const sessions = data?.sessions ?? [];
+  // Drop empty drafts (no songs, not on Spotify) and collapse same-day sessions
+  // that share a workout name — the DB has dozens of null-named "Run" sessions,
+  // several on the same day, which rendered as a wall of near-identical cards.
+  // Within a (name, day) group keep the best one (on Spotify wins, else most
+  // songs) and surface a ×N count.
+  const sessions = (() => {
+    const real = (data?.sessions ?? []).filter(
+      (s) => trackCount(s.song_assignments) > 0 || s.spotify_playlist_url,
+    );
+    const groups = new Map<string, { best: PlaylistSession; count: number }>();
+    for (const s of real) {
+      const key = `${s.workout_name ?? "Run"}|${(s.created_at ?? "").slice(0, 10)}`;
+      const g = groups.get(key);
+      if (!g) {
+        groups.set(key, { best: s, count: 1 });
+        continue;
+      }
+      g.count += 1;
+      const better =
+        (!!s.spotify_playlist_url && !g.best.spotify_playlist_url) ||
+        trackCount(s.song_assignments) > trackCount(g.best.song_assignments);
+      if (better) g.best = s;
+    }
+    return [...groups.values()].sort(
+      (a, b) => new Date(b.best.created_at ?? 0).getTime() - new Date(a.best.created_at ?? 0).getTime(),
+    );
+  })();
   const plans = data?.plans ?? [];
 
   return (
@@ -196,14 +222,21 @@ export default function PlaylistScreen() {
         {/* Saved playlist sessions */}
         {tab === "Playlists" ? (
           sessions.length ? (
-            sessions.map((s) => {
+            sessions.map(({ best: s, count: dupes }) => {
               const count = trackCount(s.song_assignments);
               return (
                 <Card key={s.id} className="gap-2">
                   <View className="flex-row items-center justify-between">
-                    <Text variant="body" className="text-text">
-                      {s.workout_name ?? "Run"}
-                    </Text>
+                    <View className="flex-1 flex-row items-center gap-2 pr-2">
+                      <Text variant="body" className="text-text">
+                        {s.workout_name ?? "Run"}
+                      </Text>
+                      {dupes > 1 ? (
+                        <Text variant="micro" className="text-text-muted">
+                          ×{dupes}
+                        </Text>
+                      ) : null}
+                    </View>
                     {s.spotify_playlist_url ? (
                       <Badge label="On Spotify" tone="success" />
                     ) : (
