@@ -55,7 +55,7 @@ export default function RootLayout({
           )}
           <NavProgress />
           <Sidebar />
-          <main className={`min-h-screen bg-background pb-[env(safe-area-inset-bottom,0.5rem)] pt-[calc(env(safe-area-inset-top,0px)+3rem)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]${isDemo ? " md:pt-8" : ""}`}>
+          <main className={`min-h-screen bg-background pb-[env(safe-area-inset-bottom,0.5rem)] pt-[calc(env(safe-area-inset-top,0px)+3rem)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)] lg:pl-56 lg:pt-6${isDemo ? " md:pt-8" : ""}`}>
             {children}
           </main>
           <Toaster richColors />

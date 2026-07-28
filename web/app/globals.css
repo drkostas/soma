@@ -13,6 +13,18 @@
    text-success, …) are generated even though they only appear in node_modules. */
 @source "../node_modules/soma-style/src";
 
+/* Repair the border token. soma-style@1.1.0's shadcn-compat.css defines
+   `--color-border: var(--color-border)` (self-referential → cyclic → invalid),
+   which voids the token so every `border`/`border-border` fell back to
+   currentColor (the near-white text colour). A plain :root declaration lands the
+   value that Tailwind's @theme merge refused to emit, and the base fallback
+   covers bare `border`. Remove once the package ships a fix. */
+:root {
+  --color-border: #1a3040;
+  --color-input: #1a3040;
+  --color-sidebar-border: #1a3040;
+}
+
 
 @layer base {
   * {
