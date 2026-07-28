@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
-import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
+import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores, useRunningSplits, useHrPace, useRecentRoutes } from "../../lib/api";
 import { RunningMileage } from "../../components/running-mileage";
 import { RunningDeepTrends } from "../../components/running-deep-trends";
@@ -158,10 +158,12 @@ const ZONE_HEX = ["#77c8d1", "#6ad4a0", "#e0c458", "#e0a458", "#e06060"];
 
 export default function RunningScreen() {
   const { data, error, refetch } = useRunning();
-  const { data: runTrends } = useRunningTrends("180d");
-  const { data: fitScores } = useFitnessScores("1y");
-  const { data: splits } = useRunningSplits("1y");
-  const { data: hrPace } = useHrPace("1y");
+  // Range drives the trend sections (all four endpoints accept 90d/1y/2y).
+  const [range, setRange] = useState<"90d" | "1y" | "2y">("1y");
+  const { data: runTrends } = useRunningTrends(range);
+  const { data: fitScores } = useFitnessScores(range);
+  const { data: splits } = useRunningSplits(range);
+  const { data: hrPace } = useHrPace(range);
   const { data: routes } = useRecentRoutes();
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
@@ -233,6 +235,11 @@ export default function RunningScreen() {
           </Text>
         </View>
 
+        <SegmentedControl
+          options={["90d", "1y", "2y"] as const}
+          value={range}
+          onChange={(v) => setRange(v as "90d" | "1y" | "2y")}
+        />
         {error ? (
           <Card>
             <Text variant="body" className="text-danger">
