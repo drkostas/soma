@@ -179,11 +179,36 @@ export default function ConnectionsScreen() {
     : 0;
   const lastSyncTime = fmtDateTime(sync?.lastSync ?? null);
 
+  // Short labels so the eyebrow fits a 3-up strip on a 390px phone (was wrapping
+  // "Platforms" to "PLATFORM S").
   const stats: { label: string; value: string; cls: string }[] = [
-    { label: "Platforms", value: `${connectedCount}`, cls: "text-teal" },
-    { label: "Active Rules", value: `${activeRulesCount}`, cls: "text-lime" },
-    { label: "Records synced", value: totalRecords.toLocaleString(), cls: "text-warm" },
+    { label: "Linked", value: `${connectedCount}`, cls: "text-teal" },
+    { label: "Rules on", value: `${activeRulesCount}`, cls: "text-lime" },
+    { label: "Records", value: totalRecords.toLocaleString(), cls: "text-warm" },
   ];
+
+  // Group sync rules by source→destination. The DB has duplicates (e.g. three
+  // garmin→strava rules, some on, some off) which rendered as contradictory
+  // rows. Collapse to one row per pair, showing the EFFECTIVE state (an enabled
+  // rule wins; ties break on priority) and a ×N count. Toggling flips the
+  // effective rule.
+  const groupedRules = (() => {
+    const groups = new Map<string, SyncRule[]>();
+    for (const r of rules) {
+      const dest = Object.keys(r.destinations ?? {}).join(", ") || r.activity_type;
+      const key = `${r.source_platform}→${dest}`;
+      const arr = groups.get(key);
+      if (arr) arr.push(r);
+      else groups.set(key, [r]);
+    }
+    return [...groups.entries()].map(([key, rs]) => {
+      const [source, dest] = key.split("→");
+      const effective = [...rs].sort(
+        (a, b) => Number(b.enabled) - Number(a.enabled) || b.priority - a.priority || a.id - b.id,
+      )[0];
+      return { key, source, dest, effective, count: rs.length };
+    });
+  })();
 
   // Recent sync activity from the per-source status map
   const syncSources = sync
@@ -218,7 +243,7 @@ export default function ConnectionsScreen() {
         <View className="flex-row flex-wrap gap-3">
           {stats.map((s) => (
             <Card key={s.label} className="min-w-[30%] flex-1 gap-1">
-              <Text variant="eyebrow">{s.label}</Text>
+              <Text variant="eyebrow" numberOfLines={1}>{s.label}</Text>
               <Text variant="headline" className={s.cls}>
                 {s.value}
               </Text>
@@ -240,17 +265,17 @@ export default function ConnectionsScreen() {
             const cred = credMap[platform];
             const connected = meta.kind !== "planned" && isConnected(cred);
             const badge = statusBadge(meta, connected);
+            // Sync-service "Last synced" must use the pipeline's real last-run
+            // time, NOT connected_at (the day the integration was linked — showed
+            // a stale "4/13" while data was fresh to 7/16).
+            const who = cred?.athlete_name ? `${cred.athlete_name} · ` : "";
             const detail =
               meta.kind === "planned"
                 ? "Not yet available"
                 : connected
-                  ? cred?.athlete_name
-                    ? `${cred.athlete_name} · ${
-                        meta.kind === "sync-service" ? "synced" : "connected"
-                      } ${fmtDate(cred?.connected_at)}`
-                    : `${meta.kind === "sync-service" ? "Last synced" : "Connected"} ${fmtDate(
-                        cred?.connected_at,
-                      )}`
+                  ? meta.kind === "sync-service"
+                    ? `${who}Last synced ${fmtDate(sync?.lastSync ?? null)}`
+                    : `${who}Connected ${fmtDate(cred?.connected_at)}`
                   : "Not connected";
 
             return (
@@ -275,29 +300,34 @@ export default function ConnectionsScreen() {
         {/* Sync rules */}
         <Card className="gap-2">
           <Text variant="eyebrow">Sync rules</Text>
-          {rules.length === 0 ? (
+          {groupedRules.length === 0 ? (
             <Text variant="micro">No sync rules configured.</Text>
           ) : (
-            rules.map((r) => (
+            groupedRules.map((g) => (
               <View
-                key={r.id}
+                key={g.key}
                 className="flex-row items-center justify-between border-b border-border-subtle py-2 last:border-0"
               >
                 <View className="flex-1 flex-row items-center gap-2 pr-2">
                   <Text variant="caption" className="text-text-secondary">
-                    {r.source_platform}
+                    {g.source}
                   </Text>
                   <Text variant="caption" className="text-text-muted">
                     →
                   </Text>
                   <Text variant="caption" className="text-text">
-                    {Object.keys(r.destinations ?? {}).join(", ") || r.activity_type}
+                    {g.dest}
                   </Text>
+                  {g.count > 1 ? (
+                    <Text variant="micro" className="text-text-muted">
+                      ×{g.count}
+                    </Text>
+                  ) : null}
                 </View>
-                <Pressable onPress={() => toggleRule(r.id, r.enabled)} hitSlop={8}>
+                <Pressable onPress={() => toggleRule(g.effective.id, g.effective.enabled)} hitSlop={8}>
                   <Badge
-                    label={r.enabled ? "On" : "Off"}
-                    tone={r.enabled ? "success" : "neutral"}
+                    label={g.effective.enabled ? "On" : "Off"}
+                    tone={g.effective.enabled ? "success" : "neutral"}
                   />
                 </Pressable>
               </View>
