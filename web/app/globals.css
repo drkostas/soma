@@ -17,12 +17,36 @@
    `--color-border: var(--color-border)` (self-referential → cyclic → invalid),
    which voids the token so every `border`/`border-border` fell back to
    currentColor (the near-white text colour). A plain :root declaration lands the
-   value that Tailwind's @theme merge refused to emit, and the base fallback
-   covers bare `border`. Remove once the package ships a fix. */
+   value that Tailwind's @theme merge refused to emit.
+
+   Also: shadcn-compat maps tokens under `@theme inline`, which inlines them into
+   Tailwind utilities but never emits :root custom properties. Components that use
+   the bare shadcn names as *raw* CSS values (recharts fills, tooltip/cursor
+   styles, axis colours) read `var(--primary)`, `var(--card)`, … which were
+   therefore empty — bar fills fell back to black and vanished on the dark
+   background. Define the bare aliases here, mapped to the base soma palette.
+   Remove once the package ships these on :root. */
 :root {
   --color-border: #1a3040;
   --color-input: #1a3040;
   --color-sidebar-border: #1a3040;
+
+  --background: var(--color-base);
+  --foreground: var(--color-text);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-text);
+  --popover: var(--color-surface-elevated);
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-teal);
+  --primary-foreground: var(--color-base);
+  --muted: var(--color-surface-elevated);
+  --muted-foreground: var(--color-text-muted);
+  --accent: var(--color-surface-hover);
+  --accent-foreground: var(--color-text);
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-teal-dim);
+  --destructive: var(--color-danger);
 }
 
 
