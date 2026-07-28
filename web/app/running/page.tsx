@@ -465,7 +465,7 @@ async function getSplitAnalysis(cutoff: string) {
         (lap->>'distance')::float as distance,
         (lap->>'duration')::float as duration,
         (lap->>'averageHR')::float as avg_hr,
-        (lap->>'averageRunCadence')::float * 2 as cadence,
+        (lap->>'averageRunCadence')::float as cadence,
         (lap->>'averagePower')::float as power
       FROM garmin_activity_raw s,
         jsonb_array_elements(s.raw_json->'lapDTOs') as lap
@@ -509,7 +509,7 @@ async function getBestSplits(cutoff: string) {
         (lap->>'distance')::float as distance,
         (lap->>'duration')::float as duration,
         (lap->>'averageHR')::float as avg_hr,
-        (lap->>'averageRunCadence')::float * 2 as cadence
+        (lap->>'averageRunCadence')::float as cadence
       FROM garmin_activity_raw s,
         jsonb_array_elements(s.raw_json->'lapDTOs') as lap
       WHERE s.endpoint_name = 'splits'

@@ -43,7 +43,17 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
         <Card className="gap-2">
           <View className="flex-row items-center justify-between">
             <Text variant="eyebrow">Training load · acute vs chronic</Text>
-            {loadLast.acwr != null ? <Badge label={`ACWR ${loadLast.acwr.toFixed(2)} · ${acwrLabel(loadLast.acwr)}`} tone={acwrTone(loadLast.acwr)} /> : null}
+            {(() => {
+              // Derive ACWR from the plotted acute/chronic so the badge and the
+              // chart agree (the raw acwr DB field is computed separately and drifts).
+              const ratio =
+                loadLast.acute != null && loadLast.chronic != null && loadLast.chronic > 0
+                  ? loadLast.acute / loadLast.chronic
+                  : loadLast.acwr;
+              return ratio != null ? (
+                <Badge label={`ACWR ${ratio.toFixed(2)} · ${acwrLabel(ratio)}`} tone={acwrTone(ratio)} />
+              ) : null;
+            })()}
           </View>
           <DualLine a={acute} b={chronic} colorA="#77c8d1" colorB="#5a7a8a" />
           <View className="flex-row justify-between">
