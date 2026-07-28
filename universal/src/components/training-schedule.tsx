@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
-import type { PlanDay, WorkoutStep } from "../lib/api";
+import { requestGarminPush, type ActivityMatch, type PlanDay, type WorkoutStep } from "../lib/api";
 
 /* Run-type → colour, matching the web training plan (easy green, quality orange,
    long blue, rest grey). Used for the small type pill on each day row. */
@@ -39,19 +39,40 @@ function stepLine(s: WorkoutStep): string {
   return parts.join(" · ");
 }
 
+/** Seconds/km → "M:SS". */
+function paceStr(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+const scoreColor = (s: number) => (s >= 80 ? "#6ad4a0" : s >= 60 ? "#e0c458" : "#e06060");
+
 function DayRow({
   day,
   isToday,
+  match,
   onToggleComplete,
 }: {
   day: PlanDay;
   isToday: boolean;
+  match?: ActivityMatch;
   onToggleComplete: (day: PlanDay) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [pushOverride, setPushOverride] = useState<string | null>(null);
   const steps = day.workoutSteps ?? [];
-  const pushed = day.garminPushStatus === "pushed" || day.garminPushStatus === "success";
-  const pending = day.garminPushStatus === "pending";
+  const status = pushOverride ?? day.garminPushStatus;
+  const pushed = status === "pushed" || status === "success";
+  const pending = status === "pending";
+  const failed = status === "failed" || status === "error";
+  const canPush = steps.length > 0 && !pushed && !pending;
+  const act = match?.matched ? match.activity : null;
+
+  async function onPush() {
+    setPushOverride("pending"); // optimistic; the plan-push cron completes it
+    const ok = await requestGarminPush(day.id);
+    if (!ok) setPushOverride(day.garminPushStatus ?? null);
+  }
 
   return (
     <View className="border-b border-border-subtle py-2.5">
@@ -69,8 +90,8 @@ function DayRow({
           {day.completed ? <Text style={{ color: "#6ad4a0", fontSize: 13 }}>✓</Text> : null}
         </Pressable>
 
-        {/* main tap target: expand steps */}
-        <Pressable className="flex-1" onPress={() => steps.length && setOpen((o) => !o)}>
+        {/* main tap target: expand steps + match details */}
+        <Pressable className="flex-1" onPress={() => (steps.length || act) && setOpen((o) => !o)}>
           <View className="flex-row items-center gap-2">
             <Text variant="micro" className={isToday ? "text-teal" : "text-text-muted"}>
               {isToday ? "TODAY" : shortDate(day.dayDate)}
@@ -78,6 +99,11 @@ function DayRow({
             <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: runColor(day.runType) + "22" }}>
               <Text variant="micro" style={{ color: runColor(day.runType) }}>{day.runType}</Text>
             </View>
+            {match?.matched && match.completionScore != null ? (
+              <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: scoreColor(match.completionScore) + "22" }}>
+                <Text variant="micro" style={{ color: scoreColor(match.completionScore) }}>{match.completionScore}%</Text>
+              </View>
+            ) : null}
             {day.gymWorkout ? (
               <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: "#6366b022" }}>
                 <Text variant="micro" style={{ color: "#8a8dd0" }}>🏋 {day.gymWorkout}</Text>
@@ -97,17 +123,25 @@ function DayRow({
               <Text variant="caption" className="tabular-nums text-text-secondary ml-2">{day.targetDistanceKm} km</Text>
             ) : null}
           </View>
-          {/* garmin sync status */}
+          {/* garmin sync status + manual push/retry (queues for the plan-push cron) */}
           {pushed ? (
             <Text variant="micro" className="text-success mt-0.5">✓ On Garmin</Text>
           ) : pending ? (
             <Text variant="micro" className="text-warning mt-0.5">⏳ Syncing to Garmin</Text>
+          ) : failed ? (
+            <Pressable onPress={onPush} hitSlop={6}>
+              <Text variant="micro" className="text-danger mt-0.5">✕ Push failed — tap to retry</Text>
+            </Pressable>
+          ) : canPush ? (
+            <Pressable onPress={onPush} hitSlop={6}>
+              <Text variant="micro" className="text-teal mt-0.5">↑ Push to Garmin</Text>
+            </Pressable>
           ) : null}
         </Pressable>
       </View>
 
-      {/* expandable workout steps */}
-      {open && steps.length ? (
+      {/* expandable workout steps + matched-activity detail */}
+      {open ? (
         <View className="mt-2 ml-9 gap-1">
           {steps.map((s, i) => (
             <View key={i} className="flex-row items-start gap-2">
@@ -116,6 +150,26 @@ function DayRow({
             </View>
           ))}
           {day.gymNotes ? <Text variant="micro" className="text-text-muted mt-1">Gym: {day.gymNotes}</Text> : null}
+          {act ? (
+            <View className="mt-1.5 rounded-lg bg-surface-subtle px-2.5 py-2 gap-0.5">
+              <View className="flex-row items-center justify-between">
+                <Text variant="micro" className="text-text-muted">MATCHED GARMIN ACTIVITY</Text>
+                {match?.completionScore != null ? (
+                  <Text variant="micro" style={{ color: scoreColor(match.completionScore) }}>{match.completionScore}% of plan</Text>
+                ) : null}
+              </View>
+              <Text variant="micro" className="text-text-secondary">
+                {act.distance_km != null ? `${Number(act.distance_km).toFixed(1)} km` : ""}
+                {act.duration_min != null ? ` · ${Math.round(Number(act.duration_min))} min` : ""}
+                {act.avg_pace_sec_km != null ? ` · ${paceStr(act.avg_pace_sec_km)}/km` : ""}
+              </Text>
+              <Text variant="micro" className="text-text-muted">
+                {act.avg_hr != null ? `HR ${act.avg_hr}` : ""}
+                {act.max_hr != null ? ` (max ${act.max_hr})` : ""}
+                {act.calories != null ? ` · ${act.calories} kcal` : ""}
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -125,10 +179,12 @@ function DayRow({
 export function TrainingSchedule({
   planDays,
   today,
+  matches,
   onToggleComplete,
 }: {
   planDays: PlanDay[];
   today: string;
+  matches?: Record<number, ActivityMatch>;
   onToggleComplete: (day: PlanDay) => void;
 }) {
   // group by week
@@ -190,7 +246,7 @@ export function TrainingSchedule({
             {isOpen ? (
               <View className="mt-1">
                 {days.map((d) => (
-                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} onToggleComplete={onToggleComplete} />
+                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} onToggleComplete={onToggleComplete} />
                 ))}
               </View>
             ) : null}
