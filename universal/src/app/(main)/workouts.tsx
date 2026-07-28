@@ -104,12 +104,6 @@ export default function WorkoutsScreen() {
       cls: "text-warm",
       spark: { data: kcalTrend, color: "#b17850" },
     },
-    {
-      label: "Avg Exercises",
-      value: avgExercises != null ? `${avgExercises}` : "—",
-      sub: "per session",
-      cls: "text-indigo",
-    },
   ];
 
   return (
@@ -184,45 +178,6 @@ export default function WorkoutsScreen() {
           </Card>
         ) : null}
 
-        {/* Recent workouts */}
-        <Card className="gap-2">
-          <Text variant="eyebrow">Recent workouts</Text>
-          {!data && !error ? (
-            <Text variant="micro">Loading…</Text>
-          ) : recent.length === 0 ? (
-            <Text variant="micro">No workouts yet.</Text>
-          ) : (
-            recent.map((w, i) => (
-              <View
-                key={`${w.date}-${w.title}-${i}`}
-                className="gap-1 border-b border-border-subtle py-2"
-              >
-                <View className="flex-row items-center justify-between">
-                  <Text variant="body" className="mr-2 flex-1 text-text" numberOfLines={1}>
-                    {w.title || "Workout"}
-                  </Text>
-                  <Badge
-                    label={w.synced ? "synced" : w.status || "pending"}
-                    tone={w.synced ? "success" : "warm"}
-                  />
-                </View>
-                <View className="flex-row items-center gap-3">
-                  <Text variant="micro" className="text-text-secondary">
-                    {formatDate(w.date)}
-                  </Text>
-                  <Text variant="micro" className="tabular-nums text-text-muted">
-                    {w.exercises} ex · {w.sets} sets
-                  </Text>
-                  {w.kcal > 0 ? (
-                    <Text variant="micro" className="tabular-nums text-warm">
-                      {w.kcal} kcal
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            ))
-          )}
-        </Card>
       </View>
     </ScrollView>
   );
