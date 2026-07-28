@@ -4,6 +4,23 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import { Card, CardContent } from "@/components/ui/card";
 import { estimateHMSeconds } from "@/lib/vdot-utils";
 
+// Normal-distribution percentile of a z-score (0-100), bounded. Keeps our signed
+// readiness z-composite on the same scale as Garmin's 0-100 readiness.
+function erf(x: number): number {
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * ax);
+  const y =
+    1 -
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-ax * ax);
+  return sign * y;
+}
+function zToPercentile(z: number): number {
+  return 50 * (1 + erf(z / Math.SQRT2));
+}
+
 interface ComparisonData {
   load: { date: string; dailyLoad: number; ctl: number; atl: number }[];
   readiness: { date: string; garminScore: number; ourScore: number }[];
@@ -18,10 +35,13 @@ interface ComparisonChartsProps {
 }
 
 export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonChartsProps) {
-  // Normalize z-score (-2..+2) to 0-100 scale to match Garmin readiness
+  // Map the signed z-composite to its normal-distribution percentile (0-100) so
+  // it sits on the same honest scale as Garmin's 0-100 readiness. The old linear
+  // `50 + z*25` went negative for z < -2 (our z reaches -3.4). Percentile is
+  // strictly bounded: z=0 → 50, z=+2 → 98, z=-2 → 2.
   const readinessNormalized = data.readiness.map(r => ({
     ...r,
-    ourScoreNorm: Math.round(50 + r.ourScore * 25), // z=0 → 50, z=2 → 100, z=-2 → 0
+    ourScoreNorm: Math.round(zToPercentile(r.ourScore)),
   }));
 
   return (

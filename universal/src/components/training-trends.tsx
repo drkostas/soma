@@ -46,6 +46,23 @@ interface Comparison {
 const n = (v: unknown): number => Number(v);
 const last = (a: ComparisonPoint[]): ComparisonPoint | undefined => (a.length ? a[a.length - 1] : undefined);
 
+// Our readiness ourScore is a SIGNED z-composite (roughly -3.5..+2), not a 0-100
+// score — multiplying it by 100 produced nonsense like "-123". Map the z to its
+// normal-distribution percentile (0-100) so it's on the same honest scale as
+// Garmin's 0-100 readiness. z=0 -> 50, z=+2 -> ~98, z=-2 -> ~2.
+function erf(x: number): number {
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * ax);
+  const y =
+    1 -
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-ax * ax);
+  return sign * y;
+}
+const zToPercentile = (z: number): number => 50 * (1 + erf(z / Math.SQRT2));
+
 /** Compact "model vs Garmin" trend cards (mobile-adapted comparison charts). */
 export function TrainingTrends({ comparison }: { comparison: Comparison | null | undefined }) {
   if (!comparison) return null;
@@ -78,11 +95,11 @@ export function TrainingTrends({ comparison }: { comparison: Comparison | null |
     },
     {
       key: "readiness",
-      title: "Readiness — ours vs Garmin",
-      a: rd.map((p) => n(p.ourScore) * 100),
+      title: "Readiness — percentile vs Garmin",
+      a: rd.map((p) => zToPercentile(n(p.ourScore))),
       b: rd.map((p) => n(p.garminScore)),
       colorB: "#5a7a8a",
-      latest: rdL ? `Ours ${Math.round(n(rdL.ourScore) * 100)} · Garmin ${Math.round(n(rdL.garminScore))}` : "",
+      latest: rdL ? `Ours ${Math.round(zToPercentile(n(rdL.ourScore)))} · Garmin ${Math.round(n(rdL.garminScore))}` : "",
     },
     {
       key: "race",
