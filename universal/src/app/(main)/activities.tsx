@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh } from "../../lib/api";
+import { fetchJson, usePullRefresh, useActivitiesDeep } from "../../lib/api";
+import { ActivitiesMonthly, KiteDeepDive, ActivitiesList } from "../../components/activities-deep";
 
 /** Daily activity-count series (per-day sessions) for the Sessions trend. */
 function useSessionsTrend() {
@@ -116,6 +117,7 @@ function fmtDate(iso: string): string {
 export default function ActivitiesScreen() {
   const [range, setRange] = useState<RangeKey>("1y");
   const { data, loading, error, refetch } = useActivities(range);
+  const { data: deep } = useActivitiesDeep(range);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const totals = data?.totals;
@@ -285,36 +287,14 @@ export default function ActivitiesScreen() {
           </Card>
         ) : null}
 
-        {/* Recent activity log */}
-        {data && data.recent.length > 0 ? (
-          <Card className="gap-2">
-            <Text variant="eyebrow">Recent activities</Text>
-            {data.recent.slice(0, 15).map((a) => (
-              <View
-                key={a.activity_id}
-                className="flex-row items-center justify-between border-b border-border-subtle py-2"
-              >
-                <View className="mr-2 flex-1 gap-0.5">
-                  <Text variant="caption" className="text-text" numberOfLines={1}>
-                    {a.name || a.label}
-                  </Text>
-                  <Text variant="micro" className="text-text-muted">
-                    {a.label} · {fmtDate(a.date)}
-                  </Text>
-                </View>
-                <View className="items-end gap-0.5">
-                  <Text variant="caption" className="tabular-nums text-text">
-                    {a.distance_km > 0 ? `${a.distance_km.toFixed(1)} km` : fmtDuration(a.duration_min)}
-                  </Text>
-                  <Text variant="micro" className="tabular-nums text-text-muted">
-                    {fmtDuration(a.duration_min)}
-                    {a.avg_hr ? ` · ${Math.round(a.avg_hr)} bpm` : ""}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </Card>
-        ) : null}
+        {/* Monthly distribution — stacked columns by sport (web parity) */}
+        {deep ? <ActivitiesMonthly monthly={deep.monthly} /> : null}
+
+        {/* Kite deep dive — speed progression + top spots + jump records */}
+        {deep ? <KiteDeepDive sessions={deep.kite.sessions} /> : null}
+
+        {/* Full activity list with sport filter + paging (replaces the recent log) */}
+        {deep ? <ActivitiesList all={deep.all} /> : null}
       </View>
     </ScrollView>
   );
