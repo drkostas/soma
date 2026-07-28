@@ -68,8 +68,9 @@ export function Sidebar() {
 
   return (
     <>
-      {/* App header bar — solid background covering status bar + notch */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-border">
+      {/* App header bar — mobile only. On desktop the sidebar is always visible
+          (lg:translate-x-0 below), so the hamburger header is hidden. */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-border lg:hidden">
         {/* Status bar spacer — solid fill behind clock/notch/icons */}
         <div className="safe-area-pt" />
         {/* Header content */}
@@ -101,8 +102,10 @@ export function Sidebar() {
       {/* Slide-out drawer */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen w-56 flex-col border-r border-border bg-sidebar transition-transform duration-200 safe-area-pt safe-area-pl safe-area-pb",
-          drawerOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed left-0 top-0 z-40 h-screen w-56 flex flex-col border-r border-border bg-sidebar transition-transform duration-200 safe-area-pt safe-area-pl safe-area-pb",
+          // Slide-in drawer on mobile; always visible on desktop (lg+).
+          drawerOpen ? "translate-x-0" : "-translate-x-full",
+          "lg:translate-x-0"
         )}
       >
         {/* Logo + close area */}
