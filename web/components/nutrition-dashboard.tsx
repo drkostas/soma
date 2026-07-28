@@ -519,8 +519,13 @@ export function NutritionDashboard({
 
   return (
     <div className="space-y-4 lg:grid lg:grid-cols-[420px_1fr] lg:gap-8 lg:space-y-0 lg:max-w-5xl lg:mx-auto">
-      {/* ── LEFT COLUMN: summary & controls (sticky on desktop) ── */}
-      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:scrollbar-none">
+      {/* ── LEFT COLUMN: summary & controls ──
+          Not sticky/height-capped: the column's content is taller than the
+          viewport, and a sticky element taller than the viewport pins its top so
+          the bottom never scrolls into view (with scrollbar-none the overflow was
+          also invisible → ~495px was unreachable). Flow it normally so page scroll
+          reaches everything. */}
+      <div className="space-y-4 lg:self-start">
         {/* Date header with navigation */}
         <div className="flex items-center justify-between">
           <a href={`/nutrition?date=${(() => { const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })()}`}>
