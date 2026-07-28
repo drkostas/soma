@@ -42,12 +42,24 @@ export const revalidate = 300;
 
 async function getTodayHealth() {
   const sql = getDb();
+  // Pull the last 7 days, not just today. Today's row is often partial (Garmin
+  // syncs fields at different times), so a field can be null while its weekly
+  // delta is live — the KPI then rendered "—" next to "↑ +50%". Backfill each
+  // null field from the most recent older day so the value matches the delta.
   const rows = await sql`
     SELECT * FROM daily_health_summary
     ORDER BY date DESC
-    LIMIT 1
+    LIMIT 7
   `;
-  return rows[0] || null;
+  if (!rows.length) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const merged: Record<string, any> = { ...rows[0] };
+  for (const row of rows.slice(1)) {
+    for (const key of Object.keys(row)) {
+      if (merged[key] == null && row[key] != null) merged[key] = row[key];
+    }
+  }
+  return merged;
 }
 
 async function getWeeklyAverages() {
