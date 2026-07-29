@@ -1,5 +1,5 @@
 {
-  "buildCommand": "next build --webpack",
+  "buildCommand": "node scripts/check-env-whitespace.mjs && next build --webpack",
   "crons": [
     {
       "path": "/api/cron/garmin-ingest",
