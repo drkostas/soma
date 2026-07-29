@@ -82,6 +82,7 @@ function formatRaceTime(totalSeconds: number): string {
 /** Build reference metrics from separately-queried external data — signals NOT in the formula graph. */
 function buildReferenceMetrics(
   referenceData: ReferenceData,
+  currentVdot: number,
 ): ReferenceMetric[] {
   const { readinessHistory, fitnessHistory, weightHistory } = referenceData;
 
@@ -100,9 +101,15 @@ function buildReferenceMetrics(
     }
   }
 
-  // Determine latest race prediction value
+  // Determine the latest race prediction from the CURRENT (banister) VDOT via the
+  // same Daniels VO2 model, so it matches the displayed VDOT and the app. The
+  // fitness_trajectory race_prediction_seconds / vdot_adjusted are stale (an
+  // older, higher VDOT) and disagreed \u2014 e.g. banister 43.2 \u2192 1:43:49 (app match),
+  // vs the stale 57.7 \u2192 1:20:50. Keep the stale values only as a fallback.
   let latestRacePrediction: string = "\u2014";
-  if (latestFitness?.race_prediction_seconds != null) {
+  if (currentVdot && currentVdot > 0) {
+    latestRacePrediction = formatRaceTime(estimateHMSeconds(currentVdot));
+  } else if (latestFitness?.race_prediction_seconds != null) {
     latestRacePrediction = formatRaceTime(Number(latestFitness.race_prediction_seconds));
   } else if (latestFitness?.vdot_adjusted != null && Number(latestFitness.vdot_adjusted) > 0) {
     latestRacePrediction = formatRaceTime(estimateHMSeconds(Number(latestFitness.vdot_adjusted)));
@@ -490,8 +497,8 @@ export function TrainingDashboard({
 
   // Reference metrics from server-queried external data
   const referenceMetrics = useMemo<ReferenceMetric[]>(() => {
-    return buildReferenceMetrics(referenceData);
-  }, [referenceData]);
+    return buildReferenceMetrics(referenceData, currentVdot);
+  }, [referenceData, currentVdot]);
 
   // Dynamic VDOT: prefer graph node value, fall back to server-provided currentVdot prop
   const dynamicVdot = useMemo(() => {
