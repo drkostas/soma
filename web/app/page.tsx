@@ -16,6 +16,7 @@ import { InteractiveThisWeek } from "@/components/interactive-this-week";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import { readinessScore, trafficLightText } from "@/lib/readiness";
 import {
   Footprints,
   Flame,
@@ -440,8 +441,9 @@ async function getWeightTrend(cutoff: string) {
 
 async function getRecoverySummary() {
   const sql = getDb();
-  // Get latest body battery, HRV, and training readiness
-  const [bb, hrv, tr] = await Promise.all([
+  // Get latest body battery, HRV, Garmin training readiness, and soma's own
+  // model readiness (headlined; Garmin is shown as the secondary comparison).
+  const [bb, hrv, tr, model] = await Promise.all([
     sql`
       SELECT
         (raw_json->>'bodyBatteryChargedValue')::int as charged,
@@ -471,11 +473,17 @@ async function getRecoverySummary() {
         AND raw_json->0->>'score' IS NOT NULL
       ORDER BY date DESC LIMIT 1
     `,
+    sql`
+      SELECT traffic_light, composite_score
+      FROM daily_readiness
+      ORDER BY date DESC LIMIT 1
+    `,
   ]);
   return {
     bodyBattery: bb[0] || null,
     hrv: hrv[0] || null,
     readiness: tr[0] || null,
+    model: model[0] || null,
   };
 }
 
@@ -921,18 +929,32 @@ export default async function HomePage({
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {recovery.readiness && (
+                {(recovery.model || recovery.readiness) && (
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">Training Readiness</div>
-                    <div className={`text-2xl font-bold ${
-                      Number(recovery.readiness.score) >= 70 ? "text-green-400" :
-                      Number(recovery.readiness.score) >= 40 ? "text-yellow-400" : "text-red-400"
-                    }`}>
-                      {recovery.readiness.score}
-                    </div>
-                    <div className="text-xs text-muted-foreground capitalize">
-                      {recovery.readiness.level?.toLowerCase().replace(/_/g, " ")}
-                    </div>
+                    <div className="text-xs text-muted-foreground mb-1">Readiness</div>
+                    {recovery.model?.composite_score != null ? (
+                      // soma's own model readiness (headlined); Garmin below as the comparison.
+                      <>
+                        <div className={`text-2xl font-bold ${trafficLightText(recovery.model.traffic_light)}`}>
+                          {readinessScore(Number(recovery.model.composite_score))}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {recovery.readiness ? `Garmin ${recovery.readiness.score}` : "model"}
+                        </div>
+                      </>
+                    ) : recovery.readiness ? (
+                      <>
+                        <div className={`text-2xl font-bold ${
+                          Number(recovery.readiness.score) >= 70 ? "text-green-400" :
+                          Number(recovery.readiness.score) >= 40 ? "text-yellow-400" : "text-red-400"
+                        }`}>
+                          {recovery.readiness.score}
+                        </div>
+                        <div className="text-xs text-muted-foreground capitalize">
+                          {recovery.readiness.level?.toLowerCase().replace(/_/g, " ")}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 )}
                 {recovery.bodyBattery && (
