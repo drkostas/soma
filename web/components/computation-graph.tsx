@@ -247,10 +247,10 @@ export function ComputationGraphView({
   // Add HM time annotation under adjusted_pace — computed from the pace value itself
   const adjustedPaceNode = graph.nodes.find(n => n.id === "adjusted_pace");
   if (adjustedPaceNode?.value != null && adjustedPaceNode.value > 0) {
-    const hmSec = adjustedPaceNode.value * 21.0975;
+    const hmSec = Math.round(adjustedPaceNode.value * 21.0975); // round total seconds first
     const h = Math.floor(hmSec / 3600);
     const m = Math.floor((hmSec % 3600) / 60);
-    const s = Math.round(hmSec % 60);
+    const s = hmSec % 60;
     const hmStr = h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
     banisterAnnotations.set("adjusted_pace", `HM ≈ ${hmStr}`);
   }

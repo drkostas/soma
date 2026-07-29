@@ -48,7 +48,8 @@ export function PaceWaterfall({ basePace, items, adjustedPace }: {
 }
 
 function formatPaceSeconds(s: number): string {
-  const min = Math.floor(s / 60)
-  const sec = Math.round(s % 60)
+  const t = Math.round(s) // round total seconds first so :60 can't render
+  const min = Math.floor(t / 60)
+  const sec = t % 60
   return `${min}:${sec.toString().padStart(2, "0")}/km`
 }

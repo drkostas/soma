@@ -21,8 +21,9 @@ type SortKey = "date" | "distance" | "pace" | "avg_hr" | "calories";
 type SortDir = "asc" | "desc";
 
 function formatPace(mins: number) {
-  const m = Math.floor(mins);
-  const s = Math.round((mins - m) * 60);
+  const t = Math.round(mins * 60); // round total seconds first so :60 can't render
+  const m = Math.floor(t / 60);
+  const s = t % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
