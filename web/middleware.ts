@@ -42,8 +42,20 @@ export default auth((req) => {
   // Personal API token: native apps + widgets reach /api/* without a session.
   if (isApi && hasApiToken(req)) return withTokenCors(NextResponse.next());
 
-  // Demo mode: no auth required
-  if (process.env.DEMO_MODE?.trim() === "true") return withDevCors(NextResponse.next(), isApi);
+  // Demo mode: READ-ONLY. Reads and page views need no auth, but every /api/*
+  // handler runs auth-less here, so an anonymous visitor could otherwise POST/
+  // DELETE straight into the shared DB (log/close-day/delete-rule/…). Block all
+  // mutating methods on /api/* at this single choke point.
+  if (process.env.DEMO_MODE?.trim() === "true") {
+    const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+    if (isApi && isMutation) {
+      return withDevCors(
+        NextResponse.json({ error: "This is a read-only demo." }, { status: 403 }),
+        true,
+      );
+    }
+    return withDevCors(NextResponse.next(), isApi);
+  }
 
   // Always allow auth routes, login page, and image API (used by sync pipeline)
   if (

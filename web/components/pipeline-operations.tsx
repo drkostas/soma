@@ -251,7 +251,7 @@ export function PipelineOperations({
     }
   }
 
-  const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === "true";
+  const isDemo = process.env.NEXT_PUBLIC_IS_DEMO?.trim() === "true";
 
   return (
     <div className="space-y-4">
