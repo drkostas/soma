@@ -9,6 +9,7 @@ import {
   usePullRefresh,
   todayLocal,
 } from "../../lib/api";
+import { readinessScore } from "../../lib/readiness";
 
 interface OverviewTrends {
   steps: number[];
@@ -154,7 +155,7 @@ export default function OverviewScreen() {
                 {readiness.composite_score != null && readiness.composite_score > 0 ? (
                   <>
                     <Text variant="display" style={{ color: TL_COLOR[readiness.traffic_light] ?? "#77c8d1" }}>
-                      {Math.round(Math.min(1, readiness.composite_score) * 100)}
+                      {readinessScore(readiness.composite_score)}
                     </Text>
                     <Text variant="caption" className="text-text-muted mb-1">readiness score</Text>
                   </>

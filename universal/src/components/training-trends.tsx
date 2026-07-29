@@ -3,6 +3,7 @@ import Svg, { Polyline } from "react-native-svg";
 import { Text, Card } from "soma-style";
 import type { ComparisonPoint } from "../lib/api";
 import { pacesForVdot, timeStr } from "../lib/vdot";
+import { readinessScore } from "../lib/readiness";
 
 /** Two lines on a SHARED y-scale (so the comparison is honest), scaled to width. */
 function DualLine({
@@ -46,22 +47,10 @@ interface Comparison {
 const n = (v: unknown): number => Number(v);
 const last = (a: ComparisonPoint[]): ComparisonPoint | undefined => (a.length ? a[a.length - 1] : undefined);
 
-// Our readiness ourScore is a SIGNED z-composite (roughly -3.5..+2), not a 0-100
-// score — multiplying it by 100 produced nonsense like "-123". Map the z to its
-// normal-distribution percentile (0-100) so it's on the same honest scale as
-// Garmin's 0-100 readiness. z=0 -> 50, z=+2 -> ~98, z=-2 -> ~2.
-function erf(x: number): number {
-  const sign = x < 0 ? -1 : 1;
-  const ax = Math.abs(x);
-  const t = 1 / (1 + 0.3275911 * ax);
-  const y =
-    1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
-      t *
-      Math.exp(-ax * ax);
-  return sign * y;
-}
-const zToPercentile = (z: number): number => 50 * (1 + erf(z / Math.SQRT2));
+// Readiness ourScore is a signed z-composite; map it to a 0-100 percentile so
+// it's on the same honest scale as Garmin's 0-100 readiness (shared helper, used
+// by the overview hero too, so the same z reads the same everywhere).
+const zToPercentile = readinessScore;
 
 /** Compact "model vs Garmin" trend cards (mobile-adapted comparison charts). */
 export function TrainingTrends({ comparison }: { comparison: Comparison | null | undefined }) {
