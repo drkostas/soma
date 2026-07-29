@@ -604,7 +604,19 @@ export default async function RunningPage({
         />
         <StatCard
           title="VO2max"
-          value={stats?.peak_vo2max ? `${Number(stats.peak_vo2max).toFixed(1)}` : "—"}
+          /* Latest VO2max (current fitness), not the range peak — matches the
+             dashboard KPI. Read from the already-fetched trend (ordered date-ASC,
+             so the last entry is the most recent) to avoid adding a DB query on
+             this already query-heavy page. Falls back to the range max. */
+          value={(() => {
+            const trend = vo2max as { vo2max: number | null }[] | null;
+            const latest = trend?.length ? Number(trend[trend.length - 1]?.vo2max) : null;
+            return latest
+              ? latest.toFixed(1)
+              : stats?.peak_vo2max
+                ? `${Number(stats.peak_vo2max).toFixed(1)}`
+                : "—";
+          })()}
           subtitle="ml/kg/min"
           icon={<Zap className="h-4 w-4 text-yellow-400" />}
         />
