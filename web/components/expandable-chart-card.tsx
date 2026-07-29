@@ -52,7 +52,11 @@ export function ExpandableChartCard({
             <Maximize2 className="h-3.5 w-3.5 ml-auto opacity-40 md:opacity-30 md:group-hover:opacity-60 transition-opacity duration-200 shrink-0" />
           </CardTitle>
         </CardHeader>
-        <CardContent className="[&_.recharts-responsive-container]:!h-[200px] sm:[&_.recharts-responsive-container]:!h-auto">
+        {/* No mobile height clamp: forcing the container to 200px didn't shrink
+            the recharts SVG (which keeps its numeric `height` prop), so the SVG
+            spilled 100px below the card and overlapped the next card. Let the
+            container match the chart's natural height on every breakpoint. */}
+        <CardContent>
           {renderChildren(false)}
         </CardContent>
       </Card>
