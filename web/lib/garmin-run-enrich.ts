@@ -22,9 +22,9 @@ export function generateRunStravaDescription(summary: Record<string, any>, hrZon
   if (dist > 0) parts.push(`📏 ${(dist / 1000).toFixed(2)} km`);
   const avgSpeed = summary.averageSpeed ?? 0;
   if (avgSpeed > 0) {
-    const pace = 1000 / avgSpeed / 60;
-    const m = Math.trunc(pace);
-    parts.push(`⚡ ${m}:${String(r0((pace - m) * 60)).padStart(2, "0")}/km`);
+    const secPerKm = Math.round(1000 / avgSpeed); // round total sec/km first so :60 can't render
+    const m = Math.floor(secPerKm / 60);
+    parts.push(`⚡ ${m}:${String(secPerKm % 60).padStart(2, "0")}/km`);
   }
   const avgHr = summary.averageHR ?? 0;
   if (avgHr > 0) parts.push(`❤️ ${r0(avgHr)} bpm`);

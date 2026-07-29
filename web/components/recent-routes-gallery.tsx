@@ -29,9 +29,9 @@ interface RouteItem {
 
 function formatPace(distance_km: number, duration_s: number): string {
   if (!distance_km || !duration_s) return "—";
-  const paceMin = duration_s / 60 / distance_km;
-  const m = Math.floor(paceMin);
-  const s = Math.round((paceMin - m) * 60);
+  const secPerKm = Math.round(duration_s / distance_km); // round total sec/km first
+  const m = Math.floor(secPerKm / 60);
+  const s = secPerKm % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
