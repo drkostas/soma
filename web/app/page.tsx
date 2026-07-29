@@ -477,7 +477,7 @@ async function getRecoverySummary() {
       SELECT traffic_light, composite_score
       FROM daily_readiness
       ORDER BY date DESC LIMIT 1
-    `,
+    `.catch(() => []),  // demo DB has no daily_readiness table — fall back to Garmin readiness
   ]);
   return {
     bodyBattery: bb[0] || null,
