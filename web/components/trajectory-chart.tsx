@@ -323,7 +323,11 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null, goalVdot?: num
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Formula</div>
               <div className="text-xs grid grid-cols-2 gap-x-3 gap-y-0.5">
                 <span className="text-muted-foreground">Readiness</span>
-                <span className="font-mono">{projectedDay.readinessFactor.toFixed(4)}x</span>
+                <span className="font-mono">
+                  {/* -1 is a REST-day sentinel (critically low readiness), not a
+                      real multiplier — render it as REST rather than "-1.0000x". */}
+                  {projectedDay.readinessFactor === -1 ? "rest" : `${projectedDay.readinessFactor.toFixed(4)}x`}
+                </span>
                 <span className="text-muted-foreground">Fatigue</span>
                 <span className="font-mono">{projectedDay.fatigueFactor.toFixed(4)}x</span>
                 <span className="text-muted-foreground">Weight</span>

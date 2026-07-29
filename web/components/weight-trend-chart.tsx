@@ -25,6 +25,9 @@ export function WeightTrendChart({ data }: { data: WeightPoint[] }) {
   const recent = data.slice(-60);
 
   const weights = recent.map((d) => d.weight_kg).filter((w) => w > 0);
+  // weight_kg can be 0/absent even when rows exist; without valid weights,
+  // Math.min(...[]) is Infinity (broken axis) and reduce/0 is NaN (avg label).
+  if (weights.length === 0) return null;
   const minW = Math.floor(Math.min(...weights) - 1);
   const maxW = Math.ceil(Math.max(...weights) + 1);
 
