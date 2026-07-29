@@ -179,7 +179,7 @@ export async function GET(request: Request) {
 
   const nodes: GraphNode[] = [
     // Raw layer — raw values don't have a natural neutral; mirror their z-score activation
-    { id: "hrv_raw", column: "raw", label: "HRV", value: hrvRaw, unit: "ms", color: colorForNode("hrv_z", hrvZ), normalizedValue: zNorm(hrvZ), tooltip: { ...tooltip("hrv_raw"), inputs: [] } },
+    { id: "hrv_raw", column: "raw", label: "HRV (overnight)", value: hrvRaw, unit: "ms", color: colorForNode("hrv_z", hrvZ), normalizedValue: zNorm(hrvZ), tooltip: { ...tooltip("hrv_raw"), inputs: [] } },
     { id: "sleep_raw", column: "raw", label: "Sleep", value: sleepHours != null ? round(sleepHours, 1) : null, unit: "h", color: colorForNode("sleep_z", sleepZ), normalizedValue: zNorm(sleepZ), tooltip: { ...tooltip("sleep_raw"), inputs: [] } },
     { id: "rhr_raw", column: "raw", label: "RHR", value: rhrRaw, unit: "bpm", color: colorForNode("rhr_z", rhrZ), normalizedValue: zNorm(rhrZ), tooltip: { ...tooltip("rhr_raw"), inputs: [] } },
     { id: "bb_raw", column: "raw", label: "Body Battery", value: bbRaw, unit: "/100", color: colorForNode("bb_z", bbZ), normalizedValue: zNorm(bbZ), tooltip: { ...tooltip("bb_raw"), inputs: [] } },
