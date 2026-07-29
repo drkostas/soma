@@ -3,23 +3,8 @@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { estimateHMSeconds } from "@/lib/vdot-utils";
-
-// Normal-distribution percentile of a z-score (0-100), bounded. Keeps our signed
-// readiness z-composite on the same scale as Garmin's 0-100 readiness.
-function erf(x: number): number {
-  const sign = x < 0 ? -1 : 1;
-  const ax = Math.abs(x);
-  const t = 1 / (1 + 0.3275911 * ax);
-  const y =
-    1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
-      t *
-      Math.exp(-ax * ax);
-  return sign * y;
-}
-function zToPercentile(z: number): number {
-  return 50 * (1 + erf(z / Math.SQRT2));
-}
+// Shared with the home Recovery card + the app, so a given z reads the same everywhere.
+import { readinessScore as zToPercentile } from "@/lib/readiness";
 
 interface ComparisonData {
   load: { date: string; dailyLoad: number; ctl: number; atl: number }[];
