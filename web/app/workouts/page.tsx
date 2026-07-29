@@ -87,8 +87,11 @@ async function getWeeklyVolume(cutoff: string) {
   return rows;
 }
 
-async function getWorkoutSummaryStats() {
+async function getWorkoutSummaryStats(cutoff: string) {
   const sql = getDb();
+  // Range-scoped so the headline cards (Total Workouts, Avg Duration, Training
+  // Span, avg/week) track the range selector like the charts below them, instead
+  // of showing all-time totals under a filtered view.
   const rows = await sql`
     WITH stats AS (
       SELECT
@@ -100,6 +103,7 @@ async function getWorkoutSummaryStats() {
         MAX((raw_json->>'start_time')::date) as last_workout
       FROM hevy_raw_data
       WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
     )
     SELECT * FROM stats
   `;
@@ -487,7 +491,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
       getRecentWorkouts(cutoff, 50),
       getWeeklyVolume(cutoff),
       getConfigurableProgression(cutoff),
-      getWorkoutSummaryStats(),
+      getWorkoutSummaryStats(cutoff),
       getTopExercises(cutoff),
       getProgramSplit(cutoff),
       getExercisePRs(),
