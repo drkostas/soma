@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3456",
-    "build": "next build --webpack",
+    "build": "node scripts/check-env-whitespace.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
