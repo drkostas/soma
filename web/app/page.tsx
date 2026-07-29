@@ -100,14 +100,17 @@ function pctChange(current: number | null, previous: number | null): number | nu
   return ((current - previous) / previous) * 100;
 }
 
-async function getWorkoutStats() {
+async function getWorkoutStats(cutoff: string) {
   const sql = getDb();
+  // Range-scoped so the Gym Frequency headline matches the range-scoped
+  // Activity Breakdown Gym count beside it (was an all-time COUNT(*)).
   const rows = await sql`
     SELECT
       COUNT(*) as total_workouts,
       MAX(raw_json->>'start_time') as last_workout
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
   `;
   const recent = await sql`
     SELECT COUNT(*) as count_7d
@@ -737,7 +740,7 @@ export default async function HomePage({
       getTodayHealth(),
       getWeeklyAverages(),
       getPreviousWeekAverages(),
-      getWorkoutStats(),
+      getWorkoutStats(cutoff),
       getGymFrequency(cutoff),
       getRunningStats(cutoff),
       getActivityCounts(cutoff),
