@@ -35,7 +35,7 @@ function relativeTime(iso: string | null): string {
 }
 
 export function SyncButton() {
-  const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === "true";
+  const isDemo = process.env.NEXT_PUBLIC_IS_DEMO?.trim() === "true";
 
   const [state, setState] = useState<SyncState>({
     status: "never",
