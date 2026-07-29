@@ -102,7 +102,7 @@ export function Sidebar() {
       {/* Slide-out drawer */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen w-56 flex flex-col border-r border-border bg-sidebar transition-transform duration-200 safe-area-pt safe-area-pl safe-area-pb",
+          "fixed left-0 top-0 z-40 h-screen w-56 2xl:w-64 flex flex-col border-r border-border bg-sidebar transition-transform duration-200 safe-area-pt safe-area-pl safe-area-pb",
           // Slide-in drawer on mobile; always visible on desktop (lg+).
           drawerOpen ? "translate-x-0" : "-translate-x-full",
           "lg:translate-x-0"
@@ -117,7 +117,7 @@ export function Sidebar() {
             aria-label="Go to home"
           >
             <SomaLogo size={24} />
-            <span className="text-sm font-semibold">Soma</span>
+            <span className="text-base font-semibold">Soma</span>
           </Link>
         </div>
 
@@ -135,7 +135,7 @@ export function Sidebar() {
                 onClick={() => { if (!isActive) setNavigatingTo(item.href); }}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm active:scale-[0.96] active:opacity-70",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-[15px] active:scale-[0.96] active:opacity-70",
                   isActive
                     ? "bg-accent text-accent-foreground font-medium"
                     : isLoading
@@ -149,7 +149,7 @@ export function Sidebar() {
                   <Icon className="h-4 w-4 shrink-0" />
                 )}
                 <span>{item.label}</span>
-                <span className="ml-auto text-[10px] text-muted-foreground/50 hidden md:inline">
+                <span className="ml-auto text-xs text-muted-foreground/50 hidden md:inline">
                   ⌘{item.shortcut}
                 </span>
               </Link>
