@@ -647,9 +647,10 @@ export default function PlaylistBuilder() {
   return (
     <div className="flex flex-col h-full">
       <PlaylistTopBar sources={sources} onSourcesChange={setSources} genres={genres} onGenresChange={setGenres} genreThreshold={genreThreshold} onThresholdChange={setGenreThreshold} workoutName={workoutName} onChangeRun={() => { if (hasSongsPlaced) { setChangeRunConfirm(true); } else { resetRun(); } }} onOpenBank={() => setPumpUpModalOpen(true)} onOpenShortcuts={() => setShortcutsOpen(true)} />
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: run selector (first time) or run timeline */}
-        <div ref={leftRef} className="w-[40%] border-r overflow-y-auto">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+        {/* Left: run selector (first time) or run timeline. Full-width stacked on
+            mobile — the desktop w-[40%] crushed it to ~150px on a phone. */}
+        <div ref={leftRef} className="w-full lg:w-[40%] border-b lg:border-b-0 lg:border-r overflow-y-auto">
           {!hasRun ? (
             <div className="h-full flex flex-col">
               <div className="px-3 py-2 border-b text-xs font-medium text-muted-foreground">Select a run to get started</div>
