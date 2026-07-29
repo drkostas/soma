@@ -43,9 +43,10 @@ interface TrajectoryChartProps {
 // ── VDOT → pace/time conversions (Daniels/Gilbert) ──────────
 
 function formatSeconds(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.round(sec % 60);
+  const t = Math.round(sec); // round total seconds first so :60 can't render
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
   return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
@@ -53,15 +54,16 @@ function formatSeconds(sec: number): string {
 
 function vdotToHmPace(vdot: number): string {
   const hmSeconds = estimateHMSeconds(vdot);
-  const paceSecPerKm = hmSeconds / 21.0975;
-  const min = Math.floor(paceSecPerKm / 60);
-  const sec = Math.round(paceSecPerKm % 60);
+  const secPerKm = Math.round(hmSeconds / 21.0975); // round total sec/km first
+  const min = Math.floor(secPerKm / 60);
+  const sec = secPerKm % 60;
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
 function formatPace(secPerKm: number): string {
-  const min = Math.floor(secPerKm / 60);
-  const sec = Math.round(secPerKm % 60);
+  const t = Math.round(secPerKm); // round total seconds first so :60 can't render
+  const min = Math.floor(t / 60);
+  const sec = t % 60;
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
@@ -71,9 +73,9 @@ function formatHmTime(vdot: number): string {
 
 function formatTimeDelta(seconds: number): string {
   const sign = seconds >= 0 ? "+" : "-";
-  const abs = Math.abs(seconds);
+  const abs = Math.round(Math.abs(seconds)); // round total seconds first so :60 can't render
   const m = Math.floor(abs / 60);
-  const s = Math.round(abs % 60);
+  const s = abs % 60;
   return `${sign}${m}:${String(s).padStart(2, "0")}`;
 }
 
@@ -629,8 +631,9 @@ export function TrajectoryChart({
             reversed
             domain={["dataMin - 5", "dataMax + 5"]}
             tickFormatter={(v: number) => {
-              const m = Math.floor(v / 60);
-              const s = Math.round(v % 60);
+              const t = Math.round(v); // round total seconds first so :60 can't render
+              const m = Math.floor(t / 60);
+              const s = t % 60;
               return `${m}:${String(s).padStart(2, "0")}`;
             }}
             width={hasSecondary ? 0 : 40}
