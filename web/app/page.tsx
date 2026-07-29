@@ -146,7 +146,16 @@ async function getRunningStats(cutoff: string) {
     SELECT
       COUNT(*) as total_runs,
       SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
-      MAX((raw_json->>'vO2MaxValue')::float) as vo2max
+      -- VO2max is a point-in-time fitness metric, not a range aggregate: show the
+      -- latest value regardless of the selected range (was MAX-over-range, which
+      -- made it read 54 at 6M but 57 at "All").
+      (SELECT (a.raw_json->>'vO2MaxValue')::float
+         FROM garmin_activity_raw a
+        WHERE a.endpoint_name = 'summary'
+          AND a.raw_json->>'vO2MaxValue' IS NOT NULL
+          AND a.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        ORDER BY a.activity_id DESC
+        LIMIT 1) as vo2max
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
