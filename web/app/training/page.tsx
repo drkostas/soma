@@ -395,10 +395,23 @@ export default async function TrainingPage() {
 
   const hasNoPlan = planDays.length === 0;
 
-  // Days until race for the thin header bar
-  const daysUntilRace = raceInfo
-    ? Math.max(0, Math.ceil((new Date(raceInfo.race_date + "T00:00:00").getTime() - Date.now()) / 86400000))
-    : 0;
+  // Days until race for the thin header bar. Keep the raw (signed) value: a
+  // negative number means the race is in the past — clamping it to 0 made a
+  // finished race read "0d to race" as if it were today.
+  const rawDaysUntilRace = raceInfo
+    ? Math.ceil((new Date(raceInfo.race_date + "T00:00:00").getTime() - Date.now()) / 86400000)
+    : null;
+  const daysUntilRace = rawDaysUntilRace != null ? Math.max(0, rawDaysUntilRace) : 0;
+  const racePast = rawDaysUntilRace != null && rawDaysUntilRace < 0;
+
+  // Header subtitle. Don't present a past race or an out-of-window plan as live:
+  // a finished race shows "race completed Nd ago", and the week indicator only
+  // shows when today actually falls inside the plan (not the "Week 1" fallback).
+  const planSubtitle = hasNoPlan
+    ? "No active training plan."
+    : racePast
+      ? `${raceInfo?.plan_name || "Training Plan"} · race completed ${Math.abs(rawDaysUntilRace as number)}d ago`
+      : `${raceInfo?.plan_name || "Training Plan"} · ${daysUntilRace}d to race${todayEntry ? ` · Week ${currentWeek}/${totalWeeks}` : ""}`;
 
   return (
     <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8 max-w-7xl">
@@ -406,11 +419,7 @@ export default async function TrainingPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Training</h1>
-          <p className="text-sm text-muted-foreground">
-            {hasNoPlan
-              ? "No active training plan."
-              : `${raceInfo?.plan_name || "Training Plan"} · ${daysUntilRace}d to race · Week ${currentWeek}/${totalWeeks}`}
-          </p>
+          <p className="text-sm text-muted-foreground">{planSubtitle}</p>
         </div>
         {!hasNoPlan && <TrainingControls />}
       </div>
