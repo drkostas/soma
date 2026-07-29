@@ -57,8 +57,9 @@ interface Activity {
 }
 
 function formatDuration(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
+  const t = Math.round(mins); // round total minutes first so 60m can't render
+  const h = Math.floor(t / 60);
+  const m = t % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
