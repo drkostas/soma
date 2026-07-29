@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { Loader2, Save, Check, X, AlertTriangle, ShieldAlert } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { readinessScore } from "@/lib/readiness";
 import { ComputationGraphView } from "@/components/computation-graph";
 import { TrajectorySection } from "@/components/trajectory-section";
 import { ReferencePanel, type ReferenceMetric } from "@/components/reference-panel";
@@ -109,20 +110,23 @@ function buildReferenceMetrics(
 
   return [
     {
-      id: "garmin-readiness",
-      label: "Garmin Training Readiness",
-      value: latestReadiness?.garmin_readiness_score != null
-        ? String(Math.round(Number(latestReadiness.garmin_readiness_score)))
+      id: "readiness",
+      label: "Readiness",
+      // soma's own model readiness (0-100 percentile of the recovery z-composite),
+      // headlined; Garmin's readiness is the comparison. Was showing the raw
+      // z-composite ("4.3") next to Garmin's 0-100 ("66") \u2014 different scales.
+      value: latestReadiness?.composite_score != null
+        ? String(readinessScore(Number(latestReadiness.composite_score)))
         : "\u2014",
       sparkline: readinessHistory
-        .filter((r) => r.garmin_readiness_score != null)
-        .map((r) => Number(r.garmin_readiness_score)),
-      color: "oklch(65% 0.15 250)",
+        .filter((r) => r.composite_score != null)
+        .map((r) => readinessScore(Number(r.composite_score))),
+      color: "oklch(65% 0.15 142)",
       tooltip:
-        "Garmin\u2019s composite readiness score. Compare with our model\u2019s composite to see if they agree.",
+        "soma\u2019s model readiness \u2014 the 0-100 percentile of today\u2019s recovery z-composite. Garmin\u2019s own readiness is shown for comparison.",
       comparison: {
         ours: latestReadiness?.composite_score != null
-          ? Number(latestReadiness.composite_score).toFixed(1)
+          ? String(readinessScore(Number(latestReadiness.composite_score)))
           : "\u2014",
         garmin: latestReadiness?.garmin_readiness_score != null
           ? String(Math.round(Number(latestReadiness.garmin_readiness_score)))
