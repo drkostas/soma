@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.18",
-    "garmin-auth": "^0.1.0",
+    "garmin-auth": "^0.4.1",
     "oauth-1.0a": "^2.2.6",
     "pg": "^8.11.0",
     "playwright": "^1.48.0"
