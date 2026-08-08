@@ -11,6 +11,7 @@
       "bundleIdentifier": "dev.gkos.soma"
     },
     "android": {
+      "package": "dev.gkos.soma",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
