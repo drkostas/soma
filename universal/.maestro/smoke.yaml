@@ -1,0 +1,49 @@
+# Soma universal (Expo / React Native) mobile smoke test.
+#
+# Cold-launches the app and drives the bottom tab bar (Home / Training / Food /
+# More), asserting a stable, structural header on each screen. Tab-bar taps are
+# used (not deep links) so the flow both navigates reliably AND proves the
+# primary bottom navigation renders and is tappable. Asserts target static
+# headers only — never dynamic numbers/dates/API values — so the flow stays green
+# regardless of the data in the connected database.
+#
+# Prerequisites and run instructions: see .maestro/README.md
+appId: dev.gkos.soma
+name: Soma smoke
+tags:
+  - smoke
+---
+# Cold start. index.tsx redirects / -> /nutrition, so Nutrition renders first.
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# --- Nutrition (default screen; "Food" tab) ---
+# "Day"/"Trend" is the always-rendered segmented control on the calorie hero.
+- assertVisible: "Trend"
+- assertVisible: "Day"
+
+# --- Home / Overview (tab-bar tap) ---
+- tapOn: "Home"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "Overview"
+
+# --- Training (tab-bar tap) ---
+- tapOn: "Training"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "Training"
+
+# --- More menu (tab-bar tap; the secondary-sections hub) ---
+- tapOn: "More"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "More"
+
+# --- Back to Nutrition via the "Food" tab (confirms the tab bar round-trips) ---
+- tapOn: "Food"
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "Trend"
