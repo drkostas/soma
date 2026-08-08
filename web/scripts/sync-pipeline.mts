@@ -16,6 +16,7 @@ import { computeHevyLoads } from "../lib/training-load";
 import { backfillLoadFromHistory, computeAndStorePmc } from "../lib/pmc-stream";
 import { pushPlanToGarmin } from "../lib/garmin-workout-builder";
 import { enrichGarminRunActivities } from "../lib/garmin-run-enrich";
+import { uploadEnrichedToGarmin } from "../lib/hevy-upload";
 import { notifyPendingWorkouts } from "../lib/notify";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -65,9 +66,15 @@ if (garminClient) {
     return { activePlan: planId, ...(await pushPlanToGarmin(sql, garminClient!, planId)) };
   });
   await step("garmin-enrich", () => enrichGarminRunActivities(sql, garminClient!, webBaseUrl));
+  // Upload newly-enriched Hevy workouts to Garmin as strength activities, so they then
+  // forward to Strava via the bridge (strava-bridge-ts.yml). dryRun:false is safe here:
+  // uploadEnrichedToGarmin's three dedup layers (match→demote, append-only garmin ledger,
+  // Garmin 409) plus the bridge's own ledger guarantee no activity is uploaded or
+  // forwarded twice. Runs before notify so "Synced" reflects an actual upload.
+  await step("hevy-upload", () => uploadEnrichedToGarmin(sql, garminClient!, { dryRun: false }));
 }
 
-// 5. Telegram + push notifications for new activities/workouts.
+// 5. Telegram + push notifications for workouts now on Garmin.
 await step("notify", () => notifyPendingWorkouts(sql));
 
 console.log("[sync] pipeline complete");

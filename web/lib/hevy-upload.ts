@@ -12,8 +12,9 @@
  *   3. Garmin itself returns 409 on a duplicate FIT; that is caught and matched
  *      via populateGarminIds instead of creating a duplicate.
  *
- * This module does NOT fire on a schedule. It is invoked deliberately, and the
- * dedup selection is unit-tested below before any live use.
+ * Wired into the sync pipeline (web/scripts/sync-pipeline.mts) so newly-enriched
+ * workouts upload automatically; the three dedup layers above make that safe. It is
+ * also exposed as a manual, dry-run-default route (api/cron/hevy-upload) for inspection.
  */
 import { generateFit, uploadFit, renameActivity } from "hevy2garmin";
 import type { GarminClient } from "garmin-auth";
