@@ -29,7 +29,7 @@ export async function notifyPendingWorkouts(sql: QueryFn): Promise<NotifyResult>
     SELECT we.hevy_id, we.hevy_title, we.workout_date::text AS workout_date, h.raw_json
     FROM workout_enrichment we
     JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
-    WHERE we.status IN ('enriched', 'uploaded')
+    WHERE we.status = 'uploaded'
       AND we.hevy_id NOT IN (
         SELECT source_id FROM activity_sync_log
         WHERE source_platform = 'hevy' AND destination = 'telegram' AND status = 'sent'
