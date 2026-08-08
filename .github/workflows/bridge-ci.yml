@@ -1,0 +1,30 @@
+name: bridge-ci
+
+on:
+  pull_request:
+    paths:
+      - "bridge/**"
+      - ".github/workflows/bridge-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "bridge/**"
+
+jobs:
+  test:
+    name: Bridge — Typecheck + Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: npm ci || npm install
+      - name: Build (tsc)
+        run: npm run build
+      - name: Unit tests
+        run: npm test
