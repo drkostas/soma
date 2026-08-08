@@ -49,6 +49,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "vitest run",
+    "e2e:mobile": "maestro test .maestro",
     "typecheck": "tsc --noEmit",
     "postinstall": "patch-package"
   },
