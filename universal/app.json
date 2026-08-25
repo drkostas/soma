@@ -33,7 +33,8 @@
           "imageWidth": 76
         }
       ],
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      "./plugins/soma-widget/withSomaWidget"
     ],
     "experiments": {
       "typedRoutes": true,
