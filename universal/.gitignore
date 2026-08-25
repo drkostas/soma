@@ -44,3 +44,6 @@ example
 
 # Widget API token (secret — never commit)
 targets/**/token.swift
+
+# Widget API token — Android (secret — never commit)
+plugins/soma-widget/secrets.json
