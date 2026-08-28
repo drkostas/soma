@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
+import { ThisWeekCard, type WeeklyTraining } from "../../components/this-week-card";
 import {
   useToday,
   useTraining,
@@ -69,6 +70,19 @@ function useSleepGlance() {
   return s;
 }
 
+/** This-week vs last-week training totals + streak for the This Week card. */
+function useWeeklyTraining() {
+  const [w, setW] = useState<WeeklyTraining | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<WeeklyTraining>("/api/overview/weekly-training")
+      .then((d) => alive && setW(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return w;
+}
+
 const TL_TONE: Record<string, "success" | "warm" | "danger" | "teal"> = {
   green: "success",
   amber: "warm",
@@ -96,6 +110,7 @@ export default function OverviewScreen() {
   const weight = useWeightTrend();
   const sleep = useSleepGlance();
   const trends = useOverviewTrends();
+  const weekly = useWeeklyTraining();
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
     refetchTraining();
@@ -175,6 +190,9 @@ export default function OverviewScreen() {
             </View>
           </Card>
         ) : null}
+
+        {/* This Week training summary */}
+        <ThisWeekCard data={weekly} />
 
         {/* Cross-domain glance row */}
         <View className="flex-row flex-wrap gap-3">
