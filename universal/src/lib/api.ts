@@ -35,7 +35,7 @@ export interface MacroSet {
   fiber: number;
 }
 
-export interface SomaMealItem { name?: string; grams?: number }
+export interface SomaMealItem { name?: string; grams?: number; ingredient_id?: string; calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number }
 export interface SomaMeal {
   id: number;
   meal_slot: string;
