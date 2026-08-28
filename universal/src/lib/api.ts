@@ -405,6 +405,25 @@ export function useRecentRoutes() {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Route heatmap: many run GPS paths overlaid (12mo) ----
+/** Each route is an array of [lng, lat] points (GeoJSON order). */
+export type HeatRoute = [number, number][];
+
+/** Recent run routes (up to ~40 over 12 months) from /api/running/heatmap,
+ *  overlaid as a dependency-free multi-polyline "heatmap" on mobile. */
+export function useRunHeatmap() {
+  const [routes, setRoutes] = useState<HeatRoute[]>([]);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<{ routes: HeatRoute[] }>("/api/running/heatmap")
+      .then((d) => alive && setRoutes(Array.isArray(d?.routes) ? d.routes : []))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [reload]);
+  return { routes, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- HR-vs-pace scatter points ----
 export interface HrPacePoint { date: string; name: string | null; pace: number | null; hr: number | null; distance: number | null }
 

@@ -1,7 +1,8 @@
 import { View } from "react-native";
-import Svg, { Polyline, Line } from "react-native-svg";
-import { Text, Card, Badge, Sparkline } from "soma-style";
+import Svg, { Polyline } from "react-native-svg";
+import { Text, Card, Badge } from "soma-style";
 import type { RunningTrends } from "../lib/api";
+import { LineChart, ChartLegend } from "./line-chart";
 
 /** Two lines on a shared y-scale (acute vs chronic load). */
 function DualLine({ a, b, colorA, colorB, height = 44 }: { a: number[]; b: number[]; colorA: string; colorB: string; height?: number }) {
@@ -32,6 +33,12 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
   const loadLast = load.length ? load[load.length - 1] : null;
   const acute = load.map((p) => Number(p.acute)).filter(isFinite);
   const chronic = load.map((p) => Number(p.chronic)).filter(isFinite);
+
+  // Per-point ACWR (acute / chronic) for the guide-banded ratio line.
+  const acwrSeries = load.map((p) =>
+    p.acute != null && p.chronic != null && Number(p.chronic) > 0 ? Number(p.acute) / Number(p.chronic) : null,
+  );
+  const hasAcwr = acwrSeries.filter((v): v is number => v != null).length >= 2;
 
   const cad = trends.cadenceStride.filter((p) => p.cadence != null);
   const cadLast = cad.length ? cad[cad.length - 1] : null;
@@ -64,6 +71,23 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
             <View className="flex-row items-center gap-1"><View className="h-2 w-2 rounded-full bg-teal" /><Text variant="micro" className="text-text-muted">acute (7d)</Text></View>
             <View className="flex-row items-center gap-1"><View className="h-2 w-2 rounded-full" style={{ backgroundColor: "#5a7a8a" }} /><Text variant="micro" className="text-text-muted">chronic (28d)</Text></View>
           </View>
+
+          {hasAcwr ? (
+            <View className="gap-1 border-t border-border-subtle pt-2">
+              <Text variant="micro" className="text-text-muted">ACWR ratio · sweet spot 0.8–1.3</Text>
+              <LineChart
+                height={110}
+                yFormat={(v) => v.toFixed(2)}
+                series={[{ values: acwrSeries, color: "#77c8d1", width: 2 }]}
+                refLines={[
+                  { y: 0.8, color: "#6ad4a0" },
+                  { y: 1.3, color: "#e0c458" },
+                  { y: 1.5, color: "#e06060" },
+                ]}
+              />
+              <ChartLegend items={[{ color: "#6ad4a0", label: "0.8", dashed: true }, { color: "#e0c458", label: "1.3", dashed: true }, { color: "#e06060", label: "1.5 high", dashed: true }]} />
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -77,7 +101,13 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
             <Text variant="display" className="text-lime">{cadLast.cadence}</Text>
             <Text variant="caption" className="text-text-muted mb-1">spm</Text>
           </View>
-          <Sparkline data={cadSeries} color="#cbe896" height={36} baseline />
+          <LineChart
+            height={110}
+            yFormat={(v) => String(Math.round(v))}
+            series={[{ values: cadSeries, color: "#cbe896", width: 2.2 }]}
+            refLine={{ y: 180, color: "#77c8d1" }}
+          />
+          <Text variant="micro" className="text-text-muted">Dashed line = 180 spm target.</Text>
         </Card>
       ) : null}
     </View>
