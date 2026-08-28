@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View, RefreshControl, TextInput } from "react-native";
+import { ScrollView, View, RefreshControl, TextInput, Pressable } from "react-native";
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import {
   useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, deleteDrink, closeDay,
@@ -9,6 +9,7 @@ import {
 import { BodyCompChart } from "../../components/body-comp-chart";
 import { ActivitySelector } from "../../components/activity-selector";
 import { ComposeMealView } from "../../components/compose-meal-view";
+import { MealDetailModal } from "../../components/meal-detail-modal";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
@@ -74,7 +75,7 @@ export default function NutritionScreen() {
   const isToday = DATE === todayLocal();
   const { data, loading, error, refetch } = useSomaPlan(DATE);
   // Reset per-day transient UI when the viewed day changes.
-  useEffect(() => { setCloseStatus(null); setLogMode("preset"); setLogOpen(false); }, [DATE]);
+  useEffect(() => { setCloseStatus(null); setLogMode("preset"); setLogOpen(false); setEditMeal(null); setDetailMeal(null); }, [DATE]);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
   const { presets, ingredients } = usePresets();
   const { drinks } = useDrinks();
@@ -100,6 +101,8 @@ export default function NutritionScreen() {
   const [copyBusy, setCopyBusy] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
   const [delDrinkId, setDelDrinkId] = useState<number | null>(null);
+  const [detailMeal, setDetailMeal] = useState<SomaMeal | null>(null);
+  const [editMeal, setEditMeal] = useState<{ id: number; grams: Record<string, number> } | null>(null);
 
   const plan = data?.plan;
   const consumed = data?.consumed;
@@ -128,11 +131,23 @@ export default function NutritionScreen() {
     setBusyId(null);
     if (ok) refetch();
   }
-  async function onDelete(id: number) {
-    setDelId(id);
-    const ok = await deleteMeal(id);
+  async function onDetailDelete() {
+    if (!detailMeal) return;
+    setDelId(detailMeal.id);
+    const ok = await deleteMeal(detailMeal.id);
     setDelId(null);
-    if (ok) refetch();
+    if (ok) { setDetailMeal(null); refetch(); }
+  }
+  function onEditMeal(m: SomaMeal) {
+    const g: Record<string, number> = {};
+    for (const it of m.items ?? []) {
+      if (it.ingredient_id && it.grams) g[it.ingredient_id] = Math.round(it.grams);
+    }
+    setEditMeal({ id: m.id, grams: g });
+    setSlot(m.meal_slot);
+    setLogMode("compose");
+    setDetailMeal(null);
+    setLogOpen(true);
   }
   async function onQuickAdd() {
     setQBusy(true);
@@ -353,15 +368,15 @@ export default function NutritionScreen() {
                     <>
                       {budget > 0 ? <ProgressBar pct={Math.min(eatenInSlot / budget, 1)} color={eatenInSlot > budget ? "#e0a458" : "#77c8d1"} /> : null}
                       {slotMeals.map((m) => (
-                        <View key={m.id} className="flex-row items-center gap-2 border-b border-border-subtle py-1.5">
+                        <Pressable key={m.id} onPress={() => setDetailMeal(m)} className="flex-row items-center gap-2 border-b border-border-subtle py-1.5">
                           <View className="flex-1">
                             <Text variant="body" className="text-text" numberOfLines={1}>{mealName(m)}</Text>
                             <Text variant="micro" className="tabular-nums">
                               {Math.round(m.calories)} kcal · P{Math.round(m.protein)} C{Math.round(m.carbs)} F{Math.round(m.fat)}
                             </Text>
                           </View>
-                          <Button label={delId === m.id ? "…" : "Remove"} variant="ghost" size="sm" disabled={delId != null} onPress={() => onDelete(m.id)} />
-                        </View>
+                          <Text variant="body" className="text-text-muted">›</Text>
+                        </Pressable>
                       ))}
                       {!dayClosed ? (
                         <View className="flex-row gap-2 self-start">
@@ -440,23 +455,25 @@ export default function NutritionScreen() {
       </View>
 
       {/* Log-meal modal — preset picker, prefilled to the tapped slot */}
-      <Modal visible={logOpen} onClose={() => setLogOpen(false)} title={`Log ${slotLabel(slot)}`}>
+      <Modal visible={logOpen} onClose={() => { setLogOpen(false); setEditMeal(null); }} title={editMeal ? `Edit ${slotLabel(slot)}` : `Log ${slotLabel(slot)}`}>
         <PillGroup className="mb-3">
           {slots.map((s) => (
             <Pill key={s} label={slotLabel(s)} active={slot === s} onPress={() => setSlot(s)} />
           ))}
         </PillGroup>
         <View className="mb-3 flex-row gap-1.5">
-          <Button label="Presets" variant={logMode === "preset" ? "secondary" : "ghost"} size="sm" onPress={() => setLogMode("preset")} />
-          <Button label="Quick add" variant={logMode === "quick" ? "secondary" : "ghost"} size="sm" onPress={() => setLogMode("quick")} />
-          <Button label="Compose" variant={logMode === "compose" ? "secondary" : "ghost"} size="sm" onPress={() => setLogMode("compose")} />
+          <Button label="Presets" variant={logMode === "preset" ? "secondary" : "ghost"} size="sm" onPress={() => { setLogMode("preset"); setEditMeal(null); }} />
+          <Button label="Quick add" variant={logMode === "quick" ? "secondary" : "ghost"} size="sm" onPress={() => { setLogMode("quick"); setEditMeal(null); }} />
+          <Button label={editMeal ? "Editing" : "Compose"} variant={logMode === "compose" ? "secondary" : "ghost"} size="sm" onPress={() => { setLogMode("compose"); setEditMeal(null); }} />
         </View>
         {logMode === "compose" ? (
           <ComposeMealView
             ingredients={ingredients}
             date={DATE}
             slot={slot}
-            onLogged={() => { setLogOpen(false); refetch(); }}
+            initialGrams={editMeal?.grams}
+            editMealId={editMeal?.id ?? null}
+            onLogged={() => { setLogOpen(false); setEditMeal(null); refetch(); }}
           />
         ) : logMode === "quick" ? (
           <View className="gap-2 rounded-lg border border-border-subtle p-3">
@@ -494,9 +511,20 @@ export default function NutritionScreen() {
           </ScrollView>
         )}
         <View className="mt-4 flex-row justify-end">
-          <Button label="Done" variant="primary" onPress={() => setLogOpen(false)} />
+          <Button label={logMode === "compose" ? "Cancel" : "Done"} variant={logMode === "compose" ? "ghost" : "primary"} onPress={() => { setLogOpen(false); setEditMeal(null); }} />
         </View>
       </Modal>
+
+      {/* Logged-meal detail — tap a meal to see macros + ingredients, edit or delete */}
+      <MealDetailModal
+        meal={detailMeal}
+        name={detailMeal ? mealName(detailMeal) : ""}
+        slotLabel={slotLabel}
+        deleting={delId != null}
+        onClose={() => setDetailMeal(null)}
+        onDelete={onDetailDelete}
+        onEdit={detailMeal ? () => onEditMeal(detailMeal) : undefined}
+      />
 
       {/* Log-drink modal */}
       <Modal visible={drinkOpen} onClose={() => setDrinkOpen(false)} title="Log a drink">
