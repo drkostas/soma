@@ -199,6 +199,7 @@ export default function TrainingScreen() {
             planDays={planDays}
             today={sim?.today ?? todayISO()}
             matches={matches}
+            vdot={vdot}
             onToggleComplete={onToggleComplete}
           />
         ) : null}
