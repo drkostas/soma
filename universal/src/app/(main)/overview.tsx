@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View, RefreshControl } from "react-native";
+import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
+import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import {
   useToday,
   useTraining,
@@ -101,6 +102,7 @@ export default function OverviewScreen() {
     refetchPlan();
   });
 
+  const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
   const readiness = training?.readiness;
   const tsb = training?.pmc?.tsb ?? null;
 
@@ -117,13 +119,13 @@ export default function OverviewScreen() {
   const sleepLatest = sleepSeries.length ? sleepSeries[sleepSeries.length - 1] : null;
   const sleepAvg = sleep?.summary?.current_avg ?? null;
 
-  const stats: { label: string; value: string; sub: string; cls: string; spark?: number[]; color: string }[] = [
+  const stats: { label: string; value: string; sub: string; cls: string; spark?: number[]; color: string; unit?: string }[] = [
     { label: "Steps", value: (data?.total_steps ?? 0).toLocaleString(), sub: `${km} km`, cls: "text-teal", spark: trends?.steps, color: "#77c8d1" },
-    { label: "Active Calories", value: `${Math.round(data?.active_kilocalories ?? 0)}`, sub: `${Math.round(data?.total_kilocalories ?? 0)} total`, cls: "text-warm", spark: trends?.calories, color: "#b17850" },
-    { label: "Resting HR", value: `${data?.resting_heart_rate ?? "—"}`, sub: `${data?.min_heart_rate ?? "—"}–${data?.max_heart_rate ?? "—"} bpm`, cls: "text-danger", spark: trends?.rhr, color: "#e06060" },
+    { label: "Active Calories", value: `${Math.round(data?.active_kilocalories ?? 0)}`, sub: `${Math.round(data?.total_kilocalories ?? 0)} total`, cls: "text-warm", spark: trends?.calories, color: "#b17850", unit: "kcal" },
+    { label: "Resting HR", value: `${data?.resting_heart_rate ?? "—"}`, sub: `${data?.min_heart_rate ?? "—"}–${data?.max_heart_rate ?? "—"} bpm`, cls: "text-danger", spark: trends?.rhr, color: "#e06060", unit: "bpm" },
     { label: "Avg Stress", value: `${data?.avg_stress_level ?? "—"}`, sub: `Peak ${data?.max_stress_level ?? "—"}`, cls: "text-warning", spark: trends?.stress, color: "#e0a458" },
     { label: "Body Battery", value: `${data?.body_battery_max ?? "—"}`, sub: `−${Math.abs(data?.body_battery_drained ?? 0)} drained`, cls: "text-lime", spark: trends?.bodyBattery, color: "#cbe896" },
-    { label: "Intensity min", value: `${(data?.moderate_intensity_minutes ?? 0) + (data?.vigorous_intensity_minutes ?? 0)}`, sub: `${data?.vigorous_intensity_minutes ?? 0} vigorous`, cls: "text-indigo", spark: trends?.intensity, color: "#6366b0" },
+    { label: "Intensity min", value: `${(data?.moderate_intensity_minutes ?? 0) + (data?.vigorous_intensity_minutes ?? 0)}`, sub: `${data?.vigorous_intensity_minutes ?? 0} vigorous`, cls: "text-indigo", spark: trends?.intensity, color: "#6366b0", unit: "min" },
   ];
 
   return (
@@ -206,19 +208,26 @@ export default function OverviewScreen() {
         <Text variant="eyebrow" className="text-text-muted mt-1">Today's metrics</Text>
         <View className="flex-row flex-wrap gap-3">
           {stats.map((s) => (
-            <Card key={s.label} className="min-w-[46%] flex-1 gap-1">
-              <Text variant="eyebrow">{s.label}</Text>
-              <Text variant="headline" className={s.cls}>{s.value}</Text>
-              <Text variant="micro">{s.sub}</Text>
-              {s.spark && s.spark.length >= 2 ? (
-                <View className="mt-1">
-                  <Sparkline data={s.spark} color={s.color} height={26} baseline />
+            <Pressable key={s.label} className="min-w-[46%] flex-1" onPress={() => setStatDetail(s)}>
+              <Card className="gap-1">
+                <View className="flex-row items-center justify-between">
+                  <Text variant="eyebrow">{s.label}</Text>
+                  <Text variant="micro" className="text-text-muted">›</Text>
                 </View>
-              ) : null}
-            </Card>
+                <Text variant="headline" className={s.cls}>{s.value}</Text>
+                <Text variant="micro">{s.sub}</Text>
+                {s.spark && s.spark.length >= 2 ? (
+                  <View className="mt-1">
+                    <Sparkline data={s.spark} color={s.color} height={26} baseline />
+                  </View>
+                ) : null}
+              </Card>
+            </Pressable>
           ))}
         </View>
       </View>
+
+      <StatDetailModal stat={statDetail} onClose={() => setStatDetail(null)} />
     </ScrollView>
   );
 }
