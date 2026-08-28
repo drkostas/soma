@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { Text, Modal } from "soma-style";
-import { LineChart } from "./line-chart";
+import { Text, Modal, SegmentedControl } from "soma-style";
+import { LineChart, ChartLegend, chartDateLabel } from "./line-chart";
+import { fetchJson } from "../lib/api";
 
 export interface StatDetail {
   label: string;
@@ -10,17 +12,98 @@ export interface StatDetail {
   color: string;
   /** Optional unit suffix for the axis labels (e.g. "bpm", "kcal"). */
   unit?: string;
+  /** If set, the modal fetches /api/stats/[metric] for a range toggle + previous-period overlay. */
+  metric?: string;
 }
 
-/** Detail dialog for an overview stat card: the current value + a full trend
- *  chart (upgraded from the card's sparkline) with min / avg / max. */
+interface StatPoint { date: string; value: number | null }
+interface StatSeries {
+  current: StatPoint[];
+  previous: StatPoint[];
+  summary: { current_avg: number | null; current_min: number | null; current_max: number | null; previous_avg: number | null };
+}
+type Range = "7d" | "30d" | "90d" | "1y";
+const RANGES: readonly Range[] = ["7d", "30d", "90d", "1y"] as const;
+
+/** Detail dialog for a stat card. With `metric`, fetches the real trend for a
+ *  chosen range with a dashed previous-period overlay, tap-to-read, and
+ *  avg/min/max + Δ-vs-previous; otherwise shows the card's sparkline trend. */
 export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; onClose: () => void }) {
+  const [range, setRange] = useState<Range>("30d");
+  const [data, setData] = useState<StatSeries | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!stat?.metric) { setData(null); return; }
+    let alive = true; setLoading(true);
+    fetchJson<StatSeries>(`/api/stats/${stat.metric}?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => alive && setData(null))
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [stat?.metric, range]);
+
   if (!stat) return null;
+  const unit = stat.unit ? ` ${stat.unit}` : "";
+  const fmt = (v: number | null) => (v == null ? "–" : `${Math.round(v).toLocaleString()}${unit}`);
+
+  // Rich path: real endpoint with range + previous overlay
+  if (stat.metric) {
+    const cur = (data?.current ?? []).map((p) => (p.value != null && isFinite(p.value) ? p.value : null));
+    const prev = (data?.previous ?? []).map((p) => (p.value != null && isFinite(p.value) ? p.value : null));
+    const labels = (data?.current ?? []).map((p) => chartDateLabel(p.date));
+    const sm = data?.summary;
+    const delta = sm?.current_avg != null && sm?.previous_avg != null ? sm.current_avg - sm.previous_avg : null;
+    return (
+      <Modal visible={!!stat} onClose={onClose} title={stat.label}>
+        <View className="gap-3">
+          <View className="flex-row items-end gap-2">
+            <Text variant="display" className="tabular-nums" style={{ color: stat.color }}>{stat.value}</Text>
+            <Text variant="body" className="mb-1 text-text-muted">{stat.sub}</Text>
+          </View>
+          <SegmentedControl options={RANGES} value={range} onChange={(v) => setRange(v as Range)} />
+          {loading && !data ? (
+            <Text variant="body" className="text-text-muted">Loading…</Text>
+          ) : cur.filter((v) => v != null).length >= 2 ? (
+            <View className="gap-1">
+              <LineChart
+                height={170}
+                interactive
+                labels={labels}
+                xTicks={4}
+                yFormat={(v) => `${Math.round(v).toLocaleString()}`}
+                series={[
+                  ...(prev.filter((v) => v != null).length >= 2 ? [{ values: prev, color: "#5a7a8a", width: 1.4, dashed: true, label: "Previous" }] : []),
+                  { values: cur, color: stat.color, width: 2.2, label: "Current" },
+                ]}
+              />
+              {prev.filter((v) => v != null).length >= 2 ? (
+                <ChartLegend items={[{ color: stat.color, label: "Current" }, { color: "#5a7a8a", label: "Previous", dashed: true }]} />
+              ) : null}
+              <View className="mt-1 flex-row justify-between">
+                <Text variant="micro" className="text-text-muted tabular-nums">min {fmt(sm?.current_min ?? null)}</Text>
+                <Text variant="micro" className="text-text-muted tabular-nums">avg {fmt(sm?.current_avg ?? null)}</Text>
+                <Text variant="micro" className="text-text-muted tabular-nums">max {fmt(sm?.current_max ?? null)}</Text>
+              </View>
+              {delta != null && sm?.previous_avg != null ? (
+                <Text variant="micro" className={`tabular-nums ${delta >= 0 ? "text-success" : "text-warning"}`}>
+                  {delta >= 0 ? "+" : ""}{Math.round(delta).toLocaleString()}{unit} vs previous {range} (avg {fmt(sm.previous_avg)})
+                </Text>
+              ) : null}
+            </View>
+          ) : (
+            <Text variant="caption" className="text-text-muted">No trend data for this range.</Text>
+          )}
+        </View>
+      </Modal>
+    );
+  }
+
+  // Fallback path: the card's sparkline values
   const s = (stat.spark ?? []).filter((v) => isFinite(v));
   const min = s.length ? Math.min(...s) : null;
   const max = s.length ? Math.max(...s) : null;
   const avg = s.length ? s.reduce((a, b) => a + b, 0) / s.length : null;
-  const fmt = (v: number | null) => (v == null ? "–" : `${Math.round(v).toLocaleString()}${stat.unit ? ` ${stat.unit}` : ""}`);
   return (
     <Modal visible={!!stat} onClose={onClose} title={stat.label}>
       <View className="gap-3">
@@ -31,11 +114,7 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
         {s.length >= 2 ? (
           <View className="gap-1">
             <Text variant="eyebrow" className="text-text-muted">Trend · last {s.length} days</Text>
-            <LineChart
-              height={160}
-              series={[{ values: s, color: stat.color, width: 2.2 }]}
-              yFormat={(v) => `${Math.round(v).toLocaleString()}`}
-            />
+            <LineChart height={160} interactive series={[{ values: s, color: stat.color, width: 2.2 }]} yFormat={(v) => `${Math.round(v).toLocaleString()}`} />
             <View className="mt-1 flex-row justify-between">
               <Text variant="micro" className="text-text-muted tabular-nums">min {fmt(min)}</Text>
               <Text variant="micro" className="text-text-muted tabular-nums">avg {fmt(avg)}</Text>
