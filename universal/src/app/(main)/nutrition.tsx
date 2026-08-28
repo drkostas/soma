@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View, RefreshControl } from "react-native";
+import { ScrollView, View, RefreshControl, TextInput } from "react-native";
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import {
-  useSomaPlan, usePresets, logPresetMeal, deleteMeal, useDrinks, logDrink, closeDay,
+  useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, closeDay,
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
 
@@ -57,6 +57,14 @@ export default function NutritionScreen() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [closeStatus, setCloseStatus] = useState<string | null>(null);
+  const [qOpen, setQOpen] = useState(false);
+  const [qName, setQName] = useState("");
+  const [qCal, setQCal] = useState("");
+  const [qP, setQP] = useState("");
+  const [qC, setQC] = useState("");
+  const [qF, setQF] = useState("");
+  const [qBusy, setQBusy] = useState(false);
+  const [skipBusy, setSkipBusy] = useState<string | null>(null);
 
   const plan = data?.plan;
   const consumed = data?.consumed;
@@ -66,6 +74,7 @@ export default function NutritionScreen() {
   const days = data?.trend7d?.days ?? [];
   const bd = data?.breakdown;
   const meals = data?.meals ?? [];
+  const skippedSlots = data?.skippedSlots ?? [];
   const caloriesTrend = useCaloriesTrend();
   const targetCal = plan?.target_calories ?? 0;
 
@@ -85,6 +94,28 @@ export default function NutritionScreen() {
     setDelId(id);
     const ok = await deleteMeal(id);
     setDelId(null);
+    if (ok) refetch();
+  }
+  async function onQuickAdd() {
+    setQBusy(true);
+    const ok = await quickAddMeal(DATE, slot, {
+      name: qName.trim(),
+      calories: Number(qCal) || 0,
+      protein: Number(qP) || 0,
+      carbs: Number(qC) || 0,
+      fat: Number(qF) || 0,
+    });
+    setQBusy(false);
+    if (ok) {
+      setQOpen(false);
+      setQName(""); setQCal(""); setQP(""); setQC(""); setQF("");
+      refetch();
+    }
+  }
+  async function onSkip(s: string) {
+    setSkipBusy(s);
+    const ok = await skipSlot(DATE, s);
+    setSkipBusy(null);
     if (ok) refetch();
   }
   async function onLogDrink(key: string) {
@@ -198,33 +229,47 @@ export default function NutritionScreen() {
               </Card>
             ) : null}
 
-            {/* Per-slot meal cards — itemized logged meals + delete + quick-log */}
+            {/* Per-slot meal cards — logged meals + delete + quick-log + skip */}
             {slots.map((s) => {
               const slotMeals = meals.filter((m) => m.meal_slot === s);
               const budget = data?.slotBudgets?.[s]?.calories ?? 0;
               const eatenInSlot = slotMeals.reduce((sum, m) => sum + (m.calories ?? 0), 0);
-              if (budget <= 0 && slotMeals.length === 0) return null;
+              const isSkipped = skippedSlots.includes(s);
+              if (budget <= 0 && slotMeals.length === 0 && !isSkipped) return null;
               return (
                 <Card key={s} className="gap-2">
                   <View className="flex-row items-center justify-between">
                     <Text variant="title">{slotLabel(s)}</Text>
-                    <Text variant="caption" className="tabular-nums text-text-muted">
-                      {Math.round(eatenInSlot)}{budget > 0 ? ` / ${Math.round(budget)}` : ""} kcal
-                    </Text>
+                    {isSkipped ? (
+                      <Badge label="Skipped" tone="neutral" />
+                    ) : (
+                      <Text variant="caption" className="tabular-nums text-text-muted">
+                        {Math.round(eatenInSlot)}{budget > 0 ? ` / ${Math.round(budget)}` : ""} kcal
+                      </Text>
+                    )}
                   </View>
-                  {budget > 0 ? <ProgressBar pct={Math.min(eatenInSlot / budget, 1)} color={eatenInSlot > budget ? "#e0a458" : "#77c8d1"} /> : null}
-                  {slotMeals.map((m) => (
-                    <View key={m.id} className="flex-row items-center gap-2 border-b border-border-subtle py-1.5">
-                      <View className="flex-1">
-                        <Text variant="body" className="text-text" numberOfLines={1}>{mealName(m)}</Text>
-                        <Text variant="micro" className="tabular-nums">
-                          {Math.round(m.calories)} kcal · P{Math.round(m.protein)} C{Math.round(m.carbs)} F{Math.round(m.fat)}
-                        </Text>
+                  {isSkipped ? (
+                    <Button label={skipBusy === s ? "…" : "Un-skip"} variant="ghost" size="sm" className="self-start" disabled={skipBusy != null} onPress={() => onSkip(s)} />
+                  ) : (
+                    <>
+                      {budget > 0 ? <ProgressBar pct={Math.min(eatenInSlot / budget, 1)} color={eatenInSlot > budget ? "#e0a458" : "#77c8d1"} /> : null}
+                      {slotMeals.map((m) => (
+                        <View key={m.id} className="flex-row items-center gap-2 border-b border-border-subtle py-1.5">
+                          <View className="flex-1">
+                            <Text variant="body" className="text-text" numberOfLines={1}>{mealName(m)}</Text>
+                            <Text variant="micro" className="tabular-nums">
+                              {Math.round(m.calories)} kcal · P{Math.round(m.protein)} C{Math.round(m.carbs)} F{Math.round(m.fat)}
+                            </Text>
+                          </View>
+                          <Button label={delId === m.id ? "…" : "Remove"} variant="ghost" size="sm" disabled={delId != null} onPress={() => onDelete(m.id)} />
+                        </View>
+                      ))}
+                      <View className="flex-row gap-2 self-start">
+                        <Button label={`+ Log ${slotLabel(s)}`} variant="secondary" size="sm" onPress={() => { setSlot(s); setLogOpen(true); }} />
+                        <Button label={skipBusy === s ? "…" : "Skip"} variant="ghost" size="sm" disabled={skipBusy != null} onPress={() => onSkip(s)} />
                       </View>
-                      <Button label={delId === m.id ? "…" : "Remove"} variant="ghost" size="sm" disabled={delId != null} onPress={() => onDelete(m.id)} />
-                    </View>
-                  ))}
-                  <Button label={`+ Log ${slotLabel(s)}`} variant="secondary" size="sm" className="self-start" onPress={() => { setSlot(s); setLogOpen(true); }} />
+                    </>
+                  )}
                 </Card>
               );
             })}
@@ -292,19 +337,45 @@ export default function NutritionScreen() {
             <Pill key={s} label={slotLabel(s)} active={slot === s} onPress={() => setSlot(s)} />
           ))}
         </PillGroup>
-        <ScrollView className="max-h-80">
-          {pickerPresets.map((p) => (
-            <View key={p.id} className="flex-row items-center gap-2 border-b border-border-subtle py-2.5">
-              <View className="flex-1">
-                <Text variant="body" className="text-text" numberOfLines={1}>{p.name}</Text>
-                <Text variant="micro" className="tabular-nums">
-                  {p.meal_slot ? slotLabel(p.meal_slot) + " · " : ""}{Math.round(p.total_calories)} kcal · P{Math.round(p.total_protein)} C{Math.round(p.total_carbs)} F{Math.round(p.total_fat)}
-                </Text>
-              </View>
-              <Button label={busyId === p.id ? "…" : "Log"} variant="secondary" size="sm" disabled={busyId != null} onPress={() => onLog(p)} />
+        <View className="mb-2 flex-row items-center justify-between">
+          <Text variant="eyebrow" className="text-text-muted">{qOpen ? "Quick add" : "Presets"}</Text>
+          <Button label={qOpen ? "Use a preset" : "＋ Quick add"} variant="ghost" size="sm" onPress={() => setQOpen(!qOpen)} />
+        </View>
+        {qOpen ? (
+          <View className="gap-2 rounded-lg border border-border-subtle p-3">
+            <TextInput
+              placeholder="Name (e.g. Restaurant burger)"
+              placeholderTextColor="#5a7a8a"
+              value={qName}
+              onChangeText={setQName}
+              className="rounded-md border border-border-subtle px-3 py-2 text-text"
+            />
+            <View className="flex-row gap-2">
+              <TextInput placeholder="kcal" placeholderTextColor="#5a7a8a" keyboardType="numeric" value={qCal} onChangeText={setQCal} className="flex-1 rounded-md border border-border-subtle px-2 py-2 text-text tabular-nums" />
+              <TextInput placeholder="P" placeholderTextColor="#5a7a8a" keyboardType="numeric" value={qP} onChangeText={setQP} className="flex-1 rounded-md border border-border-subtle px-2 py-2 text-text tabular-nums" />
+              <TextInput placeholder="C" placeholderTextColor="#5a7a8a" keyboardType="numeric" value={qC} onChangeText={setQC} className="flex-1 rounded-md border border-border-subtle px-2 py-2 text-text tabular-nums" />
+              <TextInput placeholder="F" placeholderTextColor="#5a7a8a" keyboardType="numeric" value={qF} onChangeText={setQF} className="flex-1 rounded-md border border-border-subtle px-2 py-2 text-text tabular-nums" />
             </View>
-          ))}
-        </ScrollView>
+            <View className="flex-row justify-end gap-2">
+              <Button label="Cancel" variant="ghost" size="sm" onPress={() => setQOpen(false)} />
+              <Button label={qBusy ? "…" : "Add"} variant="primary" size="sm" disabled={qBusy || !qCal} onPress={onQuickAdd} />
+            </View>
+          </View>
+        ) : (
+          <ScrollView className="max-h-80">
+            {pickerPresets.map((p) => (
+              <View key={p.id} className="flex-row items-center gap-2 border-b border-border-subtle py-2.5">
+                <View className="flex-1">
+                  <Text variant="body" className="text-text" numberOfLines={1}>{p.name}</Text>
+                  <Text variant="micro" className="tabular-nums">
+                    {p.meal_slot ? slotLabel(p.meal_slot) + " · " : ""}{Math.round(p.total_calories)} kcal · P{Math.round(p.total_protein)} C{Math.round(p.total_carbs)} F{Math.round(p.total_fat)}
+                  </Text>
+                </View>
+                <Button label={busyId === p.id ? "…" : "Log"} variant="secondary" size="sm" disabled={busyId != null} onPress={() => onLog(p)} />
+              </View>
+            ))}
+          </ScrollView>
+        )}
         <View className="mt-4 flex-row justify-end">
           <Button label="Done" variant="primary" onPress={() => setLogOpen(false)} />
         </View>
