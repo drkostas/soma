@@ -1,57 +1,101 @@
-import { useMemo } from "react";
-import { View } from "react-native";
+import { useMemo, useState } from "react";
+import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
 import { LineChart, ChartLegend } from "./line-chart";
 import type { WorkoutInsights } from "../lib/api";
 
 const num = (v: unknown): number => { const n = Number(v); return isFinite(n) ? n : 0; };
 const EMPTY = "#16242b";
-const LVL = ["#1e3a44", "#2f6d5b", "#4fa07a", "#77c8a0"]; // workout-day intensity
+const REST_WORKED = "#4fa07a"; // worked-out day whose program is unlabelled
+/** Distinct colors assigned to programs in first-seen order. */
+const PROG_PALETTE = ["#6ad4a0", "#77c8d1", "#e0a458", "#c084fc", "#6aa0e0", "#cbe896", "#e06060", "#b17bd4"];
 
 function isoDay(d: Date): string { return d.toISOString().slice(0, 10); }
 function mondayIndex(d: Date): number { return (d.getUTCDay() + 6) % 7; } // Mon=0..Sun=6
+function longDay(iso: string): string {
+  const d = new Date(iso + "T00:00:00Z");
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
+function programColor(program: string, order: string[]): string {
+  const i = order.indexOf(program);
+  return i >= 0 ? PROG_PALETTE[i % PROG_PALETTE.length] : REST_WORKED;
+}
 
-/** 26-week workout calendar heatmap (day cells colored by that day's session count). */
+type Cell = { key: string; worked: boolean; program: string | null };
+
+/** 26-week workout calendar heatmap. Days are colored by their program (web
+ *  parity #428); tapping a worked day reveals its date + program, and a legend
+ *  maps each color to its program. */
 function CalendarHeatmap({ calendar }: { calendar: WorkoutInsights["calendar"] }) {
-  const { weeks } = useMemo(() => {
-    const counts = new Map<string, number>();
+  const [selected, setSelected] = useState<Cell | null>(null);
+  const { weeks, programs } = useMemo(() => {
+    const dayProg = new Map<string, string | null>();
+    const order: string[] = [];
     for (const c of calendar) {
       const key = String(c.day).slice(0, 10);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+      const p = c.program ?? null;
+      if (p && !order.includes(p)) order.push(p);
+      const cur = dayProg.get(key);
+      if (cur === undefined) dayProg.set(key, p);
+      else if (!cur && p) dayProg.set(key, p); // upgrade a null day to a labelled one
     }
-    // anchor to today (UTC); 26 columns ending this week
     const today = new Date(isoDay(new Date()) + "T00:00:00Z");
     const end = new Date(today); end.setUTCDate(end.getUTCDate() - mondayIndex(today) + 6); // Sunday of this week
-    const cols: { c: string; n: number }[][] = [];
+    const cols: Cell[][] = [];
     for (let w = 25; w >= 0; w--) {
-      const col: { c: string; n: number }[] = [];
+      const col: Cell[] = [];
       for (let d = 0; d < 7; d++) {
         const day = new Date(end);
         day.setUTCDate(end.getUTCDate() - w * 7 - (6 - d));
-        const n = counts.get(isoDay(day)) ?? 0;
-        col.push({ c: n === 0 ? EMPTY : LVL[Math.min(LVL.length - 1, n - 1)], n });
+        const key = isoDay(day);
+        col.push({ key, worked: dayProg.has(key), program: dayProg.get(key) ?? null });
       }
       cols.push(col);
     }
-    return { weeks: cols };
+    return { weeks: cols, programs: order };
   }, [calendar]);
+
+  const cellColor = (c: Cell): string => (c.worked ? (c.program ? programColor(c.program, programs) : REST_WORKED) : EMPTY);
 
   return (
     <View className="gap-1.5">
+      {selected ? (
+        <View className="flex-row items-center gap-2 self-start rounded-md px-2 py-1" style={{ backgroundColor: "#152028" }}>
+          <View className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: cellColor(selected) }} />
+          <Text variant="micro" className="text-text-secondary">
+            {longDay(selected.key)}{selected.program ? ` · ${selected.program}` : " · workout"}
+          </Text>
+        </View>
+      ) : (
+        <Text variant="micro" className="text-text-muted">tap a day to see its program</Text>
+      )}
+
       <View className="flex-row gap-0.5">
         {weeks.map((col, wi) => (
           <View key={wi} className="flex-1 gap-0.5">
             {col.map((cell, di) => (
-              <View key={di} className="rounded-[2px]" style={{ aspectRatio: 1, backgroundColor: cell.c }} />
+              <Pressable
+                key={di}
+                disabled={!cell.worked}
+                onPress={() => setSelected(cell)}
+                className="rounded-[2px]"
+                style={{ aspectRatio: 1, backgroundColor: cellColor(cell) }}
+              />
             ))}
           </View>
         ))}
       </View>
-      <View className="flex-row items-center justify-end gap-1">
-        <Text variant="micro" className="text-text-muted">less</Text>
-        {[EMPTY, ...LVL].map((c) => <View key={c} className="h-2.5 w-2.5 rounded-[2px]" style={{ backgroundColor: c }} />)}
-        <Text variant="micro" className="text-text-muted">more</Text>
-      </View>
+
+      {programs.length ? (
+        <View className="flex-row flex-wrap gap-x-3 gap-y-1">
+          {programs.map((p) => (
+            <View key={p} className="flex-row items-center gap-1">
+              <View className="h-2 w-2 rounded-[2px]" style={{ backgroundColor: programColor(p, programs) }} />
+              <Text variant="micro" className="text-text-muted">{p}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -98,9 +142,9 @@ export function WorkoutActivity({ insights }: { insights: WorkoutInsights | null
         <Card className="gap-2">
           <View className="flex-row items-center justify-between">
             <Text variant="eyebrow">Weekly frequency</Text>
-            <Text variant="micro" className="text-text-muted">sessions / week</Text>
+            <Text variant="micro" className="text-text-muted">sessions / week · tap to read</Text>
           </View>
-          <LineChart height={120} labels={freq.labels} yFormat={(v) => String(Math.round(v))} series={[{ values: freq.counts, color: "#6ad4a0", width: 2.2 }]} />
+          <LineChart height={120} interactive xTicks={4} labels={freq.labels} yFormat={(v) => String(Math.round(v))} series={[{ values: freq.counts, color: "#6ad4a0", width: 2.2, label: "Sessions" }]} />
         </Card>
       ) : null}
 
@@ -112,11 +156,13 @@ export function WorkoutActivity({ insights }: { insights: WorkoutInsights | null
           </View>
           <LineChart
             height={130}
+            interactive
+            xTicks={4}
             labels={hrLabels}
             yFormat={(v) => String(Math.round(v))}
             series={[
-              { values: hrMax, color: "#e06060", dashed: true, width: 1.5 },
-              { values: hrAvg, color: "#e0a458", width: 2.2 },
+              { values: hrMax, color: "#e06060", dashed: true, width: 1.5, label: "Max" },
+              { values: hrAvg, color: "#e0a458", width: 2.2, label: "Avg" },
             ]}
           />
           <ChartLegend items={[{ color: "#e0a458", label: "avg" }, { color: "#e06060", label: "max", dashed: true }]} />
