@@ -50,11 +50,11 @@ export interface SomaBreakdown {
   stepCalories?: number; stepCaloriesPredicted?: number; expectedSteps?: number; actualSteps?: number;
   runCalories?: number; runActual?: number; runPredicted?: number; runEnabled?: boolean; runActualDistKm?: number; runDistanceKm?: number;
   gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: number }[];
-  drinkCalories?: number; deficit?: number;
+  drinkCalories?: number; deficit?: number; manualOverride?: boolean;
 }
 export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean }
 export interface SomaPlan {
-  plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number } | null;
+  plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number; status?: string } | null;
   consumed: MacroSet;
   remaining: MacroSet | null;
   slotBudgets: Record<string, { calories: number; protein?: number; carbs?: number; fat?: number; fiber?: number }> | null;
@@ -690,6 +690,36 @@ export async function closeDay(date: string): Promise<string | null> {
   if (!res.ok) return null;
   const d = (await res.json()) as { status?: string };
   return d.status ?? null;
+}
+
+/** Reopen a previously-closed day so meals can be edited again. */
+export async function reopenDay(date: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/reopen-day`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ date }),
+  });
+  return res.ok;
+}
+
+/** Copy all meals from one day to another (used for "Copy yesterday"). */
+export async function copyDay(fromDate: string, toDate: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/copy-day`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ from_date: fromDate, to_date: toDate }),
+  });
+  return res.ok;
+}
+
+/** Toggle the manual activity-plan override (unlock an Offset Plan). */
+export async function setManualOverride(date: string, on: boolean): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/activity-select`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ date, manual_override: on }),
+  });
+  return res.ok;
 }
 
 /** Log a preset meal into a slot. Returns true on success. */
