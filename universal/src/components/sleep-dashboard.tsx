@@ -1,11 +1,20 @@
-import { View } from "react-native";
-import { Text, Card, Sparkline } from "soma-style";
+import { View, Pressable } from "react-native";
+import { Text, Card, Sparkline, Badge } from "soma-style";
 import type { SleepSummary, SleepNight } from "../lib/api";
+import type { StatDetail } from "./stat-detail-modal";
 
 const DEEP = "#4f46e5";
 const LIGHT = "#a5b4fc";
 const REM = "#c084fc";
 const AWAKE = "#f87171";
+
+/** Garmin-style sleep-score qualifier band, derived from the 0-100 score. */
+function scoreQualifier(score: number): { label: string; tone: "success" | "warm" | "danger" } {
+  if (score >= 80) return { label: "Excellent", tone: "success" };
+  if (score >= 60) return { label: "Good", tone: "success" };
+  if (score >= 40) return { label: "Fair", tone: "warm" };
+  return { label: "Poor", tone: "danger" };
+}
 
 function hm(sec: number | null | undefined): string {
   if (sec == null) return "—";
@@ -77,17 +86,28 @@ function Legend() {
 }
 
 /** Sleep dashboard: last-night detail + stages trend + score trend. Fed by /api/sleep/summary. */
-export function SleepDashboard({ summary }: { summary: SleepSummary | null | undefined }) {
+export function SleepDashboard({
+  summary,
+  onExpand,
+}: {
+  summary: SleepSummary | null | undefined;
+  onExpand?: (s: StatDetail) => void;
+}) {
   if (!summary) return null;
   const ln = summary.lastNight;
   const scores = summary.trend.map((n) => n.score).filter((v): v is number => v != null);
+  const lnQual = ln?.score != null ? scoreQualifier(ln.score) : null;
+  const scoreTappable = !!(onExpand && scores.length >= 2);
 
   return (
     <View className="gap-4">
       {ln ? (
         <Card className="gap-3">
           <View className="flex-row items-center justify-between">
-            <Text variant="eyebrow">Last night</Text>
+            <View className="flex-row items-center gap-2">
+              <Text variant="eyebrow">Last night</Text>
+              {lnQual ? <Badge label={lnQual.label} tone={lnQual.tone} /> : null}
+            </View>
             <Text variant="micro" className="text-text-muted">{shortDate(ln.date)}</Text>
           </View>
           <View className="flex-row items-end gap-2">
@@ -115,15 +135,31 @@ export function SleepDashboard({ summary }: { summary: SleepSummary | null | und
       </Card>
 
       {scores.length >= 2 ? (
-        <Card className="gap-2">
-          <View className="flex-row items-center justify-between">
-            <Text variant="eyebrow">Sleep score</Text>
-            <Text variant="micro" className="tabular-nums text-text-muted">
-              avg {summary.stats.avg_score != null ? Math.round(summary.stats.avg_score) : "—"}
-            </Text>
-          </View>
-          <Sparkline data={scores} color="#a5b4fc" height={40} baseline />
-        </Card>
+        <Pressable
+          disabled={!scoreTappable}
+          onPress={() =>
+            onExpand?.({
+              label: "Sleep score",
+              value: summary.stats.avg_score != null ? String(Math.round(summary.stats.avg_score)) : "—",
+              sub: `avg · last ${scores.length} nights`,
+              spark: scores,
+              color: "#a5b4fc",
+            })
+          }
+        >
+          <Card className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <Text variant="eyebrow">Sleep score</Text>
+              <View className="flex-row items-center gap-1.5">
+                <Text variant="micro" className="tabular-nums text-text-muted">
+                  avg {summary.stats.avg_score != null ? Math.round(summary.stats.avg_score) : "—"}
+                </Text>
+                {scoreTappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
+              </View>
+            </View>
+            <Sparkline data={scores} color="#a5b4fc" height={40} baseline />
+          </Card>
+        </Pressable>
       ) : null}
     </View>
   );
