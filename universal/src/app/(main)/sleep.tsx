@@ -325,18 +325,18 @@ export default function SleepScreen() {
           </Card>
         ) : null}
 
-        {(recovery?.current?.length ?? 0) >= 2 ? (
+        {(recoveryVitals?.readiness?.trend?.length ?? 0) >= 2 ? (
           <Card className="gap-2">
             <View className="flex-row items-center justify-between">
               <Text variant="eyebrow">Training readiness</Text>
-              <Text variant="micro" className="text-text-muted">30 days</Text>
+              <Text variant="micro" className="text-text-muted">score · 30 days</Text>
             </View>
             <LineChart
               height={130}
-              labels={recovery!.current.map((p) => chartLabel(p.date))}
+              labels={recoveryVitals!.readiness.trend.map((p) => chartLabel(p.date))}
               yFormat={(v) => String(Math.round(v))}
               refLine={{ y: 50, color: "#3a5563" }}
-              series={[{ values: recovery!.current.map((p) => finiteOrNull(p.value)), color: "#6ad4a0", width: 2.2 }]}
+              series={[{ values: recoveryVitals!.readiness.trend.map((p) => finiteOrNull(p.score)), color: "#6ad4a0", width: 2.2 }]}
             />
           </Card>
         ) : null}

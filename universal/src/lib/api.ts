@@ -343,6 +343,30 @@ export async function deleteSyncRule(id: number): Promise<boolean> {
   return res.ok;
 }
 
+// ---- Notification preferences (server-persisted singleton) ----
+export interface NotificationPrefs {
+  enabled: boolean;
+  on_sync_workout: boolean;
+  on_sync_run: boolean;
+  on_sync_error: boolean;
+  on_milestone: boolean;
+  on_playlist_ready: boolean;
+}
+/** Read the persisted notification preferences (GET /api/notifications/preferences). */
+export async function getNotificationPrefs(): Promise<NotificationPrefs | null> {
+  try { return await fetchJson<NotificationPrefs>("/api/notifications/preferences"); }
+  catch { return null; }
+}
+/** Persist notification preferences (PUT /api/notifications/preferences). */
+export async function setNotificationPrefs(prefs: NotificationPrefs): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/notifications/preferences`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify(prefs),
+  });
+  return res.ok;
+}
+
 /** Apply a what-if intensity factor to upcoming plan days (POST /api/training/intensity).
  *  Best-effort — the server owns the re-sim + persist; returns true on success. */
 export async function applyIntensity(factor: number, dayIds: number[]): Promise<boolean> {
@@ -357,7 +381,7 @@ export async function applyIntensity(factor: number, dayIds: number[]): Promise<
 /** Submit platform credentials to connect it (POST /api/connections/[platform]). */
 export async function connectPlatform(platform: string, credentials: Record<string, string>): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/connections/${platform}`, {
-    method: "POST",
+    method: "PUT",
     headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
     body: JSON.stringify(credentials),
   });
