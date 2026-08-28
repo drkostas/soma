@@ -17,6 +17,7 @@ import { TrainingSchedule } from "../../components/training-schedule";
 import { TrainingPaces } from "../../components/training-paces";
 import { RaceProtocol } from "../../components/race-protocol";
 import { TrainingTrends } from "../../components/training-trends";
+import { TrajectoryChart } from "../../components/trajectory-chart";
 import { PaceComputation } from "../../components/pace-computation";
 
 /** VO2max trend (last year, chronological) from the shared stats endpoint. */
@@ -179,6 +180,10 @@ export default function TrainingScreen() {
 
         {/* Pace computation breakdown — mobile replacement for the web DAG */}
         <PaceComputation nodes={graphNodes} />
+
+        {/* Fitness trajectory — the centerpiece: model vs Garmin across
+            Fitness (VDOT) / Readiness / Load. Replaces the flat VO2 sparkline. */}
+        <TrajectoryChart comparison={sim?.comparison ?? null} />
 
         {vo2Trend.length >= 2 ? (
           <Card className="gap-2">
