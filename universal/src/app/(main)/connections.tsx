@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
-import { Text, Card, Badge, type BadgeTone } from "soma-style";
-import { fetchJson, usePullRefresh, setRuleEnabled } from "../../lib/api";
+import { Text, Card, Badge, Button, type BadgeTone } from "soma-style";
+import { fetchJson, usePullRefresh, setRuleEnabled, triggerSync, deleteSyncRule, createSyncRule } from "../../lib/api";
+import { SyncFlowDiagram, type FlowPlatform, type FlowRule } from "../../components/sync-flow-diagram";
+import { CredentialsDialog } from "../../components/credentials-dialog";
+import { PushNotificationsCard } from "../../components/push-notifications-card";
 
 // ---- Types (subset of the web /connections page, from fetchable endpoints) ----
 
@@ -144,6 +147,59 @@ function fmtDateTime(iso: string | null | undefined): string {
   return d.toLocaleString();
 }
 
+/** Inline "add sync rule" form: pick a source + destination, then create. */
+function QuickAddRule({ sources, onCreate }: { sources: string[]; onCreate: (source: string, dest: string) => Promise<boolean> }) {
+  const [open, setOpen] = useState(false);
+  const [source, setSource] = useState<string | null>(null);
+  const [dest, setDest] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const srcOptions = sources.length ? sources : ["garmin", "hevy"];
+  const destOptions = ["strava", "telegram"];
+
+  if (!open) {
+    return (
+      <Pressable onPress={() => setOpen(true)} hitSlop={6} className="pt-1">
+        <Text variant="caption" className="text-teal">+ Add rule</Text>
+      </Pressable>
+    );
+  }
+  const Pill = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
+    <Pressable onPress={onPress} hitSlop={4}>
+      <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: active ? "#77c8d133" : "#142530" }}>
+        <Text variant="micro" style={{ color: active ? "#77c8d1" : "#8aa0ac" }}>{label}</Text>
+      </View>
+    </Pressable>
+  );
+  return (
+    <View className="gap-2 border-t border-border-subtle pt-2">
+      <Text variant="micro" className="text-text-muted">Source</Text>
+      <View className="flex-row flex-wrap gap-2">
+        {srcOptions.map((s) => <Pill key={s} label={s} active={source === s} onPress={() => setSource(s)} />)}
+      </View>
+      <Text variant="micro" className="text-text-muted">Destination</Text>
+      <View className="flex-row flex-wrap gap-2">
+        {destOptions.map((d) => <Pill key={d} label={d} active={dest === d} onPress={() => setDest(d)} />)}
+      </View>
+      <View className="flex-row gap-2">
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!source || !dest || busy}
+          label={busy ? "Adding…" : "Create rule"}
+          onPress={async () => {
+            if (!source || !dest) return;
+            setBusy(true);
+            const ok = await onCreate(source, dest);
+            setBusy(false);
+            if (ok) { setOpen(false); setSource(null); setDest(null); }
+          }}
+        />
+        <Button variant="ghost" size="sm" label="Cancel" onPress={() => setOpen(false)} />
+      </View>
+    </View>
+  );
+}
+
 export default function ConnectionsScreen() {
   const { data: conn, error: connError, refetch: refetchConn } = useConnections();
   const { data: sync, error: syncError, refetch: refetchSync } = useSyncStatus();
@@ -155,9 +211,25 @@ export default function ConnectionsScreen() {
   const platforms = conn?.platforms ?? [];
   // optimistic enable/disable overrides so the toggle flips instantly
   const [ruleOverride, setRuleOverride] = useState<Record<number, boolean>>({});
-  const rules = (conn?.rules ?? []).map((r) =>
-    r.id in ruleOverride ? { ...r, enabled: ruleOverride[r.id] } : r,
-  );
+  const [dialogPlatform, setDialogPlatform] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [deletedRules, setDeletedRules] = useState<Set<number>>(new Set());
+
+  async function onSyncNow() {
+    setSyncing(true); setSyncMsg(null);
+    const ok = await triggerSync();
+    setSyncing(false);
+    setSyncMsg(ok ? "Sync started — pull to refresh in a moment." : "Couldn't start a sync right now.");
+  }
+  async function onDeleteRule(id: number) {
+    setDeletedRules((s) => new Set(s).add(id)); // optimistic
+    const ok = await deleteSyncRule(id);
+    if (!ok) setDeletedRules((s) => { const n = new Set(s); n.delete(id); return n; }); // revert
+  }
+  const rules = (conn?.rules ?? [])
+    .filter((r) => !deletedRules.has(r.id))
+    .map((r) => (r.id in ruleOverride ? { ...r, enabled: ruleOverride[r.id] } : r));
   async function toggleRule(id: number, current: boolean) {
     const next = !current;
     setRuleOverride((m) => ({ ...m, [id]: next }));
@@ -210,6 +282,11 @@ export default function ConnectionsScreen() {
     });
   })();
 
+  const flowPlatforms: FlowPlatform[] = PLATFORM_ORDER
+    .filter((p) => PLATFORM_META[p].kind !== "planned")
+    .map((p) => ({ key: p, label: PLATFORM_META[p].label, connected: isConnected(credMap[p]) }));
+  const flowRules: FlowRule[] = groupedRules.map((g) => ({ source: g.source, dest: g.dest, enabled: g.effective.enabled }));
+
   // Recent sync activity from the per-source status map
   const syncSources = sync
     ? Object.entries(sync.sources)
@@ -257,6 +334,21 @@ export default function ConnectionsScreen() {
           </Card>
         </View>
 
+        {/* Sync flow diagram (ingest → hub → destinations) */}
+        <SyncFlowDiagram platforms={flowPlatforms} rules={flowRules} />
+
+        {/* Pipeline: manual sync trigger */}
+        <Card className="gap-2">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 pr-2">
+              <Text variant="eyebrow">Pipeline</Text>
+              <Text variant="micro" className="text-text-muted">Run the sync pipeline now</Text>
+            </View>
+            <Button variant="secondary" size="sm" onPress={onSyncNow} disabled={syncing} label={syncing ? "Starting…" : "Sync now"} />
+          </View>
+          {syncMsg ? <Text variant="micro" className="text-text-secondary">{syncMsg}</Text> : null}
+        </Card>
+
         {/* Platform cards */}
         <View className="gap-3">
           <Text variant="eyebrow">Platforms</Text>
@@ -289,9 +381,19 @@ export default function ConnectionsScreen() {
                   </View>
                   <Badge label={badge.label} tone={badge.tone} />
                 </View>
-                <Text variant="micro" className="text-text-secondary">
-                  {detail}
-                </Text>
+                <View className="flex-row items-center justify-between">
+                  <Text variant="micro" className="text-text-secondary flex-1 pr-2">
+                    {detail}
+                  </Text>
+                  {meta.kind !== "planned" ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => setDialogPlatform(platform)}
+                      label={connected ? "Configure" : "Connect"}
+                    />
+                  ) : null}
+                </View>
               </Card>
             );
           })}
@@ -324,15 +426,28 @@ export default function ConnectionsScreen() {
                     </Text>
                   ) : null}
                 </View>
-                <Pressable onPress={() => toggleRule(g.effective.id, g.effective.enabled)} hitSlop={8}>
-                  <Badge
-                    label={g.effective.enabled ? "On" : "Off"}
-                    tone={g.effective.enabled ? "success" : "neutral"}
-                  />
-                </Pressable>
+                <View className="flex-row items-center gap-3">
+                  <Pressable onPress={() => toggleRule(g.effective.id, g.effective.enabled)} hitSlop={8}>
+                    <Badge
+                      label={g.effective.enabled ? "On" : "Off"}
+                      tone={g.effective.enabled ? "success" : "neutral"}
+                    />
+                  </Pressable>
+                  <Pressable onPress={() => onDeleteRule(g.effective.id)} hitSlop={8}>
+                    <Text variant="micro" className="text-danger">Delete</Text>
+                  </Pressable>
+                </View>
               </View>
             ))
           )}
+          <QuickAddRule
+            sources={[...new Set((conn?.rules ?? []).map((r) => r.source_platform))]}
+            onCreate={async (source, dest) => {
+              const ok = await createSyncRule({ source_platform: source, activity_type: "all", destinations: { [dest]: true } });
+              if (ok) refetchConn();
+              return ok;
+            }}
+          />
         </Card>
 
         {/* Recent sync activity (per source) */}
@@ -380,7 +495,26 @@ export default function ConnectionsScreen() {
             ))
           )}
         </Card>
+
+        {/* Spotify (music features) */}
+        <Card className="gap-2">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 pr-2">
+              <Text variant="eyebrow">Spotify</Text>
+              <Text variant="micro" className="text-text-muted">Tempo-matched running playlists</Text>
+            </View>
+            <Badge label="Web sign-in" tone="neutral" />
+          </View>
+          <Text variant="micro" className="text-text-secondary">
+            Spotify uses a one-tap OAuth sign-in handled on the soma web dashboard. Connect there, then your library status appears here.
+          </Text>
+        </Card>
+
+        {/* Push notification preferences */}
+        <PushNotificationsCard />
       </View>
+
+      <CredentialsDialog platform={dialogPlatform} onClose={() => setDialogPlatform(null)} onSaved={refetchConn} />
     </ScrollView>
   );
 }
