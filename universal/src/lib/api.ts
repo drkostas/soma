@@ -58,6 +58,7 @@ export interface SomaPlan {
   consumed: MacroSet;
   remaining: MacroSet | null;
   slotBudgets: Record<string, { calories: number; protein?: number; carbs?: number; fat?: number; fiber?: number }> | null;
+  skippedSlots?: string[];
   meals?: SomaMeal[];
   breakdown?: SomaBreakdown | null;
   adaptive: { effectiveTdee: number; reportedTdee: number; driftFlag: boolean; deficitDurationDays: number; dietBreakLevel: string } | null;
@@ -724,6 +725,41 @@ export async function deleteMeal(mealId: number): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/nutrition/log-meal?id=${mealId}`, {
     method: "DELETE",
     headers: AUTH_HEADERS,
+  });
+  return res.ok;
+}
+
+/** Log a meal from manually-entered macros (no preset). Mirrors web "Quick add". */
+export async function quickAddMeal(
+  date: string,
+  slot: string,
+  m: { name: string; calories: number; protein: number; carbs: number; fat: number },
+): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/log-meal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({
+      date,
+      meal_slot: slot,
+      source: "quick_add",
+      items: [{
+        ingredient_id: `custom_${Date.now()}`,
+        grams: 0,
+        calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, fiber: 0,
+        name: m.name || "Custom food",
+      }],
+      calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, fiber: 0,
+    }),
+  });
+  return res.ok;
+}
+
+/** Toggle skip for a meal slot (skips + clears its meals, or un-skips). Mirrors web "Skip". */
+export async function skipSlot(date: string, slot: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/skip-slot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ date, slot }),
   });
   return res.ok;
 }
