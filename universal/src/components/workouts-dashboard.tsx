@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { View, Pressable } from "react-native";
-import { Text, Card, SegmentedControl } from "soma-style";
-import type { WorkoutSummary } from "../lib/api";
+import { Text, Card, Sparkline } from "soma-style";
+import type { WorkoutSummary, TopExerciseRich } from "../lib/api";
 import { LineChart } from "./line-chart";
 import { ExerciseDetailModal } from "./exercise-detail-modal";
 import { WorkoutDetailModal } from "./workout-detail-modal";
+
+const KG_TO_LB = 2.20462;
 
 const num = (v: unknown): number => {
   const n = Number(v);
@@ -39,11 +41,12 @@ function VolumeChart({ weeks }: { weeks: WorkoutSummary["weeklyVolume"] }) {
 
 /** Workouts dashboard: summary stats + weekly volume + top exercises (+ optional
     recent list — hidden on the workouts screen, which has its own sync-status list). */
-export function WorkoutsDashboard({ summary, showRecent = true }: { summary: WorkoutSummary | null | undefined; showRecent?: boolean }) {
-  const [unit, setUnit] = useState<"kg" | "lb">("kg");
+export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", topRich }: { summary: WorkoutSummary | null | undefined; showRecent?: boolean; unit?: "kg" | "lb"; topRich?: TopExerciseRich[] }) {
   const [exName, setExName] = useState<string | null>(null);
   const [wkId, setWkId] = useState<{ id: string; title: string } | null>(null);
   if (!summary) return null;
+  const richByName = new Map((topRich ?? []).map((t) => [t.exercise, t]));
+  const bestW = (kg: number | null) => (kg == null ? null : `${Math.round((unit === "lb" ? kg * KG_TO_LB : kg) * 10) / 10} ${unit}`);
   const s = summary.stats;
   const stats: { label: string; value: string; sub: string }[] = s
     ? [
@@ -68,13 +71,7 @@ export function WorkoutsDashboard({ summary, showRecent = true }: { summary: Wor
         </View>
       ) : null}
 
-      {/* Weight-unit toggle (kg ↔ lb) — drives the detail modals */}
-      <View className="flex-row items-center justify-between">
-        <Text variant="micro" className="text-text-muted">Tap an exercise or workout for detail</Text>
-        <View className="w-24">
-          <SegmentedControl options={["kg", "lb"] as const} value={unit} onChange={(v) => setUnit(v as "kg" | "lb")} />
-        </View>
-      </View>
+      <Text variant="micro" className="text-text-muted">Tap an exercise or workout for detail</Text>
 
       {summary.weeklyVolume.length >= 2 ? (
         <Card className="gap-2">
@@ -90,18 +87,31 @@ export function WorkoutsDashboard({ summary, showRecent = true }: { summary: Wor
       {summary.topExercises.length ? (
         <Card className="gap-2">
           <Text variant="eyebrow">Top exercises</Text>
-          {summary.topExercises.map((e, i) => (
-            <Pressable key={e.name} onPress={() => setExName(e.name)} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
-              <View className="flex-row items-center gap-2 flex-1">
-                <Text variant="micro" className="tabular-nums text-text-muted w-5">{i + 1}</Text>
-                <Text variant="body" className="text-text-secondary flex-1" numberOfLines={1}>{e.name}</Text>
-              </View>
-              <View className="flex-row items-center gap-1.5 ml-2">
-                <Text variant="caption" className="tabular-nums text-text-muted">{e.sessions}×</Text>
-                <Text variant="micro" className="text-text-muted">›</Text>
-              </View>
-            </Pressable>
-          ))}
+          {summary.topExercises.map((e, i) => {
+            const r = richByName.get(e.name);
+            const spark = (r?.recent_weights ?? []).map((x) => Number(x)).filter((x) => isFinite(x));
+            const best = r?.best_weight != null ? bestW(Number(r.best_weight)) : null;
+            return (
+              <Pressable key={e.name} onPress={() => setExName(e.name)} className="border-b border-border-subtle py-1.5">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-2 flex-1">
+                    <Text variant="micro" className="tabular-nums text-text-muted w-5">{i + 1}</Text>
+                    <Text variant="body" className="text-text-secondary flex-1" numberOfLines={1}>{e.name}</Text>
+                  </View>
+                  <View className="flex-row items-center gap-1.5 ml-2">
+                    {best ? <Text variant="micro" className="tabular-nums text-lime">{best}</Text> : null}
+                    <Text variant="caption" className="tabular-nums text-text-muted">{e.sessions}×</Text>
+                    <Text variant="micro" className="text-text-muted">›</Text>
+                  </View>
+                </View>
+                {spark.length >= 2 ? (
+                  <View className="mt-1 pl-7">
+                    <Sparkline data={spark} color="#77c8d1" height={18} baseline />
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })}
         </Card>
       ) : null}
 
