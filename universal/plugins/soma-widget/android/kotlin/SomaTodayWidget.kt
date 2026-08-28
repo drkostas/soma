@@ -4,6 +4,8 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.os.Build
+import android.util.SizeF
 import android.widget.RemoteViews
 import dev.gkos.soma.R
 import kotlin.concurrent.thread
@@ -57,15 +59,37 @@ class SomaTodayWidget : AppWidgetProvider() {
         return "unknown"
     }
 
+    /**
+     * Responsive: a compact 2x2 layout when small, the full layout when wider.
+     * Android 12+ (API 31) picks the largest mapped layout that fits; below that
+     * we fall back to the full layout.
+     */
     private fun render(context: Context, t: Today): RemoteViews {
-        val rv = RemoteViews(context.packageName, R.layout.soma_today)
+        val full = bind(context, R.layout.soma_today, t, small = false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val small = bind(context, R.layout.soma_today_small, t, small = true)
+            return RemoteViews(
+                mapOf(
+                    SizeF(120f, 100f) to small,
+                    SizeF(220f, 100f) to full
+                )
+            )
+        }
+        return full
+    }
+
+    /** Binds the fields present in the given layout (small omits stress + readiness label). */
+    private fun bind(context: Context, layoutId: Int, t: Today, small: Boolean): RemoteViews {
+        val rv = RemoteViews(context.packageName, layoutId)
         rv.setTextViewText(R.id.steps, t.steps.toString())
         rv.setTextViewText(R.id.active_kcal, t.activeKcal.toString())
         rv.setTextViewText(R.id.resting_hr, t.restingHr.toString())
-        rv.setTextViewText(R.id.stress, t.stress.toString())
         rv.setTextColor(R.id.readiness_dot, readinessColor(t.readiness))
-        rv.setTextViewText(R.id.readiness_label, t.readiness.replaceFirstChar { it.uppercase() })
-        rv.setTextColor(R.id.readiness_label, readinessColor(t.readiness))
+        if (!small) {
+            rv.setTextViewText(R.id.stress, t.stress.toString())
+            rv.setTextViewText(R.id.readiness_label, t.readiness.replaceFirstChar { it.uppercase() })
+            rv.setTextColor(R.id.readiness_label, readinessColor(t.readiness))
+        }
         openApp(context)?.let { rv.setOnClickPendingIntent(R.id.root, it) }
         return rv
     }

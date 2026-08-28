@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
 import dev.gkos.soma.R
@@ -154,8 +156,28 @@ class SomaNutritionWidget : AppWidgetProvider() {
         return Nutri(slot, eaten, target, remaining, hasPlan, presets)
     }
 
+    /**
+     * Responsive: a compact 2x2 layout (headline + 1 quick-log preset) when small,
+     * the full layout (up to 3 presets) when taller. Android 12+ picks the largest
+     * mapped layout that fits; below that we fall back to the full layout.
+     */
     private fun render(context: Context, e: Nutri): RemoteViews {
-        val rv = RemoteViews(context.packageName, R.layout.soma_nutrition)
+        val full = bind(context, R.layout.soma_nutrition, e, 3)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val small = bind(context, R.layout.soma_nutrition_small, e, 1)
+            return RemoteViews(
+                mapOf(
+                    SizeF(120f, 120f) to small,
+                    SizeF(220f, 170f) to full
+                )
+            )
+        }
+        return full
+    }
+
+    /** Binds the headline + up to maxPresets quick-log rows (small layout has only preset_0). */
+    private fun bind(context: Context, layoutId: Int, e: Nutri, maxPresets: Int): RemoteViews {
+        val rv = RemoteViews(context.packageName, layoutId)
         rv.setTextViewText(R.id.slot, " · " + slotLabel(e.slot))
         if (e.hasPlan) {
             rv.setTextViewText(R.id.kcal_value, e.remaining.toString())
@@ -167,7 +189,7 @@ class SomaNutritionWidget : AppWidgetProvider() {
         val rows = intArrayOf(R.id.preset_0, R.id.preset_1, R.id.preset_2)
         val names = intArrayOf(R.id.preset_0_name, R.id.preset_1_name, R.id.preset_2_name)
         val kcals = intArrayOf(R.id.preset_0_kcal, R.id.preset_1_kcal, R.id.preset_2_kcal)
-        for (i in 0 until 3) {
+        for (i in 0 until maxPresets) {
             val p = e.presets.getOrNull(i)
             if (p == null) {
                 rv.setViewVisibility(rows[i], View.GONE)
