@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import {
@@ -18,6 +18,7 @@ import { TrainingPaces } from "../../components/training-paces";
 import { RaceProtocol } from "../../components/race-protocol";
 import { TrainingTrends } from "../../components/training-trends";
 import { TrajectoryChart } from "../../components/trajectory-chart";
+import { ReferencePanel, type RefMetric } from "../../components/reference-panel";
 import { PaceComputation } from "../../components/pace-computation";
 
 /** VO2max trend (last year, chronological) from the shared stats endpoint. */
@@ -85,6 +86,26 @@ export default function TrainingScreen() {
   const readiness = data?.readiness;
   const vdot = fit?.vdot_adjusted ?? sim?.fitness?.vdotAdjusted ?? null;
   const vo2Trend = useVo2Trend();
+
+  // External comparison signals (Garmin-side + PMC) with trend sparklines.
+  const refMetrics: RefMetric[] = useMemo(() => {
+    const c = sim?.comparison;
+    const nums = (arr: { [k: string]: number | string }[] | undefined, key: string) =>
+      (arr ?? []).map((p) => Number(p[key])).filter((v) => isFinite(v) && v > 0);
+    const last = (a: number[]) => (a.length ? a[a.length - 1] : 0);
+    const m: RefMetric[] = [];
+    const gv = nums(c?.fitness, "garminVo");
+    if (gv.length) m.push({ label: "Garmin VO₂max", value: last(gv).toFixed(1), spark: gv, color: "#a9e4ec" });
+    const gs = nums(c?.readiness, "garminScore");
+    if (gs.length) m.push({ label: "Garmin readiness", value: String(Math.round(last(gs))), spark: gs, color: "#cbe896" });
+    const ctl = nums(c?.load, "ctl");
+    if (ctl.length) m.push({ label: "Fitness (CTL)", value: String(Math.round(last(ctl))), spark: ctl, color: "#77c8d1" });
+    const atl = nums(c?.load, "atl");
+    if (atl.length) m.push({ label: "Fatigue (ATL)", value: String(Math.round(last(atl))), spark: atl, color: "#e0a458" });
+    const dec = (fit as { decoupling_pct?: number | null } | undefined)?.decoupling_pct;
+    if (dec != null) m.push({ label: "Decoupling", value: `${Number(dec).toFixed(1)}%`, spark: [], color: "#6366b0", note: "aerobic drift" });
+    return m;
+  }, [sim, fit]);
 
   async function onToggleWeighting(mode: "Adaptive" | "Equal") {
     const ok = await toggleCalibration(mode === "Equal");
@@ -197,6 +218,9 @@ export default function TrainingScreen() {
 
         {/* Compact model-vs-Garmin comparison trends (Tier 2/3 adapted) */}
         <TrainingTrends comparison={sim?.comparison} />
+
+        {/* External comparison signals (reference, with trend sparklines) */}
+        <ReferencePanel metrics={refMetrics} />
 
         {readiness ? (
           <Card className="gap-2">
