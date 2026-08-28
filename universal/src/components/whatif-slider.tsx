@@ -14,9 +14,11 @@ type SaveState = "idle" | "saving" | "saved" | "error";
  * trim) previews scaling the upcoming plan, then "Apply changes" persists the
  * deltas via onApply. An override banner shows while intensity ≠ 1.0×.
  */
-export function WhatIfSlider({ planDays, onApply }: { planDays: PlanDay[]; onApply?: (factor: number, dayIds: number[]) => Promise<boolean> }) {
+export function WhatIfSlider({ planDays, onApply, onPreview }: { planDays: PlanDay[]; onApply?: (factor: number, dayIds: number[]) => Promise<boolean>; onPreview?: (factor: number) => void }) {
   const [factor, setFactor] = useState(1.0);
   const [state, setState] = useState<SaveState>("idle");
+  const setFactorPreview = (next: number) => { setFactor(next); onPreview?.(next); };
+  const stepFactor = (delta: number) => setFactor((f) => { const next = clamp(f + delta); onPreview?.(next); return next; });
 
   const upcoming = useMemo(
     () => (planDays ?? []).filter((d) => !d.completed && d.targetDistanceKm != null && num(d.targetDistanceKm) > 0),
@@ -26,7 +28,7 @@ export function WhatIfSlider({ planDays, onApply }: { planDays: PlanDay[]; onApp
   const scaledKm = baseKm * factor;
   const changed = Math.abs(factor - 1) > 0.001;
 
-  const step = (delta: number) => { setFactor((f) => clamp(f + delta)); setState("idle"); };
+  const step = (delta: number) => { stepFactor(delta); setState("idle"); };
   const pct = Math.round(factor * 100);
   const label = factor < 0.98 ? "Easier" : factor > 1.02 ? "Harder" : "Normal";
   const labelColor = factor < 0.98 ? "#6ad4a0" : factor > 1.02 ? "#e0a458" : "#8aa0ac";
@@ -36,7 +38,7 @@ export function WhatIfSlider({ planDays, onApply }: { planDays: PlanDay[]; onApp
     setState("saving");
     const ok = await onApply(factor, upcoming.map((d) => d.id));
     setState(ok ? "saved" : "error");
-    if (ok) setFactor(1.0);
+    if (ok) setFactorPreview(1.0);
   }
 
   if (!upcoming.length) return null;
@@ -77,7 +79,7 @@ export function WhatIfSlider({ planDays, onApply }: { planDays: PlanDay[]; onApp
       {changed ? (
         <View className="rounded-lg px-3 py-2" style={{ backgroundColor: (factor > 1 ? "#e0a458" : "#6ad4a0") + "1a" }}>
           <Text variant="micro" style={{ color: factor > 1 ? "#e0a458" : "#6ad4a0" }}>
-            Override active — upcoming workouts scaled to {pct}%. Apply to persist.
+            Previewing the schedule at {pct}% — paces above update live. Apply to persist.
           </Text>
         </View>
       ) : null}
