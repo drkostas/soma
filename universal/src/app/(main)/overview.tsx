@@ -7,6 +7,7 @@ import {
   useToday,
   useTraining,
   useSomaPlan,
+  useRecoverySummary,
   fetchJson,
   usePullRefresh,
   todayLocal,
@@ -70,6 +71,20 @@ function useSleepGlance() {
   return s;
 }
 
+interface Vo2maxResp { stats: { vo2max: number | null } | null; trends: { vo2max: number[] } }
+/** Current VO2max + its trend, from /api/running/stats. */
+function useVo2max() {
+  const [v, setV] = useState<{ current: number | null; trend: number[] }>({ current: null, trend: [] });
+  useEffect(() => {
+    let alive = true;
+    fetchJson<Vo2maxResp>("/api/running/stats?range=90d")
+      .then((d) => alive && setV({ current: d.stats?.vo2max ?? (d.trends?.vo2max?.at(-1) ?? null), trend: d.trends?.vo2max ?? [] }))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return v;
+}
+
 /** This-week vs last-week training totals + streak for the This Week card. */
 function useWeeklyTraining() {
   const [w, setW] = useState<WeeklyTraining | null>(null);
@@ -111,6 +126,8 @@ export default function OverviewScreen() {
   const sleep = useSleepGlance();
   const trends = useOverviewTrends();
   const weekly = useWeeklyTraining();
+  const vo2 = useVo2max();
+  const recovery = useRecoverySummary("30d");
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
     refetchTraining();
@@ -134,6 +151,9 @@ export default function OverviewScreen() {
   const sleepLatest = sleepSeries.length ? sleepSeries[sleepSeries.length - 1] : null;
   const sleepAvg = sleep?.summary?.current_avg ?? null;
 
+  const hrvLatest = recovery.data?.hrv?.latest ?? null;
+  const hrvSpark = (recovery.data?.hrv?.trend ?? []).map((p) => Number(p.weekly_avg)).filter((v) => isFinite(v));
+
   const stats: { label: string; value: string; sub: string; cls: string; spark?: number[]; color: string; unit?: string }[] = [
     { label: "Steps", value: (data?.total_steps ?? 0).toLocaleString(), sub: `${km} km`, cls: "text-teal", spark: trends?.steps, color: "#77c8d1" },
     { label: "Active Calories", value: `${Math.round(data?.active_kilocalories ?? 0)}`, sub: `${Math.round(data?.total_kilocalories ?? 0)} total`, cls: "text-warm", spark: trends?.calories, color: "#b17850", unit: "kcal" },
@@ -141,6 +161,8 @@ export default function OverviewScreen() {
     { label: "Avg Stress", value: `${data?.avg_stress_level ?? "—"}`, sub: `Peak ${data?.max_stress_level ?? "—"}`, cls: "text-warning", spark: trends?.stress, color: "#e0a458" },
     { label: "Body Battery", value: `${data?.body_battery_max ?? "—"}`, sub: `−${Math.abs(data?.body_battery_drained ?? 0)} drained`, cls: "text-lime", spark: trends?.bodyBattery, color: "#cbe896" },
     { label: "Intensity min", value: `${(data?.moderate_intensity_minutes ?? 0) + (data?.vigorous_intensity_minutes ?? 0)}`, sub: `${data?.vigorous_intensity_minutes ?? 0} vigorous`, cls: "text-indigo", spark: trends?.intensity, color: "#6366b0", unit: "min" },
+    { label: "VO₂max", value: vo2.current != null ? String(vo2.current) : "—", sub: "ml/kg/min", cls: "text-teal", spark: vo2.trend.filter((x) => isFinite(x)), color: "#77c8d1" },
+    { label: "HRV", value: hrvLatest?.weekly_avg != null ? String(hrvLatest.weekly_avg) : "—", sub: hrvLatest?.status ? String(hrvLatest.status) : "7-night avg", cls: "text-lime", spark: hrvSpark, color: "#cbe896", unit: "ms" },
   ];
 
   return (
