@@ -62,7 +62,7 @@ export default function TrainingScreen() {
   const { data, error, refetch } = useTraining(todayISO());
   const { cal, refetch: refetchCal } = useCalibration(todayISO());
   const { data: sim, refetch: refetchSim } = useForwardSim(todayISO());
-  const { nodes: graphNodes } = useTrainingGraph(todayISO());
+  const { nodes: graphNodes, overrides: graphOverrides } = useTrainingGraph(todayISO());
   const { byDay: matches } = useActivityMatches();
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
@@ -154,6 +154,25 @@ export default function TrainingScreen() {
 
         {error ? (
           <Card><Text variant="body" className="text-danger">API: {error} — is soma running on :3456?</Text></Card>
+        ) : null}
+
+        {/* Safety-rail overrides — hard readiness rules that force RED/YELLOW */}
+        {graphOverrides.length ? (
+          <View className="gap-2">
+            {graphOverrides.map((o) => {
+              const red = o.severity === "red";
+              return (
+                <View
+                  key={o.rule}
+                  className="flex-row items-start gap-2 rounded-lg border px-3 py-2.5"
+                  style={{ backgroundColor: red ? "#3a1e24" : "#33291a", borderColor: red ? "#e06060" : "#e0a458" }}
+                >
+                  <Text variant="body" style={{ color: red ? "#f2868c" : "#e0a458" }}>{red ? "⛔" : "⚠️"}</Text>
+                  <Text variant="caption" className="flex-1" style={{ color: red ? "#f2868c" : "#e0c458" }}>{o.message}</Text>
+                </View>
+              );
+            })}
+          </View>
         ) : null}
 
         <Card className="gap-3">
