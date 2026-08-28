@@ -51,6 +51,7 @@ export interface SomaBreakdown {
   runCalories?: number; runActual?: number; runPredicted?: number; runEnabled?: boolean; runActualDistKm?: number; runDistanceKm?: number;
   gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: number }[];
   drinkCalories?: number; deficit?: number; manualOverride?: boolean;
+  weightKg?: number;
 }
 export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean }
 export interface LoggedDrink {
