@@ -1,6 +1,7 @@
 import { View } from "react-native";
 import { Text, Card } from "soma-style";
 import type { WorkoutSummary } from "../lib/api";
+import { LineChart } from "./line-chart";
 
 const num = (v: unknown): number => {
   const n = Number(v);
@@ -14,20 +15,19 @@ function kvol(v: number): string {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`;
 }
 
-/** Weekly training-volume bars, peak highlighted. */
+/** Weekly training-volume as a full trend chart (axes + dated x-labels). */
 function VolumeChart({ weeks }: { weeks: WorkoutSummary["weeklyVolume"] }) {
-  const data = weeks.map((w) => num(w.total_volume)).filter((v) => v > 0).slice(-16);
-  if (data.length < 2) return null;
-  const max = Math.max(...data) || 1;
-  const maxIdx = data.indexOf(max);
+  const recent = weeks.slice(-16);
+  const vals = recent.map((w) => num(w.total_volume));
+  if (vals.filter((v) => v > 0).length < 2) return null;
+  const labels = recent.map((w) => shortDate(String(w.week)));
   return (
-    <View className="h-24 flex-row items-end gap-1">
-      {data.map((v, i) => (
-        <View key={i} className="flex-1 items-center justify-end self-stretch">
-          <View className="w-full rounded-t-sm" style={{ height: `${Math.max(3, (v / max) * 100)}%`, backgroundColor: i === maxIdx ? "#77c8d1" : "#2f4a58" }} />
-        </View>
-      ))}
-    </View>
+    <LineChart
+      height={130}
+      labels={labels}
+      yFormat={(v) => kvol(v)}
+      series={[{ values: vals.map((v) => (v > 0 ? v : null)), color: "#77c8d1", width: 2.4 }]}
+    />
   );
 }
 
