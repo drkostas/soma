@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { View } from "react-native";
+import { View, Pressable } from "react-native";
 import { Text, Card, SegmentedControl } from "soma-style";
 import { LineChart, ChartLegend } from "./line-chart";
 import type { ForwardSim } from "../lib/api";
@@ -18,18 +18,21 @@ function shortLabel(iso: string): string {
 }
 
 /** Fitness trajectory: our-model line vs Garmin's, across Fitness (VDOT),
- *  Readiness, and Load dimensions. Mobile-adapted from the web trajectory
- *  chart — the goal-zone bands, taper band, and what-if line stay web-only
- *  for now (the what-if belongs with #422). */
+ *  Readiness, and Load dimensions, with a "You are here" marker on the latest
+ *  model value and a toggle to hide the Garmin comparison. Mobile-adapted from
+ *  the web trajectory chart — goal-zone/taper/race bands need goal+taper data
+ *  absent from the mobile payload, and the rich hover tooltip + 7-line
+ *  visibility dropdown are replaced by the dimension + compare toggles. */
 export function TrajectoryChart({ comparison }: { comparison: ForwardSim["comparison"] }) {
   const [dim, setDim] = useState<Dim>("Fitness");
+  const [compare, setCompare] = useState(true);
   const cfg = CFG[dim];
   const src = useMemo(() => {
     if (!comparison) return [];
     return dim === "Fitness" ? comparison.fitness : dim === "Readiness" ? comparison.readiness : comparison.load;
   }, [comparison, dim]);
 
-  const { labels, a, b, cur } = useMemo(() => {
+  const { labels, a, b, cur, hereDot } = useMemo(() => {
     const num = (p: Record<string, unknown>, k: string) => {
       const v = Number(p[k]);
       return isFinite(v) && v > 0 ? v : null;
@@ -37,8 +40,12 @@ export function TrajectoryChart({ comparison }: { comparison: ForwardSim["compar
     const lbls = src.map((p) => shortLabel(String(p.date)));
     const av = src.map((p) => num(p as Record<string, unknown>, cfg.keyA));
     const bv = src.map((p) => num(p as Record<string, unknown>, cfg.keyB));
-    const last = [...av].reverse().find((v) => v != null) ?? null;
-    return { labels: lbls, a: av, b: bv, cur: last };
+    // "You are here": a single dot on the most recent model value.
+    let hereIdx = -1;
+    for (let i = av.length - 1; i >= 0; i--) if (av[i] != null) { hereIdx = i; break; }
+    const dot = av.map((v, i) => (i === hereIdx ? v : null));
+    const last = hereIdx >= 0 ? av[hereIdx] : null;
+    return { labels: lbls, a: av, b: bv, cur: last, hereDot: dot };
   }, [src, cfg]);
 
   if (!comparison) return null;
@@ -49,7 +56,16 @@ export function TrajectoryChart({ comparison }: { comparison: ForwardSim["compar
         <Text variant="eyebrow">Fitness trajectory</Text>
         {cur != null ? <Text variant="body" className="text-teal tabular-nums">{cfg.fmt(cur)}{dim === "Fitness" ? " VDOT" : ""}</Text> : null}
       </View>
-      <SegmentedControl options={DIMS} value={dim} onChange={(v) => setDim(v as Dim)} />
+      <View className="flex-row items-center gap-2">
+        <View className="flex-1">
+          <SegmentedControl options={DIMS} value={dim} onChange={(v) => setDim(v as Dim)} />
+        </View>
+        <Pressable onPress={() => setCompare((c) => !c)} hitSlop={6}>
+          <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: compare ? cfg.colorB + "33" : "#142530" }}>
+            <Text variant="micro" style={{ color: compare ? cfg.colorB : "#8aa0ac" }}>Garmin</Text>
+          </View>
+        </Pressable>
+      </View>
       {a.some((v) => v != null) || b.some((v) => v != null) ? (
         <>
           <LineChart
@@ -57,13 +73,15 @@ export function TrajectoryChart({ comparison }: { comparison: ForwardSim["compar
             labels={labels}
             yFormat={(v) => cfg.fmt(v)}
             series={[
-              { values: b, color: cfg.colorB, width: 1.6, dashed: dim !== "Load" },
+              ...(compare ? [{ values: b, color: cfg.colorB, width: 1.6, dashed: dim !== "Load" }] : []),
               { values: a, color: cfg.colorA, width: 2.4 },
+              { values: hereDot, color: "#ffffff", mode: "dots" as const, width: 3 },
             ]}
           />
           <ChartLegend items={[
             { color: cfg.colorA, label: cfg.labelA },
-            { color: cfg.colorB, label: cfg.labelB, dashed: dim !== "Load" },
+            ...(compare ? [{ color: cfg.colorB, label: cfg.labelB, dashed: dim !== "Load" }] : []),
+            { color: "#ffffff", label: "You are here" },
           ]} />
         </>
       ) : (
