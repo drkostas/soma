@@ -8,6 +8,7 @@ import {
 } from "../../lib/api";
 import { BodyCompChart } from "../../components/body-comp-chart";
 import { ActivitySelector } from "../../components/activity-selector";
+import { ComposeMealView } from "../../components/compose-meal-view";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
@@ -73,9 +74,9 @@ export default function NutritionScreen() {
   const isToday = DATE === todayLocal();
   const { data, loading, error, refetch } = useSomaPlan(DATE);
   // Reset per-day transient UI when the viewed day changes.
-  useEffect(() => { setCloseStatus(null); setQOpen(false); setLogOpen(false); }, [DATE]);
+  useEffect(() => { setCloseStatus(null); setLogMode("preset"); setLogOpen(false); }, [DATE]);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
-  const { presets } = usePresets();
+  const { presets, ingredients } = usePresets();
   const { drinks } = useDrinks();
   const [tab, setTab] = useState<"Day" | "Trend">("Day");
   const [logOpen, setLogOpen] = useState(false);
@@ -87,7 +88,7 @@ export default function NutritionScreen() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [closeStatus, setCloseStatus] = useState<string | null>(null);
-  const [qOpen, setQOpen] = useState(false);
+  const [logMode, setLogMode] = useState<"preset" | "quick" | "compose">("preset");
   const [qName, setQName] = useState("");
   const [qCal, setQCal] = useState("");
   const [qP, setQP] = useState("");
@@ -144,7 +145,7 @@ export default function NutritionScreen() {
     });
     setQBusy(false);
     if (ok) {
-      setQOpen(false);
+      setLogMode("preset");
       setQName(""); setQCal(""); setQP(""); setQC(""); setQF("");
       refetch();
     }
@@ -445,11 +446,19 @@ export default function NutritionScreen() {
             <Pill key={s} label={slotLabel(s)} active={slot === s} onPress={() => setSlot(s)} />
           ))}
         </PillGroup>
-        <View className="mb-2 flex-row items-center justify-between">
-          <Text variant="eyebrow" className="text-text-muted">{qOpen ? "Quick add" : "Presets"}</Text>
-          <Button label={qOpen ? "Use a preset" : "＋ Quick add"} variant="ghost" size="sm" onPress={() => setQOpen(!qOpen)} />
+        <View className="mb-3 flex-row gap-1.5">
+          <Button label="Presets" variant={logMode === "preset" ? "secondary" : "ghost"} size="sm" onPress={() => setLogMode("preset")} />
+          <Button label="Quick add" variant={logMode === "quick" ? "secondary" : "ghost"} size="sm" onPress={() => setLogMode("quick")} />
+          <Button label="Compose" variant={logMode === "compose" ? "secondary" : "ghost"} size="sm" onPress={() => setLogMode("compose")} />
         </View>
-        {qOpen ? (
+        {logMode === "compose" ? (
+          <ComposeMealView
+            ingredients={ingredients}
+            date={DATE}
+            slot={slot}
+            onLogged={() => { setLogOpen(false); refetch(); }}
+          />
+        ) : logMode === "quick" ? (
           <View className="gap-2 rounded-lg border border-border-subtle p-3">
             <TextInput
               placeholder="Name (e.g. Restaurant burger)"
@@ -465,7 +474,7 @@ export default function NutritionScreen() {
               <TextInput placeholder="F" placeholderTextColor="#5a7a8a" keyboardType="numeric" value={qF} onChangeText={setQF} className="flex-1 rounded-md border border-border-subtle px-2 py-2 text-text tabular-nums" />
             </View>
             <View className="flex-row justify-end gap-2">
-              <Button label="Cancel" variant="ghost" size="sm" onPress={() => setQOpen(false)} />
+              <Button label="Cancel" variant="ghost" size="sm" onPress={() => setLogMode("preset")} />
               <Button label={qBusy ? "…" : "Add"} variant="primary" size="sm" disabled={qBusy || !qCal} onPress={onQuickAdd} />
             </View>
           </View>
