@@ -47,6 +47,15 @@ function niceDate(iso: string): string {
   return dt.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 }
 
+/** Color a day's deficit against the daily goal: green = met the goal deficit,
+ *  amber = a deficit but short of goal, red = a surplus (ate above burn). */
+function deficitTone(deficit: number, goalPerDay: number): string {
+  if (deficit <= 0) return "#e06060"; // surplus
+  if (goalPerDay > 0 && deficit >= goalPerDay) return "#6ad4a0"; // met goal
+  if (goalPerDay > 0) return "#e0a458"; // short of goal
+  return "#6ad4a0";
+}
+
 function shiftDate(iso: string, days: number): string {
   const [y, mo, d] = iso.split("-").map(Number);
   const dt = new Date(y, (mo ?? 1) - 1, (d ?? 1) + days);
@@ -457,25 +466,43 @@ export default function NutritionScreen() {
               </Card>
             ) : null}
 
-            {days.length ? (
-              <Card className="gap-0.5">
-                <View className="flex-row justify-between pb-1">
-                  <Text variant="eyebrow">7-day trend</Text>
-                  <Text variant="micro" className="text-text-muted">ate / burn · deficit</Text>
-                </View>
-                {days.map((d) => (
-                  <View key={d.date} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
-                    <Text variant="caption" className={d.isToday ? "font-semibold text-teal" : "text-text-secondary"}>
-                      {niceDate(d.date).replace(/,.*/, "").slice(0, 3)} {d.date.slice(8)}
-                    </Text>
-                    <Text variant="caption" className="tabular-nums text-text-muted">{Math.round(d.ate)} / {Math.round(d.burn)}</Text>
-                    <Text variant="caption" className={`w-16 text-right tabular-nums ${d.deficit >= 0 ? "text-success" : "text-warm"}`}>
-                      {d.deficit > 0 ? "+" : ""}{Math.round(d.deficit)}
+            {days.length ? (() => {
+              const goalPerDay = Number(data?.trend7d?.goalDeficit) || 0;
+              const sumAte = days.reduce((s, d) => s + (d.ate || 0), 0);
+              const sumBurn = days.reduce((s, d) => s + (d.burn || 0), 0);
+              const totalActual = data?.trend7d?.totalDeficit != null
+                ? Number(data.trend7d.totalDeficit)
+                : days.reduce((s, d) => s + (d.deficit || 0), 0);
+              const goalTotal = goalPerDay * days.length;
+              return (
+                <Card className="gap-0.5">
+                  <View className="flex-row justify-between pb-1">
+                    <Text variant="eyebrow">7-day trend</Text>
+                    <Text variant="micro" className="text-text-muted">
+                      ate / burn · deficit{goalPerDay > 0 ? ` · goal −${Math.round(goalPerDay)}/day` : ""}
                     </Text>
                   </View>
-                ))}
-              </Card>
-            ) : (
+                  {days.map((d) => (
+                    <View key={d.date} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
+                      <Text variant="caption" className={d.isToday ? "font-semibold text-teal" : "text-text-secondary"}>
+                        {niceDate(d.date).replace(/,.*/, "").slice(0, 3)} {d.date.slice(8)}
+                      </Text>
+                      <Text variant="caption" className="tabular-nums text-text-muted">{Math.round(d.ate)} / {Math.round(d.burn)}</Text>
+                      <Text variant="caption" className="w-16 text-right tabular-nums" style={{ color: deficitTone(d.deficit, goalPerDay) }}>
+                        {d.deficit > 0 ? "+" : ""}{Math.round(d.deficit)}
+                      </Text>
+                    </View>
+                  ))}
+                  <View className="flex-row items-center justify-between pt-1.5">
+                    <Text variant="caption" className="font-semibold text-text">Total ({days.length}d)</Text>
+                    <Text variant="caption" className="tabular-nums text-text-muted">{Math.round(sumAte)} / {Math.round(sumBurn)}</Text>
+                    <Text variant="caption" className="w-16 text-right font-semibold tabular-nums" style={{ color: deficitTone(totalActual, goalTotal) }}>
+                      {totalActual > 0 ? "+" : ""}{Math.round(totalActual)}
+                    </Text>
+                  </View>
+                </Card>
+              );
+            })() : (
               <Card><Text variant="body" className="text-text-secondary">No trend data yet.</Text></Card>
             )}
           </>
