@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { View, ScrollView, TextInput, Pressable } from "react-native";
 import { Text, Button } from "soma-style";
-import { ingredientMacros, logComposedMeal, type Ingredient } from "../lib/api";
+import { ingredientMacros, logComposedMeal, deleteMeal, type Ingredient } from "../lib/api";
 
 const CATEGORY_LABELS: Record<string, string> = {
   protein: "Protein", carbs: "Carbs", grain: "Grain", vegetable: "Vegetable", fat: "Fat",
@@ -14,13 +14,19 @@ const CATEGORY_ORDER = ["protein", "carbs", "grain", "vegetable", "fat", "dairy"
  *  Mobile-adapted from the web ComposeMealView (grams-based; the raw/cooked
  *  and count editors + save-as-preset stay a web-only power feature for now). */
 export function ComposeMealView({
-  ingredients, date, slot, onLogged,
+  ingredients, date, slot, onLogged, initialGrams, editMealId,
 }: {
   ingredients: Ingredient[]; date: string; slot: string; onLogged: () => void;
+  /** Pre-select ingredients (id -> grams) — used when editing a logged meal. */
+  initialGrams?: Record<string, number>;
+  /** When set, saving deletes this meal after re-logging (edit = replace). */
+  editMealId?: number | null;
 }) {
   const [search, setSearch] = useState("");
-  const [grams, setGrams] = useState<Record<string, number>>({});
+  const [grams, setGrams] = useState<Record<string, number>>(initialGrams ?? {});
   const [busy, setBusy] = useState(false);
+  const initKey = initialGrams ? Object.entries(initialGrams).map(([k, v]) => `${k}:${v}`).join(",") : "";
+  useEffect(() => { if (initialGrams) setGrams(initialGrams); }, [initKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const byId = useMemo(() => new Map(ingredients.map((i) => [i.id, i])), [ingredients]);
   const selectedIds = Object.keys(grams).filter((id) => (grams[id] ?? 0) > 0 && byId.has(id));
@@ -59,6 +65,8 @@ export function ComposeMealView({
       return { ingredient_id: id, name: ing.name, grams: grams[id], calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, fiber: m.fiber };
     });
     const ok = await logComposedMeal(date, slot, items);
+    // Edit = replace: only remove the original after the new one is logged.
+    if (ok && editMealId != null) await deleteMeal(editMealId);
     setBusy(false);
     if (ok) { setGrams({}); onLogged(); }
   }
@@ -94,7 +102,7 @@ export function ComposeMealView({
             <Text variant="caption" className="font-semibold tabular-nums">
               {Math.round(totals.calories)} kcal · P{Math.round(totals.protein)} C{Math.round(totals.carbs)} F{Math.round(totals.fat)}
             </Text>
-            <Button label={busy ? "…" : "Log meal"} variant="primary" size="sm" disabled={busy || selectedIds.length === 0} onPress={onLog} />
+            <Button label={busy ? "…" : editMealId != null ? "Save changes" : "Log meal"} variant="primary" size="sm" disabled={busy || selectedIds.length === 0} onPress={onLog} />
           </View>
         </View>
       ) : null}
