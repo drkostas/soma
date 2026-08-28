@@ -3,6 +3,7 @@ import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { fetchJson, usePullRefresh, useActivitiesDeep } from "../../lib/api";
 import { ActivitiesMonthly, KiteDeepDive, ActivitiesList } from "../../components/activities-deep";
+import { ActivitySports } from "../../components/activity-sports";
 
 /** Daily activity-count series (per-day sessions) for the Sessions trend. */
 function useSessionsTrend() {
@@ -286,6 +287,9 @@ export default function ActivitiesScreen() {
             ))}
           </Card>
         ) : null}
+
+        {/* Per-sport sections (Walking/Cycling/Swimming) + Activity-by-Year (web parity) */}
+        {deep ? <ActivitySports all={deep.all} /> : null}
 
         {/* Monthly distribution — stacked columns by sport (web parity) */}
         {deep ? <ActivitiesMonthly monthly={deep.monthly} /> : null}
