@@ -9,11 +9,14 @@ import {
   useActivityMatches,
   setDayCompletion,
   toggleCalibration,
+  applyIntensity,
   fetchJson,
   usePullRefresh,
   type PlanDay,
 } from "../../lib/api";
 import { TrainingSchedule } from "../../components/training-schedule";
+import { RaceHeader } from "../../components/race-header";
+import { WhatIfSlider } from "../../components/whatif-slider";
 import { TrainingPaces } from "../../components/training-paces";
 import { RaceProtocol } from "../../components/race-protocol";
 import { TrainingTrends } from "../../components/training-trends";
@@ -136,14 +139,17 @@ export default function TrainingScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
     >
       <View className="w-full max-w-2xl gap-4">
-        <View className="flex-row items-center gap-2">
-          <Text variant="headline">Training</Text>
-          {readiness ? (
-            <Badge
-              label={`Readiness ${readiness.traffic_light}`}
-              tone={TL_TONE[readiness.traffic_light] ?? "teal"}
-            />
-          ) : null}
+        <View className="gap-2">
+          <View className="flex-row items-center gap-2">
+            <Text variant="headline">Training</Text>
+            {readiness ? (
+              <Badge
+                label={`Readiness ${readiness.traffic_light}`}
+                tone={TL_TONE[readiness.traffic_light] ?? "teal"}
+              />
+            ) : null}
+          </View>
+          <RaceHeader planDays={planDays} today={sim?.today ?? todayISO()} />
         </View>
 
         {error ? (
@@ -175,6 +181,18 @@ export default function TrainingScreen() {
             today={sim?.today ?? todayISO()}
             matches={matches}
             onToggleComplete={onToggleComplete}
+          />
+        ) : null}
+
+        {/* What-if intensity — preview scaling upcoming workouts + apply */}
+        {planDays.length ? (
+          <WhatIfSlider
+            planDays={planDays}
+            onApply={async (factor, dayIds) => {
+              const ok = await applyIntensity(factor, dayIds);
+              if (ok) refetchSim();
+              return ok;
+            }}
           />
         ) : null}
 
