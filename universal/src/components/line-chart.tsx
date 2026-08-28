@@ -26,6 +26,8 @@ export interface LineChartProps {
   yFormat?: (v: number) => string;
   /** Optional horizontal reference line (e.g. a goal pace at y=0). */
   refLine?: { y: number; color?: string };
+  /** Additional horizontal reference lines (e.g. ACWR 0.8/1.3/1.5 guides). */
+  refLines?: { y: number; color?: string; dashed?: boolean }[];
   yMin?: number;
   yMax?: number;
 }
@@ -34,11 +36,12 @@ const VBW = 320; // viewBox width; scales uniformly to the container
 
 /** A compact, dependency-free line chart (react-native-svg) with y-axis
  *  min/max labels and first/last x labels. Reused across every app chart. */
-export function LineChart({ series, labels, height = 120, yFormat, refLine, yMin, yMax }: LineChartProps) {
+export function LineChart({ series, labels, height = 120, yFormat, refLine, refLines, yMin, yMax }: LineChartProps) {
   const fmt = yFormat ?? ((v: number) => String(Math.round(v)));
   const all: number[] = [];
   for (const s of series) for (const v of s.values) if (v != null && isFinite(v)) all.push(v);
   if (refLine && isFinite(refLine.y)) all.push(refLine.y);
+  if (refLines) for (const r of refLines) if (isFinite(r.y)) all.push(r.y);
   if (all.length < 2) {
     return <View style={{ height }} className="items-center justify-center"><Text variant="micro" className="text-text-muted">Not enough data yet.</Text></View>;
   }
@@ -67,6 +70,11 @@ export function LineChart({ series, labels, height = 120, yFormat, refLine, yMin
             {refLine && refLine.y >= lo && refLine.y <= hi ? (
               <Line x1={0} y1={yAt(refLine.y)} x2={VBW} y2={yAt(refLine.y)} stroke={refLine.color ?? "#3a5563"} strokeWidth={1} strokeDasharray="4 4" />
             ) : null}
+            {refLines?.map((r, ri) =>
+              r.y >= lo && r.y <= hi ? (
+                <Line key={`rl-${ri}`} x1={0} y1={yAt(r.y)} x2={VBW} y2={yAt(r.y)} stroke={r.color ?? "#3a5563"} strokeWidth={1} strokeDasharray={r.dashed === false ? undefined : "4 4"} />
+              ) : null,
+            )}
             {series.map((s, si) => {
               if (s.mode === "dots") {
                 return s.values.map((v, i) =>

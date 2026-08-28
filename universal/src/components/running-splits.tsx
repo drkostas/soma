@@ -34,17 +34,27 @@ export function RunningSplits({ data }: { data: RunningSplits | null | undefined
             const p = Number(k.avg_pace);
             const t = (p - minP) / rangeP; // 0 fastest → 1 slowest
             const color = t < 0.4 ? "#6ad4a0" : t < 0.7 ? "#e0c458" : "#e0a458";
+            const detail: string[] = [];
+            if (k.fast_pace != null && k.slow_pace != null) detail.push(`${pace(k.fast_pace)}–${pace(k.slow_pace)}`);
+            if (k.avg_hr != null) detail.push(`${Math.round(Number(k.avg_hr))} bpm`);
+            if (k.avg_cadence != null) detail.push(`${Math.round(Number(k.avg_cadence))} spm`);
+            if (k.runs != null) detail.push(`${k.runs} runs`);
             return (
-              <View key={k.km} className="flex-row items-center gap-2 py-1">
-                <Text variant="micro" className="tabular-nums text-text-muted w-8">km{k.km}</Text>
-                <View className="flex-1 h-3 rounded-full bg-surface-subtle overflow-hidden">
-                  <View className="h-full rounded-full" style={{ width: `${Math.max(6, (1 - t) * 100)}%`, backgroundColor: color }} />
+              <View key={k.km} className="gap-0.5 py-1">
+                <View className="flex-row items-center gap-2">
+                  <Text variant="micro" className="tabular-nums text-text-muted w-8">km{k.km}</Text>
+                  <View className="flex-1 h-3 rounded-full bg-surface-subtle overflow-hidden">
+                    <View className="h-full rounded-full" style={{ width: `${Math.max(6, (1 - t) * 100)}%`, backgroundColor: color }} />
+                  </View>
+                  <Text variant="caption" className="tabular-nums text-text w-16 text-right">{pace(p)}/km</Text>
                 </View>
-                <Text variant="caption" className="tabular-nums text-text w-16 text-right">{pace(p)}/km</Text>
+                {detail.length ? (
+                  <Text variant="micro" className="tabular-nums text-text-muted pl-10">{detail.join(" · ")}</Text>
+                ) : null}
               </View>
             );
           })}
-          <Text variant="micro" className="text-text-muted">avg over ≥10 runs per km</Text>
+          <Text variant="micro" className="text-text-muted">range · avg HR · cadence · runs, per km</Text>
         </Card>
       ) : null}
 
