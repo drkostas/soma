@@ -410,21 +410,28 @@ export default function ConnectionsScreen() {
                 key={g.key}
                 className="flex-row items-center justify-between border-b border-border-subtle py-2 last:border-0"
               >
-                <View className="flex-1 flex-row items-center gap-2 pr-2">
-                  <Text variant="caption" className="text-text-secondary">
-                    {g.source}
-                  </Text>
-                  <Text variant="caption" className="text-text-muted">
-                    →
-                  </Text>
-                  <Text variant="caption" className="text-text">
-                    {g.dest}
-                  </Text>
-                  {g.count > 1 ? (
-                    <Text variant="micro" className="text-text-muted">
-                      ×{g.count}
+                <View className="flex-1 gap-0.5 pr-2">
+                  <View className="flex-row items-center gap-2">
+                    <Text variant="caption" className="text-text-secondary">
+                      {g.source}
                     </Text>
-                  ) : null}
+                    <Text variant="caption" className="text-text-muted">
+                      →
+                    </Text>
+                    <Text variant="caption" className="text-text">
+                      {g.dest}
+                    </Text>
+                    {g.count > 1 ? (
+                      <Text variant="micro" className="text-text-muted">
+                        ×{g.count}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text variant="micro" className="text-text-muted">
+                    {g.effective.activity_type && g.effective.activity_type !== "all" && g.effective.activity_type !== "*" ? g.effective.activity_type : "all activities"}
+                    {g.effective.preprocessing?.length ? ` · ${g.effective.preprocessing.join(", ")}` : ""}
+                    {` · priority ${g.effective.priority}`}
+                  </Text>
                 </View>
                 <View className="flex-row items-center gap-3">
                   <Pressable onPress={() => toggleRule(g.effective.id, g.effective.enabled)} hitSlop={8}>
