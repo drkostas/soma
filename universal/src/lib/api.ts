@@ -642,17 +642,51 @@ export interface Preset {
 }
 
 /** soma's saved preset meals (log-meal is preset-based, not free-food search). */
+/** A raw ingredient from the catalog (per-100g macros). */
+export interface Ingredient {
+  id: string; name: string; category: string;
+  calories_per_100g: number; protein_per_100g: number; carbs_per_100g: number; fat_per_100g: number; fiber_per_100g: number;
+  unit?: string | null; grams_per_unit?: number | null;
+}
+/** Macros for `grams` of an ingredient (linear per-100g scaling). */
+export function ingredientMacros(ing: Ingredient, grams: number) {
+  const f = (Number(grams) || 0) / 100;
+  return {
+    calories: (Number(ing.calories_per_100g) || 0) * f,
+    protein: (Number(ing.protein_per_100g) || 0) * f,
+    carbs: (Number(ing.carbs_per_100g) || 0) * f,
+    fat: (Number(ing.fat_per_100g) || 0) * f,
+    fiber: (Number(ing.fiber_per_100g) || 0) * f,
+  };
+}
+
+export interface ComposeItem { ingredient_id: string; name: string; grams: number; calories: number; protein: number; carbs: number; fat: number; fiber: number }
+/** Log a meal composed from raw ingredients into a slot. */
+export async function logComposedMeal(date: string, slot: string, items: ComposeItem[]): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/nutrition/log-meal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify({ date, meal_slot: slot, source: "compose", items }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function usePresets() {
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    fetchJson<{ presets: Preset[] }>("/api/nutrition/presets")
-      .then((d) => alive && (setPresets(d.presets ?? []), setError(null)))
+    fetchJson<{ presets: Preset[]; ingredients: Ingredient[] }>("/api/nutrition/presets")
+      .then((d) => alive && (setPresets(d.presets ?? []), setIngredients(d.ingredients ?? []), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => { alive = false; };
   }, []);
-  return { presets, error };
+  return { presets, ingredients, error };
 }
 
 export interface Drink {
