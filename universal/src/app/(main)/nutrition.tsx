@@ -10,7 +10,7 @@ import { BodyCompChart } from "../../components/body-comp-chart";
 import { ActivitySelector } from "../../components/activity-selector";
 import { ComposeMealView } from "../../components/compose-meal-view";
 import { MealDetailModal } from "../../components/meal-detail-modal";
-import { MacroGoalBar, buildMacroMarkers } from "../../components/macro-goal-bar";
+import { MacroGoalBar, buildMacroMarkers, ProteinQualityPill } from "../../components/macro-goal-bar";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
@@ -366,7 +366,10 @@ export default function NutritionScreen() {
                       {slotMeals.map((m) => (
                         <Pressable key={m.id} onPress={() => setDetailMeal(m)} className="flex-row items-center gap-2 border-b border-border-subtle py-1.5">
                           <View className="flex-1">
-                            <Text variant="body" className="text-text" numberOfLines={1}>{mealName(m)}</Text>
+                            <View className="flex-row items-center gap-1.5">
+                              <Text variant="body" className="text-text" numberOfLines={1} style={{ flexShrink: 1 }}>{mealName(m)}</Text>
+                              <ProteinQualityPill grams={m.protein} weightKg={bd?.weightKg} />
+                            </View>
                             <Text variant="micro" className="tabular-nums">
                               {Math.round(m.calories)} kcal · P{Math.round(m.protein)} C{Math.round(m.carbs)} F{Math.round(m.fat)}
                             </Text>
