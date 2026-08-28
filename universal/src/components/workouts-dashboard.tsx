@@ -1,7 +1,10 @@
-import { View } from "react-native";
-import { Text, Card } from "soma-style";
+import { useState } from "react";
+import { View, Pressable } from "react-native";
+import { Text, Card, SegmentedControl } from "soma-style";
 import type { WorkoutSummary } from "../lib/api";
 import { LineChart } from "./line-chart";
+import { ExerciseDetailModal } from "./exercise-detail-modal";
+import { WorkoutDetailModal } from "./workout-detail-modal";
 
 const num = (v: unknown): number => {
   const n = Number(v);
@@ -19,13 +22,16 @@ function kvol(v: number): string {
 function VolumeChart({ weeks }: { weeks: WorkoutSummary["weeklyVolume"] }) {
   const recent = weeks.slice(-16);
   const vals = recent.map((w) => num(w.total_volume));
-  if (vals.filter((v) => v > 0).length < 2) return null;
+  const nonZero = vals.filter((v) => v > 0);
+  if (nonZero.length < 2) return null;
   const labels = recent.map((w) => shortDate(String(w.week)));
+  const avg = nonZero.reduce((a, b) => a + b, 0) / nonZero.length;
   return (
     <LineChart
       height={130}
       labels={labels}
       yFormat={(v) => kvol(v)}
+      refLine={{ y: avg, color: "#5a7a8a" }}
       series={[{ values: vals.map((v) => (v > 0 ? v : null)), color: "#77c8d1", width: 2.4 }]}
     />
   );
@@ -34,6 +40,9 @@ function VolumeChart({ weeks }: { weeks: WorkoutSummary["weeklyVolume"] }) {
 /** Workouts dashboard: summary stats + weekly volume + top exercises (+ optional
     recent list — hidden on the workouts screen, which has its own sync-status list). */
 export function WorkoutsDashboard({ summary, showRecent = true }: { summary: WorkoutSummary | null | undefined; showRecent?: boolean }) {
+  const [unit, setUnit] = useState<"kg" | "lb">("kg");
+  const [exName, setExName] = useState<string | null>(null);
+  const [wkId, setWkId] = useState<{ id: string; title: string } | null>(null);
   if (!summary) return null;
   const s = summary.stats;
   const stats: { label: string; value: string; sub: string }[] = s
@@ -59,6 +68,14 @@ export function WorkoutsDashboard({ summary, showRecent = true }: { summary: Wor
         </View>
       ) : null}
 
+      {/* Weight-unit toggle (kg ↔ lb) — drives the detail modals */}
+      <View className="flex-row items-center justify-between">
+        <Text variant="micro" className="text-text-muted">Tap an exercise or workout for detail</Text>
+        <View className="w-24">
+          <SegmentedControl options={["kg", "lb"] as const} value={unit} onChange={(v) => setUnit(v as "kg" | "lb")} />
+        </View>
+      </View>
+
       {summary.weeklyVolume.length >= 2 ? (
         <Card className="gap-2">
           <View className="flex-row items-center justify-between">
@@ -73,11 +90,17 @@ export function WorkoutsDashboard({ summary, showRecent = true }: { summary: Wor
       {summary.topExercises.length ? (
         <Card className="gap-2">
           <Text variant="eyebrow">Top exercises</Text>
-          {summary.topExercises.map((e) => (
-            <View key={e.name} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
-              <Text variant="body" className="text-text-secondary flex-1" numberOfLines={1}>{e.name}</Text>
-              <Text variant="caption" className="tabular-nums text-text-muted ml-2">{e.sessions}×</Text>
-            </View>
+          {summary.topExercises.map((e, i) => (
+            <Pressable key={e.name} onPress={() => setExName(e.name)} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
+              <View className="flex-row items-center gap-2 flex-1">
+                <Text variant="micro" className="tabular-nums text-text-muted w-5">{i + 1}</Text>
+                <Text variant="body" className="text-text-secondary flex-1" numberOfLines={1}>{e.name}</Text>
+              </View>
+              <View className="flex-row items-center gap-1.5 ml-2">
+                <Text variant="caption" className="tabular-nums text-text-muted">{e.sessions}×</Text>
+                <Text variant="micro" className="text-text-muted">›</Text>
+              </View>
+            </Pressable>
           ))}
         </Card>
       ) : null}
@@ -86,18 +109,24 @@ export function WorkoutsDashboard({ summary, showRecent = true }: { summary: Wor
         <Card className="gap-2">
           <Text variant="eyebrow">Recent workouts</Text>
           {summary.recent.slice(0, 10).map((w) => (
-            <View key={w.id} className="border-b border-border-subtle py-2">
+            <Pressable key={w.id} onPress={() => setWkId({ id: w.id, title: w.title || "Workout" })} className="border-b border-border-subtle py-2">
               <View className="flex-row items-center justify-between">
                 <Text variant="body" className="text-text flex-1" numberOfLines={1}>{w.title || "Workout"}</Text>
-                <Text variant="micro" className="text-text-muted ml-2">{shortDate(w.start_time)}</Text>
+                <View className="flex-row items-center gap-1.5 ml-2">
+                  <Text variant="micro" className="text-text-muted">{shortDate(w.start_time)}</Text>
+                  <Text variant="micro" className="text-text-muted">›</Text>
+                </View>
               </View>
               <Text variant="micro" className="text-text-muted">
                 {w.exercise_count} exercises{w.duration_min ? ` · ${w.duration_min} min` : ""}{w.volume > 0 ? ` · ${kvol(w.volume)} kg` : ""}
               </Text>
-            </View>
+            </Pressable>
           ))}
         </Card>
       ) : null}
+
+      <ExerciseDetailModal name={exName} unit={unit} onClose={() => setExName(null)} />
+      <WorkoutDetailModal id={wkId?.id ?? null} title={wkId?.title} unit={unit} onClose={() => setWkId(null)} />
     </View>
   );
 }
