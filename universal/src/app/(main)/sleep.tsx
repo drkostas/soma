@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
-import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
+import { Text, Card, Badge, SegmentedControl, Sparkline } from "soma-style";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { LineChart, ChartLegend } from "../../components/line-chart";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
@@ -9,6 +9,7 @@ import { RecoveryVitals } from "../../components/recovery-vitals";
 import { SleepRespiratory } from "../../components/sleep-respiratory";
 import { SleepRegularity } from "../../components/sleep-regularity";
 import { SleepWeekdayWeekend } from "../../components/sleep-weekday-weekend";
+import { SleepScheduleChart } from "../../components/sleep-schedule-chart";
 
 /** Value series from a StatSeries.current, dropping nulls (for sparklines). */
 const seriesVals = (pts?: { value: number | null }[]) =>
@@ -137,10 +138,6 @@ export default function SleepScreen() {
   const sleepDelta = delta(sleep);
   const rhrDelta = delta(rhr);
 
-  // Sparse bar visualisation of the sleep-hours series (approximates the web chart).
-  const sleepBars = (sleep?.current ?? []).slice(-14);
-  const maxHours = Math.max(9, ...sleepBars.map((p) => p.value ?? 0));
-
   const summaryCards: {
     label: string;
     value: string;
@@ -184,6 +181,48 @@ export default function SleepScreen() {
     },
   ];
 
+  // Range-average headline stats sourced from /api/sleep/summary (parity with
+  // the web stat row: Avg Score / Avg Deep % / Avg Sleep HR).
+  const st = sleepSum?.stats;
+  const scoreSeries = (sleepSum?.trend ?? []).map((n) => n.score).filter((v): v is number => v != null);
+  const deepPctSeries = (sleepSum?.trend ?? [])
+    .map((n) => (n.total && n.total > 0 && n.deep != null ? (n.deep / n.total) * 100 : null))
+    .filter((v): v is number => v != null);
+  const sleepHrSeries = (sleepSum?.trend ?? []).map((n) => n.hr).filter((v): v is number => v != null);
+  const extraCards: typeof summaryCards = st
+    ? [
+        {
+          label: "Avg Score",
+          value: fmt0(st.avg_score),
+          sub: "out of 100",
+          cls: "text-indigo",
+          spark: scoreSeries.length >= 2 ? { data: scoreSeries, color: "#a5b4fc" } : undefined,
+        },
+        {
+          label: "Avg Deep",
+          value: fmt0(st.avg_deep_pct, "%"),
+          sub: st.avg_rem_pct != null ? `REM ${Math.round(st.avg_rem_pct)}%` : "of sleep",
+          cls: "text-teal",
+          spark: deepPctSeries.length >= 2 ? { data: deepPctSeries, color: "#c084fc" } : undefined,
+          unit: "%",
+        },
+        {
+          label: "Avg Sleep HR",
+          value: fmt0(st.avg_sleep_hr, " bpm"),
+          sub: st.avg_spo2 != null ? `SpO₂ ${Math.round(st.avg_spo2)}%` : "during sleep",
+          cls: "text-danger",
+          spark: sleepHrSeries.length >= 2 ? { data: sleepHrSeries, color: "#e06060" } : undefined,
+          unit: "bpm",
+        },
+      ]
+    : [];
+  const allCards = [...summaryCards, ...extraCards];
+
+  // Sleep-duration-per-night series for the full-chart upgrade (was a bar list).
+  const durSeries = (sleep?.current ?? []).map((p) => finiteOrNull(p.value));
+  const durLabels = (sleep?.current ?? []).map((p) => chartLabel(p.date));
+  const durVals = durSeries.filter((v): v is number => v != null);
+
   return (
     <ScrollView
       className="flex-1 bg-base"
@@ -222,7 +261,7 @@ export default function SleepScreen() {
 
         {/* Summary stat cards */}
         <View className="flex-row flex-wrap gap-3">
-          {summaryCards.map((s) => {
+          {allCards.map((s) => {
             const tappable = !!(s.spark && s.spark.data.length >= 2);
             return (
               <Pressable
@@ -303,13 +342,16 @@ export default function SleepScreen() {
         ) : null}
 
         {/* Sleep dashboard — last night + stages + score (new /api/sleep/summary) */}
-        <SleepDashboard summary={sleepSum} />
+        <SleepDashboard summary={sleepSum} onExpand={setStatDetail} />
 
         {/* Recovery vitals — HRV + training readiness (new /api/recovery/summary) */}
-        <RecoveryVitals summary={recoveryVitals} />
+        <RecoveryVitals summary={recoveryVitals} onExpand={setStatDetail} />
 
         {/* Blood oxygen + respiration (new /api/sleep/respiratory) */}
-        <SleepRespiratory data={respiratory} />
+        <SleepRespiratory data={respiratory} onExpand={setStatDetail} />
+
+        {/* Sleep schedule — per-night bedtime → wake band (new /api/sleep/schedule) */}
+        <SleepScheduleChart schedule={schedule?.schedule} />
 
         {/* Sleep regularity — bedtime/wake consistency (new /api/sleep/schedule) */}
         <SleepRegularity data={schedule} />
@@ -317,45 +359,53 @@ export default function SleepScreen() {
         {/* Weekday vs weekend comparison (new /api/sleep/weekday-weekend) */}
         <SleepWeekdayWeekend data={weekdayWeekend} />
 
-        {/* Sleep duration trend (bar approximation) */}
-        <Card className="gap-3">
-          <View className="flex-row items-center justify-between">
-            <Text variant="eyebrow">Sleep duration</Text>
-            {sleepDelta != null ? (
-              <Text
-                variant="caption"
-                className={`tabular-nums ${sleepDelta >= 0 ? "text-success" : "text-warning"}`}
-              >
-                {sleepDelta >= 0 ? "+" : ""}
-                {sleepDelta.toFixed(1)}h vs prev
-              </Text>
-            ) : null}
-          </View>
-          {sleepBars.length ? (
-            sleepBars.map((p) => (
-              <View key={p.date} className="gap-1">
-                <View className="flex-row justify-between">
-                  <Text variant="micro" className="text-text-muted">
-                    {p.date.slice(5)}
-                  </Text>
-                  <Text variant="micro" className="tabular-nums text-text">
-                    {fmt1(p.value, "h")}
-                  </Text>
-                </View>
-                <ProgressBar
-                  pct={(p.value ?? 0) / maxHours}
-                  color={(p.value ?? 0) >= 7 ? "#6ad4a0" : "#e0a458"}
-                />
+        {/* Sleep duration trend — full chart with 7h target line, tap to expand */}
+        <Pressable
+          disabled={durVals.length < 2}
+          onPress={() =>
+            durVals.length >= 2 &&
+            setStatDetail({
+              label: "Sleep duration",
+              value: fmt1(sleep?.summary.current_avg, "h"),
+              sub: `avg · last ${durVals.length} nights`,
+              spark: durVals,
+              color: "#6ad4a0",
+              unit: "h",
+            })
+          }
+        >
+          <Card className="gap-3">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-1.5">
+                <Text variant="eyebrow">Sleep duration</Text>
+                {durVals.length >= 2 ? <Text variant="micro" className="text-text-muted">›</Text> : null}
               </View>
-            ))
-          ) : (
-            <Text variant="micro">No sleep data in this range.</Text>
-          )}
-          <Text variant="micro">
-            Green ≥ 7h · amber below target. Showing last{" "}
-            {sleepBars.length} nights.
-          </Text>
-        </Card>
+              {sleepDelta != null ? (
+                <Text
+                  variant="caption"
+                  className={`tabular-nums ${sleepDelta >= 0 ? "text-success" : "text-warning"}`}
+                >
+                  {sleepDelta >= 0 ? "+" : ""}
+                  {sleepDelta.toFixed(1)}h vs prev
+                </Text>
+              ) : null}
+            </View>
+            {durVals.length >= 2 ? (
+              <LineChart
+                height={140}
+                labels={durLabels}
+                yFormat={(v) => `${v.toFixed(1)}h`}
+                refLine={{ y: 7, color: "#6ad4a0" }}
+                series={[{ values: durSeries, color: "#8b9df0", width: 2.2 }]}
+              />
+            ) : (
+              <Text variant="micro">No sleep data in this range.</Text>
+            )}
+            <Text variant="micro">
+              Dashed line = 7h target. Showing last {durVals.length} nights.
+            </Text>
+          </Card>
+        </Pressable>
 
         {/* Recovery signals */}
         <Card className="gap-2">
