@@ -7,6 +7,7 @@ import {
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
 import { BodyCompChart } from "../../components/body-comp-chart";
+import { ActivitySelector } from "../../components/activity-selector";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
@@ -21,11 +22,11 @@ function useCaloriesTrend() {
   return series;
 }
 
-const MACROS = [
+const MACROS: { key: string; label: string; color: string; tKey: string; ceiling?: number }[] = [
   { key: "protein", label: "Protein", color: "#b17850", tKey: "target_protein" },
   { key: "carbs", label: "Carbs", color: "#6366b0", tKey: "target_carbs" },
   { key: "fat", label: "Fat", color: "#cbe896", tKey: "target_fat" },
-  { key: "fiber", label: "Fiber", color: "#82d0c8", tKey: "target_fiber" },
+  { key: "fiber", label: "Fiber", color: "#82d0c8", tKey: "target_fiber", ceiling: 60 },
 ] as const;
 
 const SLOT_ORDER = ["breakfast", "lunch", "during_workout", "dinner", "pre_sleep"];
@@ -48,6 +49,23 @@ function shiftDate(iso: string, days: number): string {
   const dt = new Date(y, (mo ?? 1) - 1, (d ?? 1) + days);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
+/** A macro progress bar with goalposts: a teal floor marker at the target
+ *  ("eat at least here") and, where a research ceiling applies (fiber 60 g),
+ *  a warm ceiling marker — the fill turns amber when the ceiling is crossed. */
+function MacroGoalBar({ eaten, target, ceiling, color }: { eaten: number; target: number; ceiling?: number; color: string }) {
+  const max = ceiling ?? (target > 0 ? target * 1.3 : Math.max(eaten, 1));
+  const pct = Math.max(0, Math.min(eaten / max, 1));
+  const floorPct = target > 0 ? Math.min(target / max, 1) : 0;
+  const over = ceiling != null && eaten > ceiling;
+  return (
+    <View className="relative h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#16242c" }}>
+      <View className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${pct * 100}%`, backgroundColor: over ? "#e0a458" : color }} />
+      {target > 0 ? <View className="absolute top-0 h-full" style={{ left: `${floorPct * 100}%`, width: 2, backgroundColor: "#77c8d1" }} /> : null}
+      {ceiling != null ? <View className="absolute top-0 h-full" style={{ left: `${Math.min(ceiling / max, 1) * 100}%`, width: 2, backgroundColor: "#e0a458" }} /> : null}
+    </View>
+  );
 }
 
 export default function NutritionScreen() {
@@ -248,13 +266,16 @@ export default function NutritionScreen() {
             {MACROS.map((m) => {
               const target = (plan as Record<string, number> | null | undefined)?.[m.tKey] ?? 0;
               const eaten = (consumed as Record<string, number> | undefined)?.[m.key] ?? 0;
+              const over = m.ceiling != null && eaten > m.ceiling;
               return (
                 <View key={m.key} className="gap-1">
                   <View className="flex-row justify-between">
                     <Text variant="caption" className="text-text-secondary">{m.label}</Text>
-                    <Text variant="caption" className="tabular-nums text-text-muted">{Math.round(eaten)}{target > 0 ? ` / ${Math.round(target)}` : ""}g</Text>
+                    <Text variant="caption" className={`tabular-nums ${over ? "text-warm" : "text-text-muted"}`}>
+                      {Math.round(eaten)}{target > 0 ? ` / ${Math.round(target)}` : ""}g{m.ceiling != null ? ` · max ${m.ceiling}` : ""}
+                    </Text>
                   </View>
-                  <ProgressBar pct={target > 0 ? eaten / target : 0} color={m.color} />
+                  <MacroGoalBar eaten={eaten} target={target} ceiling={m.ceiling} color={m.color} />
                 </View>
               );
             })}
@@ -263,6 +284,19 @@ export default function NutritionScreen() {
 
         {tab === "Day" ? (
           <>
+            {/* Today's activity — the inputs that drive the day's burn (locked once closed) */}
+            {plan && !dayClosed ? (
+              <ActivitySelector
+                date={DATE}
+                runEnabled={data?.runEnabled ?? true}
+                plannedRunKm={Number(plan?.planned_run_km) || 0}
+                expectedSteps={bd?.expectedSteps ?? (Number(plan?.expected_steps) || 8000)}
+                selectedWorkouts={data?.selectedWorkouts ?? []}
+                runDistanceKm={bd?.runDistanceKm ?? 0}
+                onChanged={refetch}
+              />
+            ) : null}
+
             {/* Burn breakdown — why today's target is what it is */}
             {bd ? (
               <Card className="gap-0.5">
