@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { View, Pressable } from "react-native";
+import { View, Pressable, TextInput } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
 import { Text, Card } from "soma-style";
 import type { ActivitiesDeep, ActivityRow, KiteSession } from "../lib/api";
+import { ActivityDetailModal } from "./activity-detail-modal";
 
 /* Sport → colour, mirroring the web activities palette. */
 const SPORT_COLOR: Record<string, string> = {
@@ -144,24 +145,92 @@ export function KiteDeepDive({ sessions }: { sessions: KiteSession[] }) {
           ))}
         </View>
       ) : null}
+
+      <KiteWind sessions={sessions} />
     </Card>
   );
 }
 
-const PAGE = 15;
+/** Kite wind conditions: avg wind, max gust, sessions-with-wind + a per-session list. */
+function KiteWind({ sessions }: { sessions: KiteSession[] }) {
+  const withWind = (sessions ?? []).filter((s) => (s.windKts ?? 0) > 0);
+  if (withWind.length < 1) return null;
+  const winds = withWind.map((s) => s.windKts as number);
+  const avgWind = winds.reduce((a, b) => a + b, 0) / winds.length;
+  const gusts = withWind.map((s) => s.gustKts ?? 0).filter((g) => g > 0);
+  const maxGust = gusts.length ? Math.max(...gusts) : null;
+  const windy = [...withWind].sort((a, b) => (b.windKts ?? 0) - (a.windKts ?? 0)).slice(0, 4);
 
-/** Full activity list: sport-filter pills + load-more paging. */
+  return (
+    <View className="gap-2 border-t border-border-subtle pt-2.5">
+      <Text variant="micro" className="text-text-muted">WIND CONDITIONS</Text>
+      <View className="flex-row flex-wrap gap-x-6 gap-y-1">
+        {[
+          ["Avg wind", `${avgWind.toFixed(0)} kts`],
+          ["Max gust", maxGust != null ? `${maxGust.toFixed(0)} kts` : "—"],
+          ["With wind", `${withWind.length}`],
+        ].map(([label, value]) => (
+          <View key={label} className="gap-0.5">
+            <Text variant="micro" className="text-text-muted">{label}</Text>
+            <Text variant="title" className="text-teal">{value}</Text>
+          </View>
+        ))}
+      </View>
+      {windy.map((s, i) => (
+        <View key={`${s.date}-${i}`} className="flex-row items-center justify-between">
+          <Text variant="micro" className="text-text-secondary flex-1" numberOfLines={1}>{s.spot ?? "Session"} · {shortDate(s.date)}</Text>
+          <Text variant="micro" className="tabular-nums text-text-muted ml-2">
+            {(s.windKts as number).toFixed(0)} kts{s.gustKts != null && s.gustKts > 0 ? ` · gust ${s.gustKts.toFixed(0)}` : ""}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const PAGE = 12;
+type SortKey = "date" | "distance_km" | "duration_min" | "avg_hr" | "calories" | "elev_gain";
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "date", label: "Date" }, { key: "distance_km", label: "Dist" }, { key: "duration_min", label: "Time" },
+  { key: "avg_hr", label: "HR" }, { key: "calories", label: "Cal" }, { key: "elev_gain", label: "Elev" },
+];
+const numf = (v: number | null | undefined): number => (v == null || !isFinite(Number(v)) ? 0 : Number(v));
+
+/** Full activity table: search + sport pills + sortable columns + numbered
+ *  pagination + tap-to-detail. Web parity (#441). */
 export function ActivitiesList({ all }: { all: ActivityRow[] }) {
   const [filter, setFilter] = useState<string | null>(null);
-  const [shown, setShown] = useState(PAGE);
+  const [q, setQ] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [asc, setAsc] = useState(false);
+  const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<ActivityRow | null>(null);
+
   const sports = useMemo(() => {
     const m = new Map<string, number>();
     for (const a of all ?? []) m.set(a.sport, (m.get(a.sport) ?? 0) + 1);
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [all]);
-  const filtered = (all ?? []).filter((a) => !filter || a.sport === filter);
-  const page = filtered.slice(0, shown);
+
+  const filtered = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    const arr = (all ?? []).filter((a) =>
+      (!filter || a.sport === filter) &&
+      (!ql || (a.name ?? "").toLowerCase().includes(ql) || a.sport.toLowerCase().includes(ql)),
+    );
+    arr.sort((a, b) => {
+      const av = sortKey === "date" ? new Date(a.date).getTime() : numf(a[sortKey]);
+      const bv = sortKey === "date" ? new Date(b.date).getTime() : numf(b[sortKey]);
+      return asc ? av - bv : bv - av;
+    });
+    return arr;
+  }, [all, filter, q, sortKey, asc]);
+
   if (!all?.length) return null;
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
+  const cur = Math.min(page, pages - 1);
+  const rows = filtered.slice(cur * PAGE, cur * PAGE + PAGE);
+  const onSort = (k: SortKey) => { if (k === sortKey) setAsc((v) => !v); else { setSortKey(k); setAsc(false); } setPage(0); };
 
   return (
     <Card className="gap-2">
@@ -169,15 +238,25 @@ export function ActivitiesList({ all }: { all: ActivityRow[] }) {
         <Text variant="eyebrow">All activities</Text>
         <Text variant="micro" className="tabular-nums text-text-muted">{filtered.length} total</Text>
       </View>
+
+      <TextInput
+        value={q}
+        onChangeText={(t) => { setQ(t); setPage(0); }}
+        placeholder="Search activities…"
+        placeholderTextColor="#5a7a8a"
+        className="rounded-lg bg-surface-subtle px-3 py-2 text-text"
+        style={{ color: "#e6edf0" }}
+      />
+
       {sports.length > 1 ? (
         <View className="flex-row flex-wrap gap-2">
-          <Pressable onPress={() => { setFilter(null); setShown(PAGE); }} hitSlop={6}>
+          <Pressable onPress={() => { setFilter(null); setPage(0); }} hitSlop={6}>
             <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: filter == null ? "#77c8d122" : "#142530" }}>
               <Text variant="micro" style={{ color: filter == null ? "#77c8d1" : "#8aa0ac" }}>All</Text>
             </View>
           </Pressable>
           {sports.map(([s, c]) => (
-            <Pressable key={s} onPress={() => { setFilter(filter === s ? null : s); setShown(PAGE); }} hitSlop={6}>
+            <Pressable key={s} onPress={() => { setFilter(filter === s ? null : s); setPage(0); }} hitSlop={6}>
               <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: filter === s ? sportColor(s) + "33" : "#142530" }}>
                 <Text variant="micro" style={{ color: filter === s ? sportColor(s) : "#8aa0ac" }}>{s} {c}</Text>
               </View>
@@ -185,29 +264,52 @@ export function ActivitiesList({ all }: { all: ActivityRow[] }) {
           ))}
         </View>
       ) : null}
-      {page.map((a) => (
-        <View key={a.activity_id} className="border-b border-border-subtle py-2">
+
+      {/* Sortable column chips */}
+      <View className="flex-row flex-wrap gap-1.5 border-b border-border-subtle pb-1.5">
+        {SORTS.map((c) => (
+          <Pressable key={c.key} onPress={() => onSort(c.key)} hitSlop={4}>
+            <Text variant="micro" className={sortKey === c.key ? "text-teal" : "text-text-muted"}>
+              {c.label}{sortKey === c.key ? (asc ? " ↑" : " ↓") : ""}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {rows.map((a) => (
+        <Pressable key={a.activity_id} onPress={() => setSelected(a)} className="border-b border-border-subtle py-2">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2 flex-1 pr-2">
               <View className="h-2 w-2 rounded-full" style={{ backgroundColor: sportColor(a.sport) }} />
               <Text variant="body" className="text-text" numberOfLines={1} style={{ flex: 1 }}>{a.name || a.sport}</Text>
             </View>
-            <Text variant="micro" className="text-text-muted">{shortDate(a.date)}</Text>
+            <View className="flex-row items-center gap-1.5">
+              <Text variant="micro" className="text-text-muted">{shortDate(a.date)}</Text>
+              <Text variant="micro" className="text-text-muted">›</Text>
+            </View>
           </View>
           <Text variant="micro" className="text-text-muted ml-4">
             {a.distance_km != null && a.distance_km > 0 ? `${a.distance_km.toFixed(1)} km · ` : ""}{hm(a.duration_min)}
             {a.avg_hr != null ? ` · ${Math.round(a.avg_hr)} bpm` : ""}
+            {a.calories != null && a.calories > 0 ? ` · ${Math.round(a.calories)} kcal` : ""}
             {a.elev_gain > 0 ? ` · ↑${Math.round(a.elev_gain)}m` : ""}
           </Text>
-        </View>
-      ))}
-      {filtered.length > shown ? (
-        <Pressable onPress={() => setShown((n) => n + PAGE)} hitSlop={6}>
-          <View className="items-center rounded-lg bg-surface-subtle py-2">
-            <Text variant="caption" className="text-teal">Show {Math.min(PAGE, filtered.length - shown)} more</Text>
-          </View>
         </Pressable>
+      ))}
+
+      {pages > 1 ? (
+        <View className="flex-row items-center justify-between pt-1">
+          <Pressable disabled={cur === 0} onPress={() => setPage((p) => Math.max(0, p - 1))} hitSlop={6}>
+            <Text variant="caption" className={cur === 0 ? "text-text-muted" : "text-teal"}>‹ Prev</Text>
+          </Pressable>
+          <Text variant="micro" className="tabular-nums text-text-muted">Page {cur + 1} of {pages}</Text>
+          <Pressable disabled={cur >= pages - 1} onPress={() => setPage((p) => Math.min(pages - 1, p + 1))} hitSlop={6}>
+            <Text variant="caption" className={cur >= pages - 1 ? "text-text-muted" : "text-teal"}>Next ›</Text>
+          </Pressable>
+        </View>
       ) : null}
+
+      <ActivityDetailModal activity={selected} onClose={() => setSelected(null)} />
     </Card>
   );
 }
