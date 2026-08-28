@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, TextInput } from "react-native";
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import {
-  useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, closeDay,
+  useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, deleteDrink, closeDay,
   reopenDay, copyDay, setManualOverride,
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
+import { BodyCompChart } from "../../components/body-comp-chart";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
@@ -79,6 +80,7 @@ export default function NutritionScreen() {
   const [reopenBusy, setReopenBusy] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
+  const [delDrinkId, setDelDrinkId] = useState<number | null>(null);
 
   const plan = data?.plan;
   const consumed = data?.consumed;
@@ -89,6 +91,7 @@ export default function NutritionScreen() {
   const bd = data?.breakdown;
   const meals = data?.meals ?? [];
   const skippedSlots = data?.skippedSlots ?? [];
+  const loggedDrinks = data?.drinks ?? [];
   const dayClosed = closeStatus === "closed" || plan?.status === "closed";
   const manualOverride = (bd?.manualOverride ?? false) && !dayClosed;
   const caloriesTrend = useCaloriesTrend();
@@ -156,6 +159,12 @@ export default function NutritionScreen() {
     setDrinkBusy(key);
     const ok = await logDrink(DATE, key);
     setDrinkBusy(null);
+    if (ok) refetch();
+  }
+  async function onDeleteDrink(id: number) {
+    setDelDrinkId(id);
+    const ok = await deleteDrink(id);
+    setDelDrinkId(null);
     if (ok) refetch();
   }
   async function onCloseDay() {
@@ -351,7 +360,8 @@ export default function NutritionScreen() {
           </>
         ) : (
           <>
-            {/* Trend tab — adherence + 7-day table */}
+            {/* Trend tab — body-composition trajectory, then adherence + 7-day table */}
+            <BodyCompChart visible={tab === "Trend"} />
             {adherence ? (
               <Card className="gap-2">
                 <Text variant="eyebrow">Weekly adherence</Text>
@@ -447,6 +457,24 @@ export default function NutritionScreen() {
 
       {/* Log-drink modal */}
       <Modal visible={drinkOpen} onClose={() => setDrinkOpen(false)} title="Log a drink">
+        {loggedDrinks.length ? (
+          <View className="mb-3 gap-1">
+            <Text variant="eyebrow" className="text-text-muted">Logged today</Text>
+            {loggedDrinks.map((d) => (
+              <View key={d.id} className="flex-row items-center gap-2 border-b border-border-subtle py-1.5">
+                <View className="flex-1">
+                  <Text variant="caption" className="text-text" numberOfLines={1}>
+                    {d.quantity > 1 ? `${d.quantity}× ` : ""}{d.name}
+                  </Text>
+                  <Text variant="micro" className="text-text-muted tabular-nums">
+                    {Math.round(d.calories)} kcal{d.fat_oxidation_pause_hours ? ` · fat-ox paused ${d.fat_oxidation_pause_hours}h` : ""}
+                  </Text>
+                </View>
+                <Button label={delDrinkId === d.id ? "…" : "✕"} variant="ghost" size="sm" disabled={delDrinkId != null} onPress={() => onDeleteDrink(d.id)} />
+              </View>
+            ))}
+          </View>
+        ) : null}
         <Text variant="caption" className="mb-2 text-text-secondary">One default serving is logged per tap.</Text>
         <ScrollView className="max-h-80">
           {drinks.map((d) => (

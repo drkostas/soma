@@ -53,6 +53,10 @@ export interface SomaBreakdown {
   drinkCalories?: number; deficit?: number; manualOverride?: boolean;
 }
 export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean }
+export interface LoggedDrink {
+  id: number; name: string; drink_type: string; quantity: number;
+  calories: number; carbs?: number; alcohol_grams?: number; fat_oxidation_pause_hours?: number;
+}
 export interface SomaPlan {
   plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number; status?: string } | null;
   consumed: MacroSet;
@@ -60,6 +64,7 @@ export interface SomaPlan {
   slotBudgets: Record<string, { calories: number; protein?: number; carbs?: number; fat?: number; fiber?: number }> | null;
   skippedSlots?: string[];
   meals?: SomaMeal[];
+  drinks?: LoggedDrink[];
   breakdown?: SomaBreakdown | null;
   adaptive: { effectiveTdee: number; reportedTdee: number; driftFlag: boolean; deficitDurationDays: number; dietBreakLevel: string } | null;
   trend7d?: {
@@ -678,6 +683,49 @@ export async function logDrink(date: string, drinkType: string, quantity = 1): P
     body: JSON.stringify({ date, drink_type: drinkType, quantity }),
   });
   return res.ok;
+}
+
+/** Delete a previously-logged drink by its row id. */
+export async function deleteDrink(id: number): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/nutrition/log-drink?id=${id}`, {
+    method: "DELETE",
+    headers: { ...AUTH_HEADERS },
+  });
+  return res.ok;
+}
+
+/** Body-composition trajectory: weigh-ins, smoothed + trend + goal projections,
+ *  and cumulative-deficit pacing. Feeds the nutrition Trend tab charts. */
+export interface BodyCompProfile {
+  currentWeight: number; currentBf: number;
+  latestActualWeight?: number | null; latestActualBf?: number | null;
+  targetWeight: number; targetBf: number; targetDate?: string | null;
+  deficit: number; onTrack?: boolean;
+  trendSlope?: number; daysRemaining?: number; weeklyRate?: number;
+  totalActualDeficit?: number; realisticDate?: string | null;
+}
+export interface BodyComp {
+  profile: BodyCompProfile;
+  weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[];
+  goalLine: { date: string; weight: number; bf: number }[];
+  trendPrediction: { date: string; weight: number; bf: number }[];
+  dailyDeficits: { date: string; deficit: number; cumulative: number; goalPace: number; closed: boolean; isToday: boolean }[];
+  goalDeficit: number;
+}
+export function useBodyComp(enabled: boolean) {
+  const [data, setData] = useState<BodyComp | null>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!enabled || data) return;
+    let alive = true;
+    setLoading(true);
+    fetchJson<BodyComp>("/api/nutrition/body-comp")
+      .then((d) => alive && setData(d))
+      .catch(() => {})
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [enabled, data]);
+  return { data, loading };
 }
 
 /** Close (finalize) a day. Returns the resulting status ("closed" | "already_closed"). */
