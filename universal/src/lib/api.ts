@@ -216,10 +216,12 @@ export interface PlanDay {
 export interface ComparisonPoint { date: string; [k: string]: number | string }
 export interface ForwardSim {
   today: string;
+  epocScaleFactor?: number;
   pmc: { ctl: number; atl: number; tsb: number } | null;
+  banister?: { p0: number; k1: number; k2: number; tau1: number; tau2: number; nAnchors: number } | null;
   readiness: { compositeZ: number | null; trafficLight: string } | null;
   calibration: Calibration | null;
-  fitness: { vo2max: number | null; vdotAdjusted: number | null; weightKg: number | null } | null;
+  fitness: { vo2max: number | null; vdotAdjusted: number | null; weightKg: number | null; calibrationWeightKg?: number } | null;
   planDays: PlanDay[];
   comparison: {
     load: ComparisonPoint[];
