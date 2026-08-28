@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
+import { LineChart, ChartLegend } from "../../components/line-chart";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
 import { SleepDashboard } from "../../components/sleep-dashboard";
 import { RecoveryVitals } from "../../components/recovery-vitals";
@@ -14,6 +15,11 @@ const seriesVals = (pts?: { value: number | null }[]) =>
   (pts ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v));
 const series2Vals = (pts?: { value2?: number | null }[]) =>
   (pts ?? []).map((p) => Number(p.value2)).filter((v) => isFinite(v));
+const chartLabel = (iso: string) => {
+  const [, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(m ?? 1) - 1]} ${d}`;
+};
+const finiteOrNull = (v: number | null | undefined): number | null => (v != null && isFinite(Number(v)) ? Number(v) : null);
 
 /** One point on a metric series from /api/stats/[metric]. */
 interface StatPoint {
@@ -244,6 +250,57 @@ export default function SleepScreen() {
             );
           })}
         </View>
+
+        {/* Recovery trend charts — Stress (avg+peak), Body Battery, Readiness */}
+        {(stress?.current?.length ?? 0) >= 2 ? (
+          <Card className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <Text variant="eyebrow">Stress</Text>
+              <Text variant="micro" className="text-text-muted">avg + peak</Text>
+            </View>
+            <LineChart
+              height={140}
+              labels={stress!.current.map((p) => chartLabel(p.date))}
+              yFormat={(v) => String(Math.round(v))}
+              refLine={{ y: 50, color: "#e0a458" }}
+              series={[
+                { values: stress!.current.map((p) => finiteOrNull(p.value2)), color: "#e06060", dashed: true, width: 1.5 },
+                { values: stress!.current.map((p) => finiteOrNull(p.value)), color: "#e0a458", width: 2.2 },
+              ]}
+            />
+            <ChartLegend items={[{ color: "#e0a458", label: "Avg" }, { color: "#e06060", label: "Peak", dashed: true }]} />
+          </Card>
+        ) : null}
+
+        {(battery?.current?.length ?? 0) >= 2 ? (
+          <Card className="gap-2">
+            <Text variant="eyebrow">Body Battery</Text>
+            <LineChart
+              height={130}
+              labels={battery!.current.map((p) => chartLabel(p.date))}
+              yFormat={(v) => String(Math.round(v))}
+              yMin={0}
+              yMax={100}
+              series={[{ values: battery!.current.map((p) => finiteOrNull(p.value)), color: "#cbe896", width: 2.2 }]}
+            />
+          </Card>
+        ) : null}
+
+        {(recovery?.current?.length ?? 0) >= 2 ? (
+          <Card className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <Text variant="eyebrow">Training readiness</Text>
+              <Text variant="micro" className="text-text-muted">30 days</Text>
+            </View>
+            <LineChart
+              height={130}
+              labels={recovery!.current.map((p) => chartLabel(p.date))}
+              yFormat={(v) => String(Math.round(v))}
+              refLine={{ y: 50, color: "#3a5563" }}
+              series={[{ values: recovery!.current.map((p) => finiteOrNull(p.value)), color: "#6ad4a0", width: 2.2 }]}
+            />
+          </Card>
+        ) : null}
 
         {/* Sleep dashboard — last night + stages + score (new /api/sleep/summary) */}
         <SleepDashboard summary={sleepSum} />
