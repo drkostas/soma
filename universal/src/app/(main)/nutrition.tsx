@@ -262,6 +262,35 @@ export default function NutritionScreen() {
             )}
           </View>
 
+          {/* Energy budget bar: eaten vs goal (ceiling marker) on the total-burn scale, with the live deficit */}
+          {plan && (bd?.totalBurn ?? 0) > 0 ? (() => {
+            const totalBurn = bd?.totalBurn ?? 0;
+            const consumedCal = consumed?.calories ?? 0;
+            const goalIntake = targetCal;
+            const deficitGoal = bd?.deficit ?? 0;
+            const eatPct = Math.min(100, (consumedCal / totalBurn) * 100);
+            const goalPct = Math.min(99.5, (goalIntake / totalBurn) * 100);
+            const currentDeficit = consumedCal - totalBurn;
+            const overGoal = consumedCal > goalIntake;
+            return (
+              <View className="gap-1">
+                <View className="relative h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: "#16242c" }}>
+                  <View className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${eatPct}%`, backgroundColor: overGoal ? "#e0a458" : "#77c8d1" }} />
+                  <View className="absolute top-0 h-full" style={{ left: `${goalPct}%`, width: 2, backgroundColor: "#6ad4a0" }} />
+                </View>
+                <View className="flex-row justify-between">
+                  <Text variant="micro" className="text-text-muted">{goalIntake.toLocaleString()} goal{deficitGoal > 0 ? ` (−${deficitGoal})` : ""}</Text>
+                  <Text variant="micro" className="text-text-muted">{totalBurn.toLocaleString()} burn</Text>
+                </View>
+                <Text variant="micro" style={{ color: currentDeficit <= 0 ? "#6ad4a0" : "#f2868c" }}>
+                  {currentDeficit <= 0
+                    ? `${Math.abs(Math.round(currentDeficit)).toLocaleString()} kcal current deficit`
+                    : `+${Math.round(currentDeficit).toLocaleString()} kcal surplus`}
+                </Text>
+              </View>
+            );
+          })() : null}
+
           <View className="gap-2.5">
             {(() => {
               const t = {
