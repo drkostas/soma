@@ -1,0 +1,145 @@
+import { useMemo, useState } from "react";
+import { View, Pressable } from "react-native";
+import { Text, Card, Modal, Badge } from "soma-style";
+
+/** One run row — structurally matches the screen's RecentRun. */
+export interface RunRow {
+  activity_id: string;
+  date: string | null;
+  name: string | null;
+  distance: number | null; // km
+  duration_min: number | null;
+  pace: number | null; // min/km
+  avg_hr: number | null;
+  calories: number | null;
+}
+
+type SortKey = "date" | "distance" | "pace" | "avg_hr";
+const COLS: { key: SortKey; label: string }[] = [
+  { key: "date", label: "Date" },
+  { key: "distance", label: "Dist" },
+  { key: "pace", label: "Pace" },
+  { key: "avg_hr", label: "HR" },
+];
+
+const num = (v: number | null | undefined): number => (v == null ? 0 : Number(v));
+function paceLabel(mins: number | null | undefined): string {
+  if (mins == null || !isFinite(mins)) return "—";
+  const t = Math.round(mins * 60);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+function shortDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+function longDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+
+/** Detail dialog for one run (the drill-in behind a table row). */
+function RunDetailModal({ run, onClose }: { run: RunRow | null; onClose: () => void }) {
+  if (!run) return null;
+  const rows: [string, string][] = [
+    ["Distance", run.distance != null ? `${num(run.distance).toFixed(2)} km` : "—"],
+    ["Duration", run.duration_min != null ? `${Math.round(num(run.duration_min))} min` : "—"],
+    ["Avg pace", run.pace != null ? `${paceLabel(run.pace)} /km` : "—"],
+    ["Avg HR", run.avg_hr != null ? `${Math.round(num(run.avg_hr))} bpm` : "—"],
+    ["Calories", run.calories != null ? `${Math.round(num(run.calories))} kcal` : "—"],
+  ];
+  return (
+    <Modal visible={!!run} onClose={onClose} title={run.name ?? "Run"}>
+      <View className="gap-3">
+        <View className="flex-row items-end gap-2">
+          <Text variant="display" className="text-teal">{run.distance != null ? num(run.distance).toFixed(1) : "—"}</Text>
+          <Text variant="body" className="mb-1 text-text-muted">km · {longDate(run.date)}</Text>
+        </View>
+        <View className="gap-2">
+          {rows.map(([label, value]) => (
+            <View key={label} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
+              <Text variant="body" className="text-text-secondary">{label}</Text>
+              <Text variant="body" className="tabular-nums text-text">{value}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/**
+ * Sortable, tap-to-detail run table (web parity, #436). Replaces the plain
+ * "Recent Runs" list: tap a column header to sort (tap again to reverse),
+ * tap a row to open its detail modal. Fed by the screen's recentRuns.
+ */
+export function RunTable({ runs }: { runs: RunRow[] }) {
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [asc, setAsc] = useState(false);
+  const [selected, setSelected] = useState<RunRow | null>(null);
+
+  const sorted = useMemo(() => {
+    const arr = [...(runs ?? [])];
+    arr.sort((a, b) => {
+      let av: number, bv: number;
+      if (sortKey === "date") { av = a.date ? new Date(a.date).getTime() : 0; bv = b.date ? new Date(b.date).getTime() : 0; }
+      else { av = num(a[sortKey]); bv = num(b[sortKey]); }
+      return asc ? av - bv : bv - av;
+    });
+    return arr;
+  }, [runs, sortKey, asc]);
+
+  if (!runs || runs.length === 0) return null;
+
+  const onHeader = (k: SortKey) => {
+    if (k === sortKey) setAsc((v) => !v);
+    else { setSortKey(k); setAsc(k === "pace"); } // pace defaults ascending (fastest first)
+  };
+
+  return (
+    <Card className="gap-2">
+      <View className="flex-row items-center justify-between">
+        <Text variant="eyebrow">Runs</Text>
+        <Text variant="micro" className="text-text-muted">{runs.length} · tap to sort / open</Text>
+      </View>
+
+      {/* Sortable header row */}
+      <View className="flex-row items-center border-b border-border-subtle pb-1.5">
+        <Pressable className="flex-1" onPress={() => onHeader("date")}>
+          <Text variant="micro" className={sortKey === "date" ? "text-teal" : "text-text-muted"}>
+            {COLS[0].label}{sortKey === "date" ? (asc ? " ↑" : " ↓") : ""}
+          </Text>
+        </Pressable>
+        {COLS.slice(1).map((c) => (
+          <Pressable key={c.key} className="w-16 items-end" onPress={() => onHeader(c.key)}>
+            <Text variant="micro" className={sortKey === c.key ? "text-teal" : "text-text-muted"}>
+              {c.label}{sortKey === c.key ? (asc ? " ↑" : " ↓") : ""}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Rows */}
+      {sorted.map((r) => (
+        <Pressable key={r.activity_id} onPress={() => setSelected(r)} className="flex-row items-center border-b border-border-subtle py-2">
+          <View className="flex-1 pr-2">
+            <Text variant="caption" className="text-text" numberOfLines={1}>{r.name ?? "Run"}</Text>
+            <Text variant="micro" className="text-text-muted">{shortDate(r.date)}</Text>
+          </View>
+          <Text variant="caption" className="w-16 text-right tabular-nums text-text">
+            {r.distance != null ? `${num(r.distance).toFixed(1)}` : "—"}
+          </Text>
+          <Text variant="caption" className="w-16 text-right tabular-nums text-lime">
+            {r.pace != null ? paceLabel(r.pace) : "—"}
+          </Text>
+          <Text variant="caption" className="w-16 text-right tabular-nums text-danger">
+            {r.avg_hr != null ? Math.round(num(r.avg_hr)) : "—"}
+          </Text>
+        </Pressable>
+      ))}
+
+      <RunDetailModal run={selected} onClose={() => setSelected(null)} />
+    </Card>
+  );
+}
