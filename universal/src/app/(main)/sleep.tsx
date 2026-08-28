@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View, RefreshControl } from "react-native";
+import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
+import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
 import { SleepDashboard } from "../../components/sleep-dashboard";
 import { RecoveryVitals } from "../../components/recovery-vitals";
@@ -101,6 +102,7 @@ function delta(series: StatSeries | null): number | null {
 
 export default function SleepScreen() {
   const [range, setRange] = useState<Range>("30d");
+  const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
   const { sleep, rhr, stress, battery, recovery, loading, error, refetch } =
     useSleepRecovery(range);
   const { data: sleepSum } = useSleepSummary(range);
@@ -139,6 +141,7 @@ export default function SleepScreen() {
     sub: string;
     cls: string;
     spark?: { data: number[]; color: string };
+    unit?: string;
   }[] = [
     {
       label: "Avg Sleep",
@@ -146,6 +149,7 @@ export default function SleepScreen() {
       sub: `${fmt1(sleep?.summary.current_min, "h")}–${fmt1(sleep?.summary.current_max, "h")}`,
       cls: "text-indigo",
       spark: { data: seriesVals(sleep?.current), color: "#6366b0" },
+      unit: "h",
     },
     {
       label: "Last Night",
@@ -162,6 +166,7 @@ export default function SleepScreen() {
           : `${rhrDelta >= 0 ? "+" : ""}${rhrDelta.toFixed(1)} vs prev`,
       cls: "text-danger",
       spark: { data: seriesVals(rhr?.current), color: "#e06060" },
+      unit: "bpm",
     },
     {
       label: "HRV (weekly)",
@@ -169,6 +174,7 @@ export default function SleepScreen() {
       sub: hrvLatest?.last_night_avg != null ? `last night ${hrvLatest.last_night_avg} ms` : "weekly avg",
       cls: "text-lime",
       spark: { data: hrvTrend, color: "#cbe896" },
+      unit: "ms",
     },
   ];
 
@@ -210,20 +216,33 @@ export default function SleepScreen() {
 
         {/* Summary stat cards */}
         <View className="flex-row flex-wrap gap-3">
-          {summaryCards.map((s) => (
-            <Card key={s.label} className="min-w-[46%] flex-1 gap-1">
-              <Text variant="eyebrow">{s.label}</Text>
-              <Text variant="headline" className={s.cls}>
-                {s.value}
-              </Text>
-              <Text variant="micro">{s.sub}</Text>
-              {s.spark && s.spark.data.length >= 2 ? (
-                <View className="mt-1">
-                  <Sparkline data={s.spark.data} color={s.spark.color} height={26} baseline />
-                </View>
-              ) : null}
-            </Card>
-          ))}
+          {summaryCards.map((s) => {
+            const tappable = !!(s.spark && s.spark.data.length >= 2);
+            return (
+              <Pressable
+                key={s.label}
+                className="min-w-[46%] flex-1"
+                disabled={!tappable}
+                onPress={() => s.spark && setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark.data, color: s.spark.color, unit: s.unit })}
+              >
+                <Card className="gap-1">
+                  <View className="flex-row items-center justify-between">
+                    <Text variant="eyebrow">{s.label}</Text>
+                    {tappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
+                  </View>
+                  <Text variant="headline" className={s.cls}>
+                    {s.value}
+                  </Text>
+                  <Text variant="micro">{s.sub}</Text>
+                  {tappable && s.spark ? (
+                    <View className="mt-1">
+                      <Sparkline data={s.spark.data} color={s.spark.color} height={26} baseline />
+                    </View>
+                  ) : null}
+                </Card>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Sleep dashboard — last night + stages + score (new /api/sleep/summary) */}
@@ -357,6 +376,8 @@ export default function SleepScreen() {
           </Card>
         </View>
       </View>
+
+      <StatDetailModal stat={statDetail} onClose={() => setStatDetail(null)} />
     </ScrollView>
   );
 }
