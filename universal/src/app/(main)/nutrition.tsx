@@ -3,6 +3,7 @@ import { ScrollView, View, RefreshControl, TextInput } from "react-native";
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import {
   useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, closeDay,
+  reopenDay, copyDay, setManualOverride,
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
 
@@ -41,9 +42,19 @@ function niceDate(iso: string): string {
   return dt.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 }
 
+function shiftDate(iso: string, days: number): string {
+  const [y, mo, d] = iso.split("-").map(Number);
+  const dt = new Date(y, (mo ?? 1) - 1, (d ?? 1) + days);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
 export default function NutritionScreen() {
-  const DATE = todayLocal();
+  const [DATE, setDATE] = useState(todayLocal());
+  const isToday = DATE === todayLocal();
   const { data, loading, error, refetch } = useSomaPlan(DATE);
+  // Reset per-day transient UI when the viewed day changes.
+  useEffect(() => { setCloseStatus(null); setQOpen(false); setLogOpen(false); }, [DATE]);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
   const { presets } = usePresets();
   const { drinks } = useDrinks();
@@ -65,6 +76,9 @@ export default function NutritionScreen() {
   const [qF, setQF] = useState("");
   const [qBusy, setQBusy] = useState(false);
   const [skipBusy, setSkipBusy] = useState<string | null>(null);
+  const [reopenBusy, setReopenBusy] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [unlockBusy, setUnlockBusy] = useState(false);
 
   const plan = data?.plan;
   const consumed = data?.consumed;
@@ -75,6 +89,8 @@ export default function NutritionScreen() {
   const bd = data?.breakdown;
   const meals = data?.meals ?? [];
   const skippedSlots = data?.skippedSlots ?? [];
+  const dayClosed = closeStatus === "closed" || plan?.status === "closed";
+  const manualOverride = (bd?.manualOverride ?? false) && !dayClosed;
   const caloriesTrend = useCaloriesTrend();
   const targetCal = plan?.target_calories ?? 0;
 
@@ -118,6 +134,24 @@ export default function NutritionScreen() {
     setSkipBusy(null);
     if (ok) refetch();
   }
+  async function onReopen() {
+    setReopenBusy(true);
+    const ok = await reopenDay(DATE);
+    setReopenBusy(false);
+    if (ok) { setCloseStatus(null); refetch(); }
+  }
+  async function onCopyYesterday() {
+    setCopyBusy(true);
+    const ok = await copyDay(shiftDate(DATE, -1), DATE);
+    setCopyBusy(false);
+    if (ok) refetch();
+  }
+  async function onUnlock() {
+    setUnlockBusy(true);
+    const ok = await setManualOverride(DATE, false);
+    setUnlockBusy(false);
+    if (ok) refetch();
+  }
   async function onLogDrink(key: string) {
     setDrinkBusy(key);
     const ok = await logDrink(DATE, key);
@@ -153,10 +187,31 @@ export default function NutritionScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
     >
       <View className="w-full max-w-2xl gap-4">
-        <View className="flex-row items-center gap-2">
-          <Text variant="title">{niceDate(DATE)}</Text>
-          {closeStatus === "closed" ? <Badge label="Closed" tone="success" /> : <Badge label="Nutrition" tone="teal" />}
+        <View className="w-full flex-row items-center justify-between">
+          <Button label="‹" variant="ghost" size="sm" onPress={() => setDATE((d) => shiftDate(d, -1))} />
+          <View className="flex-row items-center gap-2">
+            <Text variant="title">{isToday ? "Today" : niceDate(DATE)}</Text>
+            {dayClosed ? <Badge label="Closed" tone="success" /> : <Badge label="Nutrition" tone="teal" />}
+            {manualOverride ? <Badge label="Offset Plan" tone="warm" /> : null}
+          </View>
+          <Button label="›" variant="ghost" size="sm" disabled={isToday} onPress={() => setDATE((d) => shiftDate(d, 1))} />
         </View>
+        {(!isToday || dayClosed || manualOverride || (meals.length === 0 && !dayClosed)) ? (
+          <View className="flex-row flex-wrap items-center justify-center gap-2">
+            {!isToday ? (
+              <Button label="Jump to today" variant="ghost" size="sm" onPress={() => setDATE(todayLocal())} />
+            ) : null}
+            {dayClosed ? (
+              <Button label={reopenBusy ? "…" : "Reopen day"} variant="ghost" size="sm" disabled={reopenBusy} onPress={onReopen} />
+            ) : null}
+            {meals.length === 0 && !dayClosed ? (
+              <Button label={copyBusy ? "…" : "Copy yesterday"} variant="ghost" size="sm" disabled={copyBusy} onPress={onCopyYesterday} />
+            ) : null}
+            {manualOverride ? (
+              <Button label={unlockBusy ? "…" : "✕ Unlock plan"} variant="ghost" size="sm" disabled={unlockBusy} onPress={onUnlock} />
+            ) : null}
+          </View>
+        ) : null}
 
         {error ? (
           <Card><Text variant="body" className="text-danger">Couldn&apos;t reach soma: {error}</Text></Card>
@@ -264,10 +319,12 @@ export default function NutritionScreen() {
                           <Button label={delId === m.id ? "…" : "Remove"} variant="ghost" size="sm" disabled={delId != null} onPress={() => onDelete(m.id)} />
                         </View>
                       ))}
-                      <View className="flex-row gap-2 self-start">
-                        <Button label={`+ Log ${slotLabel(s)}`} variant="secondary" size="sm" onPress={() => { setSlot(s); setLogOpen(true); }} />
-                        <Button label={skipBusy === s ? "…" : "Skip"} variant="ghost" size="sm" disabled={skipBusy != null} onPress={() => onSkip(s)} />
-                      </View>
+                      {!dayClosed ? (
+                        <View className="flex-row gap-2 self-start">
+                          <Button label={`+ Log ${slotLabel(s)}`} variant="secondary" size="sm" onPress={() => { setSlot(s); setLogOpen(true); }} />
+                          <Button label={skipBusy === s ? "…" : "Skip"} variant="ghost" size="sm" disabled={skipBusy != null} onPress={() => onSkip(s)} />
+                        </View>
+                      ) : null}
                     </>
                   )}
                 </Card>
@@ -280,10 +337,17 @@ export default function NutritionScreen() {
               </View>
             ) : null}
 
-            <View className="flex-row gap-3">
-              <Button label="Log a drink" variant="secondary" className="flex-1" onPress={() => setDrinkOpen(true)} />
-              <Button label="Close day" variant="secondary" className="flex-1" onPress={() => setCloseOpen(true)} />
-            </View>
+            {!dayClosed ? (
+              <View className="flex-row gap-3">
+                <Button label="Log a drink" variant="secondary" className="flex-1" onPress={() => setDrinkOpen(true)} />
+                <Button label="Close day" variant="secondary" className="flex-1" onPress={() => setCloseOpen(true)} />
+              </View>
+            ) : (
+              <View className="flex-row items-center justify-center gap-2">
+                <Text variant="micro" className="text-text-muted">Day closed.</Text>
+                <Button label={reopenBusy ? "…" : "Reopen to edit"} variant="ghost" size="sm" disabled={reopenBusy} onPress={onReopen} />
+              </View>
+            )}
           </>
         ) : (
           <>
