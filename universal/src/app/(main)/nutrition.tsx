@@ -202,13 +202,16 @@ export default function NutritionScreen() {
     if (status) { setCloseOpen(false); refetch(); }
   }
 
-  const burnRow = (label: string, value?: number, opts?: { amber?: boolean; bold?: boolean }) =>
+  const burnRow = (label: string, value?: number, opts?: { amber?: boolean; bold?: boolean; note?: string }) =>
     value == null ? null : (
-      <View className="flex-row items-center justify-between py-1">
-        <Text variant={opts?.bold ? "body" : "caption"} className={opts?.bold ? "text-text" : "text-text-secondary"}>{label}</Text>
-        <Text variant={opts?.bold ? "body" : "caption"} className={`tabular-nums ${opts?.amber ? "text-warm" : opts?.bold ? "text-teal" : "text-text"}`}>
-          {Math.round(value)} kcal
-        </Text>
+      <View className="py-1">
+        <View className="flex-row items-center justify-between">
+          <Text variant={opts?.bold ? "body" : "caption"} className={opts?.bold ? "text-text" : "text-text-secondary"}>{label}</Text>
+          <Text variant={opts?.bold ? "body" : "caption"} className={`tabular-nums ${opts?.amber ? "text-warm" : opts?.bold ? "text-teal" : "text-text"}`}>
+            {Math.round(value)} kcal
+          </Text>
+        </View>
+        {opts?.note ? <Text variant="micro" className="text-text-muted">{opts.note}</Text> : null}
       </View>
     );
 
@@ -352,9 +355,34 @@ export default function NutritionScreen() {
               <Card className="gap-0.5">
                 <Text variant="eyebrow" className="mb-1">Burn breakdown</Text>
                 {burnRow("Passive (BMR)", bd.bmr)}
-                {burnRow(`Steps${bd.actualSteps ? ` · ${bd.actualSteps.toLocaleString()}` : ""}`, bd.stepCalories)}
-                {bd.runEnabled ? burnRow(`Run${bd.runActual ? "" : " (planned)"}`, bd.runActual ?? bd.runPredicted ?? bd.runCalories, { amber: !bd.runActual }) : null}
-                {burnRow("Gym", bd.gymCalories)}
+                {burnRow(
+                  `Steps${bd.actualSteps ? ` · ${bd.actualSteps.toLocaleString()}` : ""}`,
+                  bd.stepCalories,
+                  { note: [bd.expectedSteps ? `${bd.expectedSteps.toLocaleString()} expected` : null, "excl. run steps"].filter(Boolean).join(" · ") },
+                )}
+                {bd.runEnabled ? burnRow(
+                  `Run${bd.runActual ? "" : " (planned)"}`,
+                  bd.runActual ?? bd.runPredicted ?? bd.runCalories,
+                  {
+                    amber: !bd.runActual,
+                    note: [
+                      bd.runActualDistKm ? `${bd.runActualDistKm.toFixed(1)} km actual` : (bd.runDistanceKm ?? 0) > 0 ? `${(bd.runDistanceKm ?? 0).toFixed(1)} km planned` : null,
+                      bd.runActual != null && bd.runPredicted != null ? `~${Math.round(bd.runPredicted)} kcal predicted` : null,
+                    ].filter(Boolean).join(" · ") || undefined,
+                  },
+                ) : null}
+                {/* Gym — itemized per workout when the breakdown is available */}
+                {bd.gymBreakdown && bd.gymBreakdown.length ? (
+                  bd.gymBreakdown.map((g, i) => (
+                    <View key={i}>
+                      {burnRow(
+                        `🏋 ${g.title}`,
+                        g.actual ?? g.calories ?? g.predicted,
+                        { note: g.actual == null && g.predicted != null ? `~${Math.round(g.predicted)} kcal predicted` : undefined },
+                      )}
+                    </View>
+                  ))
+                ) : burnRow("Gym", bd.gymCalories)}
                 {(bd.drinkCalories ?? 0) > 0 ? burnRow("Drinks", bd.drinkCalories, { amber: true }) : null}
                 {burnRow("Total burn", totalBurn, { bold: true })}
               </Card>
