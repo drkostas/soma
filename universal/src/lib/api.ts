@@ -487,6 +487,35 @@ export function useWorkoutsSummary(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Workout insights (muscle / PRs / calendar / frequency / HR / program) ----
+export interface TopExerciseRich {
+  exercise: string; workout_count: number | string;
+  best_weight: number | string | null; avg_weight: number | string | null;
+  last_performed: string | null; recent_weights: number[];
+}
+export interface WorkoutInsights {
+  topExercises: TopExerciseRich[];
+  programSplit: { program: string; sessions: number | string; avg_duration: number | string | null }[];
+  prs: { exercise: string; pr_weight: number | string; reps_at_pr: number | string | null }[];
+  hrTrend: { date: string; avg_hr: number | string | null; max_hr: number | string | null; title: string; duration_min: number | string | null }[];
+  monthlyMuscle: { month: string; muscle_group: string; volume: number | string }[];
+  calendar: { day: string; program: string | null }[];
+}
+
+/** Page-only workout SQL exposed as JSON from /api/workouts/insights. */
+export function useWorkoutInsights(range: string) {
+  const [data, setData] = useState<WorkoutInsights | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<WorkoutInsights>(`/api/workouts/insights?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range, reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+
 // ---- Per-night sleep data (stages, score, sleep HR, SpO2) for the sleep dashboard ----
 export interface SleepNight {
   date: string;
