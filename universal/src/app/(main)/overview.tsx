@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
+import { LineChart, ChartLegend, ExpandableChart, chartDateLabel } from "../../components/line-chart";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { ThisWeekCard, type WeeklyTraining } from "../../components/this-week-card";
 import { ActivityHeatmap, RecentActivityFeed, ActivityBreakdown, LastGymSession, GymFrequency, ActivityDetailModal } from "../../components/activity-content";
@@ -165,6 +166,16 @@ export default function OverviewScreen() {
   const wLatest = wSeries.length ? wSeries[wSeries.length - 1] : null;
   const wDelta = wSeries.length >= 2 ? wLatest! - wSeries[0] : null;
   const bfLatest = weight.length ? weight[weight.length - 1].body_fat_pct : null;
+  // Body-composition chart: weight (left axis) + body-fat % (right axis) over the 90-day trend.
+  const wLabels = weight.map((r) => chartDateLabel(r.date));
+  const wVals = weight.map((r) => { const v = Number(r.weight_kg); return isFinite(v) ? v : null; });
+  const bfVals = weight.map((r) => (r.body_fat_pct != null && isFinite(Number(r.body_fat_pct)) ? Number(r.body_fat_pct) : null));
+  const hasBf = bfVals.filter((v) => v != null).length >= 2;
+  const bodyCompSeries = [
+    { values: wVals, color: "#b17850", width: 2.2, label: "Weight" },
+    ...(hasBf ? [{ values: bfVals, color: "#77c8d1", width: 1.6, dashed: true, axis: "right" as const, label: "Body fat" }] : []),
+  ];
+  const bodyCompChart = { series: bodyCompSeries, labels: wLabels, yFormat: (v: number) => v.toFixed(1), yFormatRight: (v: number) => `${v.toFixed(0)}%` };
 
   // Sleep glance: latest night's score + 7-day series
   const sleepSeries = (sleep?.current ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v));
@@ -289,6 +300,22 @@ export default function OverviewScreen() {
             ) : null}
           </Card>
         </View>
+
+        {/* Body composition — weight + body-fat % over the 90-day trend */}
+        {wSeries.length >= 2 ? (
+          <Card className="gap-2">
+            <ExpandableChart title="Body composition" chart={bodyCompChart}>
+              <View className="flex-row items-end gap-2">
+                <Text variant="display" className="text-warm">{wLatest != null ? wLatest.toFixed(1) : "—"}</Text>
+                <Text variant="caption" className="text-text-muted mb-1">
+                  kg{bfLatest != null ? ` · ${bfLatest.toFixed(1)}% bf` : ""}{wDelta != null ? ` · ${wDelta >= 0 ? "+" : ""}${wDelta.toFixed(1)} kg/90d` : ""}
+                </Text>
+              </View>
+              <LineChart height={130} interactive xTicks={4} labels={wLabels} yFormat={bodyCompChart.yFormat} yFormatRight={bodyCompChart.yFormatRight} series={bodyCompSeries} />
+            </ExpandableChart>
+            {hasBf ? <ChartLegend items={[{ color: "#b17850", label: "Weight (kg)" }, { color: "#77c8d1", label: "Body fat (%)", dashed: true }]} /> : null}
+          </Card>
+        ) : null}
 
         {/* Today's health KPIs */}
         <Text variant="eyebrow" className="text-text-muted mt-1">Today's metrics</Text>
