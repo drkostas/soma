@@ -89,7 +89,9 @@ export default function TrainingScreen() {
   const fit = data?.fitness;
   const readiness = data?.readiness;
   const vdot = fit?.vdot_adjusted ?? sim?.fitness?.vdotAdjusted ?? null;
-  const projected = useMemo(() => projectDays(sim), [sim]);
+  const [whatIfFactor, setWhatIfFactor] = useState(1.0);
+  // Re-run the forward simulation live as the what-if slider moves (no save).
+  const projected = useMemo(() => projectDays(sim, whatIfFactor), [sim, whatIfFactor]);
   const vo2Trend = useVo2Trend();
 
   // External comparison signals (Garmin-side + PMC) with trend sparklines.
@@ -211,9 +213,10 @@ export default function TrainingScreen() {
         {planDays.length ? (
           <WhatIfSlider
             planDays={planDays}
+            onPreview={setWhatIfFactor}
             onApply={async (factor, dayIds) => {
               const ok = await applyIntensity(factor, dayIds);
-              if (ok) refetchSim();
+              if (ok) { setWhatIfFactor(1.0); refetchSim(); }
               return ok;
             }}
           />
