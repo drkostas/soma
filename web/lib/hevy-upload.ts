@@ -96,7 +96,11 @@ export interface UploadOutcome { hevyId: string; status: "uploaded" | "error"; a
 /** Generate a FIT for one workout and upload it to Garmin, then rename. Side-effectful. */
 export async function processWorkout(client: GarminClient, c: UploadCandidate): Promise<UploadOutcome> {
   try {
-    const { fit } = generateFit(c.workout, c.hrSamples.length ? c.hrSamples : null, {});
+    // HEVY2GARMIN_TIMEZONE (IANA, e.g. Europe/Athens) stamps local_timestamp into
+    // the FIT so Garmin forwards the correct local time to Strava. Empty = raw UTC.
+    const { fit } = generateFit(c.workout, c.hrSamples.length ? c.hrSamples : null, {
+      profile: { timezone: process.env.HEVY2GARMIN_TIMEZONE ?? "" },
+    });
     const start = c.workout?.start_time;
     const { activityId } = await uploadFit(client, fit, start);
     if (c.hevyTitle && activityId) {
