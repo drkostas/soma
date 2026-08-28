@@ -1,7 +1,7 @@
-import { View, Pressable } from "react-native";
-import { Text, Card, Sparkline, Badge } from "soma-style";
+import { View } from "react-native";
+import { Text, Card, Badge } from "soma-style";
+import { LineChart, ExpandableChart, chartDateLabel } from "./line-chart";
 import type { SleepSummary, SleepNight } from "../lib/api";
-import type { StatDetail } from "./stat-detail-modal";
 
 const DEEP = "#4f46e5";
 const LIGHT = "#a5b4fc";
@@ -86,18 +86,13 @@ function Legend() {
 }
 
 /** Sleep dashboard: last-night detail + stages trend + score trend. Fed by /api/sleep/summary. */
-export function SleepDashboard({
-  summary,
-  onExpand,
-}: {
-  summary: SleepSummary | null | undefined;
-  onExpand?: (s: StatDetail) => void;
-}) {
+export function SleepDashboard({ summary }: { summary: SleepSummary | null | undefined }) {
   if (!summary) return null;
   const ln = summary.lastNight;
-  const scores = summary.trend.map((n) => n.score).filter((v): v is number => v != null);
+  const scoreVals = summary.trend.map((n) => (n.score != null && isFinite(n.score) ? n.score : null));
+  const scoreLabels = summary.trend.map((n) => chartDateLabel(n.date));
+  const scoreCount = scoreVals.filter((v) => v != null).length;
   const lnQual = ln?.score != null ? scoreQualifier(ln.score) : null;
-  const scoreTappable = !!(onExpand && scores.length >= 2);
 
   return (
     <View className="gap-4">
@@ -134,32 +129,18 @@ export function SleepDashboard({
         <Legend />
       </Card>
 
-      {scores.length >= 2 ? (
-        <Pressable
-          disabled={!scoreTappable}
-          onPress={() =>
-            onExpand?.({
-              label: "Sleep score",
-              value: summary.stats.avg_score != null ? String(Math.round(summary.stats.avg_score)) : "—",
-              sub: `avg · last ${scores.length} nights`,
-              spark: scores,
-              color: "#a5b4fc",
-            })
-          }
-        >
-          <Card className="gap-2">
-            <View className="flex-row items-center justify-between">
-              <Text variant="eyebrow">Sleep score</Text>
-              <View className="flex-row items-center gap-1.5">
-                <Text variant="micro" className="tabular-nums text-text-muted">
-                  avg {summary.stats.avg_score != null ? Math.round(summary.stats.avg_score) : "—"}
-                </Text>
-                {scoreTappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
-              </View>
-            </View>
-            <Sparkline data={scores} color="#a5b4fc" height={40} baseline />
-          </Card>
-        </Pressable>
+      {scoreCount >= 2 ? (
+        <Card className="gap-2">
+          <ExpandableChart
+            title="Sleep score"
+            chart={{ series: [{ values: scoreVals, color: "#a5b4fc", width: 2.2 }], labels: scoreLabels, refLine: { y: 80, color: "#6ad4a0" }, yMin: 0, yMax: 100, yFormat: (v) => String(Math.round(v)) }}
+          >
+            <Text variant="micro" className="tabular-nums text-text-muted">
+              avg {summary.stats.avg_score != null ? Math.round(summary.stats.avg_score) : "—"} · "Good" ≥ 80
+            </Text>
+            <LineChart height={120} interactive labels={scoreLabels} xTicks={4} yMin={0} yMax={100} refLine={{ y: 80, color: "#6ad4a0" }} yFormat={(v) => String(Math.round(v))} series={[{ values: scoreVals, color: "#a5b4fc", width: 2.2 }]} />
+          </ExpandableChart>
+        </Card>
       ) : null}
     </View>
   );
