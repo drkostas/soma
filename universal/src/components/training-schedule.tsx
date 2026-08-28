@@ -3,6 +3,7 @@ import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
 import { requestGarminPush, type ActivityMatch, type PlanDay, type WorkoutStep } from "../lib/api";
 import { getBasePace, getHRZone } from "../lib/vdot-pace-zones";
+import { TRAFFIC_COLOR, type ProjectedDay } from "../lib/project-days";
 import { MatchedActivityPanel } from "./matched-activity-panel";
 
 /* Run-type → colour, matching the web training plan (easy green, quality orange,
@@ -54,6 +55,7 @@ function DayRow({
   isToday,
   match,
   vdot,
+  proj,
   onToggleComplete,
   onOpenMatch,
 }: {
@@ -61,6 +63,7 @@ function DayRow({
   isToday: boolean;
   match?: ActivityMatch;
   vdot: number | null;
+  proj?: ProjectedDay;
   onToggleComplete: (day: PlanDay) => void;
   onOpenMatch?: (day: PlanDay, match: ActivityMatch) => void;
 }) {
@@ -132,14 +135,33 @@ function DayRow({
               <Text variant="caption" className="tabular-nums text-text-secondary ml-2">{day.targetDistanceKm} km</Text>
             ) : null}
           </View>
-          {/* Target pace + HR zone for run days, from the athlete's current VDOT */}
-          {vdot != null && day.runType && day.runType.toLowerCase() !== "rest" && (day.targetDistanceKm ?? 0) > 0 ? (() => {
+          {/* Target pace + HR zone for run days. When the forward simulation has
+              projected this day, show its readiness-ADJUSTED pace + traffic light
+              (or a REST signal); otherwise the base VDOT pace. */}
+          {day.runType && day.runType.toLowerCase() !== "rest" && (day.targetDistanceKm ?? 0) > 0 ? (() => {
             const hz = getHRZone(day.runType);
+            if (proj) {
+              if (proj.adjustedPace == null) {
+                return <Text variant="micro" className="mt-0.5" style={{ color: "#e06060" }}>⛔ REST — readiness critical</Text>;
+              }
+              const tl = TRAFFIC_COLOR[proj.trafficLight] ?? "#77c8d1";
+              const changed = Math.abs(proj.paceChangePct) >= 0.5;
+              return (
+                <View className="flex-row flex-wrap items-center gap-x-2 mt-0.5">
+                  <View className="flex-row items-center gap-1">
+                    <View className="h-2 w-2 rounded-full" style={{ backgroundColor: tl }} />
+                    <Text variant="micro" className="tabular-nums" style={{ color: tl }}>{paceStr(proj.adjustedPace)}/km</Text>
+                  </View>
+                  {changed ? <Text variant="micro" className="tabular-nums text-text-muted">{proj.paceChangePct > 0 ? "+" : ""}{proj.paceChangePct}% vs base</Text> : null}
+                  <Text variant="micro" className="text-text-muted">·</Text>
+                  <Text variant="micro" className="tabular-nums text-text-muted">HR {hz.zone} {hz.low}–{hz.high}</Text>
+                </View>
+              );
+            }
+            if (vdot == null) return null;
             return (
               <View className="flex-row items-center gap-2 mt-0.5">
-                <Text variant="micro" className="tabular-nums" style={{ color: runColor(day.runType) }}>
-                  {paceStr(getBasePace(vdot, day.runType))}/km
-                </Text>
+                <Text variant="micro" className="tabular-nums" style={{ color: runColor(day.runType) }}>{paceStr(getBasePace(vdot, day.runType))}/km</Text>
                 <Text variant="micro" className="text-text-muted">·</Text>
                 <Text variant="micro" className="tabular-nums text-text-muted">HR {hz.zone} {hz.low}–{hz.high}</Text>
               </View>
@@ -203,12 +225,14 @@ export function TrainingSchedule({
   today,
   matches,
   vdot = null,
+  projected,
   onToggleComplete,
 }: {
   planDays: PlanDay[];
   today: string;
   matches?: Record<number, ActivityMatch>;
   vdot?: number | null;
+  projected?: Map<number, ProjectedDay> | null;
   onToggleComplete: (day: PlanDay) => void;
 }) {
   // group by week
@@ -271,7 +295,7 @@ export function TrainingSchedule({
             {isOpen ? (
               <View className="mt-1">
                 {days.map((d) => (
-                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} vdot={vdot} onToggleComplete={onToggleComplete}
+                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} vdot={vdot} proj={projected?.get(d.id)} onToggleComplete={onToggleComplete}
                     onOpenMatch={(day, match) => setOpenMatch({ day, match })} />
                 ))}
               </View>
