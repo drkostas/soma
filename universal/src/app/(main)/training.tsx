@@ -15,6 +15,7 @@ import {
   type PlanDay,
 } from "../../lib/api";
 import { TrainingSchedule } from "../../components/training-schedule";
+import { projectDays } from "../../lib/project-days";
 import { RaceHeader } from "../../components/race-header";
 import { WhatIfSlider } from "../../components/whatif-slider";
 import { TrainingPaces } from "../../components/training-paces";
@@ -88,6 +89,7 @@ export default function TrainingScreen() {
   const fit = data?.fitness;
   const readiness = data?.readiness;
   const vdot = fit?.vdot_adjusted ?? sim?.fitness?.vdotAdjusted ?? null;
+  const projected = useMemo(() => projectDays(sim), [sim]);
   const vo2Trend = useVo2Trend();
 
   // External comparison signals (Garmin-side + PMC) with trend sparklines.
@@ -200,6 +202,7 @@ export default function TrainingScreen() {
             today={sim?.today ?? todayISO()}
             matches={matches}
             vdot={vdot}
+            projected={projected}
             onToggleComplete={onToggleComplete}
           />
         ) : null}
