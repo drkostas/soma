@@ -216,8 +216,12 @@ export default function RunningScreen() {
     },
     {
       label: "VO2max",
-      value: stats?.peak_vo2max != null ? num(stats.peak_vo2max).toFixed(1) : "—",
-      sub: "ml/kg/min",
+      value: (() => {
+        const t = trends?.vo2max;
+        const latest = t && t.length ? t[t.length - 1] : stats?.peak_vo2max;
+        return latest != null ? num(latest).toFixed(1) : "—";
+      })(),
+      sub: stats?.peak_vo2max != null ? `peak ${num(stats.peak_vo2max).toFixed(1)}` : "ml/kg/min",
       cls: "text-warning",
       spark: trends?.vo2max?.length ? { data: trends.vo2max, color: "#e0a458" } : undefined,
       unit: "ml/kg/min",
