@@ -58,7 +58,9 @@ export interface LoggedDrink {
   calories: number; carbs?: number; alcohol_grams?: number; fat_oxidation_pause_hours?: number;
 }
 export interface SomaPlan {
-  plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number; status?: string } | null;
+  plan: { target_calories: number; target_protein: number; target_carbs: number; target_fat: number; target_fiber: number; status?: string; planned_run_km?: number | null; expected_steps?: number | null } | null;
+  runEnabled?: boolean;
+  selectedWorkouts?: string[];
   consumed: MacroSet;
   remaining: MacroSet | null;
   slotBudgets: Record<string, { calories: number; protein?: number; carbs?: number; fat?: number; fiber?: number }> | null;
@@ -768,6 +770,38 @@ export async function setManualOverride(date: string, on: boolean): Promise<bool
     body: JSON.stringify({ date, manual_override: on }),
   });
   return res.ok;
+}
+
+/** Update the day's activity plan (drives the burn calc): run on/off + which
+ *  gym workouts count + expected steps + ad-hoc planned-run km. */
+export async function setActivity(
+  date: string,
+  opts: { run_enabled?: boolean; selected_workouts?: string[]; expected_steps?: number; planned_run_km?: number | null },
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/nutrition/activity-select`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify({ date, ...opts }),
+    });
+    return res.ok;
+  } catch {
+    return false; // network error — keep the optimistic local state, drop the "saving…"
+  }
+}
+
+/** Gym routines with their average burned calories (for the activity chips). */
+export interface WorkoutCalorie { hevy_title: string; avg_calories: number }
+export function useWorkoutCalories() {
+  const [routines, setRoutines] = useState<WorkoutCalorie[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<{ routines: WorkoutCalorie[] }>("/api/nutrition/workout-calories")
+      .then((d) => alive && setRoutines(d.routines ?? []))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return routines;
 }
 
 /** Log a preset meal into a slot. Returns true on success. */
