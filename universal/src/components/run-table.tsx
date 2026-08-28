@@ -14,12 +14,14 @@ export interface RunRow {
   calories: number | null;
 }
 
-type SortKey = "date" | "distance" | "pace" | "avg_hr";
+type SortKey = "date" | "distance" | "duration_min" | "pace" | "avg_hr" | "calories";
 const COLS: { key: SortKey; label: string }[] = [
   { key: "date", label: "Date" },
   { key: "distance", label: "Dist" },
+  { key: "duration_min", label: "Time" },
   { key: "pace", label: "Pace" },
   { key: "avg_hr", label: "HR" },
+  { key: "calories", label: "Cal" },
 ];
 
 const num = (v: number | null | undefined): number => (v == null ? 0 : Number(v));
@@ -104,15 +106,10 @@ export function RunTable({ runs }: { runs: RunRow[] }) {
         <Text variant="micro" className="text-text-muted">{runs.length} · tap to sort / open</Text>
       </View>
 
-      {/* Sortable header row */}
-      <View className="flex-row items-center border-b border-border-subtle pb-1.5">
-        <Pressable className="flex-1" onPress={() => onHeader("date")}>
-          <Text variant="micro" className={sortKey === "date" ? "text-teal" : "text-text-muted"}>
-            {COLS[0].label}{sortKey === "date" ? (asc ? " ↑" : " ↓") : ""}
-          </Text>
-        </Pressable>
-        {COLS.slice(1).map((c) => (
-          <Pressable key={c.key} className="w-16 items-end" onPress={() => onHeader(c.key)}>
+      {/* Sortable column chips (all 6 sortable; 3 are shown as aligned columns) */}
+      <View className="flex-row flex-wrap gap-x-3 gap-y-1 border-b border-border-subtle pb-1.5">
+        {COLS.map((c) => (
+          <Pressable key={c.key} onPress={() => onHeader(c.key)} hitSlop={4}>
             <Text variant="micro" className={sortKey === c.key ? "text-teal" : "text-text-muted"}>
               {c.label}{sortKey === c.key ? (asc ? " ↑" : " ↓") : ""}
             </Text>
@@ -125,15 +122,19 @@ export function RunTable({ runs }: { runs: RunRow[] }) {
         <Pressable key={r.activity_id} onPress={() => setSelected(r)} className="flex-row items-center border-b border-border-subtle py-2">
           <View className="flex-1 pr-2">
             <Text variant="caption" className="text-text" numberOfLines={1}>{r.name ?? "Run"}</Text>
-            <Text variant="micro" className="text-text-muted">{shortDate(r.date)}</Text>
+            <Text variant="micro" className="text-text-muted">
+              {shortDate(r.date)}
+              {r.duration_min != null ? ` · ${Math.round(num(r.duration_min))} min` : ""}
+              {r.calories != null && r.calories > 0 ? ` · ${Math.round(num(r.calories))} kcal` : ""}
+            </Text>
           </View>
-          <Text variant="caption" className="w-16 text-right tabular-nums text-text">
+          <Text variant="caption" className="w-14 text-right tabular-nums text-text">
             {r.distance != null ? `${num(r.distance).toFixed(1)}` : "—"}
           </Text>
-          <Text variant="caption" className="w-16 text-right tabular-nums text-lime">
+          <Text variant="caption" className="w-14 text-right tabular-nums text-lime">
             {r.pace != null ? paceLabel(r.pace) : "—"}
           </Text>
-          <Text variant="caption" className="w-16 text-right tabular-nums text-danger">
+          <Text variant="caption" className="w-12 text-right tabular-nums text-danger">
             {r.avg_hr != null ? Math.round(num(r.avg_hr)) : "—"}
           </Text>
         </Pressable>

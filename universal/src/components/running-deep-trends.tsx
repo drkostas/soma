@@ -42,7 +42,9 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
 
   const cad = trends.cadenceStride.filter((p) => p.cadence != null);
   const cadLast = cad.length ? cad[cad.length - 1] : null;
-  const cadSeries = cad.map((p) => Number(p.cadence)).filter(isFinite);
+  const cadSeries = cad.map((p) => (p.cadence != null && isFinite(Number(p.cadence)) ? Number(p.cadence) : null));
+  const strideSeries = cad.map((p) => (p.stride != null && isFinite(Number(p.stride)) ? Number(p.stride) : null));
+  const hasStride = strideSeries.filter((v) => v != null).length >= 2;
 
   return (
     <View className="gap-4">
@@ -94,7 +96,7 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
       {cadLast && cadSeries.length >= 2 ? (
         <Card className="gap-2">
           <View className="flex-row items-center justify-between">
-            <Text variant="eyebrow">Cadence</Text>
+            <Text variant="eyebrow">Cadence &amp; stride</Text>
             <Text variant="micro" className="tabular-nums text-text-muted">{cadLast.stride != null ? `stride ${cadLast.stride} cm` : ""}</Text>
           </View>
           <View className="flex-row items-end gap-2">
@@ -102,12 +104,21 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
             <Text variant="caption" className="text-text-muted mb-1">spm</Text>
           </View>
           <LineChart
-            height={110}
+            height={120}
+            interactive
             yFormat={(v) => String(Math.round(v))}
-            series={[{ values: cadSeries, color: "#cbe896", width: 2.2 }]}
+            yFormatRight={(v) => `${Math.round(v)}cm`}
             refLine={{ y: 180, color: "#77c8d1" }}
+            series={[
+              { values: cadSeries, color: "#cbe896", width: 2.2, label: "Cadence" },
+              ...(hasStride ? [{ values: strideSeries, color: "#8b9df0", width: 1.8, axis: "right" as const, label: "Stride" }] : []),
+            ]}
           />
-          <Text variant="micro" className="text-text-muted">Dashed line = 180 spm target.</Text>
+          {hasStride ? (
+            <ChartLegend items={[{ color: "#cbe896", label: "Cadence spm (L)" }, { color: "#8b9df0", label: "Stride cm (R)" }, { color: "#77c8d1", label: "180 target", dashed: true }]} />
+          ) : (
+            <Text variant="micro" className="text-text-muted">Dashed line = 180 spm target.</Text>
+          )}
         </Card>
       ) : null}
     </View>
