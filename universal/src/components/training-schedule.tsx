@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
 import { requestGarminPush, type ActivityMatch, type PlanDay, type WorkoutStep } from "../lib/api";
+import { getBasePace, getHRZone } from "../lib/vdot-pace-zones";
 import { MatchedActivityPanel } from "./matched-activity-panel";
 
 /* Run-type → colour, matching the web training plan (easy green, quality orange,
@@ -52,12 +53,14 @@ function DayRow({
   day,
   isToday,
   match,
+  vdot,
   onToggleComplete,
   onOpenMatch,
 }: {
   day: PlanDay;
   isToday: boolean;
   match?: ActivityMatch;
+  vdot: number | null;
   onToggleComplete: (day: PlanDay) => void;
   onOpenMatch?: (day: PlanDay, match: ActivityMatch) => void;
 }) {
@@ -129,6 +132,19 @@ function DayRow({
               <Text variant="caption" className="tabular-nums text-text-secondary ml-2">{day.targetDistanceKm} km</Text>
             ) : null}
           </View>
+          {/* Target pace + HR zone for run days, from the athlete's current VDOT */}
+          {vdot != null && day.runType && day.runType.toLowerCase() !== "rest" && (day.targetDistanceKm ?? 0) > 0 ? (() => {
+            const hz = getHRZone(day.runType);
+            return (
+              <View className="flex-row items-center gap-2 mt-0.5">
+                <Text variant="micro" className="tabular-nums" style={{ color: runColor(day.runType) }}>
+                  {paceStr(getBasePace(vdot, day.runType))}/km
+                </Text>
+                <Text variant="micro" className="text-text-muted">·</Text>
+                <Text variant="micro" className="tabular-nums text-text-muted">HR {hz.zone} {hz.low}–{hz.high}</Text>
+              </View>
+            );
+          })() : null}
           {/* garmin sync status + manual push/retry (queues for the plan-push cron) */}
           {pushed ? (
             <Text variant="micro" className="text-success mt-0.5">✓ On Garmin</Text>
@@ -186,11 +202,13 @@ export function TrainingSchedule({
   planDays,
   today,
   matches,
+  vdot = null,
   onToggleComplete,
 }: {
   planDays: PlanDay[];
   today: string;
   matches?: Record<number, ActivityMatch>;
+  vdot?: number | null;
   onToggleComplete: (day: PlanDay) => void;
 }) {
   // group by week
@@ -253,7 +271,7 @@ export function TrainingSchedule({
             {isOpen ? (
               <View className="mt-1">
                 {days.map((d) => (
-                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} onToggleComplete={onToggleComplete}
+                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} vdot={vdot} onToggleComplete={onToggleComplete}
                     onOpenMatch={(day, match) => setOpenMatch({ day, match })} />
                 ))}
               </View>
