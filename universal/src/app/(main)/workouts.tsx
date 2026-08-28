@@ -1,9 +1,12 @@
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh, useWorkoutsSummary } from "../../lib/api";
+import { fetchJson, usePullRefresh, useWorkoutsSummary, useWorkoutInsights } from "../../lib/api";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { WorkoutsDashboard } from "../../components/workouts-dashboard";
+import { WorkoutActivity } from "../../components/workout-activity";
+import { WorkoutMuscle } from "../../components/workout-muscle";
+import { WorkoutStrength } from "../../components/workout-strength";
 
 interface RecentWorkout {
   title: string;
@@ -59,9 +62,22 @@ function formatDate(dateStr: string): string {
 export default function WorkoutsScreen() {
   const { data, error, refetch } = useWorkouts();
   const [range, setRange] = useState<"30d" | "90d" | "1y">("90d");
+  const [unit, setUnit] = useState<"kg" | "lb">("kg");
   const { data: wkSum } = useWorkoutsSummary(range);
+  const { data: insights } = useWorkoutInsights(range);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
   const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
+
+  // Training span (first → last workout) from the all-time calendar.
+  const trainingSpan = (() => {
+    const cal = insights?.calendar ?? [];
+    if (cal.length < 2) return null;
+    const first = new Date(String(cal[0].day).slice(0, 10));
+    const last = new Date(String(cal[cal.length - 1].day).slice(0, 10));
+    const days = Math.round((last.getTime() - first.getTime()) / 86400000);
+    const months = Math.max(1, Math.round(days / 30.4));
+    return { count: cal.length, years: days / 365, months, first: cal[0].day, last: cal[cal.length - 1].day };
+  })();
 
   const recent = data?.recent ?? [];
   const totalSynced = data?.totalSynced ?? 0;
@@ -106,6 +122,14 @@ export default function WorkoutsScreen() {
       cls: "text-warm",
       spark: { data: kcalTrend, color: "#b17850" },
     },
+    ...(trainingSpan
+      ? [{
+          label: "Training Span",
+          value: trainingSpan.years >= 1 ? `${trainingSpan.years.toFixed(1)}y` : `${trainingSpan.months}mo`,
+          sub: `${trainingSpan.count} workouts logged`,
+          cls: "text-indigo",
+        }]
+      : []),
   ];
 
   return (
@@ -168,12 +192,28 @@ export default function WorkoutsScreen() {
         </View>
 
         {/* Workout data — volume, stats, top exercises, recent (new /api/workouts/summary) */}
-        <SegmentedControl
-          options={["30d", "90d", "1y"] as const}
-          value={range}
-          onChange={(v) => setRange(v as "30d" | "90d" | "1y")}
-        />
-        <WorkoutsDashboard summary={wkSum} />
+        <View className="flex-row items-center gap-3">
+          <View className="flex-1">
+            <SegmentedControl
+              options={["30d", "90d", "1y"] as const}
+              value={range}
+              onChange={(v) => setRange(v as "30d" | "90d" | "1y")}
+            />
+          </View>
+          <View className="w-24">
+            <SegmentedControl options={["kg", "lb"] as const} value={unit} onChange={(v) => setUnit(v as "kg" | "lb")} />
+          </View>
+        </View>
+        <WorkoutsDashboard summary={wkSum} unit={unit} topRich={insights?.topExercises} />
+
+        {/* Muscle-group distribution + monthly-by-muscle (new /api/workouts/insights) */}
+        <WorkoutMuscle insights={insights} />
+
+        {/* Configurable strength progression + PRs + program split */}
+        <WorkoutStrength insights={insights} unit={unit} />
+
+        {/* Training calendar + weekly frequency + avg-HR per workout */}
+        <WorkoutActivity insights={insights} />
 
         {/* Sync coverage bar */}
         {recent.length > 0 ? (
