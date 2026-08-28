@@ -1,7 +1,9 @@
-import { View, Pressable } from "react-native";
-import { Text, Card, Badge, Sparkline } from "soma-style";
+import { View } from "react-native";
+import { Text, Card, Badge } from "soma-style";
+import { LineChart, ChartLegend, ExpandableChart, chartDateLabel } from "./line-chart";
 import type { RecoverySummary } from "../lib/api";
-import type { StatDetail } from "./stat-detail-modal";
+
+const fin = (v: number | null | undefined): number | null => (v != null && isFinite(Number(v)) ? Number(v) : null);
 
 const HRV_TONE: Record<string, "success" | "warm" | "danger" | "teal"> = {
   BALANCED: "success",
@@ -16,18 +18,18 @@ const RDY_TONE = (level: string | null): "success" | "warm" | "danger" | "teal" 
 };
 
 /** HRV + training-readiness cards (recovery vitals), fed by /api/recovery/summary. */
-export function RecoveryVitals({
-  summary,
-  onExpand,
-}: {
-  summary: RecoverySummary | null | undefined;
-  onExpand?: (s: StatDetail) => void;
-}) {
+export function RecoveryVitals({ summary }: { summary: RecoverySummary | null | undefined }) {
   if (!summary) return null;
   const hrv = summary.hrv.latest;
   const rdy = summary.readiness.latest;
-  const hrvSeries = summary.hrv.trend.map((p) => p.weekly_avg).filter((v): v is number => v != null);
-  const hrvTappable = !!(onExpand && hrvSeries.length >= 2);
+  const hrvLabels = summary.hrv.trend.map((p) => chartDateLabel(p.date));
+  const hrvWeekly = summary.hrv.trend.map((p) => fin(p.weekly_avg));
+  const hrvNight = summary.hrv.trend.map((p) => fin(p.last_night_avg));
+  const hrvHasChart = hrvWeekly.filter((v) => v != null).length >= 2 || hrvNight.filter((v) => v != null).length >= 2;
+  const hrvSeries = [
+    { values: hrvNight, color: "#a5b4fc", width: 1.4, dashed: true, label: "Last night" },
+    { values: hrvWeekly, color: "#77c8d1", width: 2.2, label: "Weekly avg" },
+  ];
 
   const factors: { label: string; v: number | null; color: string }[] = rdy
     ? [
@@ -44,37 +46,24 @@ export function RecoveryVitals({
   return (
     <View className="gap-4">
       {hrv ? (
-        <Pressable
-          disabled={!hrvTappable}
-          onPress={() =>
-            onExpand?.({
-              label: "Heart rate variability",
-              value: hrv.weekly_avg != null ? `${hrv.weekly_avg} ms` : "—",
-              sub: hrv.last_night_avg != null ? `last night ${hrv.last_night_avg} ms` : "weekly avg",
-              spark: hrvSeries,
-              color: "#77c8d1",
-              unit: "ms",
-            })
-          }
-        >
-          <Card className="gap-2">
-            <View className="flex-row items-center justify-between">
-              <Text variant="eyebrow">Heart rate variability</Text>
-              <View className="flex-row items-center gap-1.5">
-                {hrv.status ? <Badge label={hrv.status} tone={HRV_TONE[hrv.status] ?? "teal"} /> : null}
-                {hrvTappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
+        <Card className="gap-2">
+          <ExpandableChart title="Heart rate variability" chart={{ series: hrvSeries, labels: hrvLabels, yFormat: (v) => `${Math.round(v)}` }}>
+            <View className="flex-row items-end justify-between">
+              <View className="flex-row items-end gap-2">
+                <Text variant="display" className="text-teal">{hrv.weekly_avg ?? "—"}</Text>
+                <Text variant="caption" className="text-text-muted mb-1">ms weekly avg</Text>
+                {hrv.last_night_avg != null ? (
+                  <Text variant="micro" className="text-text-muted mb-1">· last night {hrv.last_night_avg}</Text>
+                ) : null}
               </View>
+              {hrv.status ? <Badge label={hrv.status} tone={HRV_TONE[hrv.status] ?? "teal"} /> : null}
             </View>
-            <View className="flex-row items-end gap-2">
-              <Text variant="display" className="text-teal">{hrv.weekly_avg ?? "—"}</Text>
-              <Text variant="caption" className="text-text-muted mb-1">ms weekly avg</Text>
-              {hrv.last_night_avg != null ? (
-                <Text variant="micro" className="text-text-muted mb-1">· last night {hrv.last_night_avg}</Text>
-              ) : null}
-            </View>
-            {hrvSeries.length >= 2 ? <Sparkline data={hrvSeries} color="#77c8d1" height={36} baseline /> : null}
-          </Card>
-        </Pressable>
+            {hrvHasChart ? (
+              <LineChart height={110} interactive labels={hrvLabels} xTicks={4} yFormat={(v) => `${Math.round(v)}`} series={hrvSeries} />
+            ) : null}
+          </ExpandableChart>
+          {hrvHasChart ? <ChartLegend items={[{ color: "#77c8d1", label: "Weekly avg" }, { color: "#a5b4fc", label: "Last night", dashed: true }]} /> : null}
+        </Card>
       ) : null}
 
       {rdy ? (

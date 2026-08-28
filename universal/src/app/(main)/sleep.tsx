@@ -145,6 +145,7 @@ export default function SleepScreen() {
     cls: string;
     spark?: { data: number[]; color: string };
     unit?: string;
+    metric?: string;
   }[] = [
     {
       label: "Avg Sleep",
@@ -153,6 +154,7 @@ export default function SleepScreen() {
       cls: "text-indigo",
       spark: { data: seriesVals(sleep?.current), color: "#6366b0" },
       unit: "h",
+      metric: "sleep",
     },
     {
       label: "Last Night",
@@ -170,6 +172,7 @@ export default function SleepScreen() {
       cls: "text-danger",
       spark: { data: seriesVals(rhr?.current), color: "#e06060" },
       unit: "bpm",
+      metric: "rhr",
     },
     {
       label: "HRV (weekly)",
@@ -268,7 +271,7 @@ export default function SleepScreen() {
                 key={s.label}
                 className="min-w-[46%] flex-1"
                 disabled={!tappable}
-                onPress={() => s.spark && setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark.data, color: s.spark.color, unit: s.unit })}
+                onPress={() => s.spark && setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark.data, color: s.spark.color, unit: s.unit, metric: s.metric })}
               >
                 <Card className="gap-1">
                   <View className="flex-row items-center justify-between">
@@ -299,29 +302,45 @@ export default function SleepScreen() {
             </View>
             <LineChart
               height={140}
+              interactive
               labels={stress!.current.map((p) => chartLabel(p.date))}
+              xTicks={4}
+              yMin={0}
+              yMax={100}
               yFormat={(v) => String(Math.round(v))}
-              refLine={{ y: 50, color: "#e0a458" }}
+              refLines={[
+                { y: 25, color: "#6ad4a0" },
+                { y: 50, color: "#e0c458" },
+                { y: 75, color: "#e06060" },
+              ]}
               series={[
-                { values: stress!.current.map((p) => finiteOrNull(p.value2)), color: "#e06060", dashed: true, width: 1.5 },
-                { values: stress!.current.map((p) => finiteOrNull(p.value)), color: "#e0a458", width: 2.2 },
+                { values: stress!.current.map((p) => finiteOrNull(p.value2)), color: "#e06060", dashed: true, width: 1.5, label: "Peak" },
+                { values: stress!.current.map((p) => finiteOrNull(p.value)), color: "#e0a458", width: 2.2, label: "Avg" },
               ]}
             />
-            <ChartLegend items={[{ color: "#e0a458", label: "Avg" }, { color: "#e06060", label: "Peak", dashed: true }]} />
+            <ChartLegend items={[{ color: "#e0a458", label: "Avg" }, { color: "#e06060", label: "Peak", dashed: true }, { color: "#6ad4a0", label: "low/med/high 25·50·75", dashed: true }]} />
           </Card>
         ) : null}
 
         {(battery?.current?.length ?? 0) >= 2 ? (
           <Card className="gap-2">
-            <Text variant="eyebrow">Body Battery</Text>
+            <View className="flex-row items-center justify-between">
+              <Text variant="eyebrow">Body Battery</Text>
+              <Text variant="micro" className="text-text-muted">charged + drained</Text>
+            </View>
             <LineChart
               height={130}
+              interactive
               labels={battery!.current.map((p) => chartLabel(p.date))}
+              xTicks={4}
               yFormat={(v) => String(Math.round(v))}
               yMin={0}
-              yMax={100}
-              series={[{ values: battery!.current.map((p) => finiteOrNull(p.value)), color: "#cbe896", width: 2.2 }]}
+              series={[
+                { values: battery!.current.map((p) => finiteOrNull(p.value2)), color: "#e06060", width: 1.5, dashed: true, label: "Drained" },
+                { values: battery!.current.map((p) => finiteOrNull(p.value)), color: "#cbe896", width: 2.2, label: "Charged" },
+              ]}
             />
+            <ChartLegend items={[{ color: "#cbe896", label: "Charged" }, { color: "#e06060", label: "Drained", dashed: true }]} />
           </Card>
         ) : null}
 
@@ -342,13 +361,13 @@ export default function SleepScreen() {
         ) : null}
 
         {/* Sleep dashboard — last night + stages + score (new /api/sleep/summary) */}
-        <SleepDashboard summary={sleepSum} onExpand={setStatDetail} />
+        <SleepDashboard summary={sleepSum} />
 
         {/* Recovery vitals — HRV + training readiness (new /api/recovery/summary) */}
-        <RecoveryVitals summary={recoveryVitals} onExpand={setStatDetail} />
+        <RecoveryVitals summary={recoveryVitals} />
 
         {/* Blood oxygen + respiration (new /api/sleep/respiratory) */}
-        <SleepRespiratory data={respiratory} onExpand={setStatDetail} />
+        <SleepRespiratory data={respiratory} />
 
         {/* Sleep schedule — per-night bedtime → wake band (new /api/sleep/schedule) */}
         <SleepScheduleChart schedule={schedule?.schedule} />
