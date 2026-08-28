@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View, RefreshControl } from "react-native";
+import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
+import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores, useRunningSplits, useHrPace, useRecentRoutes } from "../../lib/api";
 import { RunningMileage } from "../../components/running-mileage";
 import { RunningDeepTrends } from "../../components/running-deep-trends";
@@ -162,6 +163,7 @@ export default function RunningScreen() {
   const { data, error, refetch } = useRunning();
   // Range drives the trend sections (all four endpoints accept 90d/1y/2y).
   const [range, setRange] = useState<"90d" | "1y" | "2y">("1y");
+  const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
   const { data: runTrends } = useRunningTrends(range);
   const { data: fitScores } = useFitnessScores(range);
   const { data: splits } = useRunningSplits(range);
@@ -185,6 +187,7 @@ export default function RunningScreen() {
     sub: string;
     cls: string;
     spark?: { data: number[]; color: string };
+    unit?: string;
   }[] = [
     {
       label: "Total Distance",
@@ -192,6 +195,7 @@ export default function RunningScreen() {
       sub: `${num(stats?.total_runs)} runs`,
       cls: "text-teal",
       spark: trends?.mileage?.length ? { data: trends.mileage, color: "#77c8d1" } : undefined,
+      unit: "km",
     },
     {
       label: "Avg Pace",
@@ -212,6 +216,7 @@ export default function RunningScreen() {
       sub: "ml/kg/min",
       cls: "text-warning",
       spark: trends?.vo2max?.length ? { data: trends.vo2max, color: "#e0a458" } : undefined,
+      unit: "ml/kg/min",
     },
   ];
 
@@ -247,20 +252,33 @@ export default function RunningScreen() {
 
         {/* Summary stat grid */}
         <View className="flex-row flex-wrap gap-3">
-          {summaryCards.map((s) => (
-            <Card key={s.label} className="min-w-[46%] flex-1 gap-1">
-              <Text variant="eyebrow">{s.label}</Text>
-              <Text variant="headline" className={s.cls}>
-                {s.value}
-              </Text>
-              <Text variant="micro">{s.sub}</Text>
-              {s.spark ? (
-                <View className="mt-1">
-                  <Sparkline data={s.spark.data} color={s.spark.color} height={28} baseline />
-                </View>
-              ) : null}
-            </Card>
-          ))}
+          {summaryCards.map((s) => {
+            const tappable = !!(s.spark && s.spark.data.length >= 2);
+            return (
+              <Pressable
+                key={s.label}
+                className="min-w-[46%] flex-1"
+                disabled={!tappable}
+                onPress={() => s.spark && setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark.data, color: s.spark.color, unit: s.unit })}
+              >
+                <Card className="gap-1">
+                  <View className="flex-row items-center justify-between">
+                    <Text variant="eyebrow">{s.label}</Text>
+                    {tappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
+                  </View>
+                  <Text variant="headline" className={s.cls}>
+                    {s.value}
+                  </Text>
+                  <Text variant="micro">{s.sub}</Text>
+                  {tappable && s.spark ? (
+                    <View className="mt-1">
+                      <Sparkline data={s.spark.data} color={s.spark.color} height={28} baseline />
+                    </View>
+                  ) : null}
+                </Card>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Training Status — only when Garmin actually populated it (else it was
@@ -563,6 +581,8 @@ export default function RunningScreen() {
           </Card>
         ) : null}
       </View>
+
+      <StatDetailModal stat={statDetail} onClose={() => setStatDetail(null)} />
     </ScrollView>
   );
 }
