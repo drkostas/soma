@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { View, Pressable } from "react-native";
-import { Text, Card, Modal, Badge } from "soma-style";
+import { Text, Card } from "soma-style";
+import { ActivityDetailModal } from "./activity-detail-modal";
+import type { ActivityRow } from "../lib/api";
 
 /** One run row — structurally matches the screen's RecentRun. */
 export interface RunRow {
@@ -35,40 +37,22 @@ function shortDate(iso: string | null | undefined): string {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-function longDate(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
-}
-
-/** Detail dialog for one run (the drill-in behind a table row). */
-function RunDetailModal({ run, onClose }: { run: RunRow | null; onClose: () => void }) {
-  if (!run) return null;
-  const rows: [string, string][] = [
-    ["Distance", run.distance != null ? `${num(run.distance).toFixed(2)} km` : "—"],
-    ["Duration", run.duration_min != null ? `${Math.round(num(run.duration_min))} min` : "—"],
-    ["Avg pace", run.pace != null ? `${paceLabel(run.pace)} /km` : "—"],
-    ["Avg HR", run.avg_hr != null ? `${Math.round(num(run.avg_hr))} bpm` : "—"],
-    ["Calories", run.calories != null ? `${Math.round(num(run.calories))} kcal` : "—"],
-  ];
-  return (
-    <Modal visible={!!run} onClose={onClose} title={run.name ?? "Run"}>
-      <View className="gap-3">
-        <View className="flex-row items-end gap-2">
-          <Text variant="display" className="text-teal">{run.distance != null ? num(run.distance).toFixed(1) : "—"}</Text>
-          <Text variant="body" className="mb-1 text-text-muted">km · {longDate(run.date)}</Text>
-        </View>
-        <View className="gap-2">
-          {rows.map(([label, value]) => (
-            <View key={label} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
-              <Text variant="body" className="text-text-secondary">{label}</Text>
-              <Text variant="body" className="tabular-nums text-text">{value}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-    </Modal>
-  );
+/** Adapt a run row into the ActivityRow the rich detail modal expects. The
+ *  modal fetches /api/activity/<id> for splits, HR zones, weather, gear and
+ *  running dynamics; these row fields seed its header + overview metrics. */
+function toActivityRow(r: RunRow): ActivityRow {
+  return {
+    activity_id: r.activity_id,
+    type_key: "running",
+    sport: "Running",
+    date: r.date ?? "",
+    name: r.name,
+    distance_km: r.distance,
+    duration_min: r.duration_min,
+    avg_hr: r.avg_hr,
+    calories: r.calories,
+    elev_gain: 0,
+  };
 }
 
 /**
@@ -140,7 +124,7 @@ export function RunTable({ runs }: { runs: RunRow[] }) {
         </Pressable>
       ))}
 
-      <RunDetailModal run={selected} onClose={() => setSelected(null)} />
+      <ActivityDetailModal activity={selected ? toActivityRow(selected) : null} onClose={() => setSelected(null)} />
     </Card>
   );
 }
