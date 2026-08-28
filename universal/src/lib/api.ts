@@ -312,6 +312,47 @@ export async function setRuleEnabled(id: number, enabled: boolean): Promise<bool
   return res.ok;
 }
 
+/** Trigger a manual sync run (POST /api/sync). Returns true on success. */
+export async function triggerSync(source?: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify(source ? { source } : {}),
+  });
+  return res.ok;
+}
+
+/** Create a sync rule (POST /api/connections/rules). Returns true on success. */
+export async function createSyncRule(rule: {
+  source_platform: string; activity_type: string; destinations: Record<string, unknown>; enabled?: boolean;
+}): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/connections/rules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ enabled: true, ...rule }),
+  });
+  return res.ok;
+}
+
+/** Delete a sync rule (DELETE /api/connections/rules/[id]). Returns true on success. */
+export async function deleteSyncRule(id: number): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/connections/rules/${id}`, {
+    method: "DELETE",
+    headers: { ...AUTH_HEADERS },
+  });
+  return res.ok;
+}
+
+/** Submit platform credentials to connect it (POST /api/connections/[platform]). */
+export async function connectPlatform(platform: string, credentials: Record<string, string>): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/connections/${platform}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify(credentials),
+  });
+  return res.ok;
+}
+
 // ---- Running trends: training-load/ACWR + cadence/stride ----
 export interface LoadPoint { date: string; acute: number | null; chronic: number | null; acwr: number | null }
 export interface CadencePoint { date: string; cadence: number | null; stride: number | null }
