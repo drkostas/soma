@@ -194,6 +194,25 @@ function DayRow({
             </View>
           ))}
           {day.gymNotes ? <Text variant="micro" className="text-text-muted mt-1">Gym: {day.gymNotes}</Text> : null}
+          {/* Pace-adjustment waterfall (upcoming days only — past days aren't re-adjusted):
+              base pace × readiness × fatigue × weight = adjusted */}
+          {proj && !day.completed && proj.adjustedPace != null && day.runType?.toLowerCase() !== "rest" ? (
+            <View className="mt-1.5 rounded-lg bg-surface-subtle px-2.5 py-2 gap-0.5">
+              <Text variant="micro" className="text-text-muted mb-0.5">WHY THIS PACE</Text>
+              {[
+                ["Base pace", `${paceStr(proj.basePaceForType)}/km`, false, undefined as string | undefined],
+                ["Readiness", `×${proj.readinessFactor.toFixed(3)}`, false, undefined],
+                ["Fatigue (form)", `×${proj.fatigueFactor.toFixed(3)}`, false, undefined],
+                ["Weight", `×${proj.weightFactor.toFixed(3)}`, false, undefined],
+                ["Adjusted pace", `${paceStr(proj.adjustedPace)}/km`, true, TRAFFIC_COLOR[proj.trafficLight] ?? "#77c8d1"],
+              ].map(([label, value, bold, color], i) => (
+                <View key={i} className={`flex-row items-center justify-between ${bold ? "border-t border-border-subtle pt-1 mt-0.5" : ""}`}>
+                  <Text variant="micro" className={bold ? "text-text" : "text-text-secondary"}>{label as string}</Text>
+                  <Text variant="micro" className="tabular-nums" style={color ? { color: color as string } : undefined}>{value as string}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
           {act ? (
             <View className="mt-1.5 rounded-lg bg-surface-subtle px-2.5 py-2 gap-0.5">
               <View className="flex-row items-center justify-between">
