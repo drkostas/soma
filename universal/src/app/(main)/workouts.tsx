@@ -1,7 +1,8 @@
-import { ScrollView, View, RefreshControl } from "react-native";
+import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { fetchJson, usePullRefresh, useWorkoutsSummary } from "../../lib/api";
+import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { WorkoutsDashboard } from "../../components/workouts-dashboard";
 
 interface RecentWorkout {
@@ -60,6 +61,7 @@ export default function WorkoutsScreen() {
   const [range, setRange] = useState<"30d" | "90d" | "1y">("90d");
   const { data: wkSum } = useWorkoutsSummary(range);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
+  const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
 
   const recent = data?.recent ?? [];
   const totalSynced = data?.totalSynced ?? 0;
@@ -136,20 +138,33 @@ export default function WorkoutsScreen() {
 
         {/* Summary stats */}
         <View className="flex-row flex-wrap gap-3">
-          {stats.map((s) => (
-            <Card key={s.label} className="min-w-[46%] flex-1 gap-1">
-              <Text variant="eyebrow">{s.label}</Text>
-              <Text variant="headline" className={s.cls}>
-                {s.value}
-              </Text>
-              <Text variant="micro">{s.sub}</Text>
-              {s.spark && s.spark.data.length >= 2 ? (
-                <View className="mt-1">
-                  <Sparkline data={s.spark.data} color={s.spark.color} height={24} baseline />
-                </View>
-              ) : null}
-            </Card>
-          ))}
+          {stats.map((s) => {
+            const tappable = !!(s.spark && s.spark.data.length >= 2);
+            return (
+              <Pressable
+                key={s.label}
+                className="min-w-[46%] flex-1"
+                disabled={!tappable}
+                onPress={() => s.spark && setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark.data, color: s.spark.color, unit: s.label === "Avg Calories" ? "kcal" : undefined })}
+              >
+                <Card className="gap-1">
+                  <View className="flex-row items-center justify-between">
+                    <Text variant="eyebrow">{s.label}</Text>
+                    {tappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
+                  </View>
+                  <Text variant="headline" className={s.cls}>
+                    {s.value}
+                  </Text>
+                  <Text variant="micro">{s.sub}</Text>
+                  {tappable && s.spark ? (
+                    <View className="mt-1">
+                      <Sparkline data={s.spark.data} color={s.spark.color} height={24} baseline />
+                    </View>
+                  ) : null}
+                </Card>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Workout data — volume, stats, top exercises, recent (new /api/workouts/summary) */}
@@ -179,6 +194,8 @@ export default function WorkoutsScreen() {
         ) : null}
 
       </View>
+
+      <StatDetailModal stat={statDetail} onClose={() => setStatDetail(null)} />
     </ScrollView>
   );
 }
