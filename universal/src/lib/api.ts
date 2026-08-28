@@ -343,6 +343,17 @@ export async function deleteSyncRule(id: number): Promise<boolean> {
   return res.ok;
 }
 
+/** Apply a what-if intensity factor to upcoming plan days (POST /api/training/intensity).
+ *  Best-effort — the server owns the re-sim + persist; returns true on success. */
+export async function applyIntensity(factor: number, dayIds: number[]): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/training/intensity`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ factor, day_ids: dayIds }),
+  });
+  return res.ok;
+}
+
 /** Submit platform credentials to connect it (POST /api/connections/[platform]). */
 export async function connectPlatform(platform: string, credentials: Record<string, string>): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/connections/${platform}`, {
