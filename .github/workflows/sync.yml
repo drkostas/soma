@@ -108,4 +108,7 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           MERGE_MODE: ${{ secrets.MERGE_MODE }}
+          # IANA zone stamped into the uploaded FIT's local_timestamp so Garmin
+          # forwards the correct local time to Strava (not raw UTC).
+          HEVY2GARMIN_TIMEZONE: Europe/Athens
         run: npx tsx scripts/sync-pipeline.mts
