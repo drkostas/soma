@@ -105,10 +105,21 @@ function addDaysUtc(dateStr: string, days: number): string {
  * (ON CONFLICT DO NOTHING). Returns the count inserted. DB-only.
  */
 export async function backfillLoadFromHistory(sql: QueryFn): Promise<number> {
+  // Only read blobs for activities not already in training_load. Existing rows
+  // are ON CONFLICT DO NOTHING no-ops below, so the computed result is identical
+  // to reading everything — but this avoids re-downloading every 'summary' blob
+  // from Neon on every sync run (that full re-read was the dominant network-
+  // transfer cost and paused the Free-tier project). If training_load is ever
+  // empty, NOT EXISTS matches nothing and the full history is rebuilt as before.
+  // ::text on both sides keeps the join type-safe regardless of column types.
   const rows = await sql`
-    SELECT activity_id, raw_json
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'`;
+    SELECT g.activity_id, g.raw_json
+    FROM garmin_activity_raw g
+    WHERE g.endpoint_name = 'summary'
+      AND NOT EXISTS (
+        SELECT 1 FROM training_load tl
+        WHERE tl.activity_id::text = g.activity_id::text
+      )`;
   // Build all candidate rows in JS, then batch-insert (a per-row loop is one
   // Neon round-trip per activity — hundreds of them). ON CONFLICT DO NOTHING +
   // RETURNING counts only the genuinely new activities.
