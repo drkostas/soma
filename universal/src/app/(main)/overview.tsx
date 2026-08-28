@@ -3,14 +3,17 @@ import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { ThisWeekCard, type WeeklyTraining } from "../../components/this-week-card";
+import { ActivityHeatmap, RecentActivityFeed, ActivityBreakdown, LastGymSession, GymFrequency, ActivityDetailModal } from "../../components/activity-content";
 import {
   useToday,
   useTraining,
   useSomaPlan,
   useRecoverySummary,
+  useActivitiesDeep,
   fetchJson,
   usePullRefresh,
   todayLocal,
+  type ActivityRow,
 } from "../../lib/api";
 import { readinessScore } from "../../lib/readiness";
 
@@ -128,6 +131,7 @@ export default function OverviewScreen() {
   const weekly = useWeeklyTraining();
   const vo2 = useVo2max();
   const recovery = useRecoverySummary("30d");
+  const { data: activitiesDeep } = useActivitiesDeep("180d");
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
     refetchTraining();
@@ -135,6 +139,7 @@ export default function OverviewScreen() {
   });
 
   const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
+  const [selActivity, setSelActivity] = useState<ActivityRow | null>(null);
   const readiness = training?.readiness;
   const tsb = training?.pmc?.tsb ?? null;
 
@@ -265,9 +270,22 @@ export default function OverviewScreen() {
             </Pressable>
           ))}
         </View>
+
+        {/* Activity content — calendar heatmap, recent feed, breakdown */}
+        {activitiesDeep?.all?.length ? (
+          <>
+            <Text variant="eyebrow" className="text-text-muted mt-1">Activity</Text>
+            <ActivityHeatmap activities={activitiesDeep.all} />
+            <LastGymSession activities={activitiesDeep.all} onSelect={setSelActivity} />
+            <GymFrequency activities={activitiesDeep.all} />
+            <RecentActivityFeed activities={activitiesDeep.all} onSelect={setSelActivity} />
+            <ActivityBreakdown monthly={activitiesDeep.monthly ?? []} />
+          </>
+        ) : null}
       </View>
 
       <StatDetailModal stat={statDetail} onClose={() => setStatDetail(null)} />
+      <ActivityDetailModal activity={selActivity} onClose={() => setSelActivity(null)} />
     </ScrollView>
   );
 }
