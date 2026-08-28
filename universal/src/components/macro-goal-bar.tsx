@@ -1,6 +1,51 @@
 import { View } from "react-native";
 import { Text } from "soma-style";
 
+/* ── Per-meal protein quality (MPS signaling) ──────────────────────────────
+ * Schoenfeld & Aragon 2018 / Trommelen 2023: the muscle-protein-synthesis
+ * floor is ~0.4 g/kg per eating event (≈30 g at 75 kg, scaling with mass).
+ * A pill flags a logged meal that falls below that floor; meals at/above it
+ * show nothing. Mirrors web/lib/per-meal-protein.tsx. */
+export type PerMealProteinLevel = "red" | "amber" | "yellow" | "green" | "plenty";
+const MPS_G_PER_KG = 0.4;
+const PLENTY_G_PER_KG = 0.55;
+const FALLBACK_MPS_G = 30;
+
+function proteinThresholds(weightKg: number | null | undefined) {
+  if (!weightKg || weightKg <= 0) return { red: 15, amber: 25, yellow: 30, plenty: 55 };
+  const mps = Math.max(20, Math.round(weightKg * MPS_G_PER_KG));
+  const plenty = Math.max(40, Math.round(weightKg * PLENTY_G_PER_KG));
+  return { red: Math.max(10, Math.round(mps * 0.5)), amber: Math.max(15, Math.round(mps * 0.83)), yellow: mps, plenty };
+}
+
+export function perMealProteinLevel(g: number, weightKg?: number | null): PerMealProteinLevel {
+  const t = proteinThresholds(weightKg);
+  if (g < t.red) return "red";
+  if (g < t.amber) return "amber";
+  if (g < t.yellow) return "yellow";
+  if (g <= t.plenty) return "green";
+  return "plenty";
+}
+
+const PILL: Record<"red" | "amber" | "yellow", { fg: string; bg: string; label: string }> = {
+  red: { fg: "#f2868c", bg: "#3a1e24", label: "low protein" },
+  amber: { fg: "#e0a458", bg: "#33291a", label: "below MPS" },
+  yellow: { fg: "#e0d060", bg: "#31311c", label: "near MPS" },
+};
+
+/** MPS-floor pill for one logged meal. Renders nothing when the meal's protein
+ *  is already at or above the floor (green / plenty). */
+export function ProteinQualityPill({ grams, weightKg }: { grams: number; weightKg?: number | null }) {
+  const level = perMealProteinLevel(grams, weightKg);
+  if (level === "green" || level === "plenty") return null;
+  const p = PILL[level];
+  return (
+    <View className="rounded px-1.5 py-[1px]" style={{ backgroundColor: p.bg }}>
+      <Text variant="micro" style={{ color: p.fg }}>{p.label}</Text>
+    </View>
+  );
+}
+
 /** One research-anchored goalpost on a macro bar. Mirrors web's MacroBar. */
 export interface MacroMarker {
   value: number;
