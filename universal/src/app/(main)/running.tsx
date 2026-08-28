@@ -2,13 +2,16 @@ import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
-import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores, useRunningSplits, useHrPace, useRecentRoutes } from "../../lib/api";
+import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores, useRunningSplits, useHrPace, useRecentRoutes, useRunHeatmap } from "../../lib/api";
 import { RunningMileage } from "../../components/running-mileage";
 import { RunningDeepTrends } from "../../components/running-deep-trends";
 import { RunningFitnessScores } from "../../components/running-fitness-scores";
 import { RunningSplits } from "../../components/running-splits";
 import { RunningHrPace } from "../../components/running-hr-pace";
 import { RunningRoutes } from "../../components/running-routes";
+import { RunningPaceVo2Charts } from "../../components/running-pace-vo2-charts";
+import { RunHeatmap } from "../../components/run-heatmap";
+import { RunTable } from "../../components/run-table";
 
 /* ------------------------------------------------------------------ */
 /* Types — mirror the fields the web /running page renders             */
@@ -169,6 +172,7 @@ export default function RunningScreen() {
   const { data: splits } = useRunningSplits(range);
   const { data: hrPace } = useHrPace(range);
   const { data: routes } = useRecentRoutes();
+  const { routes: heatRoutes } = useRunHeatmap();
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const stats = data?.stats;
@@ -350,8 +354,14 @@ export default function RunningScreen() {
         {/* Monthly mileage bar chart (web parity) */}
         <RunningMileage mileage={trends?.mileage} />
 
+        {/* Dedicated Pace Progression + VO2max Trend charts (web parity) */}
+        <RunningPaceVo2Charts pace={trends?.pace} vo2max={trends?.vo2max} />
+
         {/* Recent route thumbnails (SVG shapes from /api/running/recent-routes) */}
         <RunningRoutes routes={routes} />
+
+        {/* Route heatmap — all recent GPS paths overlaid (new /api/running/heatmap) */}
+        <RunHeatmap routes={heatRoutes} />
 
         {/* Range governs the trend charts below (stats above are all-time). */}
         <View className="gap-1">
@@ -379,6 +389,26 @@ export default function RunningScreen() {
         {zones.length > 0 ? (
           <Card className="gap-3">
             <Text variant="eyebrow">Training Intensity Distribution</Text>
+            {/* Single stacked 5-zone bar (web parity) */}
+            {zoneTotal > 0 ? (
+              <View className="gap-1">
+                <View className="flex-row h-4 rounded-full overflow-hidden">
+                  {zones.map((z, i) =>
+                    num(z.count) > 0 ? (
+                      <View key={`seg-${z.zone}`} style={{ width: `${(num(z.count) / zoneTotal) * 100}%`, backgroundColor: ZONE_HEX[i] ?? ZONE_HEX[0] }} />
+                    ) : null,
+                  )}
+                </View>
+                <View className="flex-row flex-wrap gap-x-3 gap-y-0.5">
+                  {zones.map((z, i) => (
+                    <View key={`lg-${z.zone}`} className="flex-row items-center gap-1">
+                      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: ZONE_HEX[i] ?? ZONE_HEX[0] }} />
+                      <Text variant="micro" className="text-text-muted">{z.zone} {Math.round((num(z.count) / zoneTotal) * 100)}%</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
             {zones.map((z, i) => {
               const pct = zoneTotal > 0 ? num(z.count) / zoneTotal : 0;
               return (
@@ -538,48 +568,28 @@ export default function RunningScreen() {
                     </Text>
                   </View>
                   {maxKm ? <ProgressBar pct={Math.min(worn, 1)} color={barColor} /> : null}
-                  <Text variant="micro">
-                    {maxKm
-                      ? `${totalKm.toFixed(0)} / ${maxKm.toFixed(0)} km (${Math.round(worn * 100)}%)`
-                      : `${totalKm.toFixed(0)} km total`}
-                  </Text>
+                  <View className="flex-row items-center justify-between">
+                    <Text variant="micro">
+                      {maxKm
+                        ? `${totalKm.toFixed(0)} / ${maxKm.toFixed(0)} km (${Math.round(worn * 100)}%)`
+                        : `${totalKm.toFixed(0)} km total`}
+                    </Text>
+                    {maxKm ? (
+                      <Text variant="micro" className={worn >= 1 ? "text-danger" : "text-text-muted"}>
+                        {worn >= 1
+                          ? `${(totalKm - maxKm).toFixed(0)} km over`
+                          : `${(maxKm - totalKm).toFixed(0)} km remaining`}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
               );
             })}
           </Card>
         ) : null}
 
-        {/* Recent Runs */}
-        {recent.length > 0 ? (
-          <Card className="gap-2">
-            <Text variant="eyebrow">Recent Runs</Text>
-            {recent.map((r) => (
-              <View
-                key={r.activity_id}
-                className="flex-row items-center justify-between border-b border-border-subtle py-2"
-              >
-                <View className="flex-1 gap-0.5 pr-2">
-                  <Text variant="body" className="text-text" numberOfLines={1}>
-                    {r.name ?? "Run"}
-                  </Text>
-                  <Text variant="micro">
-                    {shortDate(r.date)} ·{" "}
-                    {r.distance != null ? `${num(r.distance).toFixed(1)} km` : "—"}
-                  </Text>
-                </View>
-                <View className="items-end gap-0.5">
-                  <Text variant="caption" className="tabular-nums text-teal">
-                    {r.pace != null ? `${formatPace(r.pace)}/km` : "—"}
-                  </Text>
-                  <Text variant="micro" className="tabular-nums">
-                    {r.avg_hr != null ? `${Math.round(num(r.avg_hr))} bpm` : "—"} ·{" "}
-                    {r.duration_min != null ? `${Math.round(num(r.duration_min))} min` : "—"}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </Card>
-        ) : null}
+        {/* Recent Runs — sortable, tap-to-detail table (web parity) */}
+        <RunTable runs={recent} />
       </View>
 
       <StatDetailModal stat={statDetail} onClose={() => setStatDetail(null)} />
