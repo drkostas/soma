@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
 import { requestGarminPush, type ActivityMatch, type PlanDay, type WorkoutStep } from "../lib/api";
+import { MatchedActivityPanel } from "./matched-activity-panel";
 
 /* Run-type → colour, matching the web training plan (easy green, quality orange,
    long blue, rest grey). Used for the small type pill on each day row. */
@@ -52,11 +53,13 @@ function DayRow({
   isToday,
   match,
   onToggleComplete,
+  onOpenMatch,
 }: {
   day: PlanDay;
   isToday: boolean;
   match?: ActivityMatch;
   onToggleComplete: (day: PlanDay) => void;
+  onOpenMatch?: (day: PlanDay, match: ActivityMatch) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pushOverride, setPushOverride] = useState<string | null>(null);
@@ -100,9 +103,12 @@ function DayRow({
               <Text variant="micro" style={{ color: runColor(day.runType) }}>{day.runType}</Text>
             </View>
             {match?.matched && match.completionScore != null ? (
-              <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: scoreColor(match.completionScore) + "22" }}>
-                <Text variant="micro" style={{ color: scoreColor(match.completionScore) }}>{match.completionScore}%</Text>
-              </View>
+              <Pressable onPress={() => onOpenMatch?.(day, match)} hitSlop={6}>
+                <View className="flex-row items-center gap-0.5 rounded-full px-2 py-0.5" style={{ backgroundColor: scoreColor(match.completionScore) + "22" }}>
+                  <Text variant="micro" style={{ color: scoreColor(match.completionScore) }}>{match.completionScore}%</Text>
+                  <Text variant="micro" style={{ color: scoreColor(match.completionScore) }}>›</Text>
+                </View>
+              </Pressable>
             ) : null}
             {day.gymWorkout ? (
               <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: "#6366b022" }}>
@@ -205,6 +211,7 @@ export function TrainingSchedule({
     [planDays, today, weeks],
   );
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set(currentWeek != null ? [currentWeek] : []));
+  const [openMatch, setOpenMatch] = useState<{ day: PlanDay; match: ActivityMatch } | null>(null);
 
   const toggleWeek = (w: number) =>
     setExpanded((prev) => {
@@ -246,13 +253,15 @@ export function TrainingSchedule({
             {isOpen ? (
               <View className="mt-1">
                 {days.map((d) => (
-                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} onToggleComplete={onToggleComplete} />
+                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} onToggleComplete={onToggleComplete}
+                    onOpenMatch={(day, match) => setOpenMatch({ day, match })} />
                 ))}
               </View>
             ) : null}
           </Card>
         );
       })}
+      <MatchedActivityPanel match={openMatch?.match ?? null} day={openMatch?.day ?? null} onClose={() => setOpenMatch(null)} />
     </View>
   );
 }
