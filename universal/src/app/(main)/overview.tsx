@@ -74,6 +74,20 @@ function useSleepGlance() {
   return s;
 }
 
+interface FitnessResp { fitness_age: number | null; chrono_age: number | null; achievable_age: number | null; total_activities: number }
+/** Garmin Fitness Age + lifetime activity count, from /api/overview/fitness. */
+function useOverviewFitness() {
+  const [f, setF] = useState<FitnessResp | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<FitnessResp>("/api/overview/fitness")
+      .then((d) => alive && setF(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return f;
+}
+
 interface Vo2maxResp { stats: { vo2max: number | null } | null; trends: { vo2max: number[] } }
 /** Current VO2max + its trend, from /api/running/stats. */
 function useVo2max() {
@@ -132,6 +146,7 @@ export default function OverviewScreen() {
   const vo2 = useVo2max();
   const recovery = useRecoverySummary("30d");
   const { data: activitiesDeep } = useActivitiesDeep("180d");
+  const fitness = useOverviewFitness();
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
     refetchTraining();
@@ -168,6 +183,7 @@ export default function OverviewScreen() {
     { label: "Intensity min", value: `${(data?.moderate_intensity_minutes ?? 0) + (data?.vigorous_intensity_minutes ?? 0)}`, sub: `${data?.vigorous_intensity_minutes ?? 0} vigorous`, cls: "text-indigo", spark: trends?.intensity, color: "#6366b0", unit: "min" },
     { label: "VO₂max", value: vo2.current != null ? String(vo2.current) : "—", sub: "ml/kg/min", cls: "text-teal", spark: vo2.trend.filter((x) => isFinite(x)), color: "#77c8d1" },
     { label: "HRV", value: hrvLatest?.weekly_avg != null ? String(hrvLatest.weekly_avg) : "—", sub: hrvLatest?.status ? String(hrvLatest.status) : "7-night avg", cls: "text-lime", spark: hrvSpark, color: "#cbe896", unit: "ms" },
+    { label: "Total activities", value: fitness?.total_activities != null && fitness.total_activities > 0 ? fitness.total_activities.toLocaleString() : "—", sub: "all time", cls: "text-teal", color: "#77c8d1" },
   ];
 
   return (
@@ -220,6 +236,31 @@ export default function OverviewScreen() {
 
         {/* This Week training summary */}
         <ThisWeekCard data={weekly} />
+
+        {/* Fitness age */}
+        {fitness?.fitness_age != null ? (
+          <Card className="gap-2">
+            <Text variant="eyebrow">Fitness age</Text>
+            <View className="flex-row items-end gap-2">
+              <Text variant="display" className="text-teal tabular-nums">{Math.round(fitness.fitness_age)}</Text>
+              {fitness.chrono_age != null ? (
+                <Text variant="body" className={`mb-1 ${fitness.chrono_age - fitness.fitness_age >= 0 ? "text-success" : "text-warm"}`}>
+                  {Math.abs(Math.round(fitness.chrono_age - fitness.fitness_age))} yrs {fitness.chrono_age - fitness.fitness_age >= 0 ? "younger" : "older"}
+                </Text>
+              ) : null}
+            </View>
+            {fitness.chrono_age != null ? (
+              <>
+                <View className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#16242c" }}>
+                  <View className="h-full rounded-full" style={{ width: `${Math.min((fitness.fitness_age / fitness.chrono_age) * 100, 100)}%`, backgroundColor: "#6ad4a0" }} />
+                </View>
+                <Text variant="micro" className="text-text-muted">
+                  chronological age {fitness.chrono_age}{fitness.achievable_age != null ? ` · achievable ${Math.round(fitness.achievable_age)}` : ""}
+                </Text>
+              </>
+            ) : null}
+          </Card>
+        ) : null}
 
         {/* Cross-domain glance row */}
         <View className="flex-row flex-wrap gap-3">
