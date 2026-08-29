@@ -76,7 +76,8 @@ function useSleepGlance() {
 }
 
 interface FitnessComponent { key: string; label: string; unit: string; value: number | null; target: number | null; priority: number | null }
-interface FitnessResp { fitness_age: number | null; chrono_age: number | null; achievable_age: number | null; total_activities: number; components?: FitnessComponent[] }
+interface WeeklyIntensity { goal: number; total: number; moderate: number; vigorous: number }
+interface FitnessResp { fitness_age: number | null; chrono_age: number | null; achievable_age: number | null; total_activities: number; components?: FitnessComponent[]; intensity?: WeeklyIntensity | null }
 const fmtComp = (v: number) => (v % 1 === 0 ? String(v) : v.toFixed(1));
 /** Garmin Fitness Age + lifetime activity count, from /api/overview/fitness. */
 function useOverviewFitness() {
@@ -292,6 +293,27 @@ export default function OverviewScreen() {
             ) : null}
           </Card>
         ) : null}
+
+        {/* Weekly intensity minutes (vs Garmin goal) */}
+        {fitness?.intensity && fitness.intensity.goal > 0 ? (() => {
+          const im = fitness.intensity;
+          const pct = Math.min(100, (im.total / im.goal) * 100);
+          const met = im.total >= im.goal;
+          return (
+            <Card className="gap-2">
+              <View className="flex-row items-center justify-between">
+                <Text variant="eyebrow">Weekly intensity</Text>
+                <Text variant="micro" className="tabular-nums text-text-muted">{im.total} / {im.goal} min</Text>
+              </View>
+              <View className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#16242c" }}>
+                <View className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: met ? "#6ad4a0" : "#6366b0" }} />
+              </View>
+              <Text variant="micro" className="text-text-muted">
+                {im.moderate} moderate · {im.vigorous} vigorous (2×) · {Math.round((im.total / im.goal) * 100)}% of goal
+              </Text>
+            </Card>
+          );
+        })() : null}
 
         {/* Cross-domain glance row */}
         <View className="flex-row flex-wrap gap-3">
