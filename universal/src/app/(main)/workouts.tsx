@@ -1,11 +1,12 @@
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh, useWorkoutsSummary, useWorkoutInsights, useWorkoutTimeline, type TimelinePoint } from "../../lib/api";
+import { fetchJson, usePullRefresh, useWorkoutsSummary, useWorkoutInsights, useWorkoutTimeline, useBodyMap, type TimelinePoint } from "../../lib/api";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { WorkoutsDashboard } from "../../components/workouts-dashboard";
 import { WorkoutActivity } from "../../components/workout-activity";
 import { WorkoutMuscle } from "../../components/workout-muscle";
+import { MuscleBodyMapSection } from "../../components/muscle-body-map-section";
 import { WorkoutStrength } from "../../components/workout-strength";
 
 interface RecentWorkout {
@@ -66,6 +67,7 @@ export default function WorkoutsScreen() {
   const { data: wkSum } = useWorkoutsSummary(range);
   const { data: insights } = useWorkoutInsights(range);
   const { data: timeline } = useWorkoutTimeline();
+  const { data: bodyMap } = useBodyMap(range);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
   const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
 
@@ -225,6 +227,9 @@ export default function WorkoutsScreen() {
           </View>
         </View>
         <WorkoutsDashboard summary={wkSum} unit={unit} topRich={insights?.topExercises} />
+
+        {/* Anatomical muscle activation map + 4-metric toggle (new /api/workouts/bodymap) */}
+        <MuscleBodyMapSection data={bodyMap} />
 
         {/* Muscle-group distribution + monthly-by-muscle (new /api/workouts/insights) */}
         <WorkoutMuscle insights={insights} />

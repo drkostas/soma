@@ -634,6 +634,27 @@ export function useWorkoutTimeline() {
   return { data };
 }
 
+// ---- Per-muscle activation for the Workouts anatomical body map (web parity) ----
+export interface MuscleMetric { primary: number; secondary: number; total: number }
+export interface BodyMapData {
+  volume: Record<string, MuscleMetric>;
+  sets: Record<string, MuscleMetric>;
+  reps: Record<string, MuscleMetric>;
+  exercises: Record<string, MuscleMetric>;
+}
+/** Per-muscle volume/sets/reps/session maps from /api/workouts/bodymap. */
+export function useBodyMap(range: string) {
+  const [data, setData] = useState<BodyMapData | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<BodyMapData>(`/api/workouts/bodymap?range=${range}`)
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [range]);
+  return { data };
+}
+
 // ---- Per-night sleep data (stages, score, sleep HR, SpO2) for the sleep dashboard ----
 export interface SleepNight {
   date: string;
