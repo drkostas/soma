@@ -84,7 +84,12 @@ interface RecentRun {
   pace: number | null;
   avg_hr: number | null;
   calories: number | null;
+  temp_c?: number | null;
+  max_speed_ms?: number | null;
 }
+
+export interface PacePoint { date: string; pace: number; distance: number }
+export interface MileageMonth { month: string; km: number; runs: number }
 
 interface RunningPayload {
   stats: RunningStats | null;
@@ -93,7 +98,7 @@ interface RunningPayload {
   records: Records | null;
   shoeMileage: ShoeMileage[];
   recentRuns: RecentRun[];
-  trends: { pace: number[]; vo2max: number[]; mileage: number[] } | null;
+  trends: { pace: number[]; vo2max: number[]; mileage: number[]; paceDetail?: PacePoint[]; mileageDetail?: MileageMonth[] } | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -356,10 +361,10 @@ export default function RunningScreen() {
         ) : null}
 
         {/* Monthly mileage bar chart (web parity) */}
-        <RunningMileage mileage={trends?.mileage} />
+        <RunningMileage mileage={trends?.mileage} months={trends?.mileageDetail} />
 
         {/* Dedicated Pace Progression + VO2max Trend charts (web parity) */}
-        <RunningPaceVo2Charts pace={trends?.pace} vo2max={trends?.vo2max} />
+        <RunningPaceVo2Charts pace={trends?.pace} vo2max={trends?.vo2max} paceDetail={trends?.paceDetail} />
 
         {/* Recent route thumbnails (SVG shapes from /api/running/recent-routes) */}
         <RunningRoutes routes={routes} />
