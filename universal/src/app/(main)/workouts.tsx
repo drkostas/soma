@@ -1,7 +1,7 @@
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
-import { fetchJson, usePullRefresh, useWorkoutsSummary, useWorkoutInsights } from "../../lib/api";
+import { fetchJson, usePullRefresh, useWorkoutsSummary, useWorkoutInsights, useWorkoutTimeline, type TimelinePoint } from "../../lib/api";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { WorkoutsDashboard } from "../../components/workouts-dashboard";
 import { WorkoutActivity } from "../../components/workout-activity";
@@ -65,6 +65,7 @@ export default function WorkoutsScreen() {
   const [unit, setUnit] = useState<"kg" | "lb">("kg");
   const { data: wkSum } = useWorkoutsSummary(range);
   const { data: insights } = useWorkoutInsights(range);
+  const { data: timeline } = useWorkoutTimeline();
   const { refreshing, onRefresh } = usePullRefresh(refetch);
   const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
 
@@ -102,24 +103,33 @@ export default function WorkoutsScreen() {
     .filter((k) => k > 0)
     .reverse();
 
-  const stats: { label: string; value: string; sub: string; cls: string; spark?: { data: number[]; color: string } }[] = [
+  // Each stat card opens a dated per-workout timeline (web ClickableSummaryStats
+  // parity): cumulative count, duration/workout, calories/workout, workouts/month.
+  type Stat = {
+    label: string; value: string; sub: string; cls: string; color: string; unit?: string;
+    timeline?: TimelinePoint[]; timelineMode?: "line" | "dots"; timelineNoun?: string; spark?: { data: number[]; color: string };
+  };
+  const stats: Stat[] = [
     {
       label: "Total Synced",
       value: `${totalSynced}`,
       sub: `${syncedThisWeek} this week`,
-      cls: "text-teal",
+      cls: "text-teal", color: "#77c8d1", unit: "workouts",
+      timeline: timeline?.cumulative, timelineMode: "line",
     },
     {
       label: "Recent Sessions",
       value: `${recent.length}`,
       sub: `${syncedCount} on Garmin`,
-      cls: "text-lime",
+      cls: "text-lime", color: "#8fc866", unit: "min",
+      timeline: timeline?.duration, timelineMode: "dots",
     },
     {
       label: "Avg Calories",
       value: avgKcal != null ? `${avgKcal}` : "—",
       sub: "kcal via Garmin HR",
-      cls: "text-warm",
+      cls: "text-warm", color: "#b17850", unit: "kcal",
+      timeline: timeline?.calories, timelineMode: "dots",
       spark: { data: kcalTrend, color: "#b17850" },
     },
     ...(trainingSpan
@@ -127,8 +137,9 @@ export default function WorkoutsScreen() {
           label: "Training Span",
           value: trainingSpan.years >= 1 ? `${trainingSpan.years.toFixed(1)}y` : `${trainingSpan.months}mo`,
           sub: `${trainingSpan.count} workouts logged`,
-          cls: "text-indigo",
-        }]
+          cls: "text-indigo", color: "#8b8fd6", unit: "workouts",
+          timeline: timeline?.monthly, timelineMode: "line" as const, timelineNoun: "months",
+        } satisfies Stat]
       : []),
   ];
 
@@ -163,13 +174,22 @@ export default function WorkoutsScreen() {
         {/* Summary stats */}
         <View className="flex-row flex-wrap gap-3">
           {stats.map((s) => {
-            const tappable = !!(s.spark && s.spark.data.length >= 2);
+            const hasTimeline = !!(s.timeline && s.timeline.length >= 2);
+            const hasSpark = !!(s.spark && s.spark.data.length >= 2);
+            const tappable = hasTimeline || hasSpark;
+            const previewData = hasTimeline ? s.timeline!.map((p) => p.value) : s.spark?.data;
             return (
               <Pressable
                 key={s.label}
                 className="min-w-[46%] flex-1"
                 disabled={!tappable}
-                onPress={() => s.spark && setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark.data, color: s.spark.color, unit: s.label === "Avg Calories" ? "kcal" : undefined })}
+                onPress={() => {
+                  if (hasTimeline) {
+                    setStatDetail({ label: s.label, value: s.value, sub: s.sub, color: s.color, unit: s.unit, timeline: s.timeline, timelineMode: s.timelineMode, timelineNoun: s.timelineNoun });
+                  } else if (hasSpark) {
+                    setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark!.data, color: s.spark!.color, unit: s.unit });
+                  }
+                }}
               >
                 <Card className="gap-1">
                   <View className="flex-row items-center justify-between">
@@ -180,9 +200,9 @@ export default function WorkoutsScreen() {
                     {s.value}
                   </Text>
                   <Text variant="micro">{s.sub}</Text>
-                  {tappable && s.spark ? (
+                  {tappable && previewData && previewData.length >= 2 ? (
                     <View className="mt-1">
-                      <Sparkline data={s.spark.data} color={s.spark.color} height={24} baseline />
+                      <Sparkline data={previewData} color={s.color} height={24} baseline />
                     </View>
                   ) : null}
                 </Card>
