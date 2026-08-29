@@ -1,4 +1,5 @@
 import { View } from "react-native";
+import Svg, { Polyline, Circle } from "react-native-svg";
 import { Text, Card } from "soma-style";
 import type { GraphNode, GraphEdge } from "../lib/api";
 import { paceStr } from "../lib/vdot";
@@ -9,6 +10,31 @@ const READINESS_INPUTS = [
   { id: "rhr_z", label: "RHR" },
   { id: "bb_z", label: "Body Batt" },
 ];
+
+/** A transfer-function curve (input → pace factor) with a "you are here" dot.
+ *  Static curve points ported from the web graph-tooltip response curves. */
+function ResponseCurve({ points, cx, cy, color, label }: {
+  points: { x: number; y: number }[]; cx: number; cy: number; color: string; label: string;
+}) {
+  const xs = points.map((p) => p.x).concat(cx);
+  const ys = points.map((p) => p.y).concat(cy);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs), yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const W = 100, H = 44, pad = 5;
+  const sx = (x: number) => pad + ((x - xMin) / ((xMax - xMin) || 1)) * (W - 2 * pad);
+  const sy = (y: number) => pad + (1 - (y - yMin) / ((yMax - yMin) || 1)) * (H - 2 * pad);
+  return (
+    <View className="gap-0.5">
+      <View className="flex-row items-center justify-between">
+        <Text variant="micro" className="text-text-secondary">{label}</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">now ×{cy.toFixed(2)}</Text>
+      </View>
+      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <Polyline points={points.map((p) => `${sx(p.x)},${sy(p.y)}`).join(" ")} fill="none" stroke={color} strokeWidth={1.4} />
+        <Circle cx={sx(cx)} cy={sy(cy)} r={2.6} fill="#ffffff" stroke={color} strokeWidth={1.2} />
+      </Svg>
+    </View>
+  );
+}
 
 /**
  * Mobile-native replacement for the web's draggable computation-graph DAG.
@@ -118,6 +144,31 @@ export function PaceComputation({ nodes, edges = [] }: { nodes: Record<string, G
           ))}
         </View>
       ) : null}
+
+      {/* Response curves: how each input bends the pace factor, with a "you are here" dot */}
+      {(() => {
+        // The graph returns 0 for missing z-signals; a real z-score is virtually
+        // never exactly 0, so treat 0 as "no data" (matches the backend's factor).
+        const zs = READINESS_INPUTS.map((s) => val(s.id)).filter((v): v is number => v != null && Math.abs(v) > 1e-6);
+        const compositeZ = zs.length ? zs.reduce((a, b) => a + b, 0) / zs.length : null;
+        const rf = val("readiness_factor"), ff = val("fatigue_factor"), wf = val("weight_factor");
+        const tsb = val("tsb"), wema = val("weight_ema");
+        const CW = 80.5;
+        const curves: { key: string; label: string; color: string; cx: number; cy: number; points: { x: number; y: number }[] }[] = [];
+        if (compositeZ != null && rf != null)
+          curves.push({ key: "r", label: "Readiness · composite z", color: "#6ad4a0", cx: compositeZ, cy: rf, points: [{ x: -2, y: 1.05 }, { x: -1, y: 1.05 }, { x: 0, y: 1.0 }, { x: 1, y: 0.97 }] });
+        if (tsb != null && ff != null)
+          curves.push({ key: "f", label: "Fatigue · TSB", color: "#e0a458", cx: tsb, cy: ff, points: [{ x: -20, y: 1.03 }, { x: -10, y: 1.015 }, { x: 0, y: 1.0 }, { x: 5, y: 0.99 }, { x: 10, y: 0.98 }] });
+        if (wema != null && wf != null)
+          curves.push({ key: "w", label: "Weight · kg from calibration", color: "#b17850", cx: wema - CW, cy: wf, points: [-8, -4, 0, 4].map((d) => ({ x: d, y: (CW + d) / CW })) });
+        if (!curves.length) return null;
+        return (
+          <View className="gap-2 border-t border-border-subtle pt-2.5">
+            <Text variant="micro" className="text-text-muted">RESPONSE CURVES · input → pace factor</Text>
+            {curves.map(({ key, ...c }) => <ResponseCurve key={key} {...c} />)}
+          </View>
+        );
+      })()}
 
       <Text variant="micro" className="text-text-muted">
         Base VDOT pace bent by readiness, fatigue and weight to today&apos;s target.
