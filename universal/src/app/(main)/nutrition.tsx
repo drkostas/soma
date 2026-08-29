@@ -3,7 +3,7 @@ import { ScrollView, View, RefreshControl, TextInput, Pressable } from "react-na
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import {
   useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, deleteDrink, closeDay,
-  reopenDay, copyDay, setManualOverride,
+  reopenDay, copyDay, setManualOverride, rebalanceMeals,
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
 import { BodyCompChart } from "../../components/body-comp-chart";
@@ -69,8 +69,17 @@ export default function NutritionScreen() {
   const [DATE, setDATE] = useState(todayLocal());
   const isToday = DATE === todayLocal();
   const { data, loading, error, refetch } = useSomaPlan(DATE);
-  // Reset per-day transient UI when the viewed day changes.
-  useEffect(() => { setCloseStatus(null); setLogMode("preset"); setLogOpen(false); setEditMeal(null); setDetailMeal(null); }, [DATE]);
+  // Reset per-day transient UI when the viewed day changes, and load that
+  // day's locked slots from storage (guarded — no-ops on native).
+  useEffect(() => {
+    setCloseStatus(null); setLogMode("preset"); setLogOpen(false); setEditMeal(null); setDetailMeal(null); setRebalanceToast(null);
+    let stored: string[] = [];
+    try {
+      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(`locked-slots-${DATE}`) : null;
+      if (raw) stored = JSON.parse(raw);
+    } catch { /* native / unavailable */ }
+    setLockedSlots(new Set(stored));
+  }, [DATE]);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
   const { presets, ingredients } = usePresets();
   const { drinks } = useDrinks();
@@ -98,6 +107,10 @@ export default function NutritionScreen() {
   const [delDrinkId, setDelDrinkId] = useState<number | null>(null);
   const [detailMeal, setDetailMeal] = useState<SomaMeal | null>(null);
   const [editMeal, setEditMeal] = useState<{ id: number; grams: Record<string, number> } | null>(null);
+  // Slots the user has locked (won't be rebalanced). Persisted per-date via
+  // guarded localStorage (works on Expo web; in-memory fallback on native).
+  const [lockedSlots, setLockedSlots] = useState<Set<string>>(new Set());
+  const [rebalanceToast, setRebalanceToast] = useState<string | null>(null);
 
   const plan = data?.plan;
   const consumed = data?.consumed;
@@ -120,11 +133,30 @@ export default function NutritionScreen() {
   const pickerPresets = [...presets].sort((a, b) =>
     (a.meal_slot === slot ? 0 : 1) - (b.meal_slot === slot ? 0 : 1));
 
+  function toggleLock(s: string) {
+    setLockedSlots((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s); else next.add(s);
+      try { if (typeof localStorage !== "undefined") localStorage.setItem(`locked-slots-${DATE}`, JSON.stringify([...next])); } catch { /* native */ }
+      return next;
+    });
+  }
+  // After a meal is logged, redistribute the unlocked later slots to hit the
+  // calorie target (mirrors the web dashboard) and surface what moved.
+  async function doRebalance(changedSlot: string) {
+    const changes = await rebalanceMeals(DATE, changedSlot, Array.from(lockedSlots));
+    if (changes.length > 0) {
+      setRebalanceToast(changes.map((c) => `${c.ingredient} ${Math.round(c.from)}→${Math.round(c.to)}g`).join(", "));
+      setTimeout(() => setRebalanceToast(null), 6000);
+      refetch();
+    }
+  }
+
   async function onLog(preset: Preset) {
     setBusyId(preset.id);
     const ok = await logPresetMeal(DATE, slot, preset);
     setBusyId(null);
-    if (ok) refetch();
+    if (ok) { refetch(); doRebalance(slot); }
   }
   async function onDetailDelete() {
     if (!detailMeal) return;
@@ -158,6 +190,7 @@ export default function NutritionScreen() {
       setLogMode("preset");
       setQName(""); setQCal(""); setQP(""); setQC(""); setQF("");
       refetch();
+      doRebalance(slot);
     }
   }
   async function onSkip(s: string) {
@@ -409,6 +442,17 @@ export default function NutritionScreen() {
               </Card>
             ) : null}
 
+            {/* Rebalance toast — what moved after the last log */}
+            {rebalanceToast ? (
+              <Card className="gap-1" style={{ backgroundColor: "#16241b" }}>
+                <View className="flex-row items-center justify-between">
+                  <Text variant="eyebrow" style={{ color: "#6ad4a0" }}>Rebalanced later meals</Text>
+                  <Pressable onPress={() => setRebalanceToast(null)} hitSlop={8}><Text variant="micro" className="text-text-muted">✕</Text></Pressable>
+                </View>
+                <Text variant="caption" className="text-text-secondary">{rebalanceToast}</Text>
+              </Card>
+            ) : null}
+
             {/* Day prep list — raw ingredients to cook, grouped across meals */}
             <PrepSummary meals={meals} ingredients={ingredients} />
 
@@ -422,7 +466,18 @@ export default function NutritionScreen() {
               return (
                 <Card key={s} className="gap-2">
                   <View className="flex-row items-center justify-between">
-                    <Text variant="title">{slotLabel(s)}</Text>
+                    <View className="flex-row items-center gap-2">
+                      <Text variant="title">{slotLabel(s)}</Text>
+                      {slotMeals.length > 0 && !isSkipped && !dayClosed ? (
+                        <Pressable onPress={() => toggleLock(s)} hitSlop={8}>
+                          <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: lockedSlots.has(s) ? "#e0a45822" : "#142530" }}>
+                            <Text variant="micro" style={{ color: lockedSlots.has(s) ? "#e0a458" : "#8aa0ac" }}>
+                              {lockedSlots.has(s) ? "🔒 Locked" : "Lock"}
+                            </Text>
+                          </View>
+                        </Pressable>
+                      ) : null}
+                    </View>
                     {isSkipped ? (
                       <Badge label="Skipped" tone="neutral" />
                     ) : (
@@ -563,7 +618,7 @@ export default function NutritionScreen() {
             slot={slot}
             initialGrams={editMeal?.grams}
             editMealId={editMeal?.id ?? null}
-            onLogged={() => { setLogOpen(false); setEditMeal(null); refetch(); }}
+            onLogged={() => { setLogOpen(false); setEditMeal(null); refetch(); doRebalance(slot); }}
           />
         ) : logMode === "quick" ? (
           <View className="gap-2 rounded-lg border border-border-subtle p-3">
