@@ -90,14 +90,16 @@ export async function GET(request: Request) {
       (raw_json->>'duration')::float / 60.0 as duration_min,
       (raw_json->>'averageHR')::float as avg_hr,
       (raw_json->>'calories')::float as calories,
-      COALESCE((raw_json->>'elevationGain')::float, 0) as elev_gain
+      COALESCE((raw_json->>'elevationGain')::float, 0) as elev_gain,
+      (raw_json->>'maxSpeed')::float as max_speed_ms,
+      (raw_json->>'averageSwolf')::float as swolf
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training', 'indoor_cycling')
       AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
     LIMIT 200
-  `) as { activity_id: string; type_key: string; date: string; name: string | null; distance_km: number | null; duration_min: number | null; avg_hr: number | null; calories: number | null; elev_gain: number }[];
+  `) as { activity_id: string; type_key: string; date: string; name: string | null; distance_km: number | null; duration_min: number | null; avg_hr: number | null; calories: number | null; elev_gain: number; max_speed_ms: number | null; swolf: number | null }[];
 
   return NextResponse.json({
     monthly,
