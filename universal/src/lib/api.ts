@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
 /** Personal API token for prod (soma.gkos.dev gates /api/* behind a session;
     the token bypasses that for this native client). Empty in local dev. */
 const API_TOKEN = process.env.EXPO_PUBLIC_API_TOKEN;
 const AUTH_HEADERS: Record<string, string> = API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
+
+/** Image source for an activity's generated share card. Includes the auth
+ *  header (React Native <Image> forwards `headers` on native; prod gates /api/*). */
+export function activityImageSource(activityId: string) {
+  return { uri: `${API_BASE}/api/activity/${encodeURIComponent(activityId)}/image`, headers: AUTH_HEADERS };
+}
 
 /**
  * GET JSON with one automatic retry. Serverless DBs (Neon) can return a transient
