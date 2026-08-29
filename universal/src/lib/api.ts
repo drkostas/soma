@@ -123,6 +123,23 @@ export function useToday() {
   return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- This-week vs last-week per-day breakdown (Overview This-Week drill-down) ----
+export interface WeekDay { day: string; date: string; sessions: number; hours: number; km: number; calories: number }
+export interface WeeklyComparison { this_week: WeekDay[]; last_week: WeekDay[]; totals?: unknown }
+/** Per-day Mon–Sun training breakdown from /api/weekly-comparison. */
+export function useWeeklyComparison(enabled: boolean) {
+  const [data, setData] = useState<WeeklyComparison | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    fetchJson<WeeklyComparison>("/api/weekly-comparison")
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [enabled]);
+  return { data };
+}
+
 export interface TrainingBreakdown {
   date: string;
   readiness: {
