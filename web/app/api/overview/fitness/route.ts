@@ -33,6 +33,20 @@ export async function GET() {
       (SELECT COUNT(*) FROM hevy_raw_data WHERE endpoint_name = 'workout') AS total
   `;
 
+  const intensityRows = await sql`
+    SELECT
+      (raw_json->>'weekGoal')::int      as goal,
+      (raw_json->>'weeklyTotal')::int   as total,
+      (raw_json->>'weeklyModerate')::int as moderate,
+      (raw_json->>'weeklyVigorous')::int as vigorous
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'intensity_minutes_data'
+      AND raw_json->>'weekGoal' IS NOT NULL
+    ORDER BY date DESC
+    LIMIT 1
+  `;
+  const im = (intensityRows as Record<string, unknown>[])[0] ?? null;
+
   const fitness = (fitnessRows as Record<string, unknown>[])[0] ?? null;
 
   // Normalize the Garmin fitness-age "components" blob into an ordered list of
@@ -64,5 +78,13 @@ export async function GET() {
     achievable_age: fitness ? (fitness.achievable_age ?? null) : null,
     total_activities: Number((countRows as Record<string, unknown>[])[0]?.total ?? 0),
     components,
+    intensity: im
+      ? {
+          goal: Number(im.goal ?? 0),
+          total: Number(im.total ?? 0),
+          moderate: Number(im.moderate ?? 0),
+          vigorous: Number(im.vigorous ?? 0),
+        }
+      : null,
   });
 }
