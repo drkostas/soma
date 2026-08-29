@@ -20,6 +20,18 @@ export async function GET() {
       ORDER BY priority DESC, id
     `;
 
+    // Spotify library status (features cached for tempo-matched playlists).
+    const spotifyRows = await sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM spotify_track_features)  AS tracks,
+        (SELECT COUNT(*)::int FROM spotify_artist_genres)   AS artists,
+        (SELECT MAX(cached_at) FROM spotify_track_features) AS last_sync
+    `;
+    const sp = (spotifyRows as Record<string, unknown>[])[0] ?? null;
+    const spotify = sp && Number(sp.tracks) > 0
+      ? { tracks: Number(sp.tracks), artists: Number(sp.artists), last_sync: (sp.last_sync as string | null) ?? null }
+      : null;
+
     // Build platform status including non-connected ones
     const platforms = ["garmin", "hevy", "strava", "surfr"];
     const credMap = Object.fromEntries(
@@ -41,7 +53,7 @@ export async function GET() {
       can_connect: p === "strava",
     }));
 
-    return NextResponse.json({ platforms: status, rules });
+    return NextResponse.json({ platforms: status, rules, spotify });
   } catch (err) {
     console.error("Error fetching connections status:", err);
     return NextResponse.json(

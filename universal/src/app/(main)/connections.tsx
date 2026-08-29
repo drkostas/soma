@@ -27,9 +27,11 @@ interface SyncRule {
   priority: number;
 }
 
+interface SpotifyStatus { tracks: number; artists: number; last_sync: string | null }
 interface ConnectionsResponse {
   platforms: PlatformStatus[];
   rules: SyncRule[];
+  spotify?: SpotifyStatus | null;
 }
 
 interface SourceStatus {
@@ -512,11 +514,27 @@ export default function ConnectionsScreen() {
               <Text variant="eyebrow">Spotify</Text>
               <Text variant="micro" className="text-text-muted">Tempo-matched running playlists</Text>
             </View>
-            <Badge label="Web sign-in" tone="neutral" />
+            <Badge label={conn?.spotify ? "Connected" : "Web sign-in"} tone={conn?.spotify ? "success" : "neutral"} />
           </View>
-          <Text variant="micro" className="text-text-secondary">
-            Spotify uses a one-tap OAuth sign-in handled on the soma web dashboard. Connect there, then your library status appears here.
-          </Text>
+          {conn?.spotify ? (
+            <>
+              <View className="flex-row flex-wrap gap-x-5 gap-y-1">
+                <View className="gap-0.5">
+                  <Text variant="micro" className="text-text-muted">Tracks analysed</Text>
+                  <Text variant="title" className="text-teal tabular-nums">{conn.spotify.tracks.toLocaleString()}</Text>
+                </View>
+                <View className="gap-0.5">
+                  <Text variant="micro" className="text-text-muted">Artists</Text>
+                  <Text variant="title" className="text-indigo tabular-nums">{conn.spotify.artists.toLocaleString()}</Text>
+                </View>
+              </View>
+              {conn.spotify.last_sync ? <Text variant="micro" className="text-text-muted">last synced {fmtDateTime(conn.spotify.last_sync)}</Text> : null}
+            </>
+          ) : (
+            <Text variant="micro" className="text-text-secondary">
+              Spotify uses a one-tap OAuth sign-in handled on the soma web dashboard. Connect there, then your library status appears here.
+            </Text>
+          )}
         </Card>
 
         {/* Push notification preferences */}
