@@ -75,7 +75,9 @@ function useSleepGlance() {
   return s;
 }
 
-interface FitnessResp { fitness_age: number | null; chrono_age: number | null; achievable_age: number | null; total_activities: number }
+interface FitnessComponent { key: string; label: string; unit: string; value: number | null; target: number | null; priority: number | null }
+interface FitnessResp { fitness_age: number | null; chrono_age: number | null; achievable_age: number | null; total_activities: number; components?: FitnessComponent[] }
+const fmtComp = (v: number) => (v % 1 === 0 ? String(v) : v.toFixed(1));
 /** Garmin Fitness Age + lifetime activity count, from /api/overview/fitness. */
 function useOverviewFitness() {
   const [f, setF] = useState<FitnessResp | null>(null);
@@ -269,6 +271,24 @@ export default function OverviewScreen() {
                   chronological age {fitness.chrono_age}{fitness.achievable_age != null ? ` · achievable ${Math.round(fitness.achievable_age)}` : ""}
                 </Text>
               </>
+            ) : null}
+            {fitness.components && fitness.components.length ? (
+              <View className="mt-1 gap-1 border-t border-border-subtle pt-2">
+                <Text variant="micro" className="text-text-muted">WHAT LOWERS IT · most impact first</Text>
+                {fitness.components.map((c) => {
+                  const has = c.target != null && c.value != null;
+                  const met = has ? (c.key.startsWith("vigorous") ? (c.value as number) >= (c.target as number) : (c.value as number) <= (c.target as number)) : false;
+                  return (
+                    <View key={c.key} className="flex-row items-center justify-between">
+                      <Text variant="micro" className="text-text-secondary">{c.label}</Text>
+                      <Text variant="micro" className="tabular-nums" style={{ color: has ? (met ? "#6ad4a0" : "#e0a458") : "#8aa0ac" }}>
+                        {c.value != null ? `${fmtComp(c.value)}${c.unit ? ` ${c.unit}` : ""}` : "—"}
+                        {has ? `  →  ${fmtComp(c.target as number)}` : ""}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
             ) : null}
           </Card>
         ) : null}
