@@ -28,10 +28,13 @@ interface SyncRule {
 }
 
 interface SpotifyStatus { tracks: number; artists: number; last_sync: string | null }
+interface StravaActivity { name: string | null; date: string; type_key: string | null; onStrava: boolean }
+interface StravaCoverage { total: number; onStrava: number; recent: StravaActivity[] }
 interface ConnectionsResponse {
   platforms: PlatformStatus[];
   rules: SyncRule[];
   spotify?: SpotifyStatus | null;
+  stravaCoverage?: StravaCoverage | null;
 }
 
 interface SourceStatus {
@@ -540,6 +543,38 @@ export default function ConnectionsScreen() {
                 ))}
               </View>
             ) : null}
+          </Card>
+        ) : null}
+
+        {/* Strava coverage — how many recent Garmin activities reached Strava */}
+        {conn?.stravaCoverage && conn.stravaCoverage.total > 0 ? (
+          <Card className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-1 pr-2">
+                <Text variant="eyebrow">Strava coverage</Text>
+                <Text variant="micro" className="text-text-muted">Garmin activities forwarded to Strava · last 90 days</Text>
+              </View>
+              <Text variant="caption" className="tabular-nums text-text">{conn.stravaCoverage.onStrava}/{conn.stravaCoverage.total}</Text>
+            </View>
+            <View className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#142530" }}>
+              <View style={{ width: `${Math.round((conn.stravaCoverage.onStrava / conn.stravaCoverage.total) * 100)}%`, height: "100%", backgroundColor: "#fc5200" }} />
+            </View>
+            <View className="gap-0.5">
+              {conn.stravaCoverage.recent.map((a, i) => {
+                const sport = (a.type_key || "").replace(/_v2$/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                return (
+                  <View key={`${a.date}-${i}`} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
+                    <View className="flex-1 pr-2">
+                      <Text variant="caption" className="text-text" numberOfLines={1}>{a.name || sport || "Activity"}</Text>
+                      <Text variant="micro" className="text-text-muted">{fmtDate(a.date)}{sport ? ` · ${sport}` : ""}</Text>
+                    </View>
+                    {a.onStrava
+                      ? <Badge label="On Strava" tone="warm" />
+                      : <Text variant="micro" className="text-text-muted">not synced</Text>}
+                  </View>
+                );
+              })}
+            </View>
           </Card>
         ) : null}
 
