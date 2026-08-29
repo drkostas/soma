@@ -35,7 +35,9 @@ export async function GET(request: Request) {
       (raw_json->0->>'stressHistoryFactorPercent')::int   as stress_pct,
       (raw_json->0->>'acwrFactorPercent')::int            as acwr_pct,
       (raw_json->0->>'recoveryTimeFactorPercent')::int    as recovery_pct,
-      (raw_json->0->>'sleepHistoryFactorPercent')::int    as sleep_history_pct
+      (raw_json->0->>'sleepHistoryFactorPercent')::int    as sleep_history_pct,
+      (raw_json->0->>'sleepScoreFactorPercent')::int      as sleep_score_pct,
+      raw_json->0->>'hrvFactorFeedback'                   as hrv_feedback
     FROM garmin_raw_data
     WHERE endpoint_name = 'training_readiness'
       AND raw_json->0->>'score' IS NOT NULL
@@ -45,6 +47,7 @@ export async function GET(request: Request) {
     date: string; score: number | null; level: string | null;
     hrv_pct: number | null; stress_pct: number | null; acwr_pct: number | null;
     recovery_pct: number | null; sleep_history_pct: number | null;
+    sleep_score_pct: number | null; hrv_feedback: string | null;
   }[];
 
   return NextResponse.json({
