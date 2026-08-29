@@ -249,6 +249,23 @@ export function useForwardSim(date: string) {
   return { data, loading, error, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Optimal-vs-actual VDOT trajectory (banister projection to race date) ----
+export interface TrajectoryPoint { date: string; optimal: number; actual: number | null }
+export interface TrajectoryData { trajectory: TrajectoryPoint[]; raceDate: string | null; goalVdot: number | null }
+
+/** Banister-projected optimal VDOT curve to the race date vs actual, + goal VDOT. */
+export function useTrajectory() {
+  const [data, setData] = useState<TrajectoryData | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<TrajectoryData>("/api/training/trajectory")
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return { data };
+}
+
 // ---- Activity match: per plan-day matched Garmin activity + completion score ----
 export interface MatchedActivity {
   distance_km: number | string | null; duration_min: number | string | null;
