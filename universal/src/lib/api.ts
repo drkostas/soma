@@ -715,6 +715,7 @@ export interface ReadinessPoint {
   date: string; score: number | null; level: string | null;
   hrv_pct: number | null; stress_pct: number | null; acwr_pct: number | null;
   recovery_pct: number | null; sleep_history_pct: number | null;
+  sleep_score_pct?: number | null; hrv_feedback?: string | null;
 }
 export interface RecoverySummary {
   hrv: { trend: HrvPoint[]; latest: HrvPoint | null };
