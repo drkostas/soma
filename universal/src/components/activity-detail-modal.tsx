@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, ScrollView } from "react-native";
-import { Text, Modal, Badge, SegmentedControl } from "soma-style";
+import { View, ScrollView, Image, Share } from "react-native";
+import { Text, Modal, Badge, SegmentedControl, Button } from "soma-style";
 import { LineChart } from "./line-chart";
-import { fetchJson, type ActivityRow } from "../lib/api";
+import { fetchJson, activityImageSource, type ActivityRow } from "../lib/api";
 
 interface TSPoint { elapsed_sec: number; hr?: number | null; speed?: number | null; elevation?: number | null; cadence?: number | null }
 
@@ -96,7 +96,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 export function ActivityDetailModal({ activity, onClose }: { activity: ActivityRow | null; onClose: () => void }) {
   const [data, setData] = useState<ActivityDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"Overview" | "Splits" | "Charts">("Overview");
+  const [tab, setTab] = useState<"Overview" | "Splits" | "Charts" | "Share">("Overview");
 
   useEffect(() => {
     if (!activity) { setData(null); return; }
@@ -113,7 +113,9 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
   const laps = data?.splits?.lapDTOs ?? [];
   const ts = data?.time_series ?? [];
   const hasTS = ts.length > 1;
-  const tabOptions = ["Overview", ...(laps.length > 1 ? ["Splits"] : []), ...(hasTS ? ["Charts"] : [])];
+  const tabOptions = ["Overview", ...(laps.length > 1 ? ["Splits"] : []), ...(hasTS ? ["Charts"] : []), "Share"];
+  const img = activityImageSource(activity.activity_id);
+  const onShare = () => { Share.share({ url: img.uri, message: activity.name || activity.sport }).catch(() => {}); };
   const zones = (data?.hr_zones ?? []).filter((z) => z && (z.secsInZone ?? 0) > 0);
   const zTotal = zones.reduce((a, z) => a + n(z.secsInZone), 0);
   const shoe = (data?.gear ?? []).find((g) => g.gearTypeName === "Shoes");
@@ -224,6 +226,12 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
             </View>
           ) : tab === "Charts" ? (
             <PerfCharts ts={ts} />
+          ) : tab === "Share" ? (
+            <View className="items-center gap-3">
+              <Image source={img} style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12, backgroundColor: "#0e1a22" }} resizeMode="contain" />
+              <Button label="Share activity" onPress={onShare} />
+              <Text variant="micro" className="text-center text-text-muted">A shareable card for this activity.</Text>
+            </View>
           ) : (
             /* Splits tab: per-lap pace bars + stats */
             <View className="gap-1.5">
