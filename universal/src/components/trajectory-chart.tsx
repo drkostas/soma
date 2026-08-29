@@ -2,7 +2,19 @@ import { useState, useMemo } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card, SegmentedControl } from "soma-style";
 import { LineChart, ChartLegend, chartDateLabel } from "./line-chart";
+import { getHMPrediction } from "../lib/vdot-pace-zones";
 import type { ForwardSim, TrajectoryData } from "../lib/api";
+
+/** Seconds → H:MM:SS (half-marathon finish time). */
+function timeStr(sec: number): string {
+  const t = Math.round(sec);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+function raceDateLabel(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
 type Dim = "Fitness" | "Readiness" | "Load";
 const DIMS = ["Fitness", "Readiness", "Load"] as const;
@@ -19,10 +31,12 @@ function shortLabel(iso: string): string {
 
 /** Fitness trajectory: our-model line vs Garmin's, across Fitness (VDOT),
  *  Readiness, and Load dimensions, with a "You are here" marker on the latest
- *  model value and a toggle to hide the Garmin comparison. Mobile-adapted from
- *  the web trajectory chart — goal-zone/taper/race bands need goal+taper data
- *  absent from the mobile payload, and the rich hover tooltip + 7-line
- *  visibility dropdown are replaced by the dimension + compare toggles. */
+ *  model value and a toggle to hide the Garmin comparison. The Fitness view
+ *  swaps to the banister optimal-vs-actual projection when the endpoint has an
+ *  active plan, annotated with the race-day projected HM finish vs goal (from
+ *  the raceDate + goalVdot the payload carries). The web's rich hover tooltip
+ *  and 7-line visibility dropdown are replaced by the dimension + compare
+ *  toggles; the taper/goal-tier shading remains web-only. */
 export function TrajectoryChart({ comparison, trajectory }: { comparison: ForwardSim["comparison"]; trajectory?: TrajectoryData | null }) {
   const [dim, setDim] = useState<Dim>("Fitness");
   const [compare, setCompare] = useState(true);
@@ -37,11 +51,18 @@ export function TrajectoryChart({ comparison, trajectory }: { comparison: Forwar
     const actual = t.map((p) => (p.actual != null && isFinite(p.actual) && p.actual > 0 ? p.actual : null));
     let hereIdx = -1;
     for (let i = actual.length - 1; i >= 0; i--) if (actual[i] != null) { hereIdx = i; break; }
+    // Race-day projection: the optimal VDOT at the race date → HM finish (the
+    // payoff of the engine), against the goal VDOT the payload carries.
+    let lastOptimal: number | null = null;
+    for (let i = optimal.length - 1; i >= 0; i--) if (optimal[i] != null) { lastOptimal = optimal[i]; break; }
+    const projHM = lastOptimal != null ? getHMPrediction(lastOptimal) : null;
+    const goalHM = trajectory?.goalVdot != null ? getHMPrediction(trajectory.goalVdot) : null;
     return {
       labels: t.map((p) => chartDateLabel(p.date)),
       optimal, actual,
       hereDot: actual.map((v, i) => (i === hereIdx ? v : null)),
       cur: hereIdx >= 0 ? actual[hereIdx] : null,
+      projHM, goalHM,
     };
   }, [trajectory]);
   const src = useMemo(() => {
@@ -105,6 +126,22 @@ export function TrajectoryChart({ comparison, trajectory }: { comparison: Forwar
             { color: "#77c8d1", label: "Optimal (to race)", dashed: true },
             ...(trajectory?.goalVdot != null ? [{ color: "#e0c458", label: `Goal ${trajectory.goalVdot.toFixed(1)}`, dashed: true }] : []),
           ]} />
+          {traj.projHM != null ? (
+            <View className="mt-1 flex-row items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: "#16241b" }}>
+              <View>
+                <Text variant="micro" className="text-text-muted">Projected HM finish{trajectory?.raceDate ? ` · ${raceDateLabel(trajectory.raceDate)}` : ""}</Text>
+                <Text variant="title" className="text-teal tabular-nums">{timeStr(traj.projHM)}</Text>
+              </View>
+              {traj.goalHM != null ? (
+                <View className="items-end">
+                  <Text variant="micro" className="text-text-muted">
+                    {traj.projHM <= traj.goalHM ? `${timeStr(traj.goalHM - traj.projHM)} ahead of goal` : `${timeStr(traj.projHM - traj.goalHM)} off goal`}
+                  </Text>
+                  <Text variant="body" className="tabular-nums" style={{ color: "#e0c458" }}>Goal {timeStr(traj.goalHM)}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </>
       ) : a.some((v) => v != null) || b.some((v) => v != null) ? (
         <>
