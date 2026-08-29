@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { View, ScrollView, Image, Share } from "react-native";
-import { Text, Modal, Badge, SegmentedControl, Button } from "soma-style";
+import { Text, Modal, Badge, SegmentedControl, Button, Sparkline } from "soma-style";
 import { LineChart } from "./line-chart";
 import { fetchJson, activityImageSource, type ActivityRow } from "../lib/api";
 
 interface TSPoint { elapsed_sec: number; hr?: number | null; speed?: number | null; elevation?: number | null; cadence?: number | null }
+interface GpsPoint { dist_m?: number | null; hr?: number | null; speed?: number | null; elev?: number | null }
 
 /* ---- response shape from /api/activity/[id] (Garmin summary + laps + weather) ---- */
 interface Summary {
@@ -27,6 +28,7 @@ interface ActivityDetail {
   gear?: Gear[] | null;
   strava_id?: string | null;
   time_series?: TSPoint[] | null;
+  gps_route?: GpsPoint[] | null;
 }
 
 const n = (v: number | null | undefined): number => (v == null || !isFinite(Number(v)) ? 0 : Number(v));
@@ -75,6 +77,53 @@ function PerfCharts({ ts }: { ts: TSPoint[] }) {
       <LineChart height={180} interactive xTicks={4} labels={labels} yFormat={cfg.fmt}
         series={[{ values, color: cfg.color, width: 2 }]} />
       <Text variant="micro" className="text-text-muted">{active === "Pace" ? "min/km over elapsed time — lower is faster." : `${active} over elapsed time.`}</Text>
+    </View>
+  );
+}
+
+/** Route profile (web run-sparklines parity): elevation / pace / HR traced
+ *  against DISTANCE (binned by km) from the gps_route — the shape of the run,
+ *  complementing the Charts tab's over-time view. */
+function RouteProfile({ gps }: { gps: GpsPoint[] }) {
+  const prof = useMemo(() => {
+    const pts = gps.filter((p) => p.dist_m != null);
+    const maxDist = pts.length ? Number(pts[pts.length - 1].dist_m) || 0 : 0;
+    if (pts.length < 4 || maxDist <= 0) return null;
+    const BINS = 40;
+    const elev: number[] = [], pace: number[] = [], hr: number[] = [];
+    for (let b = 0; b < BINS; b++) {
+      const lo = (b / BINS) * maxDist, hi = ((b + 1) / BINS) * maxDist;
+      const inBin = pts.filter((p) => { const d = Number(p.dist_m) || 0; return d >= lo && d < hi; });
+      if (!inBin.length) continue;
+      const avg = (f: (p: GpsPoint) => number | null) => {
+        const vs = inBin.map(f).filter((v): v is number => v != null && isFinite(v));
+        return vs.length ? vs.reduce((a, c) => a + c, 0) / vs.length : null;
+      };
+      const e = avg((p) => (p.elev != null ? Number(p.elev) : null)); if (e != null) elev.push(e);
+      const sp = avg((p) => (p.speed != null && Number(p.speed) > 0.5 ? 1000 / Number(p.speed) : null)); if (sp != null) pace.push(sp);
+      const h = avg((p) => (p.hr != null ? Number(p.hr) : null)); if (h != null) hr.push(h);
+    }
+    return { elev, pace, hr, km: maxDist / 1000 };
+  }, [gps]);
+  if (!prof || (prof.elev.length < 2 && prof.pace.length < 2 && prof.hr.length < 2)) return null;
+
+  const row = (label: string, data: number[], color: string, unit: string, fmt: (v: number) => string) =>
+    data.length >= 2 ? (
+      <View className="gap-0.5">
+        <View className="flex-row items-center justify-between">
+          <Text variant="micro" className="text-text-muted">{label}</Text>
+          <Text variant="micro" className="tabular-nums text-text-muted">{fmt(Math.min(...data))}–{fmt(Math.max(...data))} {unit}</Text>
+        </View>
+        <Sparkline data={data} color={color} height={30} baseline />
+      </View>
+    ) : null;
+
+  return (
+    <View className="gap-2 border-t border-border-subtle pt-2.5">
+      <Text variant="eyebrow" className="text-text-muted">Route profile · {prof.km.toFixed(1)} km · by distance</Text>
+      {row("Elevation", prof.elev, "#8fc866", "m", (v) => `${Math.round(v)}`)}
+      {row("Pace", prof.pace, "#77c8d1", "/km", (v) => `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`)}
+      {row("Heart rate", prof.hr, "#e06060", "bpm", (v) => `${Math.round(v)}`)}
     </View>
   );
 }
@@ -225,7 +274,10 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
               ) : null}
             </View>
           ) : tab === "Charts" ? (
-            <PerfCharts ts={ts} />
+            <View className="gap-3">
+              <PerfCharts ts={ts} />
+              <RouteProfile gps={data?.gps_route ?? []} />
+            </View>
           ) : tab === "Share" ? (
             <View className="items-center gap-3">
               <Image source={img} style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12, backgroundColor: "#0e1a22" }} resizeMode="contain" />
