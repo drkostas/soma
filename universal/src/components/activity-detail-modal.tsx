@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View, ScrollView } from "react-native";
 import { Text, Modal, Badge, SegmentedControl } from "soma-style";
+import { LineChart } from "./line-chart";
 import { fetchJson, type ActivityRow } from "../lib/api";
+
+interface TSPoint { elapsed_sec: number; hr?: number | null; speed?: number | null; elevation?: number | null; cadence?: number | null }
 
 /* ---- response shape from /api/activity/[id] (Garmin summary + laps + weather) ---- */
 interface Summary {
@@ -23,6 +26,7 @@ interface ActivityDetail {
   splits?: { lapDTOs?: Lap[] } | null;
   gear?: Gear[] | null;
   strava_id?: string | null;
+  time_series?: TSPoint[] | null;
 }
 
 const n = (v: number | null | undefined): number => (v == null || !isFinite(Number(v)) ? 0 : Number(v));
@@ -36,6 +40,44 @@ function secMMSS(sec: number): string { const t = Math.round(sec); return `${Mat
 function paceFromMs(ms: number | null | undefined): string { if (ms == null || ms <= 0) return "—"; const secKm = 1000 / ms; return `${secMMSS(secKm)}/km`; }
 function kmh(ms: number | null | undefined): string { return ms == null ? "—" : `${(ms * 3.6).toFixed(1)} km/h`; }
 function longDate(iso: string | null | undefined): string { if (!iso) return ""; const d = new Date(iso); return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }); }
+
+const PERF_METRICS = ["HR", "Pace", "Elevation", "Cadence"] as const;
+type PerfMetric = typeof PERF_METRICS[number];
+const PERF_CFG: Record<PerfMetric, { color: string; get: (p: TSPoint) => number | null; fmt: (v: number) => string }> = {
+  HR:        { color: "#e06060", get: (p) => (p.hr != null && p.hr > 0 ? p.hr : null), fmt: (v) => `${Math.round(v)}` },
+  Pace:      { color: "#77c8d1", get: (p) => (p.speed != null && p.speed > 0.5 ? 1000 / p.speed : null), fmt: (v) => `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}` },
+  Elevation: { color: "#8fc866", get: (p) => (p.elevation != null ? p.elevation : null), fmt: (v) => `${Math.round(v)}` },
+  Cadence:   { color: "#e0a458", get: (p) => (p.cadence != null && p.cadence > 0 ? p.cadence : null), fmt: (v) => `${Math.round(v)}` },
+};
+
+/** In-activity time-series charts (web activity-performance-chart parity): one
+ *  metric at a time (HR / pace / elevation / cadence) over elapsed time, from the
+ *  per-second time_series (downsampled). Pace is min/km, so lower is faster. */
+function PerfCharts({ ts }: { ts: TSPoint[] }) {
+  const [metric, setMetric] = useState<PerfMetric>("HR");
+  // Only offer metrics that actually have data.
+  const available = PERF_METRICS.filter((m) => ts.some((p) => PERF_CFG[m].get(p) != null));
+  const active: PerfMetric = available.includes(metric) ? metric : (available[0] ?? "HR");
+  const cfg = PERF_CFG[active];
+  const { values, labels } = useMemo(() => {
+    const step = Math.max(1, Math.ceil(ts.length / 120));
+    const pts = ts.filter((_, i) => i % step === 0);
+    return {
+      values: pts.map((p) => cfg.get(p)),
+      labels: pts.map((p) => `${Math.round(p.elapsed_sec / 60)}m`),
+    };
+  }, [ts, active]);
+
+  if (available.length === 0) return <Text variant="caption" className="text-text-muted">No time-series for this activity.</Text>;
+  return (
+    <View className="gap-2">
+      <SegmentedControl options={available} value={active} onChange={(v) => setMetric(v as PerfMetric)} />
+      <LineChart height={180} interactive xTicks={4} labels={labels} yFormat={cfg.fmt}
+        series={[{ values, color: cfg.color, width: 2 }]} />
+      <Text variant="micro" className="text-text-muted">{active === "Pace" ? "min/km over elapsed time — lower is faster." : `${active} over elapsed time.`}</Text>
+    </View>
+  );
+}
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -54,7 +96,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 export function ActivityDetailModal({ activity, onClose }: { activity: ActivityRow | null; onClose: () => void }) {
   const [data, setData] = useState<ActivityDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"Overview" | "Splits">("Overview");
+  const [tab, setTab] = useState<"Overview" | "Splits" | "Charts">("Overview");
 
   useEffect(() => {
     if (!activity) { setData(null); return; }
@@ -69,6 +111,9 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
   if (!activity) return null;
   const s = data?.summary ?? null;
   const laps = data?.splits?.lapDTOs ?? [];
+  const ts = data?.time_series ?? [];
+  const hasTS = ts.length > 1;
+  const tabOptions = ["Overview", ...(laps.length > 1 ? ["Splits"] : []), ...(hasTS ? ["Charts"] : [])];
   const zones = (data?.hr_zones ?? []).filter((z) => z && (z.secsInZone ?? 0) > 0);
   const zTotal = zones.reduce((a, z) => a + n(z.secsInZone), 0);
   const shoe = (data?.gear ?? []).find((g) => g.gearTypeName === "Shoes");
@@ -111,8 +156,8 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
           <Text variant="body" className="text-text-muted">Loading…</Text>
         ) : null}
 
-        {laps.length > 1 ? (
-          <SegmentedControl options={["Overview", "Splits"] as const} value={tab} onChange={(v) => setTab(v as "Overview" | "Splits")} />
+        {tabOptions.length > 1 ? (
+          <SegmentedControl options={tabOptions} value={tab} onChange={(v) => setTab(v as "Overview" | "Splits" | "Charts")} />
         ) : null}
 
         <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
@@ -177,6 +222,8 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
                 </View>
               ) : null}
             </View>
+          ) : tab === "Charts" ? (
+            <PerfCharts ts={ts} />
           ) : (
             /* Splits tab: per-lap pace bars + stats */
             <View className="gap-1.5">
