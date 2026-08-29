@@ -1,14 +1,23 @@
 import { View } from "react-native";
 import { Text, Card } from "soma-style";
-import type { GraphNode } from "../lib/api";
+import type { GraphNode, GraphEdge } from "../lib/api";
 import { paceStr } from "../lib/vdot";
+
+const READINESS_INPUTS = [
+  { id: "hrv_z", label: "HRV" },
+  { id: "sleep_z", label: "Sleep" },
+  { id: "rhr_z", label: "RHR" },
+  { id: "bb_z", label: "Body Batt" },
+];
 
 /**
  * Mobile-native replacement for the web's draggable computation-graph DAG.
  * Shows the same signals → factors → adjusted-pace flow as a compact breakdown:
- * raw signals, then the multiplicative factors that bend today's pace.
+ * the multiplicative factors that bend today's pace, then the calibrated
+ * readiness drivers (each signal's z-value + its weight into the readiness
+ * factor — the graph edges).
  */
-export function PaceComputation({ nodes }: { nodes: Record<string, GraphNode> }) {
+export function PaceComputation({ nodes, edges = [] }: { nodes: Record<string, GraphNode>; edges?: GraphEdge[] }) {
   const val = (id: string): number | null => {
     const v = nodes[id]?.value;
     return v == null || !isFinite(Number(v)) ? null : Number(v);
@@ -16,6 +25,15 @@ export function PaceComputation({ nodes }: { nodes: Record<string, GraphNode> })
 
   const adjusted = val("adjusted_pace"); // seconds/km
   const vdot = val("vdot");
+
+  // Readiness drivers: each z-signal's calibrated weight (edge → readiness_factor).
+  const drivers = READINESS_INPUTS
+    .map((s) => {
+      const e = edges.find((ed) => ed.from === s.id && ed.to === "readiness_factor");
+      return { ...s, weight: e != null ? Math.abs(e.weight) : null, z: val(s.id) };
+    })
+    .filter((d) => d.weight != null);
+  const totalW = drivers.reduce((sum, d) => sum + (d.weight ?? 0), 0) || 1;
 
   const factors = [
     { label: "Readiness", v: val("readiness_factor"), color: "#6ad4a0" },
@@ -68,8 +86,28 @@ export function PaceComputation({ nodes }: { nodes: Record<string, GraphNode> })
         })}
       </View>
 
-      {/* raw readiness signals feeding the factors */}
-      {signals.length ? (
+      {/* Readiness drivers: each signal's calibrated weight into the readiness factor */}
+      {drivers.length ? (
+        <View className="gap-1.5 border-t border-border-subtle pt-2.5">
+          <Text variant="micro" className="text-text-muted">READINESS DRIVERS · calibrated weights</Text>
+          {drivers.map((d) => {
+            const wPct = Math.round(((d.weight as number) / totalW) * 100);
+            return (
+              <View key={d.id} className="gap-0.5">
+                <View className="flex-row items-center justify-between">
+                  <Text variant="micro" className="text-text-secondary">
+                    {d.label}{d.z != null ? ` · ${(d.z as number) >= 0 ? "+" : ""}${(d.z as number).toFixed(2)} z` : ""}
+                  </Text>
+                  <Text variant="micro" className="tabular-nums text-text-muted">{wPct}%</Text>
+                </View>
+                <View className="h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: "#16242c" }}>
+                  <View className="h-full rounded-full" style={{ width: `${wPct}%`, backgroundColor: "#6aa0e0" }} />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : signals.length ? (
         <View className="flex-row flex-wrap gap-2 border-t border-border-subtle pt-2.5">
           {signals.map((s) => (
             <View key={s.label} className="rounded-full bg-surface-subtle px-2.5 py-1">
