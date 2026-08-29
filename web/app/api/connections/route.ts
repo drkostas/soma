@@ -32,6 +32,31 @@ export async function GET() {
       ? { tracks: Number(sp.tracks), artists: Number(sp.artists), last_sync: (sp.last_sync as string | null) ?? null }
       : null;
 
+    // Strava coverage: of recent Garmin activities, how many were forwarded to
+    // Strava (activity_sync_log, source_id cast to text; ids are bigint there).
+    const stravaRows = (await sql`
+      SELECT g.raw_json->>'activityName' AS name,
+        (g.raw_json->>'startTimeLocal')::date::text AS date,
+        g.raw_json->'activityType'->>'typeKey' AS type_key,
+        sl.destination_id AS strava_id
+      FROM garmin_activity_raw g
+      LEFT JOIN activity_sync_log sl
+        ON sl.source_id = g.activity_id::text AND sl.destination = 'strava' AND sl.status IN ('sent', 'external')
+      WHERE g.endpoint_name = 'summary'
+        AND (g.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 90
+      ORDER BY (g.raw_json->>'startTimeLocal')::text DESC
+      LIMIT 60
+    `) as { name: string | null; date: string; type_key: string | null; strava_id: string | null }[];
+    const stravaTotal = stravaRows.length;
+    const stravaOn = stravaRows.filter((r) => r.strava_id != null).length;
+    const stravaCoverage = stravaTotal > 0
+      ? {
+          total: stravaTotal,
+          onStrava: stravaOn,
+          recent: stravaRows.slice(0, 10).map((r) => ({ name: r.name, date: r.date, type_key: r.type_key, onStrava: r.strava_id != null })),
+        }
+      : null;
+
     // Build platform status including non-connected ones
     const platforms = ["garmin", "hevy", "strava", "surfr"];
     const credMap = Object.fromEntries(
@@ -53,7 +78,7 @@ export async function GET() {
       can_connect: p === "strava",
     }));
 
-    return NextResponse.json({ platforms: status, rules, spotify });
+    return NextResponse.json({ platforms: status, rules, spotify, stravaCoverage });
   } catch (err) {
     console.error("Error fetching connections status:", err);
     return NextResponse.json(
