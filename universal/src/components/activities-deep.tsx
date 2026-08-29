@@ -188,6 +188,85 @@ function KiteWind({ sessions }: { sessions: KiteSession[] }) {
   );
 }
 
+/** Resort name from a Garmin snowboarding activity title (ported from web). */
+function extractResort(name: string | null): string {
+  const n = name ?? "";
+  if (n.includes("Avoriaz") || n.includes("Portes du Soleil") || n.includes("Les")) return "Avoriaz";
+  if (n.includes("Bansko")) return "Bansko";
+  if (n.includes("Kalavryta")) return "Kalavryta";
+  if (n.includes("Akrata")) return "Akrata";
+  if (n.includes("Lefkasio")) return "Lefkasio";
+  if (n.includes("Vrachní") || n.includes("Elatófyto")) return "Vasilitsa";
+  return n.split(" ")[0] || "Resort";
+}
+
+/** Snowboarding deep dive (web parity): per-resort session count + total
+ *  vertical + top speed, and the fastest sessions. Built from the Snowboarding
+ *  rows already in the activities `all` feed (vertical is sparse in Garmin's
+ *  resort data, so sessions rank by top speed). */
+export function SnowDeepDive({ all }: { all: ActivityRow[] }) {
+  const snow = useMemo(() => (all ?? []).filter((a) => a.sport === "Snowboarding"), [all]);
+  const resorts = useMemo(() => {
+    const m = new Map<string, { days: number; vertical: number; topSpeed: number }>();
+    for (const s of snow) {
+      const r = extractResort(s.name);
+      const cur = m.get(r) ?? { days: 0, vertical: 0, topSpeed: 0 };
+      cur.days += 1;
+      cur.vertical += s.elev_gain || 0;
+      cur.topSpeed = Math.max(cur.topSpeed, (s.max_speed_ms ?? 0) * 3.6);
+      m.set(r, cur);
+    }
+    return [...m.entries()].sort((a, b) => b[1].days - a[1].days);
+  }, [snow]);
+  const fastest = useMemo(
+    () => [...snow].filter((s) => (s.max_speed_ms ?? 0) > 0).sort((a, b) => (b.max_speed_ms ?? 0) - (a.max_speed_ms ?? 0)).slice(0, 5),
+    [snow],
+  );
+  if (snow.length === 0) return null;
+
+  const maxDays = resorts[0]?.[1].days ?? 1;
+  const totalVert = snow.reduce((a, s) => a + (s.elev_gain || 0), 0);
+  return (
+    <Card className="gap-3">
+      <View className="flex-row items-center justify-between">
+        <Text variant="eyebrow">Snowboarding deep dive</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">{snow.length} days{totalVert > 0 ? ` · ${Math.round(totalVert).toLocaleString()} m` : ""}</Text>
+      </View>
+
+      {resorts.length ? (
+        <View className="gap-1.5">
+          <Text variant="micro" className="text-text-muted">RESORTS</Text>
+          {resorts.map(([r, d]) => (
+            <View key={r} className="flex-row items-center gap-2">
+              <Text variant="body" className="flex-1 text-text-secondary" numberOfLines={1}>{r}</Text>
+              <View className="h-2 overflow-hidden rounded-full bg-surface-subtle" style={{ width: 70 }}>
+                <View className="h-full rounded-full" style={{ width: `${(d.days / maxDays) * 100}%`, backgroundColor: "#93c5fd" }} />
+              </View>
+              <Text variant="micro" className="w-28 text-right tabular-nums text-text-muted">
+                {d.days}d{d.topSpeed > 0 ? ` · ${d.topSpeed.toFixed(0)} km/h` : ""}{d.vertical > 0 ? ` · ${(d.vertical / 1000).toFixed(1)}k m` : ""}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {fastest.length ? (
+        <View className="gap-1.5 border-t border-border-subtle pt-2.5">
+          <Text variant="micro" className="text-text-muted">FASTEST SESSIONS</Text>
+          {fastest.map((s, i) => (
+            <View key={`${s.activity_id}-${i}`} className="flex-row items-center justify-between">
+              <Text variant="micro" className="flex-1 text-text-secondary" numberOfLines={1}>{extractResort(s.name)} · {shortDate(s.date)}</Text>
+              <Text variant="micro" className="ml-2 tabular-nums text-teal">
+                {((s.max_speed_ms ?? 0) * 3.6).toFixed(0)} km/h{s.elev_gain > 0 ? ` · ↑${Math.round(s.elev_gain).toLocaleString()}m` : ""}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
 const PAGE = 12;
 type SortKey = "date" | "distance_km" | "duration_min" | "avg_hr" | "calories" | "elev_gain";
 const SORTS: { key: SortKey; label: string }[] = [
