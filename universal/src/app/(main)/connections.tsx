@@ -41,12 +41,16 @@ interface SourceStatus {
   error?: string | null;
 }
 
+interface SyncRun { type: string; status: string; records: number; at: string }
+interface TableCount { label: string; count: number }
 interface SyncStatusResponse {
   lastSync: string | null;
   status: string;
   recordsSynced: number;
   error: string | null;
   sources: Record<string, SourceStatus>;
+  history?: SyncRun[];
+  tables?: TableCount[];
 }
 
 // ---- Inline data hooks (matching useToday / useTraining pattern) ----
@@ -506,6 +510,38 @@ export default function ConnectionsScreen() {
             ))
           )}
         </Card>
+
+        {/* Data pipeline — table coverage + recent runs */}
+        {sync && ((sync.tables?.length ?? 0) > 0 || (sync.history?.length ?? 0) > 0) ? (
+          <Card className="gap-3">
+            <Text variant="eyebrow">Data pipeline</Text>
+            {sync.tables?.length ? (
+              <View className="flex-row flex-wrap gap-x-6 gap-y-2">
+                {sync.tables.map((t) => (
+                  <View key={t.label} className="gap-0.5">
+                    <Text variant="micro" className="text-text-muted">{t.label}</Text>
+                    <Text variant="title" className="text-teal tabular-nums">{t.count.toLocaleString()}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {sync.history?.length ? (
+              <View className="gap-1 border-t border-border-subtle pt-2">
+                <Text variant="micro" className="text-text-muted">RECENT RUNS</Text>
+                {sync.history.map((r, i) => (
+                  <View key={i} className="flex-row items-center justify-between">
+                    <Text variant="micro" className="text-text-secondary">{r.type.replace(/_/g, " ")}</Text>
+                    <View className="flex-row items-center gap-2">
+                      <Text variant="micro" className="tabular-nums text-text-muted">{r.records.toLocaleString()} rec</Text>
+                      <View className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: r.status === "success" ? "#6ad4a0" : r.status === "error" ? "#e06060" : "#e0a458" }} />
+                      <Text variant="micro" className="tabular-nums text-text-muted">{fmtDateTime(r.at)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </Card>
+        ) : null}
 
         {/* Spotify (music features) */}
         <Card className="gap-2">
