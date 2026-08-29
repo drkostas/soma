@@ -11,6 +11,7 @@ import { ActivitySelector } from "../../components/activity-selector";
 import { ComposeMealView } from "../../components/compose-meal-view";
 import { MealDetailModal } from "../../components/meal-detail-modal";
 import { MacroGoalBar, buildMacroMarkers, ProteinQualityPill } from "../../components/macro-goal-bar";
+import { NutritionContextStrip } from "../../components/nutrition-context-strip";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
@@ -334,6 +335,8 @@ export default function NutritionScreen() {
             </Text>
           </View>
         </Card>
+
+        {tab === "Day" && isToday ? <NutritionContextStrip /> : null}
 
         {tab === "Day" ? (
           <>
