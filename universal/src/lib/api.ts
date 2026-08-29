@@ -844,6 +844,8 @@ export interface Ingredient {
   id: string; name: string; category: string;
   calories_per_100g: number; protein_per_100g: number; carbs_per_100g: number; fat_per_100g: number; fiber_per_100g: number;
   unit?: string | null; grams_per_unit?: number | null;
+  /** Cookable/raw ingredient (drives the day's prep list). */
+  is_raw?: boolean;
 }
 /** Macros for `grams` of an ingredient (linear per-100g scaling). */
 export function ingredientMacros(ing: Ingredient, grams: number) {
