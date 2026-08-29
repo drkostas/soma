@@ -613,6 +613,27 @@ export function useWorkoutInsights(range: string) {
   return { data, refetch: () => setReload((n) => n + 1) };
 }
 
+// ---- Per-workout timelines for the clickable summary-stat cards (web parity) ----
+export interface TimelinePoint { date: string; value: number; label?: string }
+export interface WorkoutTimeline {
+  cumulative: TimelinePoint[];
+  duration: TimelinePoint[];
+  calories: TimelinePoint[];
+  monthly: TimelinePoint[];
+}
+/** Per-workout duration/calories/count series from /api/workouts/timeline. */
+export function useWorkoutTimeline() {
+  const [data, setData] = useState<WorkoutTimeline | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<WorkoutTimeline>("/api/workouts/timeline")
+      .then((d) => alive && setData(d))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return { data };
+}
+
 // ---- Per-night sleep data (stages, score, sleep HR, SpO2) for the sleep dashboard ----
 export interface SleepNight {
   date: string;

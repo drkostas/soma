@@ -14,6 +14,12 @@ export interface StatDetail {
   unit?: string;
   /** If set, the modal fetches /api/stats/[metric] for a range toggle + previous-period overlay. */
   metric?: string;
+  /** Pre-supplied dated timeline (e.g. per-workout duration/calories); renders a dated chart with tap-to-read. */
+  timeline?: { date: string; value: number; label?: string }[];
+  /** How to draw the timeline: connected line (cumulative/monthly) or scatter dots (per-workout). */
+  timelineMode?: "line" | "dots";
+  /** Plural noun for the timeline point count in the eyebrow (default "workouts"). */
+  timelineNoun?: string;
 }
 
 interface StatPoint { date: string; value: number | null; value2?: number | null }
@@ -52,6 +58,50 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
   if (!stat) return null;
   const unit = stat.unit ? ` ${stat.unit}` : "";
   const fmt = (v: number | null) => (v == null ? "–" : `${Math.round(v).toLocaleString()}${unit}`);
+
+  // Timeline path: pre-supplied dated points (per-workout duration/calories,
+  // cumulative count, workouts/month) — matches the web ClickableSummaryStats modal.
+  if (stat.timeline) {
+    const pts = stat.timeline.filter((p) => isFinite(p.value));
+    const vals = pts.map((p) => p.value);
+    const labels = pts.map((p) => chartDateLabel(p.date));
+    const min = vals.length ? Math.min(...vals) : null;
+    const max = vals.length ? Math.max(...vals) : null;
+    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    const dots = stat.timelineMode === "dots";
+    return (
+      <Modal visible={!!stat} onClose={onClose} title={stat.label}>
+        <View className="gap-3">
+          <View className="flex-row items-end gap-2">
+            <Text variant="display" className="tabular-nums" style={{ color: stat.color }}>{stat.value}</Text>
+            <Text variant="body" className="mb-1 text-text-muted">{stat.sub}</Text>
+          </View>
+          {pts.length >= 2 ? (
+            <View className="gap-1">
+              <Text variant="eyebrow" className="text-text-muted">{pts.length} {stat.timelineNoun ?? "workouts"}</Text>
+              <LineChart
+                height={170}
+                interactive
+                labels={labels}
+                xTicks={4}
+                yFormat={(v) => `${Math.round(v).toLocaleString()}`}
+                series={dots
+                  ? [{ values: vals, color: stat.color, mode: "dots" as const, width: 3 }]
+                  : [{ values: vals, color: stat.color, width: 2.2 }]}
+              />
+              <View className="mt-1 flex-row justify-between">
+                <Text variant="micro" className="text-text-muted tabular-nums">min {fmt(min)}</Text>
+                <Text variant="micro" className="text-text-muted tabular-nums">avg {fmt(avg)}</Text>
+                <Text variant="micro" className="text-text-muted tabular-nums">max {fmt(max)}</Text>
+              </View>
+            </View>
+          ) : (
+            <Text variant="caption" className="text-text-muted">No timeline data yet.</Text>
+          )}
+        </View>
+      </Modal>
+    );
+  }
 
   // Rich path: real endpoint with range + previous overlay
   if (stat.metric) {
