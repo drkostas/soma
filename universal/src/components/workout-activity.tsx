@@ -116,6 +116,68 @@ function frequencyFromCalendar(calendar: WorkoutInsights["calendar"]): { labels:
   };
 }
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/** Group the calendar into weeks (Monday-anchored), most recent first, each
+ *  with its workout days + programs — the data behind the frequency drill. */
+function weeksFromCalendar(calendar: WorkoutInsights["calendar"]): { key: string; label: string; count: number; days: { date: string; program: string | null }[] }[] {
+  const wk = new Map<string, { date: string; program: string | null }[]>();
+  for (const c of calendar) {
+    const dateStr = String(c.day).slice(0, 10);
+    const d = new Date(dateStr + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - mondayIndex(d));
+    const key = isoDay(d);
+    const arr = wk.get(key) ?? [];
+    arr.push({ date: dateStr, program: c.program ?? null });
+    wk.set(key, arr);
+  }
+  return [...wk.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-8)
+    .map(([key, days]) => {
+      const [, m, d] = key.split("-").map(Number);
+      return { key, label: `${MONTHS[(m ?? 1) - 1]} ${d}`, count: days.length, days: days.sort((a, b) => a.date.localeCompare(b.date)) };
+    })
+    .reverse();
+}
+
+/** Tap-to-drill weekly session list: each week expands to that week's workout
+ *  days + programs (web parity — clickable weekly frequency). */
+function WeeklyDrill({ calendar, programOrder }: { calendar: WorkoutInsights["calendar"]; programOrder: string[] }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const weeks = useMemo(() => weeksFromCalendar(calendar), [calendar]);
+  if (weeks.length < 2) return null;
+  return (
+    <View className="gap-0.5 border-t border-border-subtle pt-2">
+      <Text variant="micro" className="text-text-muted mb-0.5">tap a week for its sessions</Text>
+      {weeks.map((w) => {
+        const open = openKey === w.key;
+        return (
+          <View key={w.key}>
+            <Pressable onPress={() => setOpenKey(open ? null : w.key)} className="flex-row items-center justify-between py-1">
+              <Text variant="caption" className="text-text-secondary">Week of {w.label}</Text>
+              <View className="flex-row items-center gap-2">
+                <Text variant="caption" className="tabular-nums text-text-muted">{w.count} session{w.count !== 1 ? "s" : ""}</Text>
+                <Text variant="micro" className="text-text-muted">{open ? "▲" : "▼"}</Text>
+              </View>
+            </Pressable>
+            {open ? (
+              <View className="ml-2 gap-1 pb-1.5">
+                {w.days.map((day, i) => (
+                  <View key={i} className="flex-row items-center gap-2">
+                    <View className="h-2 w-2 rounded-[2px]" style={{ backgroundColor: day.program ? programColor(day.program, programOrder) : REST_WORKED }} />
+                    <Text variant="micro" className="text-text-secondary">{longDay(day.date)}</Text>
+                    <Text variant="micro" className="text-text-muted">{day.program ?? "workout"}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 /** Calendar heatmap + weekly frequency + per-workout avg-HR (web parity, #428). */
 export function WorkoutActivity({ insights }: { insights: WorkoutInsights | null | undefined }) {
   if (!insights) return null;
@@ -145,6 +207,7 @@ export function WorkoutActivity({ insights }: { insights: WorkoutInsights | null
             <Text variant="micro" className="text-text-muted">sessions / week · tap to read</Text>
           </View>
           <LineChart height={120} interactive xTicks={4} labels={freq.labels} yFormat={(v) => String(Math.round(v))} series={[{ values: freq.counts, color: "#6ad4a0", width: 2.2, label: "Sessions" }]} />
+          <WeeklyDrill calendar={cal} programOrder={[...new Set(cal.map((c) => c.program).filter((p): p is string => !!p))]} />
         </Card>
       ) : null}
 
