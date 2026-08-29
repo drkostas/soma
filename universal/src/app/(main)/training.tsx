@@ -5,6 +5,7 @@ import {
   useTraining,
   useCalibration,
   useForwardSim,
+  useTrajectory,
   useTrainingGraph,
   useActivityMatches,
   setDayCompletion,
@@ -63,6 +64,7 @@ export default function TrainingScreen() {
   const { data, error, refetch } = useTraining(todayISO());
   const { cal, refetch: refetchCal } = useCalibration(todayISO());
   const { data: sim, refetch: refetchSim } = useForwardSim(todayISO());
+  const { data: trajectory } = useTrajectory();
   const { nodes: graphNodes, edges: graphEdges, overrides: graphOverrides } = useTrainingGraph(todayISO());
   const { byDay: matches } = useActivityMatches();
   const { refreshing, onRefresh } = usePullRefresh(() => {
@@ -254,7 +256,7 @@ export default function TrainingScreen() {
 
         {/* Fitness trajectory — the centerpiece: model vs Garmin across
             Fitness (VDOT) / Readiness / Load. Replaces the flat VO2 sparkline. */}
-        <TrajectoryChart comparison={sim?.comparison ?? null} />
+        <TrajectoryChart comparison={sim?.comparison ?? null} trajectory={trajectory} />
 
         {vo2Trend.length >= 2 ? (
           <Card className="gap-2">
