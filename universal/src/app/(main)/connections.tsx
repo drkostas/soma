@@ -36,6 +36,7 @@ interface SourceStatus {
   status: string;
   lastSync: string;
   records: number;
+  error?: string | null;
 }
 
 interface SyncStatusResponse {
@@ -480,6 +481,7 @@ export default function ConnectionsScreen() {
                     {s.name}
                   </Text>
                   <Text variant="micro">{fmtDateTime(s.lastSync)}</Text>
+                  {s.error ? <Text variant="micro" className="text-danger" numberOfLines={2}>⚠ {s.error}</Text> : null}
                 </View>
                 <View className="flex-row items-center gap-2">
                   <Text variant="caption" className="tabular-nums text-text">
