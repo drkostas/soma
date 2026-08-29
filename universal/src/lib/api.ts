@@ -957,13 +957,17 @@ export interface BodyCompProfile {
   deficit: number; onTrack?: boolean;
   trendSlope?: number; daysRemaining?: number; weeklyRate?: number;
   totalActualDeficit?: number; realisticDate?: string | null;
+  fatToLose?: number; requiredDeficit?: number; avgActualDeficit?: number;
 }
 export interface BodyComp {
   profile: BodyCompProfile;
   weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[];
   goalLine: { date: string; weight: number; bf: number }[];
   trendPrediction: { date: string; weight: number; bf: number }[];
-  dailyDeficits: { date: string; deficit: number; cumulative: number; goalPace: number; closed: boolean; isToday: boolean }[];
+  dailyDeficits: {
+    date: string; deficit: number; cumulative: number; goalPace: number; closed: boolean; isToday: boolean;
+    bmr?: number; dailyActivity?: number; runCal?: number; gymCal?: number; totalBurn?: number; consumed?: number;
+  }[];
   goalDeficit: number;
 }
 export function useBodyComp(enabled: boolean) {
