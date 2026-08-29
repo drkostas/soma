@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { fetchJson, usePullRefresh, useActivitiesDeep } from "../../lib/api";
-import { ActivitiesMonthly, KiteDeepDive, ActivitiesList } from "../../components/activities-deep";
+import { ActivitiesMonthly, KiteDeepDive, SnowDeepDive, ActivitiesList } from "../../components/activities-deep";
 import { ActivitySports } from "../../components/activity-sports";
 
 /** Daily activity-count series (per-day sessions) for the Sessions trend. */
@@ -296,6 +296,9 @@ export default function ActivitiesScreen() {
 
         {/* Kite deep dive — speed progression + top spots + jump records */}
         {deep ? <KiteDeepDive sessions={deep.kite.sessions} /> : null}
+
+        {/* Snowboarding deep dive — resorts + fastest sessions */}
+        {deep ? <SnowDeepDive all={deep.all} /> : null}
 
         {/* Full activity list with sport filter + paging (replaces the recent log) */}
         {deep ? <ActivitiesList all={deep.all} /> : null}
