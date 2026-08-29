@@ -14,6 +14,7 @@ export interface RunRow {
   pace: number | null; // min/km
   avg_hr: number | null;
   calories: number | null;
+  temp_c?: number | null;
 }
 
 type SortKey = "date" | "distance" | "duration_min" | "pace" | "avg_hr" | "calories";
@@ -110,6 +111,7 @@ export function RunTable({ runs }: { runs: RunRow[] }) {
               {shortDate(r.date)}
               {r.duration_min != null ? ` · ${Math.round(num(r.duration_min))} min` : ""}
               {r.calories != null && r.calories > 0 ? ` · ${Math.round(num(r.calories))} kcal` : ""}
+              {r.temp_c != null && isFinite(Number(r.temp_c)) ? ` · ${Math.round(num(r.temp_c))}°C` : ""}
             </Text>
           </View>
           <Text variant="caption" className="w-14 text-right tabular-nums text-text">
