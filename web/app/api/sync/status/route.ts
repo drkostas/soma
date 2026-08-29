@@ -16,6 +16,7 @@ interface SourceStatus {
   status: string;
   lastSync: string;
   records: number;
+  error: string | null;
 }
 
 export async function GET() {
@@ -55,6 +56,7 @@ export async function GET() {
         status: row.status,
         lastSync: row.completed_at ?? row.started_at,
         records: Number(row.records_synced) || 0,
+        error: row.error_message ?? null,
       };
     }
 
