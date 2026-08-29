@@ -16,7 +16,13 @@ export interface StatDetail {
   metric?: string;
 }
 
-interface StatPoint { date: string; value: number | null }
+interface StatPoint { date: string; value: number | null; value2?: number | null }
+
+/** Metrics whose endpoint returns a second series (value2): label pair + color. */
+const TWO_SERIES: Record<string, { primary: string; secondary: string; color: string }> = {
+  calories: { primary: "Active", secondary: "BMR", color: "#e0a458" },
+  stress: { primary: "Avg", secondary: "Max", color: "#e06060" },
+};
 interface StatSeries {
   current: StatPoint[];
   previous: StatPoint[];
@@ -51,6 +57,9 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
   if (stat.metric) {
     const cur = (data?.current ?? []).map((p) => (p.value != null && isFinite(p.value) ? p.value : null));
     const prev = (data?.previous ?? []).map((p) => (p.value != null && isFinite(p.value) ? p.value : null));
+    const cur2 = (data?.current ?? []).map((p) => (p.value2 != null && isFinite(Number(p.value2)) ? Number(p.value2) : null));
+    const two = stat.metric ? TWO_SERIES[stat.metric] : undefined;
+    const hasTwo = !!two && cur2.filter((v) => v != null).length >= 2;
     const labels = (data?.current ?? []).map((p) => chartDateLabel(p.date));
     const sm = data?.summary;
     const delta = sm?.current_avg != null && sm?.previous_avg != null ? sm.current_avg - sm.previous_avg : null;
@@ -72,12 +81,17 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
                 labels={labels}
                 xTicks={4}
                 yFormat={(v) => `${Math.round(v).toLocaleString()}`}
-                series={[
+                series={hasTwo ? [
+                  { values: cur, color: stat.color, width: 2.2, label: two!.primary },
+                  { values: cur2, color: two!.color, width: 1.6, dashed: true, label: two!.secondary },
+                ] : [
                   ...(prev.filter((v) => v != null).length >= 2 ? [{ values: prev, color: "#5a7a8a", width: 1.4, dashed: true, label: "Previous" }] : []),
                   { values: cur, color: stat.color, width: 2.2, label: "Current" },
                 ]}
               />
-              {prev.filter((v) => v != null).length >= 2 ? (
+              {hasTwo ? (
+                <ChartLegend items={[{ color: stat.color, label: two!.primary }, { color: two!.color, label: two!.secondary, dashed: true }]} />
+              ) : prev.filter((v) => v != null).length >= 2 ? (
                 <ChartLegend items={[{ color: stat.color, label: "Current" }, { color: "#5a7a8a", label: "Previous", dashed: true }]} />
               ) : null}
               <View className="mt-1 flex-row justify-between">
