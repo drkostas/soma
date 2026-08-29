@@ -859,6 +859,25 @@ export function ingredientMacros(ing: Ingredient, grams: number) {
   };
 }
 
+export interface RebalanceChange { slot: string; ingredient: string; from: number; to: number }
+/** Redistribute grams across the unlocked slots after `changedSlot` to hit the
+ *  day's calorie target (web /api/nutrition/rebalance). Returns the applied
+ *  changes (empty when nothing moved, the plan is met, or the write is denied). */
+export async function rebalanceMeals(date: string, changedSlot: string, lockedSlots: string[]): Promise<RebalanceChange[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/nutrition/rebalance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify({ date, changedSlot, lockedSlots }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.changes) ? (data.changes as RebalanceChange[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export interface ComposeItem { ingredient_id: string; name: string; grams: number; calories: number; protein: number; carbs: number; fat: number; fiber: number }
 /** Log a meal composed from raw ingredients into a slot. */
 export async function logComposedMeal(date: string, slot: string, items: ComposeItem[]): Promise<boolean> {
