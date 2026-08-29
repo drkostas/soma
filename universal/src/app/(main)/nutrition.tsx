@@ -12,6 +12,7 @@ import { ComposeMealView } from "../../components/compose-meal-view";
 import { MealDetailModal } from "../../components/meal-detail-modal";
 import { MacroGoalBar, buildMacroMarkers, ProteinQualityPill } from "../../components/macro-goal-bar";
 import { NutritionContextStrip } from "../../components/nutrition-context-strip";
+import { PrepSummary } from "../../components/prep-summary";
 
 /** 14-day daily-calories series for the adherence trend sparkline. */
 function useCaloriesTrend() {
@@ -407,6 +408,9 @@ export default function NutritionScreen() {
                 <Text variant="micro">Informational — your targets are unchanged.</Text>
               </Card>
             ) : null}
+
+            {/* Day prep list — raw ingredients to cook, grouped across meals */}
+            <PrepSummary meals={meals} ingredients={ingredients} />
 
             {/* Per-slot meal cards — logged meals + delete + quick-log + skip */}
             {slots.map((s) => {
