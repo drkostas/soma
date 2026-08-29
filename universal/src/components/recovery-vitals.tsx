@@ -38,8 +38,12 @@ export function RecoveryVitals({ summary }: { summary: RecoverySummary | null | 
         { label: "ACWR", v: rdy.acwr_pct, color: "#6aa0e0" },
         { label: "Recovery", v: rdy.recovery_pct, color: "#c084fc" },
         { label: "Sleep hist.", v: rdy.sleep_history_pct, color: "#a5b4fc" },
+        { label: "Sleep Score", v: rdy.sleep_score_pct ?? null, color: "#77c8d1" },
       ].filter((f) => f.v != null)
     : [];
+  const hrvFeedback = rdy?.hrv_feedback && rdy.hrv_feedback !== "NONE"
+    ? rdy.hrv_feedback.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
+    : null;
 
   if (!hrv && !rdy) return null;
 
@@ -75,6 +79,7 @@ export function RecoveryVitals({ summary }: { summary: RecoverySummary | null | 
           <View className="flex-row items-end gap-2">
             <Text variant="display" className="text-lime">{rdy.score ?? "—"}</Text>
             <Text variant="caption" className="text-text-muted mb-1">/ 100</Text>
+            {hrvFeedback ? <Text variant="caption" className="text-text-muted mb-1">· HRV {hrvFeedback}</Text> : null}
           </View>
           {factors.length ? (
             <View className="gap-2">
