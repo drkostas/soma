@@ -110,7 +110,13 @@ export default function TrainingScreen() {
     const atl = nums(c?.load, "atl");
     if (atl.length) m.push({ label: "Fatigue (ATL)", value: String(Math.round(last(atl))), spark: atl, color: "#e0a458" });
     const dec = (fit as { decoupling_pct?: number | null } | undefined)?.decoupling_pct;
-    if (dec != null) m.push({ label: "Decoupling", value: `${Number(dec).toFixed(1)}%`, spark: [], color: "#6366b0", note: "aerobic drift" });
+    if (dec != null) {
+      const dv = Number(dec);
+      // Aerobic-decoupling thresholds (web parity): <3% tight, >5% high drift.
+      const decColor = dv < 3 ? "#6ad4a0" : dv > 5 ? "#e06060" : "#e0a458";
+      const decNote = dv < 3 ? "tight aerobic" : dv > 5 ? "high drift" : "moderate drift";
+      m.push({ label: "Decoupling", value: `${dv.toFixed(1)}%`, spark: [], color: decColor, note: decNote });
+    }
     return m;
   }, [sim, fit]);
 
