@@ -92,7 +92,25 @@ function StatusCard({ p }: { p: BodyComp["profile"] }) {
             <Text variant="caption" className="tabular-nums">{p.daysRemaining}</Text>
           </View>
         ) : null}
+        {p.fatToLose != null && p.fatToLose > 0 ? (
+          <View>
+            <Text variant="micro" className="text-text-muted">Fat to lose</Text>
+            <Text variant="caption" className="tabular-nums">{p.fatToLose.toFixed(1)} kg</Text>
+          </View>
+        ) : null}
+        {p.avgActualDeficit != null ? (
+          <View>
+            <Text variant="micro" className="text-text-muted">Avg deficit</Text>
+            <Text variant="caption" className="tabular-nums">{Math.round(p.avgActualDeficit).toLocaleString()}/day</Text>
+          </View>
+        ) : null}
       </View>
+      {p.requiredDeficit != null && p.requiredDeficit > 0 ? (
+        <Text variant="micro" className="text-text-muted">
+          Need {Math.round(p.requiredDeficit).toLocaleString()} kcal/day{p.targetDate ? ` to hit ${shortLabel(p.targetDate)}` : ""}
+          {p.avgActualDeficit != null ? ` · averaging ${Math.round(p.avgActualDeficit).toLocaleString()}` : ""}
+        </Text>
+      ) : null}
     </Card>
   );
 }
@@ -123,6 +141,11 @@ export function BodyCompChart({ visible }: { visible: boolean }) {
   const dLabels = dAxis.map(shortLabel);
   const cumulative = dailyDeficits.map((d) => d.cumulative);
   const goalPace = dailyDeficits.map((d) => d.goalPace);
+  // Burn-vs-eaten: total burn (BMR + steps + runs + gym) against calories eaten;
+  // the gap is the day's deficit.
+  const burn = dailyDeficits.map((d) => (d.totalBurn != null ? d.totalBurn : null));
+  const eaten = dailyDeficits.map((d) => (d.consumed != null ? d.consumed : null));
+  const hasBurn = dailyDeficits.some((d) => d.totalBurn != null && d.consumed != null);
 
   const legend = [
     { color: C.actual, label: "Weigh-in" },
@@ -186,6 +209,26 @@ export function BodyCompChart({ visible }: { visible: boolean }) {
             { color: C.deficit, label: "Actual" },
             { color: "#3a5563", label: "Goal pace", dashed: true },
           ]} />
+        </Card>
+      ) : null}
+
+      {hasBurn && dailyDeficits.length >= 2 ? (
+        <Card className="gap-2">
+          <Text variant="eyebrow">Burn vs eaten</Text>
+          <LineChart
+            height={140}
+            labels={dLabels}
+            yFormat={(v) => `${Math.round(v).toLocaleString()}`}
+            series={[
+              { values: burn, color: C.goal, width: 2.2, label: "Burn" },
+              { values: eaten, color: C.smooth, mode: "dots", width: 3, label: "Eaten" },
+            ]}
+          />
+          <ChartLegend items={[
+            { color: C.goal, label: "Total burn" },
+            { color: C.smooth, label: "Eaten" },
+          ]} />
+          <Text variant="micro" className="text-text-muted">The gap is the day&apos;s deficit — burn from BMR + steps + runs + gym.</Text>
         </Card>
       ) : null}
     </View>
