@@ -442,6 +442,7 @@ export interface ActivityRow {
   activity_id: string; type_key: string; sport: string; date: string; name: string | null;
   distance_km: number | null; duration_min: number | null; avg_hr: number | null;
   calories: number | null; elev_gain: number;
+  max_speed_ms?: number | null; swolf?: number | null;
 }
 export interface ActivitiesDeep {
   monthly: MonthSports[];
