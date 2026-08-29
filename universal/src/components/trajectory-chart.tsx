@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card, SegmentedControl } from "soma-style";
-import { LineChart, ChartLegend } from "./line-chart";
-import type { ForwardSim } from "../lib/api";
+import { LineChart, ChartLegend, chartDateLabel } from "./line-chart";
+import type { ForwardSim, TrajectoryData } from "../lib/api";
 
 type Dim = "Fitness" | "Readiness" | "Load";
 const DIMS = ["Fitness", "Readiness", "Load"] as const;
@@ -23,10 +23,27 @@ function shortLabel(iso: string): string {
  *  the web trajectory chart — goal-zone/taper/race bands need goal+taper data
  *  absent from the mobile payload, and the rich hover tooltip + 7-line
  *  visibility dropdown are replaced by the dimension + compare toggles. */
-export function TrajectoryChart({ comparison }: { comparison: ForwardSim["comparison"] }) {
+export function TrajectoryChart({ comparison, trajectory }: { comparison: ForwardSim["comparison"]; trajectory?: TrajectoryData | null }) {
   const [dim, setDim] = useState<Dim>("Fitness");
   const [compare, setCompare] = useState(true);
   const cfg = CFG[dim];
+
+  // Optimal-vs-actual VDOT trajectory (banister projection to the race date).
+  // Replaces the model-vs-Garmin Fitness view when the endpoint has a plan.
+  const useTraj = dim === "Fitness" && (trajectory?.trajectory?.length ?? 0) >= 2;
+  const traj = useMemo(() => {
+    const t = trajectory?.trajectory ?? [];
+    const optimal = t.map((p) => (isFinite(p.optimal) && p.optimal > 0 ? p.optimal : null));
+    const actual = t.map((p) => (p.actual != null && isFinite(p.actual) && p.actual > 0 ? p.actual : null));
+    let hereIdx = -1;
+    for (let i = actual.length - 1; i >= 0; i--) if (actual[i] != null) { hereIdx = i; break; }
+    return {
+      labels: t.map((p) => chartDateLabel(p.date)),
+      optimal, actual,
+      hereDot: actual.map((v, i) => (i === hereIdx ? v : null)),
+      cur: hereIdx >= 0 ? actual[hereIdx] : null,
+    };
+  }, [trajectory]);
   const src = useMemo(() => {
     if (!comparison) return [];
     return dim === "Fitness" ? comparison.fitness : dim === "Readiness" ? comparison.readiness : comparison.load;
@@ -54,19 +71,42 @@ export function TrajectoryChart({ comparison }: { comparison: ForwardSim["compar
     <Card className="gap-3">
       <View className="flex-row items-center justify-between">
         <Text variant="eyebrow">Fitness trajectory</Text>
-        {cur != null ? <Text variant="body" className="text-teal tabular-nums">{cfg.fmt(cur)}{dim === "Fitness" ? " VDOT" : ""}</Text> : null}
+        {(useTraj ? traj.cur : cur) != null ? <Text variant="body" className="text-teal tabular-nums">{cfg.fmt((useTraj ? traj.cur : cur) as number)}{dim === "Fitness" ? " VDOT" : ""}</Text> : null}
       </View>
       <View className="flex-row items-center gap-2">
         <View className="flex-1">
           <SegmentedControl options={DIMS} value={dim} onChange={(v) => setDim(v as Dim)} />
         </View>
-        <Pressable onPress={() => setCompare((c) => !c)} hitSlop={6}>
-          <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: compare ? cfg.colorB + "33" : "#142530" }}>
-            <Text variant="micro" style={{ color: compare ? cfg.colorB : "#8aa0ac" }}>Garmin</Text>
-          </View>
-        </Pressable>
+        {!useTraj ? (
+          <Pressable onPress={() => setCompare((c) => !c)} hitSlop={6}>
+            <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: compare ? cfg.colorB + "33" : "#142530" }}>
+              <Text variant="micro" style={{ color: compare ? cfg.colorB : "#8aa0ac" }}>Garmin</Text>
+            </View>
+          </Pressable>
+        ) : null}
       </View>
-      {a.some((v) => v != null) || b.some((v) => v != null) ? (
+      {useTraj ? (
+        <>
+          <LineChart
+            height={175}
+            interactive
+            xTicks={4}
+            labels={traj.labels}
+            yFormat={(v) => v.toFixed(1)}
+            refLine={trajectory?.goalVdot != null ? { y: trajectory.goalVdot, color: "#e0c458" } : undefined}
+            series={[
+              { values: traj.optimal, color: "#77c8d1", width: 1.6, dashed: true, label: "Optimal" },
+              { values: traj.actual, color: "#6ad4a0", width: 2.4, label: "Actual" },
+              { values: traj.hereDot, color: "#ffffff", mode: "dots" as const, width: 3 },
+            ]}
+          />
+          <ChartLegend items={[
+            { color: "#6ad4a0", label: "Actual VDOT" },
+            { color: "#77c8d1", label: "Optimal (to race)", dashed: true },
+            ...(trajectory?.goalVdot != null ? [{ color: "#e0c458", label: `Goal ${trajectory.goalVdot.toFixed(1)}`, dashed: true }] : []),
+          ]} />
+        </>
+      ) : a.some((v) => v != null) || b.some((v) => v != null) ? (
         <>
           <LineChart
             height={170}
