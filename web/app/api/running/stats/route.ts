@@ -94,8 +94,11 @@ export async function GET() {
           (s.raw_json->>'duration')::float / NULLIF((s.raw_json->>'distance')::float / 1000.0, 0) / 60.0 as pace,
           (s.raw_json->>'averageHR')::float as avg_hr,
           (s.raw_json->>'calories')::float as calories,
-          (s.raw_json->>'elevationGain')::float as elev_gain
+          (s.raw_json->>'elevationGain')::float as elev_gain,
+          ((w.raw_json->>'temp')::float - 32) * 5.0 / 9.0 as temp_c,
+          (s.raw_json->>'maxSpeed')::float as max_speed_ms
         FROM garmin_activity_raw s
+        LEFT JOIN garmin_activity_raw w ON w.activity_id = s.activity_id AND w.endpoint_name = 'weather'
         WHERE s.endpoint_name = 'summary'
           AND s.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
         ORDER BY (s.raw_json->>'startTimeLocal')::text DESC
@@ -132,7 +135,9 @@ export async function GET() {
       `,
       // Trend series for tier-1 sparklines (recent → chronological), value-only.
       sql`
-        SELECT (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as v
+        SELECT (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 as v,
+          LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
+          (raw_json->>'distance')::float / 1000.0 as distance
         FROM garmin_activity_raw
         WHERE endpoint_name = 'summary'
           AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
@@ -153,9 +158,10 @@ export async function GET() {
         ) t ORDER BY d ASC
       `,
       sql`
-        SELECT v FROM (
+        SELECT m, v, runs FROM (
           SELECT TO_CHAR((raw_json->>'startTimeLocal')::timestamp, 'YYYY-MM') as m,
-            SUM((raw_json->>'distance')::float) / 1000.0 as v
+            SUM((raw_json->>'distance')::float) / 1000.0 as v,
+            COUNT(*) as runs
           FROM garmin_activity_raw
           WHERE endpoint_name = 'summary'
             AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
@@ -238,6 +244,9 @@ export async function GET() {
         pace: paceRows.map((r) => Number(r.v)).reverse(),
         vo2max: vo2Rows.map((r) => Number(r.v)),
         mileage: mileageRows.map((r) => Number(r.v)),
+        // Dated detail for richer app charts (scatter / labelled bars).
+        paceDetail: paceRows.map((r) => ({ date: r.date as string, pace: Number(r.v), distance: Number(r.distance) })).reverse(),
+        mileageDetail: mileageRows.map((r) => ({ month: r.m as string, km: Number(r.v), runs: Number(r.runs) })),
       },
     });
   } catch (err) {
