@@ -63,7 +63,7 @@ export default function TrainingScreen() {
   const { data, error, refetch } = useTraining(todayISO());
   const { cal, refetch: refetchCal } = useCalibration(todayISO());
   const { data: sim, refetch: refetchSim } = useForwardSim(todayISO());
-  const { nodes: graphNodes, overrides: graphOverrides } = useTrainingGraph(todayISO());
+  const { nodes: graphNodes, edges: graphEdges, overrides: graphOverrides } = useTrainingGraph(todayISO());
   const { byDay: matches } = useActivityMatches();
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
@@ -244,7 +244,7 @@ export default function TrainingScreen() {
         <TrainingPaces vdot={vdot} />
 
         {/* Pace computation breakdown — mobile replacement for the web DAG */}
-        <PaceComputation nodes={graphNodes} />
+        <PaceComputation nodes={graphNodes} edges={graphEdges} />
 
         {/* Fitness trajectory — the centerpiece: model vs Garmin across
             Fitness (VDOT) / Readiness / Load. Replaces the flat VO2 sparkline. */}

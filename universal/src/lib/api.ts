@@ -719,30 +719,35 @@ export function useWeekdayWeekend(range: string) {
 
 // ---- Training computation graph (nodes → the mobile pace-computation breakdown) ----
 export interface GraphNode { id: string; label: string; value: number | null }
+/** A weighted edge in the readiness/pace computation graph (signal → factor). */
+export interface GraphEdge { from: string; to: string; weight: number }
 /** A hard readiness override (sleep < 5h, Body Battery < 25, HRV/majority flags). */
 export interface TrainingOverride { rule: string; triggered: boolean; message: string; severity: "red" | "yellow" }
 
-/** The computation-graph nodes keyed by id (readiness_factor, tsb, adjusted_pace, …)
- *  plus the TRIGGERED hard-override banners (forced RED / YELLOW safety rails). */
+/** The computation-graph nodes keyed by id (readiness_factor, tsb, adjusted_pace, …),
+ *  the weighted edges (which signal drives each factor), plus the TRIGGERED
+ *  hard-override banners (forced RED / YELLOW safety rails). */
 export function useTrainingGraph(date: string) {
   const [nodes, setNodes] = useState<Record<string, GraphNode>>({});
+  const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [overrides, setOverrides] = useState<TrainingOverride[]>([]);
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetchJson<{ graph?: { nodes?: GraphNode[]; overrides?: TrainingOverride[] }; nodes?: GraphNode[] }>(`/api/training/graph?date=${date}`)
+    fetchJson<{ graph?: { nodes?: GraphNode[]; edges?: GraphEdge[]; overrides?: TrainingOverride[] }; nodes?: GraphNode[] }>(`/api/training/graph?date=${date}`)
       .then((d) => {
         if (!alive) return;
         const arr = d.graph?.nodes ?? d.nodes ?? [];
         const map: Record<string, GraphNode> = {};
         for (const nd of arr) map[nd.id] = nd;
         setNodes(map);
+        setEdges(d.graph?.edges ?? []);
         setOverrides((d.graph?.overrides ?? []).filter((o) => o.triggered));
       })
       .catch(() => {});
     return () => { alive = false; };
   }, [date, reload]);
-  return { nodes, overrides, refetch: () => setReload((n) => n + 1) };
+  return { nodes, edges, overrides, refetch: () => setReload((n) => n + 1) };
 }
 
 export function useSomaPlan(date: string) {
