@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     range === "1m" || range === "30d" ? 30 :
     range === "3m" || range === "90d" ? 91 :
     range === "6m" ? 182 :
-    range === "all" ? 3650 : 365;
+    range === "all" ? 20000 : 365;
 
   const sql = getDb();
 
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
       AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training', 'indoor_cycling')
       AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
-    LIMIT 200
+    LIMIT ${range === "all" ? 2000 : 200}
   `) as { activity_id: string; type_key: string; date: string; name: string | null; distance_km: number | null; duration_min: number | null; avg_hr: number | null; calories: number | null; elev_gain: number; max_speed_ms: number | null; swolf: number | null }[];
 
   return NextResponse.json({
