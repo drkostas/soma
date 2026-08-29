@@ -27,12 +27,18 @@ function SportSection({ sport, rows }: { sport: string; rows: ActivityRow[] }) {
   const hours = mine.reduce((s, a) => s + num(a.duration_min), 0) / 60;
   const hrVals = mine.map((a) => num(a.avg_hr)).filter((v) => v > 0);
   const avgHr = hrVals.length ? Math.round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null;
+  const speeds = mine.map((a) => num(a.max_speed_ms)).filter((v) => v > 0);
+  const topKmh = speeds.length ? Math.max(...speeds) * 3.6 : null;
+  const swolfVals = mine.map((a) => num(a.swolf)).filter((v) => v > 0);
+  const avgSwolf = swolfVals.length ? Math.round(swolfVals.reduce((a, b) => a + b, 0) / swolfVals.length) : null;
   const stats: [string, string][] = [
     ["Sessions", `${mine.length}`],
     ["Distance", km > 0 ? `${km.toFixed(0)} km` : "—"],
     ["Time", `${hours.toFixed(0)}h`],
     ["Avg HR", avgHr != null ? `${avgHr} bpm` : "—"],
   ];
+  if (topKmh != null) stats.push(["Top speed", `${topKmh.toFixed(0)} km/h`]);
+  if (avgSwolf != null) stats.push(["Avg SWOLF", `${avgSwolf}`]);
 
   return (
     <Card className="gap-3">
