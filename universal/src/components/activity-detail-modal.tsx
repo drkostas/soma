@@ -168,6 +168,10 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
 
   if (!activity) return null;
   const s = data?.summary ?? null;
+  const tkey = (activity.type_key || "").toLowerCase();
+  const isRun = tkey === "running" || tkey === "treadmill_running";
+  const isStrengthAct = tkey === "strength_training";
+  const isKiteAct = tkey.includes("kite");
   const laps = data?.splits?.lapDTOs ?? [];
   const ts = data?.time_series ?? [];
   const hasTS = ts.length > 1;
@@ -190,8 +194,8 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
   const metrics: [string, string][] = s ? ([
     ["Distance", s.distance != null ? `${(n(s.distance) / 1000).toFixed(2)} km` : "—"],
     ["Duration", hm(s.duration)],
-    ["Avg pace", paceFromMs(s.averageSpeed)],
-    ["Max speed", kmh(s.maxSpeed)],
+    ["Avg pace", isRun ? paceFromMs(s.averageSpeed) : "—"],
+    ["Max speed", !isRun && !isStrengthAct && s.maxSpeed != null ? (isKiteAct ? `${(n(s.maxSpeed) * 1.94384).toFixed(1)} kts` : kmh(s.maxSpeed)) : "—"],
     ["Avg HR", s.averageHR != null ? `${Math.round(n(s.averageHR))} bpm` : "—"],
     ["Max HR", s.maxHR != null ? `${Math.round(n(s.maxHR))} bpm` : "—"],
     ["Elev gain", s.elevationGain != null ? `↑ ${Math.round(n(s.elevationGain))} m` : "—"],
@@ -203,6 +207,7 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
     ["Stride", s.avgStrideLength != null ? `${Math.round(n(s.avgStrideLength))} cm` : "—"],
     ["Grnd contact", s.avgGroundContactTime != null ? `${Math.round(n(s.avgGroundContactTime))} ms` : "—"],
     ["Vert osc", s.avgVerticalOscillation != null ? `${n(s.avgVerticalOscillation).toFixed(1)} cm` : "—"],
+    ["Vert ratio", s.avgVerticalRatio != null ? `${n(s.avgVerticalRatio).toFixed(1)}%` : "—"],
     ["Avg power", s.averagePower != null ? `${Math.round(n(s.averagePower))} W` : "—"],
   ] as [string, string][]).filter(([, v]) => v !== "—") : [];
 
