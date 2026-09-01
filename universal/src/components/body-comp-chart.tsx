@@ -55,13 +55,20 @@ function kg(v: number | null | undefined): string {
 function StatusCard({ p }: { p: BodyComp["profile"] }) {
   const slope = p.trendSlope ?? 0;
   const losing = slope < 0;
+  // Trend-based verdict (web parity): actual weekly-loss rate vs goal rate, not
+  // the API's deficit-budget onTrack — those can disagree for the same weight data.
+  const rateRatio = (p.weeklyRate ?? 0) > 0 ? Math.abs(slope) / (p.weeklyRate as number) : 0;
+  const onTrack = slope < 0 && rateRatio >= 0.8;
+  const behind = slope < 0 && rateRatio >= 0.3 && rateRatio < 0.8;
+  const verdict = p.targetDatePassed ? { label: "Reset goal", tone: "danger" as const }
+    : onTrack ? { label: "On track", tone: "success" as const }
+    : behind ? { label: "Behind pace", tone: "warm" as const }
+    : { label: "Off pace", tone: "danger" as const };
   return (
     <Card className="gap-2">
       <View className="flex-row items-center justify-between">
         <Text variant="eyebrow">Body composition</Text>
-        {p.onTrack != null ? (
-          <Badge label={p.onTrack ? "On track" : "Behind pace"} tone={p.onTrack ? "success" : "warm"} />
-        ) : null}
+        {p.trendSlope != null ? <Badge label={verdict.label} tone={verdict.tone} /> : null}
       </View>
       <View className="flex-row items-end gap-2">
         <Text variant="display" className="tabular-nums">{kg(p.latestActualWeight ?? p.currentWeight)}</Text>

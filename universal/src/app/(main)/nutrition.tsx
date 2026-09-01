@@ -135,7 +135,7 @@ export default function NutritionScreen() {
   const dayClosed = closeStatus === "closed" || plan?.status === "closed";
   const manualOverride = (bd?.manualOverride ?? false) && !dayClosed;
   const caloriesTrend = useCaloriesTrend();
-  const targetCal = plan?.target_calories ?? 0;
+  const targetCal = bd?.adjustedTargets?.calories ?? (Number(plan?.target_calories) || 0);
 
   const availSlots = SLOT_ORDER.filter((s) => data?.slotBudgets?.[s] != null);
   const slots = availSlots.length ? availSlots : SLOT_ORDER.filter((s) => s !== "during_workout");
@@ -302,10 +302,10 @@ export default function NutritionScreen() {
   // research goalposts (kcal bar adds a goal soft-ceiling + burn hard-ceiling).
   const renderDayStrip = (preview: { calories: number; protein: number; carbs: number; fat: number; fiber: number }) => {
     const t = {
-      protein: Number(plan?.target_protein) || 0,
-      carbs: Number(plan?.target_carbs) || 0,
-      fat: Number(plan?.target_fat) || 0,
-      fiber: Number(plan?.target_fiber) || 0,
+      protein: bd?.adjustedTargets?.protein ?? (Number(plan?.target_protein) || 0),
+      carbs: bd?.adjustedTargets?.carbs ?? (Number(plan?.target_carbs) || 0),
+      fat: bd?.adjustedTargets?.fat ?? (Number(plan?.target_fat) || 0),
+      fiber: bd?.adjustedTargets?.fiber ?? (Number(plan?.target_fiber) || 0),
     };
     const marks = buildMacroMarkers(Number(bd?.weightKg) || 0, t);
     const kcalMarkers: MacroMarker[] = [];
@@ -326,10 +326,10 @@ export default function NutritionScreen() {
   // Render the 4 macro goal bars; `extra` folds an in-progress meal's macros in.
   const renderMacroBars = (extra?: { protein: number; carbs: number; fat: number; fiber: number } | null) => {
     const t = {
-      protein: Number(plan?.target_protein) || 0,
-      carbs: Number(plan?.target_carbs) || 0,
-      fat: Number(plan?.target_fat) || 0,
-      fiber: Number(plan?.target_fiber) || 0,
+      protein: bd?.adjustedTargets?.protein ?? (Number(plan?.target_protein) || 0),
+      carbs: bd?.adjustedTargets?.carbs ?? (Number(plan?.target_carbs) || 0),
+      fat: bd?.adjustedTargets?.fat ?? (Number(plan?.target_fat) || 0),
+      fiber: bd?.adjustedTargets?.fiber ?? (Number(plan?.target_fiber) || 0),
     };
     const marks = buildMacroMarkers(Number(bd?.weightKg) || 0, t);
     return MACROS.map((m) => {

@@ -62,6 +62,10 @@ export interface SomaBreakdown {
   gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: number }[];
   drinkCalories?: number; deficit?: number; manualOverride?: boolean;
   weightKg?: number;
+  // Dynamically recomputed targets for the day (run/gym/drink/macro-floor adjusted).
+  // Web reads these; the app must too, or it shows stale stored plan.target_* goals.
+  targetIntake?: number;
+  adjustedTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number };
 }
 export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean }
 export interface LoggedDrink {
@@ -1079,6 +1083,7 @@ export interface BodyCompProfile {
   trendSlope?: number; daysRemaining?: number; weeklyRate?: number;
   totalActualDeficit?: number; realisticDate?: string | null;
   fatToLose?: number; requiredDeficit?: number; avgActualDeficit?: number;
+  targetDatePassed?: boolean;
 }
 export interface BodyComp {
   profile: BodyCompProfile;
