@@ -42,6 +42,8 @@ function secMMSS(sec: number): string { const t = Math.round(sec); return `${Mat
 function paceFromMs(ms: number | null | undefined): string { if (ms == null || ms <= 0) return "—"; const secKm = 1000 / ms; return `${secMMSS(secKm)}/km`; }
 function kmh(ms: number | null | undefined): string { return ms == null ? "—" : `${(ms * 3.6).toFixed(1)} km/h`; }
 function longDate(iso: string | null | undefined): string { if (!iso) return ""; const d = new Date(iso); return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }); }
+function prettyKey(k: string): string { return k.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()).trim(); }
+function fmtVal(v: number | string | boolean): string { return typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(2)) : String(v); }
 
 const PERF_METRICS = ["HR", "Pace", "Elevation", "Cadence"] as const;
 type PerfMetric = typeof PERF_METRICS[number];
@@ -145,7 +147,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 export function ActivityDetailModal({ activity, onClose }: { activity: ActivityRow | null; onClose: () => void }) {
   const [data, setData] = useState<ActivityDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"Overview" | "Splits" | "Charts" | "Share">("Overview");
+  const [tab, setTab] = useState<"Overview" | "Splits" | "Charts" | "Details" | "Share">("Overview");
 
   useEffect(() => {
     if (!activity) { setData(null); return; }
@@ -162,7 +164,7 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
   const laps = data?.splits?.lapDTOs ?? [];
   const ts = data?.time_series ?? [];
   const hasTS = ts.length > 1;
-  const tabOptions = ["Overview", ...(laps.length > 1 ? ["Splits"] : []), ...(hasTS ? ["Charts"] : []), "Share"];
+  const tabOptions = ["Overview", ...(laps.length > 1 ? ["Splits"] : []), ...(hasTS ? ["Charts"] : []), ...(s ? ["Details"] : []), "Share"];
   const img = activityImageSource(activity.activity_id);
   const onShare = () => { Share.share({ url: img.uri, message: activity.name || activity.sport }).catch(() => {}); };
   const zones = (data?.hr_zones ?? []).filter((z) => z && (z.secsInZone ?? 0) > 0);
@@ -208,7 +210,7 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
         ) : null}
 
         {tabOptions.length > 1 ? (
-          <SegmentedControl options={tabOptions} value={tab} onChange={(v) => setTab(v as "Overview" | "Splits" | "Charts")} />
+          <SegmentedControl options={tabOptions} value={tab} onChange={(v) => setTab(v as "Overview" | "Splits" | "Charts" | "Details" | "Share")} />
         ) : null}
 
         <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
@@ -283,6 +285,18 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
               <Image source={img} style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12, backgroundColor: "#0e1a22" }} resizeMode="contain" />
               <Button label="Share activity" onPress={onShare} />
               <Text variant="micro" className="text-center text-text-muted">A shareable card for this activity.</Text>
+            </View>
+          ) : tab === "Details" ? (
+            <View className="gap-1">
+              {s ? Object.entries(s)
+                .filter(([, v]) => v != null && (typeof v === "number" || typeof v === "string" || typeof v === "boolean"))
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([k, v]) => (
+                  <View key={k} className="flex-row justify-between gap-3 border-b border-border-subtle py-1">
+                    <Text variant="micro" className="text-text-muted">{prettyKey(k)}</Text>
+                    <Text variant="micro" className="tabular-nums text-text" numberOfLines={1} style={{ flexShrink: 1 }}>{fmtVal(v as number | string | boolean)}</Text>
+                  </View>
+                )) : <Text variant="caption" className="text-text-muted">No detail fields.</Text>}
             </View>
           ) : (
             /* Splits tab: per-lap pace bars + stats */
