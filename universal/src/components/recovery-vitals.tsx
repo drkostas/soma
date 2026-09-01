@@ -26,6 +26,8 @@ export function RecoveryVitals({ summary }: { summary: RecoverySummary | null | 
   const hrvWeekly = summary.hrv.trend.map((p) => fin(p.weekly_avg));
   const hrvNight = summary.hrv.trend.map((p) => fin(p.last_night_avg));
   const hrvHasChart = hrvWeekly.filter((v) => v != null).length >= 2 || hrvNight.filter((v) => v != null).length >= 2;
+  const hrvAvgVals = hrvWeekly.filter((v): v is number => v != null);
+  const hrvRef = hrvAvgVals.length ? { y: hrvAvgVals.reduce((a, b) => a + b, 0) / hrvAvgVals.length, color: "#3a5563" } : undefined;
   const hrvSeries = [
     { values: hrvNight, color: "#a5b4fc", width: 1.4, dashed: true, label: "Last night" },
     { values: hrvWeekly, color: "#77c8d1", width: 2.2, label: "Weekly avg" },
@@ -51,7 +53,7 @@ export function RecoveryVitals({ summary }: { summary: RecoverySummary | null | 
     <View className="gap-4">
       {hrv ? (
         <Card className="gap-2">
-          <ExpandableChart title="Heart rate variability" chart={{ series: hrvSeries, labels: hrvLabels, yFormat: (v) => `${Math.round(v)}` }}>
+          <ExpandableChart title="Heart rate variability" chart={{ series: hrvSeries, labels: hrvLabels, yFormat: (v) => `${Math.round(v)}`, refLine: hrvRef }}>
             <View className="flex-row items-end justify-between">
               <View className="flex-row items-end gap-2">
                 <Text variant="display" className="text-teal">{hrv.weekly_avg ?? "—"}</Text>
@@ -63,7 +65,7 @@ export function RecoveryVitals({ summary }: { summary: RecoverySummary | null | 
               {hrv.status ? <Badge label={hrv.status} tone={HRV_TONE[hrv.status] ?? "teal"} /> : null}
             </View>
             {hrvHasChart ? (
-              <LineChart height={110} interactive labels={hrvLabels} xTicks={4} yFormat={(v) => `${Math.round(v)}`} series={hrvSeries} />
+              <LineChart height={110} interactive labels={hrvLabels} xTicks={4} yFormat={(v) => `${Math.round(v)}`} refLine={hrvRef} series={hrvSeries} />
             ) : null}
           </ExpandableChart>
           {hrvHasChart ? <ChartLegend items={[{ color: "#77c8d1", label: "Weekly avg" }, { color: "#a5b4fc", label: "Last night", dashed: true }]} /> : null}
