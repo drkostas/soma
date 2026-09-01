@@ -1,19 +1,21 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { rangeToDays } from "@/lib/time-ranges";
 
 export const runtime = "edge";
 export const revalidate = 300;
 
-/* All-time running summary for the universal (React Native) app. Mirrors the data
-   the web /running server component renders (stats, training status, HR zone
-   distribution, personal records, shoe mileage, recent runs), returned as one JSON
-   payload the RN screen consumes over fetch. All-time — the RN screen has no range
-   selector — so the cutoff is an early epoch date. */
+/* Running summary for the universal (React Native) app. Mirrors the data the web
+   /running server component renders. Match web exactly: the summary stats, HR-zone
+   distribution, recent runs, and the pace / VO2max / monthly-mileage trend series
+   scope to the selected range (rangeToDays); personal records, shoe mileage, and
+   training status stay all-time, as on web. */
 
-const ALL_TIME = "2000-01-01";
-
-export async function GET() {
+export async function GET(request: Request) {
   const sql = getDb();
+  // Match web: scope summary/HR-dist/recent-runs and the pace/VO2max/mileage trend
+  // series to the selected range; PRs, shoe mileage and training status stay all-time.
+  const days = rangeToDays(new URL(request.url).searchParams.get("range") || undefined);
 
   try {
     const [statsRows, trainingRows, hrRows, recentRows, shoeRows, paceRows, vo2Rows, mileageRows, ...records] =
@@ -30,6 +32,7 @@ export async function GET() {
         FROM garmin_activity_raw
         WHERE endpoint_name = 'summary'
           AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+          AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
       `,
       // Training status (nested under a dynamic device-id key)
       sql`
@@ -80,6 +83,7 @@ export async function GET() {
           AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
           AND raw_json->>'averageHR' IS NOT NULL
           AND (raw_json->>'distance')::float > 1000
+          AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
         GROUP BY zone, sort_order
         ORDER BY sort_order ASC
       `,
@@ -101,6 +105,7 @@ export async function GET() {
         LEFT JOIN garmin_activity_raw w ON w.activity_id = s.activity_id AND w.endpoint_name = 'weather'
         WHERE s.endpoint_name = 'summary'
           AND s.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+          AND (s.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
         ORDER BY (s.raw_json->>'startTimeLocal')::text DESC
         LIMIT 20
       `,
@@ -142,6 +147,7 @@ export async function GET() {
         WHERE endpoint_name = 'summary'
           AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
           AND (raw_json->>'distance')::float > 1000
+          AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
         ORDER BY (raw_json->>'startTimeLocal')::text DESC LIMIT 40
       `,
       sql`
@@ -153,6 +159,7 @@ export async function GET() {
           WHERE endpoint_name = 'summary'
             AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
             AND raw_json->>'vO2MaxValue' IS NOT NULL
+            AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
           ORDER BY LEFT((raw_json->>'startTimeLocal')::text, 10) DESC
           LIMIT 40
         ) t ORDER BY d ASC
@@ -165,6 +172,7 @@ export async function GET() {
           FROM garmin_activity_raw
           WHERE endpoint_name = 'summary'
             AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+            AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
           GROUP BY m ORDER BY m DESC LIMIT 12
         ) t ORDER BY m ASC
       `,
