@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { rangeToDays } from "@/lib/time-ranges";
 
 export const runtime = "edge";
 
@@ -10,8 +11,8 @@ export const runtime = "edge";
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const range = searchParams.get("range") || "1y";
-  const days = range === "90d" ? 90 : range === "6m" ? 182 : range === "2y" ? 730 : 365;
+  // Match web exactly: map the app's 10 range tokens via web's rangeToDays.
+  const days = rangeToDays(searchParams.get("range") || undefined);
 
   const sql = getDb();
   const points = (await sql`

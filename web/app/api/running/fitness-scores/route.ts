@@ -8,10 +8,10 @@ export const runtime = "edge";
  * reads garmin_raw_data server-side). Mirrors getFitnessScores in
  * app/running/page.tsx.
  */
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const range = searchParams.get("range") || "1y";
-  const days = range === "90d" ? 90 : range === "6m" ? 182 : range === "2y" ? 730 : 365;
+export async function GET() {
+  // Match web exactly: getFitnessScores uses a fixed 12-month window and ignores
+  // the range selector, so the app must too (else its scores diverge from web).
+  const days = 365;
 
   const sql = getDb();
 
