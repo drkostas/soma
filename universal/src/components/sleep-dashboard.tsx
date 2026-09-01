@@ -136,7 +136,7 @@ export function SleepDashboard({ summary }: { summary: SleepSummary | null | und
             chart={{ series: [{ values: scoreVals, color: "#a5b4fc", width: 2.2 }], labels: scoreLabels, refLine: { y: 80, color: "#6ad4a0" }, yMin: 0, yMax: 100, yFormat: (v) => String(Math.round(v)) }}
           >
             <Text variant="micro" className="tabular-nums text-text-muted">
-              avg {summary.stats.avg_score != null ? Math.round(summary.stats.avg_score) : "—"} · "Good" ≥ 80
+              avg {summary.stats.avg_score != null ? Math.round(summary.stats.avg_score) : "—"} · "Excellent" ≥ 80
             </Text>
             <LineChart height={120} interactive labels={scoreLabels} xTicks={4} yMin={0} yMax={100} refLine={{ y: 80, color: "#6ad4a0" }} yFormat={(v) => String(Math.round(v))} series={[{ values: scoreVals, color: "#a5b4fc", width: 2.2 }]} />
           </ExpandableChart>
