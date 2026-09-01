@@ -66,13 +66,18 @@ export function RunHeatmap({ routes }: { routes: HeatRoute[] }) {
         <Text variant="micro" className="text-text-muted">{count} routes · last 12 mo</Text>
       </View>
       <View className="rounded-lg overflow-hidden" style={{ aspectRatio: 1 }}>
-        <Map style={{ flex: 1 }} mapStyle={DARK_STYLE} attribution={false} logo={false}>
-          <Camera bounds={bounds} padding={{ top: 30, bottom: 30, left: 30, right: 30 }} />
+        {/* Gestures locked to match web run-heatmap (interactive={false}); the
+            heatmap sits mid-scroll so a pannable map would trap vertical drags. */}
+        <Map style={{ flex: 1 }} mapStyle={DARK_STYLE} attribution={false} logo={false}
+          dragPan={false} touchZoom={false} doubleTapZoom={false} doubleTapHoldZoom={false} touchRotate={false} touchPitch={false}>
+          <Camera bounds={bounds} padding={{ top: 40, bottom: 40, left: 40, right: 40 }} />
           <GeoJSONSource id="routes" data={geojson}>
+            {/* width 2 / opacity 0.4 match web run-heatmap.tsx; app-teal token kept
+                (web uses hsl(166,80%,65%)) for consistency with the rest of the app. */}
             <Layer
               id="routeLines"
               type="line"
-              paint={{ "line-color": "#77c8d1", "line-width": 1.6, "line-opacity": 0.5 }}
+              paint={{ "line-color": "#77c8d1", "line-width": 2, "line-opacity": 0.4 }}
               layout={{ "line-cap": "round", "line-join": "round" }}
             />
           </GeoJSONSource>
