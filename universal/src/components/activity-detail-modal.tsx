@@ -338,6 +338,17 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
                   </View>
                 );
               })}
+              {/* Summary footer (web parity): split count + averages */}
+              {laps.length ? (
+                <View className="mt-1 flex-row items-center justify-between border-t border-border-subtle pt-2">
+                  <Text variant="micro" className="text-text-muted">{laps.length} splits</Text>
+                  <View className="flex-row gap-3">
+                    {s?.averageSpeed ? <Text variant="micro" className="tabular-nums text-text-secondary">{paceFromMs(s.averageSpeed)} avg</Text> : null}
+                    {s?.averageHR ? <Text variant="micro" className="tabular-nums text-text-muted">{Math.round(n(s.averageHR))} bpm</Text> : null}
+                    {s?.duration ? <Text variant="micro" className="tabular-nums text-text-muted">{hm(s.duration)}</Text> : null}
+                  </View>
+                </View>
+              ) : null}
             </View>
           )}
         </ScrollView>
