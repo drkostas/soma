@@ -1249,6 +1249,55 @@ export async function skipSlot(date: string, slot: string): Promise<boolean> {
   return res.ok;
 }
 
+// ── Nutrition onboarding (setup wizard) ──────────────────────────────────────
+export interface OnboardBootstrap {
+  tdee: number;
+  weight_kg: number;
+  garmin_bf_pct: number | null;
+  height_cm: number | null;
+  age: number | null;
+  sex: string | null;
+  vo2max: number | null;
+  estimated_bf_pct: number | null;
+  exercise_stats: { name: string; recent: number; total: number; template_id: string }[];
+}
+export interface OnboardForm {
+  weight_kg: number; height_cm: number; age: number; sex: string; vo2max: number | null;
+  estimated_bf_pct: number; target_bf_pct: number | null; target_date: string | null;
+  tdee_estimate: number; daily_deficit: number;
+  sentinel_exercises: { slot: string; exercise_name: string }[];
+}
+
+/** Whether a nutrition profile exists; if not, the bootstrap to seed the setup
+ *  wizard (GET /api/nutrition/onboard returns {profile} or {profile:null,bootstrap}). */
+export function useOnboard() {
+  const [state, setState] = useState<{ loading: boolean; hasProfile: boolean; bootstrap: OnboardBootstrap | null }>({ loading: true, hasProfile: false, bootstrap: null });
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<{ profile: unknown; bootstrap?: OnboardBootstrap }>("/api/nutrition/onboard")
+      .then((d) => { if (alive) setState({ loading: false, hasProfile: !!d.profile, bootstrap: d.bootstrap ?? null }); })
+      // Fail safe: never block the dashboard on an onboarding-probe error.
+      .catch(() => { if (alive) setState({ loading: false, hasProfile: true, bootstrap: null }); });
+    return () => { alive = false; };
+  }, [reload]);
+  return { ...state, refetch: () => setReload((n) => n + 1) };
+}
+
+/** Save the nutrition profile from the setup wizard (POST /api/nutrition/onboard). */
+export async function submitOnboard(form: OnboardForm): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/nutrition/onboard`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify(form),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Today's date as YYYY-MM-DD in the device's local timezone. */
 export function todayLocal(): string {
   const d = new Date();
