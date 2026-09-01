@@ -12,6 +12,10 @@ const AUTH_HEADERS: Record<string, string> = API_TOKEN ? { Authorization: `Beare
 export function activityImageSource(activityId: string) {
   return { uri: `${API_BASE}/api/activity/${encodeURIComponent(activityId)}/image`, headers: AUTH_HEADERS };
 }
+/** Shareable summary image for a Hevy workout (/api/workout/[id]/image). */
+export function workoutImageSource(workoutId: string) {
+  return { uri: `${API_BASE}/api/workout/${encodeURIComponent(workoutId)}/image`, headers: AUTH_HEADERS };
+}
 
 /**
  * GET JSON with one automatic retry. Serverless DBs (Neon) can return a transient

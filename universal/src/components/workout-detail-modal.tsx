@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
-import { Text, Modal } from "soma-style";
+import { View, Image, Share } from "react-native";
+import { Text, Modal, Button } from "soma-style";
 import { LineChart } from "./line-chart";
-import { fetchJson } from "../lib/api";
+import { fetchJson, workoutImageSource } from "../lib/api";
 
 interface WSet { weight_kg: number | null; reps: number | null; type?: string; avg_hr?: number }
 interface WExercise { title: string; sets: WSet[] }
@@ -151,8 +151,14 @@ export function WorkoutDetailModal({ id, title, unit, onClose }: { id: string | 
 
             <View className="gap-2">
               {exercises.map((ex, ei) => {
-                let exVol = 0;
-                for (const s of ex.sets) if (s.weight_kg != null && s.reps != null) exVol += s.weight_kg * s.reps;
+                let exVol = 0, topIdx = -1, topVol = 0;
+                ex.sets.forEach((s, i) => {
+                  if (s.weight_kg != null && s.reps != null) {
+                    const v = s.weight_kg * s.reps;
+                    exVol += v;
+                    if (v > topVol) { topVol = v; topIdx = i; }
+                  }
+                });
                 const exVolDisp = unit === "lb" ? exVol * KG_TO_LB : exVol;
                 return (
                   <View key={ei} className="gap-1 border-t border-border-subtle pt-2">
@@ -167,8 +173,10 @@ export function WorkoutDetailModal({ id, title, unit, onClose }: { id: string | 
                     <View className="flex-row flex-wrap gap-1.5">
                       {ex.sets.map((s, si) => {
                         const badge = s.type && s.type !== "normal" ? SET_TYPE[s.type] : undefined;
+                        const isTop = si === topIdx && topVol > 0;
                         return (
-                          <View key={si} className="flex-row items-center gap-1 rounded-md bg-surface-subtle px-2 py-1">
+                          <View key={si} className="flex-row items-center gap-1 rounded-md bg-surface-subtle px-2 py-1" style={isTop ? { borderWidth: 1, borderColor: "#77c8d1" } : undefined}>
+                            {isTop ? <Text variant="micro" style={{ color: "#77c8d1" }}>▲</Text> : null}
                             {badge ? <Text variant="micro" style={{ color: badge.color }}>{badge.label}</Text> : null}
                             <Text variant="micro" className="tabular-nums text-text-secondary">
                               {s.weight_kg != null ? `${w(s.weight_kg)} × ` : ""}{s.reps ?? "—"}
@@ -181,6 +189,12 @@ export function WorkoutDetailModal({ id, title, unit, onClose }: { id: string | 
                   </View>
                 );
               })}
+            </View>
+
+            {/* Shareable summary image */}
+            <View className="items-center gap-2 border-t border-border-subtle pt-3">
+              <Image source={workoutImageSource(id)} style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12, backgroundColor: "#0e1a22" }} resizeMode="contain" />
+              <Button label="Share workout" variant="secondary" size="sm" onPress={() => { Share.share({ url: workoutImageSource(id).uri, message: data.title || title || "Workout" }).catch(() => {}); }} />
             </View>
           </>
         )}
