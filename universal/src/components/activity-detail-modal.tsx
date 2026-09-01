@@ -154,7 +154,13 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
     if (!activity) { setData(null); return; }
     let alive = true; setLoading(true); setTab("Overview");
     fetchJson<ActivityDetail>(`/api/activity/${activity.activity_id}`)
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        // Web opens on the Map tab when there's a GPS route (defaultValue).
+        const rp = (d?.gps_route ?? []).filter((p) => p != null && p.lat != null && p.lng != null);
+        if (rp.length > 10) setTab("Map");
+      })
       .catch(() => alive && setData(null))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
@@ -166,8 +172,9 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
   const ts = data?.time_series ?? [];
   const hasTS = ts.length > 1;
   const routePts = (data?.gps_route ?? []).filter((p): p is { lat: number; lng: number; speed?: number | null } => p != null && p.lat != null && p.lng != null && isFinite(Number(p.lat)) && isFinite(Number(p.lng))).map((p) => ({ lat: Number(p.lat), lng: Number(p.lng), speed: p.speed }));
-  const hasRoute = routePts.length > 1;
-  const tabOptions = ["Overview", ...(hasRoute ? ["Map"] : []), ...(laps.length > 1 ? ["Splits"] : []), ...(hasTS ? ["Charts"] : []), ...(s ? ["Details"] : []), "Share"];
+  const hasRoute = routePts.length > 10; // web run-map bar: needs >10 points
+  // Web tab order: Map (first, when present), Overview, Charts, Splits, Details, Share.
+  const tabOptions = [...(hasRoute ? ["Map"] : []), "Overview", ...(hasTS ? ["Charts"] : []), ...(laps.length > 1 ? ["Splits"] : []), ...(s ? ["Details"] : []), "Share"];
   const img = activityImageSource(activity.activity_id);
   const onShare = () => { Share.share({ url: img.uri, message: activity.name || activity.sport }).catch(() => {}); };
   const zones = (data?.hr_zones ?? []).filter((z) => z && (z.secsInZone ?? 0) > 0);
@@ -297,7 +304,7 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
           ) : tab === "Details" ? (
             <View className="gap-1">
               {s ? Object.entries(s)
-                .filter(([, v]) => v != null && (typeof v === "number" || typeof v === "string" || typeof v === "boolean"))
+                .filter(([k, v]) => v != null && v !== 0 && v !== "" && typeof v !== "object" && !["activityUUID", "userProfilePK", "deviceId"].includes(k))
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([k, v]) => (
                   <View key={k} className="flex-row justify-between gap-3 border-b border-border-subtle py-1">
