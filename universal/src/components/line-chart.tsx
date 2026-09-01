@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { View, type LayoutChangeEvent, type GestureResponderEvent } from "react-native";
-import Svg, { Polyline, Line, Circle } from "react-native-svg";
+import Svg, { Polyline, Line, Circle, Rect } from "react-native-svg";
 import { Text, Modal } from "soma-style";
 
 /**
@@ -31,6 +31,8 @@ export interface LineChartProps {
   yFormatRight?: (v: number) => string;
   refLine?: { y: number; color?: string };
   refLines?: { y: number; color?: string; dashed?: boolean }[];
+  /** Translucent horizontal zones (e.g. Ready ≥70 / Moderate 40–70 bands). */
+  refAreas?: { y1: number; y2: number; color: string; opacity?: number }[];
   yMin?: number;
   yMax?: number;
   /** Number of evenly-spaced x labels to draw (default 2 = first + last). */
@@ -50,7 +52,7 @@ export function chartDateLabel(iso: string): string {
 /** A compact react-native-svg line/scatter chart with y-axis labels, dated x
  *  ticks, an optional right axis, and optional tap-to-read cursor + callout. */
 export function LineChart(props: LineChartProps) {
-  const { series, labels, height = 120, yFormat, yFormatRight, refLine, refLines, yMin, yMax, xTicks, interactive } = props;
+  const { series, labels, height = 120, yFormat, yFormatRight, refLine, refLines, refAreas, yMin, yMax, xTicks, interactive } = props;
   const fmtL = yFormat ?? ((v: number) => String(Math.round(v)));
   const fmtR = yFormatRight ?? fmtL;
   const [active, setActive] = useState<number | null>(null);
@@ -66,6 +68,7 @@ export function LineChart(props: LineChartProps) {
   const lExtra: number[] = [];
   if (refLine && isFinite(refLine.y)) lExtra.push(refLine.y);
   if (refLines) for (const r of refLines) if (isFinite(r.y)) lExtra.push(r.y);
+  if (refAreas) for (const a of refAreas) { if (isFinite(a.y1)) lExtra.push(a.y1); if (isFinite(a.y2)) lExtra.push(a.y2); }
   const lAll = gather(leftS, lExtra);
   const rAll = gather(rightS);
 
@@ -137,6 +140,14 @@ export function LineChart(props: LineChartProps) {
           onResponderRelease={() => interactive && setActive(null)}
         >
           <Svg width="100%" height={height} viewBox={`0 0 ${VBW} ${height}`}>
+            {/* reference bands (drawn under everything) */}
+            {refAreas?.map((a, ai) => {
+              const lo = Math.max(loL, Math.min(a.y1, a.y2));
+              const hi = Math.min(hiL, Math.max(a.y1, a.y2));
+              if (hi <= loL || lo >= hiL || hi <= lo) return null;
+              const yTop = yAtL(hi);
+              return <Rect key={`ra-${ai}`} x={0} y={yTop} width={VBW} height={Math.max(0, yAtL(lo) - yTop)} fill={a.color} fillOpacity={a.opacity ?? 0.12} />;
+            })}
             <Line x1={0} y1={yAtL(hiL)} x2={VBW} y2={yAtL(hiL)} stroke="#1e2f38" strokeWidth={1} />
             <Line x1={0} y1={yAtL(loL)} x2={VBW} y2={yAtL(loL)} stroke="#1e2f38" strokeWidth={1} />
             {refLine && refLine.y >= loL && refLine.y <= hiL ? (

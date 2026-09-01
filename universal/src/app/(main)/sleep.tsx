@@ -348,12 +348,28 @@ export default function SleepScreen() {
               <Text variant="micro" className="text-text-muted">score · 30 days</Text>
             </View>
             <LineChart
-              height={130}
+              height={140}
+              interactive
+              yMin={0}
+              yMax={100}
               labels={recoveryVitals!.readiness.trend.map((p) => chartLabel(p.date))}
               yFormat={(v) => String(Math.round(v))}
-              refLine={{ y: 50, color: "#3a5563" }}
-              series={[{ values: recoveryVitals!.readiness.trend.map((p) => finiteOrNull(p.score)), color: "#6ad4a0", width: 2.2 }]}
+              refAreas={[
+                { y1: 70, y2: 100, color: "#6ad4a0" },
+                { y1: 40, y2: 70, color: "#e0a458" },
+                { y1: 0, y2: 40, color: "#e06060" },
+              ]}
+              refLines={[
+                { y: 70, color: "#6ad4a0", dashed: true },
+                { y: 40, color: "#e0a458", dashed: true },
+              ]}
+              series={[{ values: recoveryVitals!.readiness.trend.map((p) => finiteOrNull(p.score)), color: "#c9d4de", width: 2.2 }]}
             />
+            <ChartLegend items={[
+              { color: "#6ad4a0", label: "Ready ≥70" },
+              { color: "#e0a458", label: "Moderate 40–70" },
+              { color: "#e06060", label: "Low <40" },
+            ]} />
           </Card>
         ) : null}
 
