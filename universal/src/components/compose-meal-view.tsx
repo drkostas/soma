@@ -2,10 +2,16 @@ import { useState, useMemo, useEffect } from "react";
 import { View, ScrollView, TextInput, Pressable } from "react-native";
 import { Text, Button } from "soma-style";
 import {
-  ingredientMacros, logComposedMeal, deleteMeal, savePreset,
+  logComposedMeal, deleteMeal, savePreset,
   isCountBased, countToGrams, gramsToCount, rawToCooked, cookedToRaw, hasRawCookedToggle,
   type Ingredient, type ComposeItem,
 } from "../lib/api";
+import { solvePortions, computeItemMacros, type Ingredient as MEIngredient } from "macro-engine-core";
+
+/** The app Ingredient is structurally the macro-engine-core Ingredient (only `unit`
+ *  differs by null vs undefined); cast so the app shares web's solver + macro math. */
+const mei = (ing: Ingredient): MEIngredient => ing as unknown as MEIngredient;
+const im = (ing: Ingredient, grams: number) => computeItemMacros(mei(ing), grams);
 
 const CATEGORY_LABELS: Record<string, string> = {
   protein: "Protein", carbs: "Carbs", grain: "Grain", vegetable: "Vegetable", fat: "Fat",
@@ -38,9 +44,11 @@ function autoMealName(items: { ingredient_id: string; name?: string }[]): string
  *  a max-yolks clamp, live macros + running totals + a volume-score hint, and
  *  a save-as-preset step after logging. Full parity with the web ComposeMealView. */
 export function ComposeMealView({
-  ingredients, date, slot, onLogged, initialGrams, editMealId, onTotalsChange,
+  ingredients, date, slot, slotBudget, onLogged, initialGrams, editMealId, onTotalsChange,
 }: {
   ingredients: Ingredient[]; date: string; slot: string; onLogged: () => void;
+  /** The slot's kcal budget — seeds the auto-solver so the preview ≈ budget (web parity). */
+  slotBudget?: number;
   /** Pre-select ingredients (id -> grams) — used when editing a logged meal. */
   initialGrams?: Record<string, number>;
   /** When set, saving deletes this meal after re-logging (edit = replace). */
@@ -80,7 +88,7 @@ export function ComposeMealView({
 
   const totals = selectedIds.reduce(
     (a, id) => {
-      const mm = ingredientMacros(byId.get(id)!, grams[id]);
+      const mm = im(byId.get(id)!, grams[id]);
       return { calories: a.calories + mm.calories, protein: a.protein + mm.protein, carbs: a.carbs + mm.carbs, fat: a.fat + mm.fat, fiber: a.fiber + mm.fiber };
     },
     { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
@@ -93,7 +101,20 @@ export function ComposeMealView({
     onTotalsChange?.(totals);
   }, [totals.calories, totals.protein, totals.carbs, totals.fat, totals.fiber]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const add = (id: string) => setGrams((g) => ({ ...g, [id]: g[id] && g[id] > 0 ? g[id] : 100 }));
+  // Web parity: adding an ingredient re-solves the whole selection to the slot's
+  // kcal budget (+30g MPS protein floor) via solvePortions, so the preview totals
+  // land near the budget immediately instead of dropping in a flat 100g.
+  const add = (id: string) => setGrams((g) => {
+    const ids = new Set(Object.keys(g).filter((k) => (g[k] ?? 0) > 0 && byId.has(k)));
+    ids.add(id);
+    const sel = [...ids].map((k) => byId.get(k)).filter((x): x is Ingredient => !!x);
+    if (!slotBudget || slotBudget <= 0 || sel.length === 0) {
+      return { ...g, [id]: g[id] && g[id] > 0 ? g[id] : 100 };
+    }
+    const next: Record<string, number> = {};
+    for (const p of solvePortions(sel.map(mei), { calories: slotBudget })) next[p.ingredient_id] = p.grams;
+    return next;
+  });
   const setG = (id: string, v: number) => setGrams((g) => ({ ...g, [id]: Math.max(0, Math.round(v)) }));
   const remove = (id: string) => setGrams((g) => { const n = { ...g }; delete n[id]; return n; });
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (id: string) =>
@@ -112,7 +133,7 @@ export function ComposeMealView({
   function buildItems(): ComposeItem[] {
     return selectedIds.map((id) => {
       const ing = byId.get(id)!;
-      const m = ingredientMacros(ing, grams[id]);
+      const m = im(ing, grams[id]);
       return { ingredient_id: id, name: ing.name, grams: grams[id], calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, fiber: m.fiber };
     });
   }
@@ -172,7 +193,7 @@ export function ComposeMealView({
           {selectedIds.map((id) => {
             const ing = byId.get(id)!;
             const g = grams[id];
-            const m = ingredientMacros(ing, g);
+            const m = im(ing, g);
             const asCount = isCountBased(ing) && !gramMode.has(id);
             const canCook = hasRawCookedToggle(ing);
             const asCooked = canCook && cookedMode.has(id);

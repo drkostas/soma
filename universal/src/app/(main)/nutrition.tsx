@@ -712,6 +712,7 @@ export default function NutritionScreen() {
             ingredients={ingredients}
             date={DATE}
             slot={slot}
+            slotBudget={data?.slotBudgets?.[slot]?.calories ?? 0}
             initialGrams={editMeal?.grams ?? presetSeed ?? undefined}
             editMealId={editMeal?.id ?? null}
             onTotalsChange={setComposePreview}
