@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { View, Pressable, ScrollView } from "react-native";
-import { Text, Card, Badge, Modal } from "soma-style";
+import { Text, Card } from "soma-style";
 import type { ActivityRow, MonthSports } from "../lib/api";
 import { LineChart } from "./line-chart";
 
@@ -126,40 +126,6 @@ export function ActivityHeatmap({ activities }: { activities: ActivityRow[] }) {
         </View>
       ) : null}
     </Card>
-  );
-}
-
-/** Detail dialog for a single activity. */
-export function ActivityDetailModal({ activity, onClose }: { activity: ActivityRow | null; onClose: () => void }) {
-  if (!activity) return null;
-  const m = meta(activity.type_key);
-  const rows: [string, string][] = [];
-  if (activity.distance_km && activity.distance_km > 0) rows.push(["Distance", `${activity.distance_km.toFixed(2)} km`]);
-  if (activity.duration_min && activity.duration_min > 0) rows.push(["Duration", `${Math.round(activity.duration_min)} min`]);
-  if (activity.calories && activity.calories > 0) rows.push(["Calories", `${Math.round(activity.calories)} kcal`]);
-  if (activity.avg_hr && activity.avg_hr > 0) rows.push(["Avg HR", `${Math.round(activity.avg_hr)} bpm`]);
-  if (activity.elev_gain && activity.elev_gain > 0) rows.push(["Elev gain", `${Math.round(activity.elev_gain)} m`]);
-  return (
-    <Modal visible={!!activity} onClose={onClose} title="Activity">
-      <View className="gap-3">
-        <View className="flex-row items-center gap-2">
-          <Text variant="title">{m.emoji}</Text>
-          <View className="flex-1">
-            <Text variant="title" numberOfLines={2}>{activity.name || m.label}</Text>
-            <Text variant="micro" className="text-text-muted">{niceDate(activity.date)}</Text>
-          </View>
-          <Badge label={m.label} tone="teal" />
-        </View>
-        <View className="gap-1">
-          {rows.length ? rows.map(([k, v]) => (
-            <View key={k} className="flex-row justify-between border-b border-border-subtle py-1.5">
-              <Text variant="caption" className="text-text-muted">{k}</Text>
-              <Text variant="caption" className="tabular-nums">{v}</Text>
-            </View>
-          )) : <Text variant="caption" className="text-text-muted">No metrics recorded.</Text>}
-        </View>
-      </View>
-    </Modal>
   );
 }
 

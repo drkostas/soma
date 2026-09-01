@@ -5,7 +5,8 @@ import { LineChart, ChartLegend, ExpandableChart, chartDateLabel } from "../../c
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { TrendArrow } from "../../components/trend-arrow";
 import { ThisWeekCard, type WeeklyTraining } from "../../components/this-week-card";
-import { ActivityHeatmap, RecentActivityFeed, ActivityBreakdown, LastGymSession, GymFrequency, ActivityDetailModal } from "../../components/activity-content";
+import { ActivityHeatmap, RecentActivityFeed, ActivityBreakdown, LastGymSession, GymFrequency } from "../../components/activity-content";
+import { ActivityDetailModal } from "../../components/activity-detail-modal";
 import {
   useToday,
   useTraining,
