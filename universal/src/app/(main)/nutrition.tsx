@@ -3,9 +3,10 @@ import { ScrollView, View, RefreshControl, TextInput, Pressable } from "react-na
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import {
   useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, deleteDrink, closeDay,
-  reopenDay, copyDay, setManualOverride, rebalanceMeals, presetItems, presetBaseMacros,
+  reopenDay, copyDay, setManualOverride, rebalanceMeals, presetItems, presetBaseMacros, useOnboard,
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
+import { NutritionOnboarding } from "../../components/nutrition-onboarding";
 import { BodyCompChart } from "../../components/body-comp-chart";
 import { ActivitySelector } from "../../components/activity-selector";
 import { ComposeMealView } from "../../components/compose-meal-view";
@@ -85,6 +86,7 @@ export default function NutritionScreen() {
   const { refreshing, onRefresh } = usePullRefresh(refetch);
   const { presets, ingredients } = usePresets();
   const { drinks } = useDrinks();
+  const onboard = useOnboard();
   const [tab, setTab] = useState<"Day" | "Trend">("Day");
   const [logOpen, setLogOpen] = useState(false);
   const [slot, setSlot] = useState("lunch");
@@ -344,6 +346,11 @@ export default function NutritionScreen() {
       );
     });
   };
+
+  // No nutrition profile yet → run the setup wizard instead of the dashboard.
+  if (!onboard.loading && !onboard.hasProfile && onboard.bootstrap) {
+    return <NutritionOnboarding bootstrap={onboard.bootstrap} onDone={() => { onboard.refetch(); refetch(); }} />;
+  }
 
   return (
     <ScrollView
