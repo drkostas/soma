@@ -14,13 +14,16 @@ const CATEGORY_ORDER = ["protein", "carbs", "grain", "vegetable", "fat", "dairy"
  *  Mobile-adapted from the web ComposeMealView (grams-based; the raw/cooked
  *  and count editors + save-as-preset stay a web-only power feature for now). */
 export function ComposeMealView({
-  ingredients, date, slot, onLogged, initialGrams, editMealId,
+  ingredients, date, slot, onLogged, initialGrams, editMealId, onTotalsChange,
 }: {
   ingredients: Ingredient[]; date: string; slot: string; onLogged: () => void;
   /** Pre-select ingredients (id -> grams) — used when editing a logged meal. */
   initialGrams?: Record<string, number>;
   /** When set, saving deletes this meal after re-logging (edit = replace). */
   editMealId?: number | null;
+  /** Emits the in-progress meal totals on every change, so the screen can fold
+   *  them into the day's live preview (remaining kcal + macro bars). */
+  onTotalsChange?: (t: { calories: number; protein: number; carbs: number; fat: number; fiber: number }) => void;
 }) {
   const [search, setSearch] = useState("");
   const [grams, setGrams] = useState<Record<string, number>>(initialGrams ?? {});
@@ -52,6 +55,11 @@ export function ComposeMealView({
     },
     { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
   );
+
+  // Push the running totals up so the screen's day preview updates live.
+  useEffect(() => {
+    onTotalsChange?.(totals);
+  }, [totals.calories, totals.protein, totals.carbs, totals.fat, totals.fiber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const add = (id: string) => setGrams((g) => ({ ...g, [id]: g[id] && g[id] > 0 ? g[id] : 100 }));
   const setG = (id: string, v: number) => setGrams((g) => ({ ...g, [id]: Math.max(0, Math.round(v)) }));
