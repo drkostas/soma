@@ -3,12 +3,13 @@ import { ScrollView, View, RefreshControl, TextInput, Pressable } from "react-na
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import {
   useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, deleteDrink, closeDay,
-  reopenDay, copyDay, setManualOverride, rebalanceMeals,
+  reopenDay, copyDay, setManualOverride, rebalanceMeals, presetItems, presetBaseMacros,
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
 import { BodyCompChart } from "../../components/body-comp-chart";
 import { ActivitySelector } from "../../components/activity-selector";
 import { ComposeMealView } from "../../components/compose-meal-view";
+import { PresetPanel } from "../../components/preset-panel";
 import { MealDetailModal } from "../../components/meal-detail-modal";
 import { MacroGoalBar, buildMacroMarkers, ProteinQualityPill } from "../../components/macro-goal-bar";
 import { NutritionContextStrip } from "../../components/nutrition-context-strip";
@@ -73,6 +74,7 @@ export default function NutritionScreen() {
   // day's locked slots from storage (guarded — no-ops on native).
   useEffect(() => {
     setCloseStatus(null); setLogMode("preset"); setLogOpen(false); setEditMeal(null); setDetailMeal(null); setRebalanceToast(null);
+    setSelectedPreset(null); setPresetSeed(null); setComposePreview(null); setPresetMult(1);
     let stored: string[] = [];
     try {
       const raw = typeof localStorage !== "undefined" ? localStorage.getItem(`locked-slots-${DATE}`) : null;
@@ -107,6 +109,12 @@ export default function NutritionScreen() {
   const [delDrinkId, setDelDrinkId] = useState<number | null>(null);
   const [detailMeal, setDetailMeal] = useState<SomaMeal | null>(null);
   const [editMeal, setEditMeal] = useState<{ id: number; grams: Record<string, number> } | null>(null);
+  // Preset scale/customize panel + live day-level meal preview.
+  const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
+  const [presetMult, setPresetMult] = useState(1);
+  const [presetLinked, setPresetLinked] = useState(true);
+  const [presetSeed, setPresetSeed] = useState<Record<string, number> | null>(null);
+  const [composePreview, setComposePreview] = useState<{ calories: number; protein: number; carbs: number; fat: number; fiber: number } | null>(null);
   // Slots the user has locked (won't be rebalanced). Persisted per-date via
   // guarded localStorage (works on Expo web; in-memory fallback on native).
   const [lockedSlots, setLockedSlots] = useState<Set<string>>(new Set());
@@ -152,11 +160,30 @@ export default function NutritionScreen() {
     }
   }
 
-  async function onLog(preset: Preset) {
-    setBusyId(preset.id);
-    const ok = await logPresetMeal(DATE, slot, preset);
+  // Reset the log modal's transient state (previews, selected preset, seed).
+  function resetLogState() {
+    setEditMeal(null); setSelectedPreset(null); setPresetSeed(null); setComposePreview(null); setPresetMult(1);
+  }
+  function closeLog() { setLogOpen(false); resetLogState(); }
+  // Switch log mode from the tab buttons — clears any in-flight preview/preset.
+  function setMode(m: "preset" | "quick" | "compose") { resetLogState(); setLogMode(m); }
+
+  async function onLogSelectedPreset() {
+    if (!selectedPreset) return;
+    const s = slot;
+    setBusyId(selectedPreset.id);
+    const ok = await logPresetMeal(DATE, s, selectedPreset, presetMult);
     setBusyId(null);
-    if (ok) { refetch(); doRebalance(slot); }
+    if (ok) { closeLog(); refetch(); doRebalance(s); }
+  }
+  // "Customize" a preset — seed the compose view with its (scaled) grams.
+  function onCustomizePreset() {
+    if (!selectedPreset) return;
+    const seed: Record<string, number> = {};
+    for (const it of presetItems(selectedPreset)) seed[it.ingredient_id] = Math.round(it.grams * presetMult);
+    setSelectedPreset(null); setComposePreview(null);
+    setPresetSeed(seed);
+    setLogMode("compose");
   }
   async function onDetailDelete() {
     if (!detailMeal) return;
@@ -170,6 +197,7 @@ export default function NutritionScreen() {
     for (const it of m.items ?? []) {
       if (it.ingredient_id && it.grams) g[it.ingredient_id] = Math.round(it.grams);
     }
+    setSelectedPreset(null); setPresetSeed(null); setComposePreview(null);
     setEditMeal({ id: m.id, grams: g });
     setSlot(m.meal_slot);
     setLogMode("compose");
@@ -253,6 +281,43 @@ export default function NutritionScreen() {
   const totalBurn = bd?.totalBurn ?? (
     (bd?.bmr ?? 0) + (bd?.stepCalories ?? 0) + (bd?.runActual ?? bd?.runPredicted ?? bd?.runCalories ?? 0) + (bd?.gymCalories ?? 0)
   );
+
+  // Live day-level meal preview: the in-progress preset (base x scale) or compose
+  // meal, folded into remaining kcal + macro bars so the user sees the impact
+  // before logging — the web dashboard's preview plumbing, on mobile.
+  const previewTotals = logOpen
+    ? logMode === "preset" && selectedPreset
+      ? (() => {
+          const b = presetBaseMacros(selectedPreset);
+          return { calories: b.calories * presetMult, protein: b.protein * presetMult, carbs: b.carbs * presetMult, fat: b.fat * presetMult, fiber: b.fiber * presetMult };
+        })()
+      : logMode === "compose" ? composePreview : null
+    : null;
+  const previewActive = !!previewTotals && previewTotals.calories > 0;
+
+  // Render the 4 macro goal bars; `extra` folds an in-progress meal's macros in.
+  const renderMacroBars = (extra?: { protein: number; carbs: number; fat: number; fiber: number } | null) => {
+    const t = {
+      protein: Number(plan?.target_protein) || 0,
+      carbs: Number(plan?.target_carbs) || 0,
+      fat: Number(plan?.target_fat) || 0,
+      fiber: Number(plan?.target_fiber) || 0,
+    };
+    const marks = buildMacroMarkers(Number(bd?.weightKg) || 0, t);
+    return MACROS.map((m) => {
+      const eaten = ((consumed as Record<string, number> | undefined)?.[m.key] ?? 0) + (extra ? (extra as Record<string, number>)[m.key] ?? 0 : 0);
+      return (
+        <MacroGoalBar
+          key={m.key}
+          label={m.label}
+          current={eaten}
+          target={t[m.key as keyof typeof t]}
+          color={m.color}
+          markers={marks[m.key as keyof typeof marks]}
+        />
+      );
+    });
+  };
 
   return (
     <ScrollView
@@ -339,29 +404,7 @@ export default function NutritionScreen() {
           })() : null}
 
           <View className="gap-2.5">
-            {(() => {
-              const t = {
-                protein: Number(plan?.target_protein) || 0,
-                carbs: Number(plan?.target_carbs) || 0,
-                fat: Number(plan?.target_fat) || 0,
-                fiber: Number(plan?.target_fiber) || 0,
-              };
-              const marks = buildMacroMarkers(Number(bd?.weightKg) || 0, t);
-              return MACROS.map((m) => {
-                const eaten = (consumed as Record<string, number> | undefined)?.[m.key] ?? 0;
-                const markers = marks[m.key as keyof typeof marks];
-                return (
-                  <MacroGoalBar
-                    key={m.key}
-                    label={m.label}
-                    current={eaten}
-                    target={t[m.key as keyof typeof t]}
-                    color={m.color}
-                    markers={markers}
-                  />
-                );
-              });
-            })()}
+            {renderMacroBars()}
             <Text variant="micro" className="text-text-muted">
               {(bd?.weightKg ?? 0) > 0
                 ? "Protein & fat ticks are g/kg tiers · green = optimal · red = ceiling"
@@ -600,25 +643,46 @@ export default function NutritionScreen() {
       </View>
 
       {/* Log-meal modal — preset picker, prefilled to the tapped slot */}
-      <Modal visible={logOpen} onClose={() => { setLogOpen(false); setEditMeal(null); }} title={editMeal ? `Edit ${slotLabel(slot)}` : `Log ${slotLabel(slot)}`}>
+      <Modal visible={logOpen} onClose={closeLog} title={editMeal ? `Edit ${slotLabel(slot)}` : `Log ${slotLabel(slot)}`}>
         <PillGroup className="mb-3">
           {slots.map((s) => (
             <Pill key={s} label={slotLabel(s)} active={slot === s} onPress={() => setSlot(s)} />
           ))}
         </PillGroup>
         <View className="mb-3 flex-row gap-1.5">
-          <Button label="Presets" variant={logMode === "preset" ? "secondary" : "ghost"} size="sm" onPress={() => { setLogMode("preset"); setEditMeal(null); }} />
-          <Button label="Quick add" variant={logMode === "quick" ? "secondary" : "ghost"} size="sm" onPress={() => { setLogMode("quick"); setEditMeal(null); }} />
-          <Button label={editMeal ? "Editing" : "Compose"} variant={logMode === "compose" ? "secondary" : "ghost"} size="sm" onPress={() => { setLogMode("compose"); setEditMeal(null); }} />
+          <Button label="Presets" variant={logMode === "preset" ? "secondary" : "ghost"} size="sm" onPress={() => setMode("preset")} />
+          <Button label="Quick add" variant={logMode === "quick" ? "secondary" : "ghost"} size="sm" onPress={() => setMode("quick")} />
+          <Button label={editMeal ? "Editing" : "Compose"} variant={logMode === "compose" ? "secondary" : "ghost"} size="sm" onPress={() => setMode("compose")} />
         </View>
+
+        {/* Live "day after this meal" preview — remaining kcal + macro bars folded
+            with the in-progress preset/compose meal, so the impact is visible
+            before logging. */}
+        {previewActive && previewTotals ? (
+          <View className="mb-3 gap-2 rounded-lg border p-3" style={{ borderColor: "#2a5560", backgroundColor: "#0f1e24" }}>
+            <View className="flex-row items-center justify-between">
+              <Text variant="eyebrow" style={{ color: "#77c8d1" }}>Day after this meal</Text>
+              {plan ? (
+                <Text variant="caption" className="tabular-nums text-text-secondary">
+                  {Math.round((remaining?.calories ?? 0) - previewTotals.calories).toLocaleString()} kcal left
+                </Text>
+              ) : (
+                <Text variant="caption" className="tabular-nums text-text-secondary">+{Math.round(previewTotals.calories).toLocaleString()} kcal</Text>
+              )}
+            </View>
+            <View className="gap-2.5">{renderMacroBars(previewTotals)}</View>
+          </View>
+        ) : null}
+
         {logMode === "compose" ? (
           <ComposeMealView
             ingredients={ingredients}
             date={DATE}
             slot={slot}
-            initialGrams={editMeal?.grams}
+            initialGrams={editMeal?.grams ?? presetSeed ?? undefined}
             editMealId={editMeal?.id ?? null}
-            onLogged={() => { setLogOpen(false); setEditMeal(null); refetch(); doRebalance(slot); }}
+            onTotalsChange={setComposePreview}
+            onLogged={() => { closeLog(); refetch(); doRebalance(slot); }}
           />
         ) : logMode === "quick" ? (
           <View className="gap-2 rounded-lg border border-border-subtle p-3">
@@ -636,28 +700,47 @@ export default function NutritionScreen() {
               <TextInput placeholder="F" placeholderTextColor="#5a7a8a" keyboardType="numeric" value={qF} onChangeText={setQF} className="flex-1 rounded-md border border-border-subtle px-2 py-2 text-text tabular-nums" />
             </View>
             <View className="flex-row justify-end gap-2">
-              <Button label="Cancel" variant="ghost" size="sm" onPress={() => setLogMode("preset")} />
+              <Button label="Cancel" variant="ghost" size="sm" onPress={() => setMode("preset")} />
               <Button label={qBusy ? "…" : "Add"} variant="primary" size="sm" disabled={qBusy || !qCal} onPress={onQuickAdd} />
             </View>
           </View>
+        ) : selectedPreset ? (
+          <PresetPanel
+            preset={selectedPreset}
+            ingredients={ingredients}
+            multiplier={presetMult}
+            linked={presetLinked}
+            onMultiplier={setPresetMult}
+            onToggleLinked={() => setPresetLinked((v) => !v)}
+            onCancel={() => { setSelectedPreset(null); setPresetMult(1); }}
+            onCustomize={onCustomizePreset}
+            onLog={onLogSelectedPreset}
+            logging={busyId != null}
+          />
         ) : (
           <ScrollView className="max-h-80">
             {pickerPresets.map((p) => (
-              <View key={p.id} className="flex-row items-center gap-2 border-b border-border-subtle py-2.5">
+              <Pressable
+                key={p.id}
+                onPress={() => { setSelectedPreset(p); setPresetMult(1); setPresetLinked(true); }}
+                className="flex-row items-center gap-2 border-b border-border-subtle py-2.5"
+              >
                 <View className="flex-1">
                   <Text variant="body" className="text-text" numberOfLines={1}>{p.name}</Text>
                   <Text variant="micro" className="tabular-nums">
                     {p.meal_slot ? slotLabel(p.meal_slot) + " · " : ""}{Math.round(p.total_calories)} kcal · P{Math.round(p.total_protein)} C{Math.round(p.total_carbs)} F{Math.round(p.total_fat)}
                   </Text>
                 </View>
-                <Button label={busyId === p.id ? "…" : "Log"} variant="secondary" size="sm" disabled={busyId != null} onPress={() => onLog(p)} />
-              </View>
+                <Text variant="body" className="text-text-muted">›</Text>
+              </Pressable>
             ))}
           </ScrollView>
         )}
-        <View className="mt-4 flex-row justify-end">
-          <Button label={logMode === "compose" ? "Cancel" : "Done"} variant={logMode === "compose" ? "ghost" : "primary"} onPress={() => { setLogOpen(false); setEditMeal(null); }} />
-        </View>
+        {!(logMode === "preset" && selectedPreset) ? (
+          <View className="mt-4 flex-row justify-end">
+            <Button label={logMode === "compose" ? "Cancel" : "Done"} variant={logMode === "compose" ? "ghost" : "primary"} onPress={closeLog} />
+          </View>
+        ) : null}
       </Modal>
 
       {/* Logged-meal detail — tap a meal to see macros + ingredients, edit or delete */}
