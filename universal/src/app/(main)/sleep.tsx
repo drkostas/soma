@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
-import { Text, Card, Badge, SegmentedControl, Sparkline } from "soma-style";
+import { Text, Card, Badge, Sparkline } from "soma-style";
+import { TimeRangeSelector } from "../../components/time-range-selector";
+import { useRangePref, statsRange } from "../../lib/time-range";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { LineChart, ChartLegend } from "../../components/line-chart";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
@@ -39,15 +41,13 @@ interface StatSeries {
   };
 }
 
-type Range = "7d" | "30d" | "90d";
-const RANGES: readonly Range[] = ["7d", "30d", "90d"] as const;
 
 /**
  * Sleep & Recovery data, fetched from soma's /api/stats/[metric] endpoints.
  * The web page reads the DB directly; the RN app has no DB, so it uses the
  * public stats API which serves the same daily_health_summary rows.
  */
-function useSleepRecovery(range: Range) {
+function useSleepRecovery(range: string) {
   const [sleep, setSleep] = useState<StatSeries | null>(null);
   const [rhr, setRhr] = useState<StatSeries | null>(null);
   const [stress, setStress] = useState<StatSeries | null>(null);
@@ -60,7 +60,8 @@ function useSleepRecovery(range: Range) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    const get = (m: string) => fetchJson<StatSeries>(`/api/stats/${m}?range=${range}`);
+    // /api/stats/* only accepts 7d/30d/90d/1y — clamp the shared range to it.
+    const get = (m: string) => fetchJson<StatSeries>(`/api/stats/${m}?range=${statsRange(range)}`);
 
     Promise.all([
       get("sleep"),
@@ -108,7 +109,7 @@ function delta(series: StatSeries | null): number | null {
 }
 
 export default function SleepScreen() {
-  const [range, setRange] = useState<Range>("30d");
+  const [range, setRange] = useRangePref();
   const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
   const { sleep, rhr, stress, battery, recovery, loading, error, refetch } =
     useSleepRecovery(range);
@@ -240,11 +241,7 @@ export default function SleepScreen() {
           ) : null}
         </View>
 
-        <SegmentedControl
-          options={RANGES}
-          value={range}
-          onChange={(v) => setRange(v as Range)}
-        />
+        <TimeRangeSelector value={range} onChange={setRange} />
 
         {error ? (
           <Card>

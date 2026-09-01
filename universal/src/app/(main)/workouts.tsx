@@ -1,6 +1,8 @@
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { useEffect, useState } from "react";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
+import { TimeRangeSelector } from "../../components/time-range-selector";
+import { useRangePref } from "../../lib/time-range";
 import { fetchJson, usePullRefresh, useWorkoutsSummary, useWorkoutInsights, useWorkoutTimeline, useBodyMap, type TimelinePoint } from "../../lib/api";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { WorkoutsDashboard } from "../../components/workouts-dashboard";
@@ -62,7 +64,7 @@ function formatDate(dateStr: string): string {
 
 export default function WorkoutsScreen() {
   const { data, error, refetch } = useWorkouts();
-  const [range, setRange] = useState<"30d" | "90d" | "1y">("90d");
+  const [range, setRange] = useRangePref();
   const [unit, setUnit] = useState<"kg" | "lb">("kg");
   const { data: wkSum } = useWorkoutsSummary(range);
   const { data: insights } = useWorkoutInsights(range);
@@ -216,11 +218,7 @@ export default function WorkoutsScreen() {
         {/* Workout data — volume, stats, top exercises, recent (new /api/workouts/summary) */}
         <View className="flex-row items-center gap-3">
           <View className="flex-1">
-            <SegmentedControl
-              options={["30d", "90d", "1y"] as const}
-              value={range}
-              onChange={(v) => setRange(v as "30d" | "90d" | "1y")}
-            />
+            <TimeRangeSelector value={range} onChange={setRange} />
           </View>
           <View className="w-24">
             <SegmentedControl options={["kg", "lb"] as const} value={unit} onChange={(v) => setUnit(v as "kg" | "lb")} />
