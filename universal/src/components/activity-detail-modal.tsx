@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { View, ScrollView, Image, Share } from "react-native";
 import { Text, Modal, Badge, SegmentedControl, Button, Sparkline } from "soma-style";
 import { LineChart } from "./line-chart";
+import { RouteMap } from "./route-map";
 import { fetchJson, activityImageSource, type ActivityRow } from "../lib/api";
 
 interface TSPoint { elapsed_sec: number; hr?: number | null; speed?: number | null; elevation?: number | null; cadence?: number | null }
-interface GpsPoint { dist_m?: number | null; hr?: number | null; speed?: number | null; elev?: number | null }
+interface GpsPoint { lat?: number | null; lng?: number | null; dist_m?: number | null; hr?: number | null; speed?: number | null; elev?: number | null }
 
 /* ---- response shape from /api/activity/[id] (Garmin summary + laps + weather) ---- */
 interface Summary {
@@ -147,7 +148,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 export function ActivityDetailModal({ activity, onClose }: { activity: ActivityRow | null; onClose: () => void }) {
   const [data, setData] = useState<ActivityDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"Overview" | "Splits" | "Charts" | "Details" | "Share">("Overview");
+  const [tab, setTab] = useState<"Overview" | "Map" | "Splits" | "Charts" | "Details" | "Share">("Overview");
 
   useEffect(() => {
     if (!activity) { setData(null); return; }
@@ -164,7 +165,9 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
   const laps = data?.splits?.lapDTOs ?? [];
   const ts = data?.time_series ?? [];
   const hasTS = ts.length > 1;
-  const tabOptions = ["Overview", ...(laps.length > 1 ? ["Splits"] : []), ...(hasTS ? ["Charts"] : []), ...(s ? ["Details"] : []), "Share"];
+  const routePts = (data?.gps_route ?? []).filter((p): p is { lat: number; lng: number; speed?: number | null } => p != null && p.lat != null && p.lng != null && isFinite(Number(p.lat)) && isFinite(Number(p.lng))).map((p) => ({ lat: Number(p.lat), lng: Number(p.lng), speed: p.speed }));
+  const hasRoute = routePts.length > 1;
+  const tabOptions = ["Overview", ...(hasRoute ? ["Map"] : []), ...(laps.length > 1 ? ["Splits"] : []), ...(hasTS ? ["Charts"] : []), ...(s ? ["Details"] : []), "Share"];
   const img = activityImageSource(activity.activity_id);
   const onShare = () => { Share.share({ url: img.uri, message: activity.name || activity.sport }).catch(() => {}); };
   const zones = (data?.hr_zones ?? []).filter((z) => z && (z.secsInZone ?? 0) > 0);
@@ -210,7 +213,7 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
         ) : null}
 
         {tabOptions.length > 1 ? (
-          <SegmentedControl options={tabOptions} value={tab} onChange={(v) => setTab(v as "Overview" | "Splits" | "Charts" | "Details" | "Share")} />
+          <SegmentedControl options={tabOptions} value={tab} onChange={(v) => setTab(v as "Overview" | "Map" | "Splits" | "Charts" | "Details" | "Share")} />
         ) : null}
 
         <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
@@ -274,6 +277,11 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
                   </Text>
                 </View>
               ) : null}
+            </View>
+          ) : tab === "Map" ? (
+            <View className="gap-2">
+              <RouteMap points={routePts} height={340} />
+              <RouteProfile gps={data?.gps_route ?? []} />
             </View>
           ) : tab === "Charts" ? (
             <View className="gap-3">
