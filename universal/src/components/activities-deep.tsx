@@ -37,8 +37,11 @@ function hm(mins: number | null | undefined): string {
 
 /** Monthly activity distribution — stacked columns by sport. */
 export function ActivitiesMonthly({ monthly }: { monthly: ActivitiesDeep["monthly"] }) {
-  const data = (monthly ?? []).slice(-12);
+  // Show the whole selected range (web parity); thin the month labels so long
+  // ranges (1Y/2Y/3Y/All) stay readable instead of truncating to 12 months.
+  const data = monthly ?? [];
   if (data.length < 2) return null;
+  const labelStep = Math.max(1, Math.ceil(data.length / 12));
   const totals = data.map((m) => Object.values(m.sports).reduce((a, b) => a + b, 0));
   const max = Math.max(...totals) || 1;
   const sports = [...new Set(data.flatMap((m) => Object.keys(m.sports)))];
@@ -56,7 +59,7 @@ export function ActivitiesMonthly({ monthly }: { monthly: ActivitiesDeep["monthl
                   <View key={s} style={{ height: `${(c / total) * 100}%`, backgroundColor: sportColor(s) }} />
                 ))}
               </View>
-              <Text variant="micro" className="text-text-muted" style={{ fontSize: 8 }}>{shortMonth(m.month)}</Text>
+              <Text variant="micro" className="text-text-muted" style={{ fontSize: 8 }}>{i % labelStep === 0 || i === data.length - 1 ? shortMonth(m.month) : ""}</Text>
             </View>
           );
         })}
