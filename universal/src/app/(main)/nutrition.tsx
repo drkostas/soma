@@ -11,7 +11,7 @@ import { ActivitySelector } from "../../components/activity-selector";
 import { ComposeMealView } from "../../components/compose-meal-view";
 import { PresetPanel } from "../../components/preset-panel";
 import { MealDetailModal } from "../../components/meal-detail-modal";
-import { MacroGoalBar, buildMacroMarkers, ProteinQualityPill } from "../../components/macro-goal-bar";
+import { MacroGoalBar, buildMacroMarkers, ProteinQualityPill, type MacroMarker } from "../../components/macro-goal-bar";
 import { NutritionContextStrip } from "../../components/nutrition-context-strip";
 import { PrepSummary } from "../../components/prep-summary";
 
@@ -294,6 +294,32 @@ export default function NutritionScreen() {
       : logMode === "compose" ? composePreview : null
     : null;
   const previewActive = !!previewTotals && previewTotals.calories > 0;
+
+  // The live "day after this meal" strip: 5 stacked bars (kcal + P/C/F/Fi). Each
+  // shows the already-eaten portion dimmer + this meal stacked on top, over the
+  // research goalposts (kcal bar adds a goal soft-ceiling + burn hard-ceiling).
+  const renderDayStrip = (preview: { calories: number; protein: number; carbs: number; fat: number; fiber: number }) => {
+    const t = {
+      protein: Number(plan?.target_protein) || 0,
+      carbs: Number(plan?.target_carbs) || 0,
+      fat: Number(plan?.target_fat) || 0,
+      fiber: Number(plan?.target_fiber) || 0,
+    };
+    const marks = buildMacroMarkers(Number(bd?.weightKg) || 0, t);
+    const kcalMarkers: MacroMarker[] = [];
+    if (targetCal > 0) kcalMarkers.push({ value: targetCal, label: "goal", kind: "softCeiling", optimal: true, description: "Daily deficit target" });
+    if ((totalBurn ?? 0) > 0) kcalMarkers.push({ value: totalBurn, label: "burn", kind: "hardCeiling", description: "Total burn — past this is surplus" });
+    const c = consumed as Record<string, number> | undefined;
+    const bars: { key: string; label: string; color: string; target: number; markers: MacroMarker[]; unit: string }[] = [
+      { key: "calories", label: "Calories", color: "#77c8d1", target: targetCal, markers: kcalMarkers, unit: "" },
+      ...MACROS.map((m) => ({ key: m.key, label: m.label, color: m.color, target: t[m.key as keyof typeof t], markers: marks[m.key as keyof typeof marks], unit: "g" })),
+    ];
+    return bars.map((b) => {
+      const base = c?.[b.key] ?? 0;
+      const cur = base + ((preview as Record<string, number>)[b.key] ?? 0);
+      return <MacroGoalBar key={b.key} label={b.label} current={cur} base={base} target={b.target} color={b.color} markers={b.markers} unit={b.unit} />;
+    });
+  };
 
   // Render the 4 macro goal bars; `extra` folds an in-progress meal's macros in.
   const renderMacroBars = (extra?: { protein: number; carbs: number; fat: number; fiber: number } | null) => {
@@ -670,7 +696,7 @@ export default function NutritionScreen() {
                 <Text variant="caption" className="tabular-nums text-text-secondary">+{Math.round(previewTotals.calories).toLocaleString()} kcal</Text>
               )}
             </View>
-            <View className="gap-2.5">{renderMacroBars(previewTotals)}</View>
+            <View className="gap-2.5">{renderDayStrip(previewTotals)}</View>
           </View>
         ) : null}
 

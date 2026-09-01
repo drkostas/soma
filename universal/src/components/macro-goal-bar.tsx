@@ -77,6 +77,7 @@ export function MacroGoalBar({
   color,
   markers,
   unit = "g",
+  base,
 }: {
   label: string;
   current: number;
@@ -84,6 +85,9 @@ export function MacroGoalBar({
   color: string;
   markers?: MacroMarker[];
   unit?: string;
+  /** When set, renders 0->base as a dimmer "already eaten" segment and
+   *  base->current as the full-strength "this meal" segment (stacked preview). */
+  base?: number;
 }) {
   const useMulti = !!markers && markers.length > 0;
   const highest = useMulti ? Math.max(...markers!.map((m) => m.value)) : 0;
@@ -118,8 +122,18 @@ export function MacroGoalBar({
         </Text>
       </View>
       <View className="relative h-2 overflow-hidden rounded-full" style={{ backgroundColor: TRACK }}>
-        {/* Base fill */}
-        <View className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${fillPct}%`, backgroundColor: color }} />
+        {(() => {
+          // Optional 2-tone stacking: dim "eaten" segment + full "this meal".
+          const basePct = base != null && base > 0 ? Math.min(100, (base / maxVal) * 100) : 0;
+          return (
+            <>
+              {basePct > 0 ? (
+                <View className="absolute left-0 top-0 h-full" style={{ width: `${basePct}%`, backgroundColor: color, opacity: 0.5 }} />
+              ) : null}
+              <View className="absolute top-0 h-full" style={{ left: `${basePct}%`, width: `${Math.max(0, fillPct - basePct)}%`, backgroundColor: color }} />
+            </>
+          );
+        })()}
         {/* Soft-ceiling amber overlay */}
         {useMulti && pastSoft && orangeEndPct > softStartPct ? (
           <View className="absolute top-0 h-full" style={{ left: `${softStartPct}%`, width: `${orangeEndPct - softStartPct}%`, backgroundColor: AMBER }} />
