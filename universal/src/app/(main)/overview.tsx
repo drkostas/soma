@@ -3,6 +3,7 @@ import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, chartDateLabel } from "../../components/line-chart";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
+import { TrendArrow } from "../../components/trend-arrow";
 import { ThisWeekCard, type WeeklyTraining } from "../../components/this-week-card";
 import { ActivityHeatmap, RecentActivityFeed, ActivityBreakdown, LastGymSession, GymFrequency, ActivityDetailModal } from "../../components/activity-content";
 import {
@@ -188,11 +189,11 @@ export default function OverviewScreen() {
   const hrvLatest = recovery.data?.hrv?.latest ?? null;
   const hrvSpark = (recovery.data?.hrv?.trend ?? []).map((p) => Number(p.weekly_avg)).filter((v) => isFinite(v));
 
-  const stats: { label: string; value: string; sub: string; cls: string; spark?: number[]; color: string; unit?: string; metric?: string }[] = [
+  const stats: { label: string; value: string; sub: string; cls: string; spark?: number[]; color: string; unit?: string; metric?: string; inverted?: boolean }[] = [
     { label: "Steps", value: (data?.total_steps ?? 0).toLocaleString(), sub: `${km} km`, cls: "text-teal", spark: trends?.steps, color: "#77c8d1", metric: "steps" },
     { label: "Active Calories", value: `${Math.round(data?.active_kilocalories ?? 0)}`, sub: `${Math.round(data?.total_kilocalories ?? 0)} total`, cls: "text-warm", spark: trends?.calories, color: "#b17850", unit: "kcal", metric: "calories" },
-    { label: "Resting HR", value: `${data?.resting_heart_rate ?? "—"}`, sub: `${data?.min_heart_rate ?? "—"}–${data?.max_heart_rate ?? "—"} bpm`, cls: "text-danger", spark: trends?.rhr, color: "#e06060", unit: "bpm", metric: "rhr" },
-    { label: "Avg Stress", value: `${data?.avg_stress_level ?? "—"}`, sub: `Peak ${data?.max_stress_level ?? "—"}`, cls: "text-warning", spark: trends?.stress, color: "#e0a458", metric: "stress" },
+    { label: "Resting HR", value: `${data?.resting_heart_rate ?? "—"}`, sub: `${data?.min_heart_rate ?? "—"}–${data?.max_heart_rate ?? "—"} bpm`, cls: "text-danger", spark: trends?.rhr, color: "#e06060", unit: "bpm", metric: "rhr", inverted: true },
+    { label: "Avg Stress", value: `${data?.avg_stress_level ?? "—"}`, sub: `Peak ${data?.max_stress_level ?? "—"}`, cls: "text-warning", spark: trends?.stress, color: "#e0a458", metric: "stress", inverted: true },
     { label: "Body Battery", value: `${data?.body_battery_max ?? "—"}`, sub: `−${Math.abs(data?.body_battery_drained ?? 0)} drained`, cls: "text-lime", spark: trends?.bodyBattery, color: "#cbe896", metric: "body_battery" },
     { label: "Intensity min", value: `${(data?.moderate_intensity_minutes ?? 0) + (data?.vigorous_intensity_minutes ?? 0)}`, sub: `${data?.vigorous_intensity_minutes ?? 0} vigorous`, cls: "text-indigo", spark: trends?.intensity, color: "#6366b0", unit: "min" },
     { label: "VO₂max", value: vo2.current != null ? String(vo2.current) : "—", sub: "ml/kg/min", cls: "text-teal", spark: vo2.trend.filter((x) => isFinite(x)), color: "#77c8d1", metric: "vo2max" },
@@ -367,7 +368,10 @@ export default function OverviewScreen() {
               <Card className="gap-1">
                 <View className="flex-row items-center justify-between">
                   <Text variant="eyebrow">{s.label}</Text>
-                  <Text variant="micro" className="text-text-muted">›</Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <TrendArrow series={s.spark} inverted={s.inverted} />
+                    <Text variant="micro" className="text-text-muted">›</Text>
+                  </View>
                 </View>
                 <Text variant="headline" className={s.cls}>{s.value}</Text>
                 <Text variant="micro">{s.sub}</Text>
