@@ -4,6 +4,7 @@ import { Text, Card, Badge, Sparkline } from "soma-style";
 import { TimeRangeSelector } from "../../components/time-range-selector";
 import { useRangePref, statsRange } from "../../lib/time-range";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
+import { TrendArrow } from "../../components/trend-arrow";
 import { LineChart, ChartLegend } from "../../components/line-chart";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
 import { SleepDashboard } from "../../components/sleep-dashboard";
@@ -147,6 +148,7 @@ export default function SleepScreen() {
     spark?: { data: number[]; color: string };
     unit?: string;
     metric?: string;
+    inverted?: boolean;
   }[] = [
     {
       label: "Avg Sleep",
@@ -174,6 +176,7 @@ export default function SleepScreen() {
       spark: { data: seriesVals(rhr?.current), color: "#e06060" },
       unit: "bpm",
       metric: "rhr",
+      inverted: true,
     },
     {
       label: "HRV (weekly)",
@@ -217,6 +220,7 @@ export default function SleepScreen() {
           cls: "text-danger",
           spark: sleepHrSeries.length >= 2 ? { data: sleepHrSeries, color: "#e06060" } : undefined,
           unit: "bpm",
+          inverted: true,
         },
       ]
     : [];
@@ -273,7 +277,10 @@ export default function SleepScreen() {
                 <Card className="gap-1">
                   <View className="flex-row items-center justify-between">
                     <Text variant="eyebrow">{s.label}</Text>
-                    {tappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
+                    <View className="flex-row items-center gap-1.5">
+                      {s.spark ? <TrendArrow series={s.spark.data} inverted={s.inverted} /> : null}
+                      {tappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
+                    </View>
                   </View>
                   <Text variant="headline" className={s.cls}>
                     {s.value}
