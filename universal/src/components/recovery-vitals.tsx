@@ -37,7 +37,7 @@ export function RecoveryVitals({ summary }: { summary: RecoverySummary | null | 
     ? [
         { label: "HRV", v: rdy.hrv_pct, color: "#6ad4a0" },
         { label: "Stress", v: rdy.stress_pct, color: "#e0a458" },
-        { label: "ACWR", v: rdy.acwr_pct, color: "#6aa0e0" },
+        { label: "Training Load", v: rdy.acwr_pct, color: "#6aa0e0" },
         { label: "Recovery", v: rdy.recovery_pct, color: "#c084fc" },
         { label: "Sleep hist.", v: rdy.sleep_history_pct, color: "#a5b4fc" },
         { label: "Sleep Score", v: rdy.sleep_score_pct ?? null, color: "#77c8d1" },
