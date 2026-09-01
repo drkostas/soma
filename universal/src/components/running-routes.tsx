@@ -1,17 +1,30 @@
 import { useState } from "react";
 import { View, Pressable } from "react-native";
 import Svg, { Polyline } from "react-native-svg";
-import { Text, Card, Modal } from "soma-style";
-import type { RouteItem, RoutePoint } from "../lib/api";
+import { Text, Card } from "soma-style";
+import { ActivityDetailModal } from "./activity-detail-modal";
+import type { RouteItem, RoutePoint, ActivityRow } from "../lib/api";
 
 function shortDate(iso: string): string {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
-function paceLabel(mins: number | null): string {
-  if (mins == null || !isFinite(mins)) return "—";
-  const t = Math.round(mins * 60);
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+/** Adapt a recent-route item into the ActivityRow the full detail modal expects
+ *  (it fetches /api/activity/<id> for map/splits/HR-zones/charts) — matching web,
+ *  where a route thumbnail opens the full ActivityDetailModal, not a mini preview. */
+function toActivityRow(r: RouteItem): ActivityRow {
+  return {
+    activity_id: r.activity_id,
+    type_key: "running",
+    sport: "Running",
+    date: r.date ?? "",
+    name: r.name,
+    distance_km: r.distance_km,
+    duration_min: r.duration_s != null ? r.duration_s / 60 : null,
+    avg_hr: null,
+    calories: null,
+    elev_gain: 0,
+  };
 }
 
 /** One route's GPS path as a normalized SVG polyline (north up), no map tiles. */
@@ -33,37 +46,6 @@ function RouteThumb({ points, stroke = 2 }: { points: RoutePoint[]; stroke?: num
         <Polyline points={poly} fill="none" stroke="#77c8d1" strokeWidth={stroke} strokeLinejoin="round" strokeLinecap="round" />
       </Svg>
     </View>
-  );
-}
-
-/** Enlarged route + stats (drill-in behind a thumbnail). */
-function RouteDetailModal({ route, onClose }: { route: RouteItem | null; onClose: () => void }) {
-  if (!route) return null;
-  const km = route.distance_km;
-  const durMin = route.duration_s != null ? route.duration_s / 60 : null;
-  const pace = km && durMin ? durMin / km : null;
-  const rows: [string, string][] = [
-    ["Distance", km != null ? `${km.toFixed(2)} km` : "—"],
-    ["Duration", durMin != null ? `${Math.round(durMin)} min` : "—"],
-    ["Avg pace", pace != null ? `${paceLabel(pace)} /km` : "—"],
-  ];
-  return (
-    <Modal visible={!!route} onClose={onClose} title={route.name ?? "Run"}>
-      <View className="gap-3">
-        <View className="rounded-lg bg-surface-subtle overflow-hidden" style={{ aspectRatio: 1 }}>
-          <RouteThumb points={route.gps_points} stroke={2.4} />
-        </View>
-        <Text variant="micro" className="text-text-muted">{shortDate(route.date)}</Text>
-        <View className="gap-2">
-          {rows.map(([label, value]) => (
-            <View key={label} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
-              <Text variant="body" className="text-text-secondary">{label}</Text>
-              <Text variant="body" className="tabular-nums text-text">{value}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -97,7 +79,7 @@ export function RunningRoutes({ routes }: { routes: RouteItem[] }) {
           <Text variant="caption" className="text-teal">{showAll ? "Show fewer" : `Show all ${withGps.length}`}</Text>
         </Pressable>
       ) : null}
-      <RouteDetailModal route={selected} onClose={() => setSelected(null)} />
+      <ActivityDetailModal activity={selected ? toActivityRow(selected) : null} onClose={() => setSelected(null)} />
     </Card>
   );
 }
