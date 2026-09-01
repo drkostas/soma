@@ -151,14 +151,15 @@ export function WorkoutDetailModal({ id, title, unit, onClose }: { id: string | 
 
             <View className="gap-2">
               {exercises.map((ex, ei) => {
-                let exVol = 0, topIdx = -1, topVol = 0;
-                ex.sets.forEach((s, i) => {
-                  if (s.weight_kg != null && s.reps != null) {
-                    const v = s.weight_kg * s.reps;
-                    exVol += v;
-                    if (v > topVol) { topVol = v; topIdx = i; }
-                  }
-                });
+                // Top set = heaviest WEIGHT among working sets (web parity); mark every
+                // set at that weight, and suppress when all working sets already match.
+                let exVol = 0;
+                const workWeights = ex.sets.filter((s) => s.type !== "warmup" && s.weight_kg != null && s.weight_kg > 0).map((s) => s.weight_kg as number);
+                const maxWeight = workWeights.length ? Math.max(...workWeights) : 0;
+                const normalCount = ex.sets.filter((s) => s.type !== "warmup").length;
+                const atMaxCount = ex.sets.filter((s) => s.type !== "warmup" && s.weight_kg === maxWeight).length;
+                const showTop = maxWeight > 0 && atMaxCount < normalCount;
+                ex.sets.forEach((s) => { if (s.weight_kg != null && s.reps != null) exVol += s.weight_kg * s.reps; });
                 const exVolDisp = unit === "lb" ? exVol * KG_TO_LB : exVol;
                 return (
                   <View key={ei} className="gap-1 border-t border-border-subtle pt-2">
@@ -173,13 +174,13 @@ export function WorkoutDetailModal({ id, title, unit, onClose }: { id: string | 
                     <View className="flex-row flex-wrap gap-1.5">
                       {ex.sets.map((s, si) => {
                         const badge = s.type && s.type !== "normal" ? SET_TYPE[s.type] : undefined;
-                        const isTop = si === topIdx && topVol > 0;
+                        const isTop = showTop && s.weight_kg === maxWeight && s.type !== "warmup";
                         return (
                           <View key={si} className="flex-row items-center gap-1 rounded-md bg-surface-subtle px-2 py-1" style={isTop ? { borderWidth: 1, borderColor: "#77c8d1" } : undefined}>
                             {isTop ? <Text variant="micro" style={{ color: "#77c8d1" }}>▲</Text> : null}
                             {badge ? <Text variant="micro" style={{ color: badge.color }}>{badge.label}</Text> : null}
                             <Text variant="micro" className="tabular-nums text-text-secondary">
-                              {s.weight_kg != null ? `${w(s.weight_kg)} × ` : ""}{s.reps ?? "—"}
+                              {s.weight_kg != null && s.weight_kg > 0 ? `${w(s.weight_kg)} × ` : (s.reps != null ? "BW × " : "")}{s.reps ?? "—"}
                             </Text>
                             {s.avg_hr != null ? <Text variant="micro" className="tabular-nums" style={{ color: "#e06060" }}>♥{Math.round(s.avg_hr)}</Text> : null}
                           </View>
