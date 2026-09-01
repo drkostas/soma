@@ -1,5 +1,5 @@
 import { View } from "react-native";
-import Svg, { Polyline, Circle } from "react-native-svg";
+import Svg, { Polyline, Circle, Defs, LinearGradient, Stop, Rect as SvgRect } from "react-native-svg";
 import { Text } from "soma-style";
 
 /** One GPS sample of a run/ride. lat+lng required; speed drives pace colour. */
@@ -74,7 +74,16 @@ export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; heigh
           <Text variant="micro" className="text-text-muted">Pace</Text>
           <View className="flex-row items-center gap-1.5">
             <Text variant="micro" style={{ color: "#ff1744" }}>Fast</Text>
-            <View style={{ width: 44, height: 4, borderRadius: 2, backgroundColor: "#ffab00" }} />
+            <Svg width={50} height={4}>
+              <Defs>
+                <LinearGradient id="paceleg-web" x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0" stopColor="#ff1744" />
+                  <Stop offset="0.5" stopColor="#ffab00" />
+                  <Stop offset="1" stopColor="#00e5ff" />
+                </LinearGradient>
+              </Defs>
+              <SvgRect width={50} height={4} rx={2} fill="url(#paceleg-web)" />
+            </Svg>
             <Text variant="micro" style={{ color: "#00e5ff" }}>Slow</Text>
           </View>
         </View>
