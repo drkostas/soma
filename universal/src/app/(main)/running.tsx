@@ -107,19 +107,19 @@ interface RunningPayload {
 /* Data hook — inline useEffect+fetch, matching useToday/useTraining   */
 /* ------------------------------------------------------------------ */
 
-function useRunning() {
+function useRunning(range: string) {
   const [data, setData] = useState<RunningPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetchJson<RunningPayload>("/api/running/stats")
+    fetchJson<RunningPayload>(`/api/running/stats?range=${range}`)
       .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => {
       alive = false;
     };
-  }, [reload]);
+  }, [reload, range]);
   return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
@@ -170,9 +170,10 @@ const ZONE_HEX = ["#77c8d1", "#6ad4a0", "#e0c458", "#e0a458", "#e06060"];
 /* ------------------------------------------------------------------ */
 
 export default function RunningScreen() {
-  const { data, error, refetch } = useRunning();
-  // Range drives the trend sections (all four endpoints accept 90d/1y/2y).
+  // Range drives the whole screen — headline stats + trends — matching web, where
+  // the top-level selector scopes the entire running page.
   const [range, setRange] = useRangePref();
+  const { data, error, refetch } = useRunning(range);
   const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
   const { data: runTrends } = useRunningTrends(range);
   const { data: fitScores } = useFitnessScores(range);
@@ -247,14 +248,15 @@ export default function RunningScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
     >
       <View className="w-full max-w-2xl gap-4">
-        {/* Header */}
-        <View className="gap-1">
+        {/* Header — the range selector scopes the WHOLE screen (web parity). */}
+        <View className="gap-2">
           <Text variant="headline">Running</Text>
           <Text variant="caption" className="text-text-secondary">
             {stats?.total_runs
-              ? `${num(stats.total_runs)} runs tracked · ${num(stats.total_km).toFixed(0)} km total`
-              : "No runs tracked yet."}
+              ? `${num(stats.total_runs)} runs · ${num(stats.total_km).toFixed(0)} km · last ${rangeLabel(range)}`
+              : "No runs in this range."}
           </Text>
+          <TimeRangeSelector value={range} onChange={setRange} />
         </View>
 
         {error ? (
@@ -374,10 +376,9 @@ export default function RunningScreen() {
         {/* Route heatmap — all recent GPS paths overlaid (new /api/running/heatmap) */}
         <RunHeatmap routes={heatRoutes} />
 
-        {/* Range governs the trend charts below (stats above are all-time). */}
+        {/* Section divider — the range selector at the top governs everything. */}
         <View className="gap-1">
           <Text variant="eyebrow" className="text-text-muted">Trends — last {rangeLabel(range)}</Text>
-          <TimeRangeSelector value={range} onChange={setRange} />
         </View>
 
         {/* Training load/ACWR + cadence trends (new /api/running/trends) */}
