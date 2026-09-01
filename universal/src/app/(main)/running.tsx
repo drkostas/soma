@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
-import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
+import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
+import { TimeRangeSelector } from "../../components/time-range-selector";
+import { useRangePref, rangeLabel } from "../../lib/time-range";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { fetchJson, usePullRefresh, useRunningTrends, useFitnessScores, useRunningSplits, useHrPace, useRecentRoutes, useRunHeatmap } from "../../lib/api";
 import { RunningMileage } from "../../components/running-mileage";
@@ -170,7 +172,7 @@ const ZONE_HEX = ["#77c8d1", "#6ad4a0", "#e0c458", "#e0a458", "#e06060"];
 export default function RunningScreen() {
   const { data, error, refetch } = useRunning();
   // Range drives the trend sections (all four endpoints accept 90d/1y/2y).
-  const [range, setRange] = useState<"90d" | "1y" | "2y">("1y");
+  const [range, setRange] = useRangePref();
   const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
   const { data: runTrends } = useRunningTrends(range);
   const { data: fitScores } = useFitnessScores(range);
@@ -374,12 +376,8 @@ export default function RunningScreen() {
 
         {/* Range governs the trend charts below (stats above are all-time). */}
         <View className="gap-1">
-          <Text variant="eyebrow" className="text-text-muted">Trends — last {range}</Text>
-          <SegmentedControl
-            options={["90d", "1y", "2y"] as const}
-            value={range}
-            onChange={(v) => setRange(v as "90d" | "1y" | "2y")}
-          />
+          <Text variant="eyebrow" className="text-text-muted">Trends — last {rangeLabel(range)}</Text>
+          <TimeRangeSelector value={range} onChange={setRange} />
         </View>
 
         {/* Training load/ACWR + cadence trends (new /api/running/trends) */}
