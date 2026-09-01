@@ -14,9 +14,24 @@ export function RunHeatmap({ routes }: { routes: HeatRoute[] }) {
   const valid = (routes ?? []).filter((r) => Array.isArray(r) && r.length >= 2);
   if (valid.length < 1) return null;
 
-  // Shared bounding box across every route.
+  // Keep only the dominant location cluster (within ~1.5° of the median centroid),
+  // matching run-heatmap.native.tsx + web run-heatmap.tsx so a run abroad doesn't
+  // stretch the canvas to a whole-world view.
+  const centers = valid.map((r) => {
+    let sl = 0, sa = 0, c = 0;
+    for (const [lng, lat] of r) if (isFinite(lng) && isFinite(lat)) { sl += lng; sa += lat; c++; }
+    return c ? ([sl / c, sa / c] as [number, number]) : null;
+  });
+  const cLngs = centers.filter((x): x is [number, number] => !!x).map((x) => x[0]).sort((a, b) => a - b);
+  const cLats = centers.filter((x): x is [number, number] => !!x).map((x) => x[1]).sort((a, b) => a - b);
+  const medLo = cLngs.length ? cLngs[Math.floor(cLngs.length / 2)] : 0;
+  const medLa = cLats.length ? cLats[Math.floor(cLats.length / 2)] : 0;
+  const main = valid.filter((_, i) => { const c = centers[i]; return c != null && Math.abs(c[0] - medLo) <= 1.5 && Math.abs(c[1] - medLa) <= 1.5; });
+  if (main.length < 1) return null;
+
+  // Shared bounding box across the dominant cluster.
   let minLo = Infinity, maxLo = -Infinity, minLa = Infinity, maxLa = -Infinity;
-  for (const r of valid) for (const [lng, lat] of r) {
+  for (const r of main) for (const [lng, lat] of r) {
     if (!isFinite(lng) || !isFinite(lat)) continue;
     if (lng < minLo) minLo = lng; if (lng > maxLo) maxLo = lng;
     if (lat < minLa) minLa = lat; if (lat > maxLa) maxLa = lat;
@@ -50,11 +65,11 @@ export function RunHeatmap({ routes }: { routes: HeatRoute[] }) {
     <Card className="gap-2">
       <View className="flex-row items-center justify-between">
         <Text variant="eyebrow">Route heatmap</Text>
-        <Text variant="micro" className="text-text-muted">{valid.length} routes · last 12 mo</Text>
+        <Text variant="micro" className="text-text-muted">{main.length} routes · last 12 mo</Text>
       </View>
       <View className="rounded-lg bg-surface-subtle overflow-hidden" style={{ aspectRatio: 1 }}>
         <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {valid.map((r, i) => (
+          {main.map((r, i) => (
             <Polyline
               key={i}
               points={project(r)}
