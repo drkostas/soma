@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { View } from "react-native";
 import { Text } from "soma-style";
 import { Map, Camera, GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
+import Svg, { Defs, LinearGradient, Stop, Rect as SvgRect } from "react-native-svg";
 
 /** One GPS sample of a run/ride. lat+lng required; speed drives pace colour. */
 export interface RoutePoint { lat: number; lng: number; speed?: number | null }
@@ -60,10 +61,15 @@ export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; heigh
   return (
     <View className="gap-1.5">
       <View className="relative rounded-lg overflow-hidden" style={{ height }}>
-        <Map style={{ flex: 1 }} mapStyle={DARK_STYLE} attribution={false} logo={false}>
-          <Camera bounds={bounds} padding={{ top: 40, bottom: 40, left: 40, right: 40 }} />
+        {/* Gestures locked to match web run-map (interactive={false}); a pannable
+            map inside the modal ScrollView would also trap vertical scroll drags. */}
+        <Map style={{ flex: 1 }} mapStyle={DARK_STYLE} attribution={false} logo={false}
+          dragPan={false} touchZoom={false} doubleTapZoom={false} doubleTapHoldZoom={false} touchRotate={false} touchPitch={false}>
+          <Camera bounds={bounds} padding={{ top: 48, bottom: 48, left: 48, right: 48 }} />
           <GeoJSONSource id="route" data={routes}>
-            <Layer id="route-glow" type="line" paint={{ "line-color": PACE_COLOR, "line-width": 9, "line-opacity": 0.14, "line-blur": 5 }} layout={{ "line-cap": "round", "line-join": "round" }} />
+            {/* Two-layer glow + core, matching web run-map.tsx exactly. */}
+            <Layer id="route-glow-outer" type="line" paint={{ "line-color": PACE_COLOR, "line-width": 10, "line-opacity": 0.06, "line-blur": 6 }} layout={{ "line-cap": "round", "line-join": "round" }} />
+            <Layer id="route-glow-mid" type="line" paint={{ "line-color": PACE_COLOR, "line-width": 4, "line-opacity": 0.22, "line-blur": 2 }} layout={{ "line-cap": "round", "line-join": "round" }} />
             <Layer id="route-core" type="line" paint={{ "line-color": PACE_COLOR, "line-width": 2.5, "line-opacity": 1 }} layout={{ "line-cap": "round", "line-join": "round" }} />
           </GeoJSONSource>
           {ends ? (
@@ -81,7 +87,16 @@ export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; heigh
           <Text variant="micro" className="text-text-muted">Pace</Text>
           <View className="flex-row items-center gap-1.5">
             <Text variant="micro" style={{ color: "#ff1744" }}>Fast</Text>
-            <View style={{ width: 44, height: 4, borderRadius: 2, backgroundColor: "#ffab00" }} />
+            <Svg width={50} height={4}>
+              <Defs>
+                <LinearGradient id="paceleg" x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0" stopColor="#ff1744" />
+                  <Stop offset="0.5" stopColor="#ffab00" />
+                  <Stop offset="1" stopColor="#00e5ff" />
+                </LinearGradient>
+              </Defs>
+              <SvgRect width={50} height={4} rx={2} fill="url(#paceleg)" />
+            </Svg>
             <Text variant="micro" style={{ color: "#00e5ff" }}>Slow</Text>
           </View>
         </View>
