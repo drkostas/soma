@@ -860,6 +860,41 @@ export interface Preset {
   total_carbs: number;
   total_fat: number;
   total_fiber: number;
+  /** Raw preset blob `{ items:[{ingredient_id,grams}], calories,... }` — the
+   *  presets endpoint returns it; used by the scale/customize panel to show the
+   *  scaled ingredient list and to seed a compose meal. */
+  items?: unknown;
+  tags?: string[] | null;
+}
+
+/** The `{ingredient_id, grams}` list inside a preset's items blob. */
+export function presetItems(p: Preset): { ingredient_id: string; grams: number }[] {
+  const blob = p.items as unknown;
+  const arr = Array.isArray(blob)
+    ? blob
+    : blob && typeof blob === "object"
+      ? (blob as { items?: unknown }).items
+      : null;
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((it) => ({ ingredient_id: String((it as { ingredient_id?: unknown })?.ingredient_id ?? ""), grams: Number((it as { grams?: unknown })?.grams) || 0 }))
+    .filter((it) => it.ingredient_id);
+}
+
+/** A preset's base (1x) macros — from the items blob when present, else the
+ *  stored flat totals. Scale by the portion multiplier for the live preview. */
+export function presetBaseMacros(p: Preset): { calories: number; protein: number; carbs: number; fat: number; fiber: number } {
+  const blob = p.items as { calories?: unknown; protein?: unknown; carbs?: unknown; fat?: unknown; fiber?: unknown } | null;
+  if (blob && typeof blob === "object" && !Array.isArray(blob) && blob.calories != null) {
+    return {
+      calories: Number(blob.calories) || 0, protein: Number(blob.protein) || 0,
+      carbs: Number(blob.carbs) || 0, fat: Number(blob.fat) || 0, fiber: Number(blob.fiber) || 0,
+    };
+  }
+  return {
+    calories: Number(p.total_calories) || 0, protein: Number(p.total_protein) || 0,
+    carbs: Number(p.total_carbs) || 0, fat: Number(p.total_fat) || 0, fiber: Number(p.total_fiber) || 0,
+  };
 }
 
 /** soma's saved preset meals (log-meal is preset-based, not free-food search). */
