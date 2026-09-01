@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl } from "react-native";
-import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
+import { Text, Card, Badge, ProgressBar, Sparkline } from "soma-style";
+import { TimeRangeSelector } from "../../components/time-range-selector";
+import { useRangePref } from "../../lib/time-range";
 import { fetchJson, usePullRefresh, useActivitiesDeep } from "../../lib/api";
 import { ActivitiesMonthly, KiteDeepDive, SnowDeepDive, ActivitiesList } from "../../components/activities-deep";
 import { ActivitySports } from "../../components/activity-sports";
@@ -23,9 +25,6 @@ function useSessionsTrend() {
   return series;
 }
 
-type RangeKey = "30d" | "90d" | "1y" | "all";
-const RANGES: readonly RangeKey[] = ["30d", "90d", "1y", "all"] as const;
-const RANGE_LABEL: Record<RangeKey, string> = { "30d": "30d", "90d": "90d", "1y": "1y", all: "All" };
 
 /** Per-sport rollup (mirrors the web getActivitySummary grouping, labelled). */
 interface SportSummary {
@@ -71,7 +70,7 @@ interface ActivitiesSummary {
  * page currently queries the DB directly in a server component, so the universal app
  * consumes a JSON rollup of the same data instead.
  */
-function useActivities(range: RangeKey) {
+function useActivities(range: string) {
   const [data, setData] = useState<ActivitiesSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +115,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function ActivitiesScreen() {
-  const [range, setRange] = useState<RangeKey>("1y");
+  const [range, setRange] = useRangePref();
   const { data, loading, error, refetch } = useActivities(range);
   const { data: deep } = useActivitiesDeep(range);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
@@ -146,11 +145,7 @@ export default function ActivitiesScreen() {
           </Text>
         </View>
 
-        <SegmentedControl
-          options={RANGES}
-          value={range}
-          onChange={(v) => setRange(v as RangeKey)}
-        />
+        <TimeRangeSelector value={range} onChange={setRange} />
 
         {error ? (
           <Card>
