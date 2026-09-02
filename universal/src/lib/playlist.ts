@@ -232,6 +232,26 @@ export async function saveSpotifyPlaylist(body: SpotifySaveBody): Promise<Spotif
   }
 }
 
+/* ---- Pump-up Bank (max 10 saved pump-up songs; mirrors web pump-up-modal) ---- */
+export interface PumpUpSong { track_id: string; name: string; artist_name: string; tempo: number | null; energy: number | null; added_at?: string }
+export const fetchPumpUp = () => fetchJson<PumpUpSong[]>(`/api/playlist/pump-up`);
+export async function addPumpUp(s: { track_id: string; name: string; artist_name: string; tempo?: number; energy?: number }): Promise<{ ok: boolean; status: number; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/playlist/pump-up`, {
+      method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify({ track_id: s.track_id, name: s.name, artist_name: s.artist_name, tempo: s.tempo, energy: s.energy }),
+    });
+    const j = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: res.ok, status: res.status, error: j.error };
+  } catch (err) { return { ok: false, status: 0, error: String((err as Error)?.message ?? err) }; }
+}
+export async function removePumpUp(trackId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/playlist/pump-up/${encodeURIComponent(trackId)}`, { method: "DELETE", headers: { ...AUTH_HEADERS } });
+    return res.ok;
+  } catch { return false; }
+}
+
 /* ---- Track exclusion / blacklist ---- */
 export async function postBlacklist(trackId: string): Promise<number> {
   try {
