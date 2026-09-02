@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ScrollView, View, TextInput, Pressable, ActivityIndicator, Linking } from "react-native";
 import { router } from "expo-router";
-import { Text, Card, Button, Pill, Badge } from "soma-style";
+import { Text, Card, Button, Pill, Badge, Stepper } from "soma-style";
 import {
-  TYPE_COLORS, parsedToItems, flatItems, segsForGenerate, generatePlaylist,
+  TYPE_COLORS, SEGMENT_TYPES, BPM_DEFAULTS, makeSegment, parsedToItems, flatItems, segsForGenerate,
+  generatePlaylist, saveWorkoutPlan,
   fetchGarminRuns, fetchGarminRunDetail, fetchGenres, postBlacklist, saveSpotifyPlaylist,
-  type SegmentItem, type Segment, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket,
+  type SegmentItem, type Segment, type SegmentType, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket,
 } from "../../lib/playlist";
 import { fetchJson } from "../../lib/api";
 
@@ -163,21 +164,71 @@ function GenreBar({ selected, onToggle }: { selected: string[]; onToggle: (g: st
 }
 
 /* ---- one segment's songs ---- */
-function SegmentCard({ seg, index, panel, onExclude, onWiden }: {
+/* Inline segment editor (mobile form of web SegmentEditor). */
+function SegmentEditor({ seg, onChange }: { seg: Segment; onChange: (s: Segment) => void }) {
+  const mins = Math.floor(seg.duration_s / 60);
+  const secs = seg.duration_s % 60;
+  const setType = (t: SegmentType) => { const b = BPM_DEFAULTS[t]; onChange({ ...seg, type: t, bpm_min: b.min, bpm_max: b.max, valence_min: b.valence_min, valence_max: b.valence_max }); };
+  return (
+    <View className="gap-3 rounded-lg border border-border-subtle bg-surface-subtle p-3">
+      <View className="gap-1">
+        <Text variant="eyebrow">Type</Text>
+        <View className="flex-row flex-wrap gap-1.5">
+          {SEGMENT_TYPES.map((t) => <Pill key={t} label={cap(t)} active={seg.type === t} onPress={() => setType(t)} />)}
+        </View>
+      </View>
+      <View className="flex-row gap-4">
+        <View className="gap-1"><Text variant="eyebrow">Min</Text><Stepper value={mins} onChange={(m) => onChange({ ...seg, duration_s: m * 60 + secs })} step={1} min={0} max={180} /></View>
+        <View className="gap-1"><Text variant="eyebrow">Sec</Text><Stepper value={secs} onChange={(s) => onChange({ ...seg, duration_s: mins * 60 + s })} step={5} min={0} max={59} /></View>
+      </View>
+      <View className="flex-row gap-3">
+        <View className="gap-1"><Text variant="eyebrow">BPM min</Text><Stepper value={seg.bpm_min} onChange={(v) => onChange({ ...seg, bpm_min: v })} step={1} min={40} max={220} /></View>
+        <View className="gap-1"><Text variant="eyebrow">BPM max</Text><Stepper value={seg.bpm_max} onChange={(v) => onChange({ ...seg, bpm_max: v })} step={1} min={40} max={220} /></View>
+      </View>
+      <View className="flex-row items-center gap-3">
+        <View className="gap-1"><Text variant="eyebrow">Tolerance ±</Text><Stepper value={seg.bpm_tolerance} onChange={(v) => onChange({ ...seg, bpm_tolerance: v })} step={1} min={0} max={30} /></View>
+      </View>
+      <View className="gap-1">
+        <View className="flex-row justify-between"><Text variant="eyebrow">Valence (mood)</Text><Text variant="micro" className="text-text-muted tabular-nums">{seg.valence_min.toFixed(1)} – {seg.valence_max.toFixed(1)}</Text></View>
+        <View className="flex-row gap-3">
+          <Stepper value={Math.round(seg.valence_min * 10)} onChange={(v) => onChange({ ...seg, valence_min: Math.min(v / 10, seg.valence_max) })} step={1} min={0} max={10} />
+          <Stepper value={Math.round(seg.valence_max * 10)} onChange={(v) => onChange({ ...seg, valence_max: Math.max(v / 10, seg.valence_min) })} step={1} min={0} max={10} />
+        </View>
+      </View>
+      <View className="gap-1">
+        <Text variant="eyebrow">Sync mode</Text>
+        <View className="flex-row gap-1.5">
+          {(["auto", "sync", "async"] as const).map((m) => <Pill key={m} label={m} active={seg.sync_mode === m} onPress={() => onChange({ ...seg, sync_mode: m })} />)}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, onMove, canUp, canDown }: {
   seg: Segment; index: number; panel: PanelState | undefined; onExclude: (t: SongData) => void; onWiden: () => void;
+  onEdit: (s: Segment) => void; onRemove: () => void; onMove: (dir: -1 | 1) => void; canUp: boolean; canDown: boolean;
 }) {
   const color = TYPE_COLORS[seg.type] ?? "#77c8d1";
+  const [editing, setEditing] = useState(false);
   const songs = (panel?.songs ?? []).filter((s) => !s.is_skip);
   const skip = (panel?.songs ?? []).find((s) => s.is_skip);
   return (
     <Card className="gap-2">
       <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-2">
+        <Pressable onPress={() => setEditing((e) => !e)} className="flex-1 flex-row items-center gap-2">
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
           <Text variant="body" className="text-text">{index + 1}. {cap(seg.type)}</Text>
+          <Text variant="micro" className="text-teal">{editing ? "▾" : "✎"}</Text>
+        </Pressable>
+        <View className="flex-row items-center gap-2">
+          <Text variant="micro" className="text-text-muted tabular-nums">{mmss(seg.duration_s)} · {seg.bpm_min}–{seg.bpm_max}</Text>
+          <Pressable onPress={() => onMove(-1)} disabled={!canUp} hitSlop={6}><Text variant="caption" className={canUp ? "text-text-muted" : "text-border-subtle"}>↑</Text></Pressable>
+          <Pressable onPress={() => onMove(1)} disabled={!canDown} hitSlop={6}><Text variant="caption" className={canDown ? "text-text-muted" : "text-border-subtle"}>↓</Text></Pressable>
+          <Pressable onPress={onRemove} hitSlop={6}><Text variant="caption" className="text-text-muted">🗑</Text></Pressable>
         </View>
-        <Text variant="micro" className="text-text-muted tabular-nums">{mmss(seg.duration_s)} · {seg.bpm_min}–{seg.bpm_max} bpm</Text>
       </View>
+      {editing ? <SegmentEditor seg={seg} onChange={onEdit} /> : null}
       {!panel?.loading && panel?.poolCount != null ? (
         <Text variant="micro" className="text-text-muted tabular-nums">{songs.length} of {panel.poolCount} matching in pool</Text>
       ) : null}
@@ -221,6 +272,11 @@ export default function PlaylistBuilderScreen() {
   const [savedUrl, setSavedUrl] = useState<string | null>(null);
   const [spotifyPlaylistId, setSpotifyPlaylistId] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [planInput, setPlanInput] = useState(false);
+  const [planName, setPlanName] = useState("");
+  const [planSaving, setPlanSaving] = useState(false);
+  const [planSaved, setPlanSaved] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const flat = items ? flatItems(items) : [];
 
@@ -259,9 +315,30 @@ export default function PlaylistBuilderScreen() {
   }, []);
 
   function onPick(name: string, gid: string | null, its: SegmentItem[]) {
-    setWorkoutName(name); setGarminId(gid); setItems(its); setAssignments({}); setSessionId(null); setExcluded(new Set()); setGenres([]);
-    setSavedUrl(null); setSpotifyPlaylistId(null); setSaveErr(null);
-    runGenerate(its, [], new Set(), gid);
+    // Flatten repeat groups into individual segments so the timeline is fully editable.
+    const flatIts: SegmentItem[] = flatItems(its);
+    setWorkoutName(name); setGarminId(gid); setItems(flatIts); setAssignments({}); setSessionId(null); setExcluded(new Set()); setGenres([]);
+    setSavedUrl(null); setSpotifyPlaylistId(null); setSaveErr(null); setDirty(false);
+    runGenerate(flatIts, [], new Set(), gid);
+  }
+
+  /* ---- editable timeline ---- */
+  function editSeg(i: number, s: Segment) { setItems((prev) => (prev ? prev.map((x, idx) => (idx === i ? s : x)) : prev)); setDirty(true); }
+  function removeSeg(i: number) { setItems((prev) => (prev ? prev.filter((_, idx) => idx !== i) : prev)); setAssignments({}); setSessionId(null); setDirty(true); }
+  function moveSeg(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    setItems((prev) => { if (!prev || j < 0 || j >= prev.length) return prev; const n = [...prev]; [n[i], n[j]] = [n[j], n[i]]; return n; });
+    setAssignments({}); setSessionId(null); setDirty(true);
+  }
+  function addSeg() { setItems((prev) => [...(prev ?? []), makeSegment({ type: "easy", duration_s: 600 })]); setDirty(true); }
+  function regenerate() { if (items) { runGenerate(items, genres, excluded, garminId); setDirty(false); } }
+  async function savePlan() {
+    const name = planName.trim();
+    if (!name || !items) return;
+    setPlanSaving(true);
+    const ok = await saveWorkoutPlan(name, items, garminId);
+    setPlanSaving(false);
+    if (ok) { setPlanInput(false); setPlanName(""); setPlanSaved(true); setTimeout(() => setPlanSaved(false), 2000); }
   }
 
   // Save the generated session to Spotify (POST create, or PUT update if already saved).
@@ -335,13 +412,33 @@ export default function PlaylistBuilderScreen() {
           <>
             <View className="flex-row items-center gap-2">
               <Text variant="micro" className="text-text-muted tabular-nums">{flat.length} segments · {totalSongs} songs · {totalSkip} skip songs</Text>
-              {sessionId ? <Badge label="Generated" tone="success" /> : null}
+              {sessionId && !dirty ? <Badge label="Generated" tone="success" /> : null}
+              {dirty ? <Badge label="Edited" tone="warm" /> : null}
             </View>
             {genErr ? <Card><Text variant="micro" className="text-danger">Generation error: {genErr}</Text></Card> : null}
+            {dirty ? <Button label="Regenerate playlist" variant="primary" onPress={regenerate} /> : null}
             <GenreBar selected={genres} onToggle={toggleGenre} />
             {flat.map((seg, i) => (
-              <SegmentCard key={seg.id} seg={seg} index={i} panel={assignments[i]} onExclude={exclude} onWiden={() => widen(i)} />
+              <SegmentCard key={seg.id} seg={seg} index={i} panel={assignments[i]} onExclude={exclude} onWiden={() => widen(i)}
+                onEdit={(s) => editSeg(i, s)} onRemove={() => removeSeg(i)} onMove={(d) => moveSeg(i, d)} canUp={i > 0} canDown={i < flat.length - 1} />
             ))}
+            {/* Timeline footer: add / save-plan / total */}
+            <Card className="gap-2">
+              <View className="flex-row items-center justify-between">
+                <Button label="+ Add segment" variant="secondary" onPress={addSeg} />
+                <Text variant="micro" className="text-text-muted tabular-nums">Total: {Math.round(flat.reduce((s, x) => s + x.duration_s, 0) / 60)} min</Text>
+              </View>
+              {planInput ? (
+                <View className="flex-row items-center gap-2">
+                  <TextInput value={planName} onChangeText={setPlanName} placeholder="Plan name…" placeholderTextColor="#6f8695"
+                    className="flex-1 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2" style={{ color: "#e6f0f4" }} />
+                  <Button label={planSaving ? "Saving…" : "Save"} variant="primary" disabled={!planName.trim() || planSaving} onPress={savePlan} />
+                  <Pressable onPress={() => { setPlanInput(false); setPlanName(""); }}><Text variant="caption" className="text-text-muted">Cancel</Text></Pressable>
+                </View>
+              ) : (
+                <Pressable onPress={() => setPlanInput(true)} className="self-start"><Text variant="caption" className="text-teal">{planSaved ? "✓ Saved!" : "＋ Save as plan"}</Text></Pressable>
+              )}
+            </Card>
             <Card className="gap-2">
               {savedUrl ? (
                 <>
