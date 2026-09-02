@@ -4,9 +4,9 @@ import { router } from "expo-router";
 import { Text, Card, Button, Pill, Badge, Stepper, Modal } from "soma-style";
 import {
   TYPE_COLORS, SEGMENT_TYPES, BPM_DEFAULTS, makeSegment, parsedToItems, flatItems, segsForGenerate,
-  generatePlaylist, saveWorkoutPlan, fetchPumpUp, addPumpUp, removePumpUp,
+  generatePlaylist, saveWorkoutPlan, fetchPumpUp, addPumpUp, removePumpUp, fetchSpotifyPlaylists,
   fetchGarminRuns, fetchGarminRunDetail, fetchGenres, postBlacklist, saveSpotifyPlaylist,
-  type SegmentItem, type Segment, type SegmentType, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket, type PumpUpSong,
+  type SegmentItem, type Segment, type SegmentType, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket, type PumpUpSong, type SpotifyPlaylistMeta,
 } from "../../lib/playlist";
 import { fetchJson } from "../../lib/api";
 import { SpotifyEmbed } from "../../components/spotify-embed";
@@ -264,6 +264,31 @@ function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, 
   );
 }
 
+/* Sources picker modal (mirrors web playlist-source-picker.tsx: Liked + playlists, searchable). */
+function SourcesModal({ visible, onClose, selected, onChange }: { visible: boolean; onClose: () => void; selected: string[]; onChange: (v: string[]) => void }) {
+  const [playlists, setPlaylists] = useState<SpotifyPlaylistMeta[] | null>(null);
+  const [q, setQ] = useState("");
+  useEffect(() => { if (visible && playlists == null) fetchSpotifyPlaylists().then(setPlaylists).catch(() => setPlaylists([])); }, [visible, playlists]);
+  const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]);
+  const all: { id: string; name: string; tracks?: number }[] = [{ id: "liked", name: "Liked Songs" }, ...(playlists ?? [])];
+  const ql = q.trim().toLowerCase();
+  const list = ql ? all.filter((s) => s.name.toLowerCase().includes(ql)) : all;
+  return (
+    <Modal visible={visible} onClose={onClose} title="Sources">
+      <Text variant="micro" className="mb-2 text-text-muted">{selected.length} selected · songs are matched from these.</Text>
+      <TextInput value={q} onChangeText={setQ} placeholder="Search sources…" placeholderTextColor="#6f8695"
+        className="mb-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2" style={{ color: "#e6f0f4" }} />
+      {playlists == null ? <ActivityIndicator color="#77c8d1" /> : (
+        <ScrollView style={{ maxHeight: 360 }}>
+          <View className="flex-row flex-wrap gap-2">
+            {list.map((s) => <Pill key={s.id} label={s.tracks != null ? `${s.name} (${s.tracks})` : s.name} active={selected.includes(s.id)} onPress={() => toggle(s.id)} />)}
+          </View>
+        </ScrollView>
+      )}
+    </Modal>
+  );
+}
+
 /* Pump-up Bank modal (mirrors web pump-up-modal.tsx). */
 function BankModal({ visible, onClose, refreshKey }: { visible: boolean; onClose: () => void; refreshKey: number }) {
   const [songs, setSongs] = useState<PumpUpSong[] | null>(null);
@@ -298,6 +323,10 @@ export default function PlaylistBuilderScreen() {
   const [assignments, setAssignments] = useState<Record<number, PanelState>>({});
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [genres, setGenres] = useState<string[]>([]);
+  const [sources, setSources] = useState<string[]>(["liked"]);
+  const sourcesRef = useRef<string[]>(["liked"]);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  useEffect(() => { sourcesRef.current = sources; }, [sources]);
   const [sessionId, setSessionId] = useState<string | number | null>(null);
   const [genErr, setGenErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -333,7 +362,7 @@ export default function PlaylistBuilderScreen() {
     abortRef.current = ac;
     const body = {
       segments: segments.map((s) => ({ type: s.type, duration_s: s.duration_s, bpm_min: s.bpm_min, bpm_max: s.bpm_max, bpm_tolerance: s.bpm_tolerance, valence_min: s.valence_min, valence_max: s.valence_max })),
-      excluded_track_ids: [...excl], genre_selection: gsel, genre_threshold: 0.03, source_playlist_ids: [], garmin_activity_id: gid,
+      excluded_track_ids: [...excl], genre_selection: gsel, genre_threshold: 0.03, source_playlist_ids: sourcesRef.current, garmin_activity_id: gid,
     };
     generatePlaylist(body, (e: SSEEvent) => {
       if (e.type === "segment_done") {
@@ -441,12 +470,14 @@ export default function PlaylistBuilderScreen() {
         <View className="flex-row items-center justify-between">
           <Text variant="headline">{items ? workoutName : "New playlist"}</Text>
           <View className="flex-row items-center gap-3">
+            {items ? <Pressable onPress={() => setSourcesOpen(true)}><Text variant="caption" className="text-teal">Sources ({sources.length})</Text></Pressable> : null}
             {items ? <Pressable onPress={() => setBankOpen(true)}><Text variant="caption" style={{ color: "#e0c458" }}>⚡ Bank</Text></Pressable> : null}
             <Pressable onPress={() => (items ? (abortRef.current?.abort(), setItems(null), setAssignments({}), setSessionId(null)) : router.back())}>
               <Text variant="caption" className="text-teal">{items ? "Change run" : "Close"}</Text>
             </Pressable>
           </View>
         </View>
+        <SourcesModal visible={sourcesOpen} onClose={() => setSourcesOpen(false)} selected={sources} onChange={setSources} />
         <BankModal visible={bankOpen} onClose={() => setBankOpen(false)} refreshKey={bankRefresh} />
         {bankToast ? <Card className="border-teal-dim"><Text variant="micro" className="text-teal">{bankToast}</Text></Card> : null}
 
