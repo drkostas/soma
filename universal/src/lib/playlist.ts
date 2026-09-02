@@ -175,6 +175,40 @@ export const fetchGarminRunDetail = (id: string) =>
 export const fetchGenres = () =>
   fetchJson<{ genres: GenreBucket[]; total: number }>(`/api/playlist/genres`);
 
+/* ---- Save to Spotify (POST create / PUT update, mirrors web handleSave) ---- */
+export interface SpotifySaveBody {
+  session_id: string | number;
+  name?: string;
+  track_ids: string[];
+  song_assignments: Record<number, SongData[]>;
+  playlist_id?: string | null;
+}
+export interface SpotifySaveResult {
+  ok: boolean;
+  status: number;
+  playlist_id?: string;
+  playlist_url?: string;
+  error?: string;
+}
+
+/** Create (POST) or update (PUT, when `playlist_id` is set) the Spotify playlist
+ *  for a generated session. Returns status so the UI can special-case 401
+ *  ("Spotify not connected") vs other failures. Needs a server-side Spotify token. */
+export async function saveSpotifyPlaylist(body: SpotifySaveBody): Promise<SpotifySaveResult> {
+  const isUpdate = !!body.playlist_id;
+  try {
+    const res = await fetch(`${API_BASE}/api/playlist/spotify/create`, {
+      method: isUpdate ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json().catch(() => ({}))) as { playlist_id?: string; playlist_url?: string; error?: string };
+    return { ok: res.ok, status: res.status, playlist_id: data.playlist_id, playlist_url: data.playlist_url, error: data.error };
+  } catch (err) {
+    return { ok: false, status: 0, error: String((err as Error)?.message ?? err) };
+  }
+}
+
 /* ---- Track exclusion / blacklist ---- */
 export async function postBlacklist(trackId: string): Promise<number> {
   try {
