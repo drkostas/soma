@@ -22,12 +22,17 @@ function songDur(ms: number): string {
 }
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/* ---- run selector (Past runs / Saved plans) ---- */
+/* ---- run selector (Past Runs / Saved Plans / History / Manual — mirrors web) ---- */
+type SelTab = "past" | "plans" | "history" | "manual";
+interface SessionMeta { id: number; workout_name: string | null; garmin_activity_id: string | null; spotify_playlist_url: string | null; song_assignments: Record<string, unknown[]> | null; created_at: string }
+const sessTrackCount = (a: Record<string, unknown[]> | null) => a ? Object.values(a).reduce((s, v) => s + (Array.isArray(v) ? v.length : 0), 0) : 0;
+
 function RunSelector({ onPick }: { onPick: (name: string, garminId: string | null, items: SegmentItem[]) => void }) {
-  const [tab, setTab] = useState<"runs" | "plans">("runs");
+  const [tab, setTab] = useState<SelTab>("past");
   const [q, setQ] = useState("");
   const [runs, setRuns] = useState<GarminRunMeta[] | null>(null);
   const [plans, setPlans] = useState<WorkoutPlan[] | null>(null);
+  const [sessions, setSessions] = useState<SessionMeta[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,6 +41,7 @@ function RunSelector({ onPick }: { onPick: (name: string, garminId: string | nul
     return () => { alive = false; clearTimeout(t); };
   }, [q]);
   useEffect(() => { fetchJson<WorkoutPlan[]>("/api/playlist/workout-plans").then(setPlans).catch(() => setPlans([])); }, []);
+  useEffect(() => { fetchJson<SessionMeta[]>("/api/playlist/sessions").then(setSessions).catch(() => setSessions([])); }, []);
 
   async function pickRun(r: GarminRunMeta) {
     setBusy(r.activity_id);
@@ -51,14 +57,36 @@ function RunSelector({ onPick }: { onPick: (name: string, garminId: string | nul
       onPick(p.name, null, parsedToItems((d.segments as never[]) ?? []));
     } catch { /* ignore */ } finally { setBusy(null); }
   }
+  async function pickSession(s: SessionMeta) {
+    if (!s.garmin_activity_id) return;
+    setBusy(`s${s.id}`);
+    try {
+      const d = await fetchGarminRunDetail(s.garmin_activity_id);
+      onPick(s.workout_name || d.activity_name || "Run", d.activity_id, parsedToItems(d.segments ?? []));
+    } catch { /* ignore */ } finally { setBusy(null); }
+  }
+
+  // De-dup history like the read-only playlist screen (real, most-recent per name/day).
+  const historyRows = (() => {
+    const real = (sessions ?? []).filter((s) => sessTrackCount(s.song_assignments) > 0 || s.spotify_playlist_url);
+    const g = new Map<string, SessionMeta>();
+    for (const s of real) { const k = `${s.workout_name ?? "Run"}|${(s.created_at ?? "").slice(0, 10)}`; if (!g.has(k)) g.set(k, s); }
+    return [...g.values()].sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
+  })();
+
+  const TabPill = ({ id, label, n }: { id: SelTab; label: string; n?: number }) => (
+    <Pill label={n != null ? `${label} (${n})` : label} active={tab === id} onPress={() => setTab(id)} />
+  );
 
   return (
     <View className="gap-3">
-      <View className="flex-row gap-2">
-        <Pill label="Past runs" active={tab === "runs"} onPress={() => setTab("runs")} />
-        <Pill label="Saved plans" active={tab === "plans"} onPress={() => setTab("plans")} />
+      <View className="flex-row flex-wrap gap-2">
+        <TabPill id="past" label="Past Runs" />
+        <TabPill id="plans" label="Saved Plans" n={plans?.length} />
+        <TabPill id="history" label="History" n={historyRows.length || undefined} />
+        <TabPill id="manual" label="Manual" />
       </View>
-      {tab === "runs" ? (
+      {tab === "past" ? (
         <>
           <TextInput value={q} onChangeText={setQ} placeholder="Search runs…" placeholderTextColor="#6f8695"
             className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2 text-text" style={{ color: "#e6f0f4" }} />
@@ -78,7 +106,7 @@ function RunSelector({ onPick }: { onPick: (name: string, garminId: string | nul
             </Pressable>
           ))}
         </>
-      ) : (
+      ) : tab === "plans" ? (
         plans == null ? <ActivityIndicator color="#77c8d1" /> : plans.length === 0 ? (
           <Text variant="micro" className="text-text-muted">No saved plans.</Text>
         ) : plans.map((p) => (
@@ -91,6 +119,23 @@ function RunSelector({ onPick }: { onPick: (name: string, garminId: string | nul
             {busy === `p${p.id}` ? <ActivityIndicator color="#77c8d1" /> : <Text variant="body" className="text-teal">›</Text>}
           </Pressable>
         ))
+      ) : tab === "history" ? (
+        sessions == null ? <ActivityIndicator color="#77c8d1" /> : historyRows.length === 0 ? (
+          <Text variant="micro" className="text-text-muted">No saved playlists yet.</Text>
+        ) : historyRows.map((s) => (
+          <Pressable key={s.id} onPress={() => pickSession(s)} disabled={!!busy || !s.garmin_activity_id}
+            className="flex-row items-center justify-between border-b border-border-subtle py-2.5">
+            <View className="flex-1 pr-2">
+              <Text variant="body" className="text-text" numberOfLines={1}>{s.workout_name || "Run"}</Text>
+              <Text variant="micro" className="text-text-muted tabular-nums">
+                {sessTrackCount(s.song_assignments)} songs{s.spotify_playlist_url ? " · on Spotify" : ""}{s.created_at ? ` · ${new Date(s.created_at).toLocaleDateString()}` : ""}
+              </Text>
+            </View>
+            {busy === `s${s.id}` ? <ActivityIndicator color="#77c8d1" /> : <Text variant="body" className="text-teal">›</Text>}
+          </Pressable>
+        ))
+      ) : (
+        <Text variant="micro" className="py-4 text-center text-text-muted">Manual builder — coming soon</Text>
       )}
     </View>
   );
@@ -269,6 +314,7 @@ export default function PlaylistBuilderScreen() {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const totalSongs = Object.values(assignments).reduce((s, p) => s + (p.songs?.filter((x) => !x.is_skip).length ?? 0), 0);
+  const totalSkip = Object.values(assignments).reduce((s, p) => s + (p.songs?.filter((x) => x.is_skip).length ?? 0), 0);
 
   return (
     <ScrollView className="flex-1 bg-base" contentContainerClassName="items-center px-5 py-6">
@@ -288,7 +334,7 @@ export default function PlaylistBuilderScreen() {
         ) : (
           <>
             <View className="flex-row items-center gap-2">
-              <Text variant="micro" className="text-text-muted tabular-nums">{flat.length} segments · {totalSongs} songs</Text>
+              <Text variant="micro" className="text-text-muted tabular-nums">{flat.length} segments · {totalSongs} songs · {totalSkip} skip songs</Text>
               {sessionId ? <Badge label="Generated" tone="success" /> : null}
             </View>
             {genErr ? <Card><Text variant="micro" className="text-danger">Generation error: {genErr}</Text></Card> : null}
