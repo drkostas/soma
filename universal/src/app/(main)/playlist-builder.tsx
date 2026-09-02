@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ScrollView, View, TextInput, Pressable, ActivityIndicator, Linking } from "react-native";
 import { router } from "expo-router";
-import { Text, Card, Button, Pill, Badge, Stepper, Modal } from "soma-style";
+import { Text, Card, Button, Pill, Badge, Stepper, Modal, ProgressBar } from "soma-style";
 import {
   TYPE_COLORS, SEGMENT_TYPES, BPM_DEFAULTS, makeSegment, parsedToItems, flatItems, segsForGenerate,
   generatePlaylist, saveWorkoutPlan, fetchPumpUp, addPumpUp, removePumpUp, fetchSpotifyPlaylists,
+  fetchLibraryStatus, analyseLibrary,
   fetchGarminRuns, fetchGarminRunDetail, fetchGenres, postBlacklist, saveSpotifyPlaylist,
-  type SegmentItem, type Segment, type SegmentType, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket, type PumpUpSong, type SpotifyPlaylistMeta,
+  type SegmentItem, type Segment, type SegmentType, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket, type PumpUpSong, type SpotifyPlaylistMeta, type LibraryStatus,
 } from "../../lib/playlist";
 import { fetchJson } from "../../lib/api";
 import { SpotifyEmbed } from "../../components/spotify-embed";
@@ -268,23 +269,70 @@ function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, 
 function SourcesModal({ visible, onClose, selected, onChange }: { visible: boolean; onClose: () => void; selected: string[]; onChange: (v: string[]) => void }) {
   const [playlists, setPlaylists] = useState<SpotifyPlaylistMeta[] | null>(null);
   const [q, setQ] = useState("");
-  useEffect(() => { if (visible && playlists == null) fetchSpotifyPlaylists().then(setPlaylists).catch(() => setPlaylists([])); }, [visible, playlists]);
+  const [lib, setLib] = useState<LibraryStatus | null>(null);
+  const [analysing, setAnalysing] = useState(false);
+  const [progress, setProgress] = useState<{ stage: string; pct: number } | null>(null);
+  const analyseAbort = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!visible) return;
+    if (playlists == null) fetchSpotifyPlaylists().then(setPlaylists).catch(() => setPlaylists([]));
+    fetchLibraryStatus().then(setLib).catch(() => {});
+    return () => analyseAbort.current?.abort();
+  }, [visible, playlists]);
   const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]);
   const all: { id: string; name: string; tracks?: number }[] = [{ id: "liked", name: "Liked Songs" }, ...(playlists ?? [])];
   const ql = q.trim().toLowerCase();
   const list = ql ? all.filter((s) => s.name.toLowerCase().includes(ql)) : all;
+
+  const withBpm = lib ? Number(lib.tracks_with_bpm) || 0 : 0;
+  const total = lib ? Number(lib.total_tracks) || 0 : 0;
+  const pct = total > 0 ? Math.round((withBpm / total) * 100) : 0;
+  const needsAnalysis = lib != null && withBpm === 0;
+
+  async function analyse() {
+    setAnalysing(true); setProgress({ stage: "Starting…", pct: 0 });
+    analyseAbort.current?.abort();
+    const ac = new AbortController(); analyseAbort.current = ac;
+    try {
+      await analyseLibrary(selected, (e) => {
+        if (e.type === "progress") setProgress({ stage: e.stage, pct: e.pct });
+        else if (e.type === "done") { setProgress({ stage: `Done — ${e.new} new tracks analysed`, pct: 100 }); fetchLibraryStatus().then(setLib).catch(() => {}); }
+        else if (e.type === "error") setProgress({ stage: e.message, pct: 0 });
+      }, ac.signal);
+    } catch (err) { if (!ac.signal.aborted) setProgress({ stage: String((err as Error)?.message ?? err), pct: 0 }); }
+    finally { setAnalysing(false); }
+  }
+
   return (
     <Modal visible={visible} onClose={onClose} title="Sources">
       <Text variant="micro" className="mb-2 text-text-muted">{selected.length} selected · songs are matched from these.</Text>
       <TextInput value={q} onChangeText={setQ} placeholder="Search sources…" placeholderTextColor="#6f8695"
         className="mb-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2" style={{ color: "#e6f0f4" }} />
       {playlists == null ? <ActivityIndicator color="#77c8d1" /> : (
-        <ScrollView style={{ maxHeight: 360 }}>
+        <ScrollView style={{ maxHeight: 300 }}>
           <View className="flex-row flex-wrap gap-2">
             {list.map((s) => <Pill key={s.id} label={s.tracks != null ? `${s.name} (${s.tracks})` : s.name} active={selected.includes(s.id)} onPress={() => toggle(s.id)} />)}
           </View>
         </ScrollView>
       )}
+      {/* Analyse library (BPM data) */}
+      <View className="mt-3 gap-2 border-t border-border-subtle pt-3">
+        <Text variant="micro" className={needsAnalysis ? "text-warm" : "text-text-muted"}>
+          {lib == null ? "Loading library status…"
+            : needsAnalysis ? "⚠ No BPM data yet — Analyse to enable song matching"
+            : `${pct}% of tracks have BPM data (${withBpm.toLocaleString()} / ${total.toLocaleString()})`}
+        </Text>
+        <Button label={analysing ? "Analysing…" : "Analyse library (fetch BPM data)"} variant="primary" disabled={analysing} onPress={analyse} />
+        {progress ? (
+          <View className="gap-1">
+            <View className="flex-row justify-between">
+              <Text variant="micro" className="flex-1 text-text-muted" numberOfLines={1}>{progress.stage}</Text>
+              {progress.pct > 0 ? <Text variant="micro" className="text-text-muted tabular-nums">{progress.pct}%</Text> : null}
+            </View>
+            {progress.pct > 0 ? <ProgressBar pct={progress.pct / 100} color="#6ad4a0" /> : null}
+          </View>
+        ) : null}
+      </View>
     </Modal>
   );
 }

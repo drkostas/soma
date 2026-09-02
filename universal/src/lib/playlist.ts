@@ -303,6 +303,48 @@ export const fetchDjHrDefaults = () => fetchJson<{ hr_rest?: number | null; hr_m
 export interface SpotifyPlaylistMeta { id: string; name: string; tracks: number }
 export const fetchSpotifyPlaylists = () => fetchJson<SpotifyPlaylistMeta[]>(`/api/playlist/spotify/playlists`);
 
+/* ---- Library BPM analysis (POST /api/playlist/spotify/library streams
+ *      `event: progress|done|error` SSE; GET returns coverage status). ---- */
+export interface LibraryStatus { total_tracks: number | string; tracks_with_bpm: number | string }
+export const fetchLibraryStatus = () => fetchJson<LibraryStatus>(`/api/playlist/spotify/library`);
+export type AnalyseEvent =
+  | { type: "progress"; stage: string; pct: number }
+  | { type: "done"; new: number }
+  | { type: "error"; message: string };
+
+/** Analyse the Spotify library for BPM data, emitting SSE progress. Uses the
+ *  `event:`/`data:` SSE shape (differs from the generation stream's bare data). */
+export async function analyseLibrary(sourceIds: string[], onEvent: (e: AnalyseEvent) => void, signal?: AbortSignal): Promise<void> {
+  const res = await streamFetch(`${API_BASE}/api/playlist/spotify/library`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ source_ids: sourceIds }), signal,
+  });
+  if (!res.ok) { const t = await res.text().catch(() => ""); onEvent({ type: "error", message: `${res.status} ${t.slice(0, 120)}` }); return; }
+  if (!res.body) return;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      const lines = part.trim().split("\n");
+      const evtLine = lines.find((l) => l.startsWith("event: "));
+      const dataLine = lines.find((l) => l.startsWith("data: "));
+      if (!evtLine || !dataLine) continue;
+      const evt = evtLine.slice(7).trim();
+      let data: { stage?: string; pct?: number; new?: number; message?: string } = {};
+      try { data = JSON.parse(dataLine.slice(6)); } catch { continue; }
+      if (evt === "progress") onEvent({ type: "progress", stage: data.stage ?? "", pct: data.pct ?? 0 });
+      else if (evt === "done") onEvent({ type: "done", new: data.new ?? 0 });
+      else if (evt === "error") onEvent({ type: "error", message: data.message ?? "error" });
+    }
+  }
+}
+
 async function djPost(path: string, body?: unknown): Promise<DjControlResult> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
