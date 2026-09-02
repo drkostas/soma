@@ -257,6 +257,8 @@ export interface DjControlResult { ok: boolean; status: number; pid?: number; al
 
 export const fetchDjStatus = () => fetchJson<DjStatus>(`/api/playlist/dj/status`);
 export const fetchDjHrDefaults = () => fetchJson<{ hr_rest?: number | null; hr_max?: number | null }>(`/api/playlist/dj/hr-defaults`);
+export interface SpotifyPlaylistMeta { id: string; name: string; tracks: number }
+export const fetchSpotifyPlaylists = () => fetchJson<SpotifyPlaylistMeta[]>(`/api/playlist/spotify/playlists`);
 
 async function djPost(path: string, body?: unknown): Promise<DjControlResult> {
   try {
