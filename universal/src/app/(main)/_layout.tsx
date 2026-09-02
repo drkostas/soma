@@ -35,6 +35,7 @@ function TabsNav() {
       <Tabs.Screen name="sleep" options={{ href: null }} />
       <Tabs.Screen name="playlist" options={{ href: null }} />
       <Tabs.Screen name="playlist-builder" options={{ href: null }} />
+      <Tabs.Screen name="live-dj" options={{ href: null }} />
       <Tabs.Screen name="connections" options={{ href: null }} />
     </Tabs>
   );

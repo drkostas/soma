@@ -214,12 +214,23 @@ export default function PlaylistScreen() {
           </Text>
         </Card>
 
-        <Button
-          label="Build a new playlist"
-          variant="primary"
-          disabled={!analysed}
-          onPress={() => router.push("/playlist-builder")}
-        />
+        <View className="flex-row gap-2">
+          <View className="flex-1">
+            <Button
+              label="Build a new playlist"
+              variant="primary"
+              disabled={!analysed}
+              onPress={() => router.push("/playlist-builder")}
+            />
+          </View>
+          <View className="flex-1">
+            <Button
+              label="Live DJ"
+              variant="secondary"
+              onPress={() => router.push("/live-dj")}
+            />
+          </View>
+        </View>
 
         <SegmentedControl
           options={["Playlists", "Plans"] as const}
