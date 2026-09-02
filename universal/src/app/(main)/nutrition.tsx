@@ -38,6 +38,10 @@ const MACROS: { key: string; label: string; color: string; tKey: string; ceiling
 
 const SLOT_ORDER = ["breakfast", "lunch", "during_workout", "dinner", "pre_sleep"];
 const slotLabel = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+// Meal-slot emojis, matching web meal-card.tsx SLOT_ICONS.
+const SLOT_ICONS: Record<string, string> = {
+  breakfast: "☀️", lunch: "🌤️", dinner: "🌙", pre_sleep: "🌙", during_workout: "🏃",
+};
 
 function mealName(m: SomaMeal): string {
   const names = (m.items ?? []).map((i) => i.name).filter(Boolean) as string[];
@@ -543,7 +547,7 @@ export default function NutritionScreen() {
                 <Card key={s} className="gap-2">
                   <View className="flex-row items-center justify-between">
                     <View className="flex-row items-center gap-2">
-                      <Text variant="title">{slotLabel(s)}</Text>
+                      <Text variant="title">{SLOT_ICONS[s] ? `${SLOT_ICONS[s]} ` : ""}{slotLabel(s)}</Text>
                       {slotMeals.length > 0 && !isSkipped && !dayClosed ? (
                         <Pressable onPress={() => toggleLock(s)} hitSlop={8}>
                           <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: lockedSlots.has(s) ? "#e0a45822" : "#142530" }}>
