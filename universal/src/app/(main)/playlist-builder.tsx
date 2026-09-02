@@ -9,6 +9,7 @@ import {
   type SegmentItem, type Segment, type SegmentType, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket,
 } from "../../lib/playlist";
 import { fetchJson } from "../../lib/api";
+import { SpotifyEmbed } from "../../components/spotify-embed";
 
 interface PanelState { songs: SongData[]; loading?: boolean; poolCount?: number; warning?: string }
 type WorkoutPlan = { id: number; name: string; sport_type: string | null; total_duration_s: number | null; source: string | null };
@@ -205,9 +206,10 @@ function SegmentEditor({ seg, onChange }: { seg: Segment; onChange: (s: Segment)
   );
 }
 
-function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, onMove, canUp, canDown }: {
+function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, onMove, canUp, canDown, onPreview }: {
   seg: Segment; index: number; panel: PanelState | undefined; onExclude: (t: SongData) => void; onWiden: () => void;
   onEdit: (s: Segment) => void; onRemove: () => void; onMove: (dir: -1 | 1) => void; canUp: boolean; canDown: boolean;
+  onPreview: (s: SongData) => void;
 }) {
   const color = TYPE_COLORS[seg.type] ?? "#77c8d1";
   const [editing, setEditing] = useState(false);
@@ -239,12 +241,12 @@ function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, 
           {panel?.warning ? <Text variant="micro" style={{ color: "#e0a458" }}>{panel.warning}</Text> : null}
           {songs.map((s, i) => (
             <View key={`${s.track_id}-${i}`} className="flex-row items-center gap-2 border-t border-border-subtle py-1.5">
-              <View className="flex-1">
+              <Pressable className="flex-1" onPress={() => onPreview(s)}>
                 <Text variant="caption" className="text-text" numberOfLines={1}>{s.name}</Text>
                 <Text variant="micro" className="text-text-muted" numberOfLines={1}>
                   {s.artist_name}{s.tempo ? ` · ${Math.round(s.tempo)} bpm` : ""}{s.is_half_time ? " ·½" : ""} · {songDur(s.duration_ms)}
                 </Text>
-              </View>
+              </Pressable>
               <Pressable onPress={() => onExclude(s)} hitSlop={8} className="h-6 w-6 items-center justify-center rounded-md active:bg-surface-elevated">
                 <Text variant="micro" className="text-text-muted">✕</Text>
               </Pressable>
@@ -277,6 +279,7 @@ export default function PlaylistBuilderScreen() {
   const [planName, setPlanName] = useState("");
   const [planSaving, setPlanSaving] = useState(false);
   const [planSaved, setPlanSaved] = useState(false);
+  const [previewSong, setPreviewSong] = useState<SongData | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const flat = items ? flatItems(items) : [];
 
@@ -420,7 +423,8 @@ export default function PlaylistBuilderScreen() {
             <GenreBar selected={genres} onToggle={toggleGenre} />
             {flat.map((seg, i) => (
               <SegmentCard key={seg.id} seg={seg} index={i} panel={assignments[i]} onExclude={exclude} onWiden={() => widen(i)}
-                onEdit={(s) => editSeg(i, s)} onRemove={() => removeSeg(i)} onMove={(d) => moveSeg(i, d)} canUp={i > 0} canDown={i < flat.length - 1} />
+                onEdit={(s) => editSeg(i, s)} onRemove={() => removeSeg(i)} onMove={(d) => moveSeg(i, d)} canUp={i > 0} canDown={i < flat.length - 1}
+                onPreview={setPreviewSong} />
             ))}
             {/* Timeline footer: add / save-plan / total */}
             <Card className="gap-2">
@@ -437,6 +441,20 @@ export default function PlaylistBuilderScreen() {
                 </View>
               ) : (
                 <Pressable onPress={() => setPlanInput(true)} className="self-start"><Text variant="caption" className="text-teal">{planSaved ? "✓ Saved!" : "＋ Save as plan"}</Text></Pressable>
+              )}
+            </Card>
+            {/* Preview player (tap any song) — Spotify embed, mirrors web SpotifyPlayer */}
+            <Card className="gap-2">
+              {previewSong ? (
+                <>
+                  <View className="flex-row items-center justify-between">
+                    <Text variant="eyebrow">Preview</Text>
+                    <Pressable onPress={() => setPreviewSong(null)} hitSlop={8}><Text variant="micro" className="text-text-muted">✕ close</Text></Pressable>
+                  </View>
+                  <SpotifyEmbed key={previewSong.track_id} trackId={previewSong.track_id} />
+                </>
+              ) : (
+                <Text variant="micro" className="text-center text-text-muted">Tap a song to preview it.</Text>
               )}
             </Card>
             <Card className="gap-2">
