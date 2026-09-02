@@ -8,9 +8,11 @@
 import { fetch as streamFetch } from "expo/fetch";
 import { API_BASE, AUTH_HEADERS, fetchJson } from "./api";
 
-export type SegmentType =
-  | "warmup" | "easy" | "aerobic" | "tempo" | "interval"
-  | "vo2max" | "recovery" | "rest" | "strides" | "cooldown";
+export const SEGMENT_TYPES = [
+  "warmup", "easy", "aerobic", "tempo", "interval",
+  "vo2max", "recovery", "rest", "strides", "cooldown",
+] as const;
+export type SegmentType = (typeof SEGMENT_TYPES)[number];
 
 export interface Segment {
   id: string; type: SegmentType; duration_s: number;
@@ -122,6 +124,27 @@ export function segsForGenerate(items: SegmentItem[]): { segments: Segment[]; fl
     }
   }
   return { segments, flatIndexMap };
+}
+
+/** Save the current segments as a reusable workout plan (mirrors web onSavePlan:
+ *  strips ids, keeps repeat structure template-only). */
+export async function saveWorkoutPlan(name: string, items: SegmentItem[], garminActivityId: string | null): Promise<boolean> {
+  const serialize = (its: SegmentItem[]) => its.map((it) => {
+    if (it.type === "repeat") {
+      const { id: _id, children, ...rest } = it as RepeatGroup;
+      return { ...rest, children: children.slice(0, (it as RepeatGroup).template_size).map((c) => { const { id: _cid, ...cr } = c; return cr; }) };
+    }
+    const { id: _id, ...rest } = it as Segment;
+    return rest;
+  });
+  const total = flatItems(items).reduce((s, seg) => s + seg.duration_s, 0);
+  try {
+    const res = await fetch(`${API_BASE}/api/playlist/workout-plans`, {
+      method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify({ name, segments: serialize(items), sport_type: "running", total_duration_s: total, source: "builder", garmin_activity_id: garminActivityId }),
+    });
+    return res.ok;
+  } catch { return false; }
 }
 
 /* ---- SSE generation (POST /api/playlist/sessions streams text/event-stream) ---- */
