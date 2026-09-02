@@ -228,3 +228,47 @@ export async function confirmBlacklist(trackId: string, name: string, artistName
     });
   } catch { /* best effort */ }
 }
+
+/* ---- Live DJ (HR-driven auto-queue daemon; runs on a local host, reachable
+ *      from the phone over Tailscale). The app only controls + monitors it:
+ *      POST start/stop, GET status (the daemon writes /tmp/soma-dj-status.json),
+ *      GET hr-defaults (avg resting / max HR from the last 90 days). ---- */
+export type DjState = "stopped" | "starting" | "running" | "error";
+export interface DjPlayHistoryItem {
+  track_id: string; name: string; artist: string;
+  track_bpm: number | null; target_bpm: number | null;
+  started_at: number; duration_ms: number | null; image_url: string | null;
+  status: "current" | "queued" | "played";
+}
+export interface DjQueueHistoryItem { name: string; artist: string; target_bpm: number | null; track_bpm: number | null; reason: string; ts: number }
+export interface DjHrHistoryItem { ts: number; hr: number; target_bpm: number | null }
+export interface DjStatus {
+  state: DjState;
+  hr?: number | null; hr_age_s?: number | null; target_bpm?: number | null; offset?: number;
+  current_track?: string | null; current_track_id?: string | null; ms_remaining?: number | null;
+  queued_track?: string | null; queued_track_id?: string | null;
+  replace_reason?: string | null; no_queue_reason?: string | null; session_played_count?: number;
+  allowed_track_count?: number | null; auto_detect?: boolean; context_name?: string | null;
+  queue_history?: DjQueueHistoryItem[]; play_history?: DjPlayHistoryItem[]; hr_history?: DjHrHistoryItem[];
+  error?: string; ts?: number;
+}
+export interface DjStartBody { hr_rest: number; hr_max: number; offset: number; genres: string[]; sources: string[] }
+export interface DjControlResult { ok: boolean; status: number; pid?: number; alreadyRunning?: boolean; error?: string }
+
+export const fetchDjStatus = () => fetchJson<DjStatus>(`/api/playlist/dj/status`);
+export const fetchDjHrDefaults = () => fetchJson<{ hr_rest?: number | null; hr_max?: number | null }>(`/api/playlist/dj/hr-defaults`);
+
+async function djPost(path: string, body?: unknown): Promise<DjControlResult> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: body != null ? JSON.stringify(body) : undefined,
+    });
+    const j = (await res.json().catch(() => ({}))) as { pid?: number; alreadyRunning?: boolean; error?: string };
+    return { ok: res.ok, status: res.status, pid: j.pid, alreadyRunning: j.alreadyRunning, error: j.error };
+  } catch (err) {
+    return { ok: false, status: 0, error: String((err as Error)?.message ?? err) };
+  }
+}
+export const startDj = (body: DjStartBody) => djPost(`/api/playlist/dj/start`, body);
+export const stopDj = () => djPost(`/api/playlist/dj/stop`);
