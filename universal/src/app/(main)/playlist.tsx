@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { Text, Card, Badge, ProgressBar, SegmentedControl } from "soma-style";
+import { Text, Card, Badge, ProgressBar, SegmentedControl, Button } from "soma-style";
+import { router } from "expo-router";
 import { fetchJson } from "../../lib/api";
 
 /** Library analysis status — how much of the Spotify library has BPM data. */
@@ -212,6 +213,13 @@ export default function PlaylistScreen() {
               : "Connect Spotify and analyse your library on the web app to enable playlist building."}
           </Text>
         </Card>
+
+        <Button
+          label="Build a new playlist"
+          variant="primary"
+          disabled={!analysed}
+          onPress={() => router.push("/playlist-builder")}
+        />
 
         <SegmentedControl
           options={["Playlists", "Plans"] as const}
