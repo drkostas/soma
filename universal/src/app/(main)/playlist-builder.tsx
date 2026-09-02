@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ScrollView, View, TextInput, Pressable, ActivityIndicator, Linking } from "react-native";
 import { router } from "expo-router";
-import { Text, Card, Button, Pill, Badge, Stepper } from "soma-style";
+import { Text, Card, Button, Pill, Badge, Stepper, Modal } from "soma-style";
 import {
   TYPE_COLORS, SEGMENT_TYPES, BPM_DEFAULTS, makeSegment, parsedToItems, flatItems, segsForGenerate,
-  generatePlaylist, saveWorkoutPlan,
+  generatePlaylist, saveWorkoutPlan, fetchPumpUp, addPumpUp, removePumpUp,
   fetchGarminRuns, fetchGarminRunDetail, fetchGenres, postBlacklist, saveSpotifyPlaylist,
-  type SegmentItem, type Segment, type SegmentType, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket,
+  type SegmentItem, type Segment, type SegmentType, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket, type PumpUpSong,
 } from "../../lib/playlist";
 import { fetchJson } from "../../lib/api";
 import { SpotifyEmbed } from "../../components/spotify-embed";
@@ -206,10 +206,10 @@ function SegmentEditor({ seg, onChange }: { seg: Segment; onChange: (s: Segment)
   );
 }
 
-function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, onMove, canUp, canDown, onPreview }: {
+function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, onMove, canUp, canDown, onPreview, onBank }: {
   seg: Segment; index: number; panel: PanelState | undefined; onExclude: (t: SongData) => void; onWiden: () => void;
   onEdit: (s: Segment) => void; onRemove: () => void; onMove: (dir: -1 | 1) => void; canUp: boolean; canDown: boolean;
-  onPreview: (s: SongData) => void;
+  onPreview: (s: SongData) => void; onBank: (s: SongData) => void;
 }) {
   const color = TYPE_COLORS[seg.type] ?? "#77c8d1";
   const [editing, setEditing] = useState(false);
@@ -247,6 +247,9 @@ function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, 
                   {s.artist_name}{s.tempo ? ` · ${Math.round(s.tempo)} bpm` : ""}{s.is_half_time ? " ·½" : ""} · {songDur(s.duration_ms)}
                 </Text>
               </Pressable>
+              <Pressable onPress={() => onBank(s)} hitSlop={8} className="h-6 w-6 items-center justify-center rounded-md active:bg-surface-elevated">
+                <Text variant="micro" style={{ color: "#e0c458" }}>⚡</Text>
+              </Pressable>
               <Pressable onPress={() => onExclude(s)} hitSlop={8} className="h-6 w-6 items-center justify-center rounded-md active:bg-surface-elevated">
                 <Text variant="micro" className="text-text-muted">✕</Text>
               </Pressable>
@@ -258,6 +261,33 @@ function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, 
         </>
       )}
     </Card>
+  );
+}
+
+/* Pump-up Bank modal (mirrors web pump-up-modal.tsx). */
+function BankModal({ visible, onClose, refreshKey }: { visible: boolean; onClose: () => void; refreshKey: number }) {
+  const [songs, setSongs] = useState<PumpUpSong[] | null>(null);
+  useEffect(() => { if (!visible) return; setSongs(null); fetchPumpUp().then(setSongs).catch(() => setSongs([])); }, [visible, refreshKey]);
+  async function remove(id: string) { setSongs((p) => (p ? p.filter((s) => s.track_id !== id) : p)); await removePumpUp(id); }
+  return (
+    <Modal visible={visible} onClose={onClose} title="⚡ Pump-up Bank">
+      <Text variant="micro" className="mb-2 text-text-muted tabular-nums">{songs?.length ?? 0}/10 songs</Text>
+      {songs == null ? <ActivityIndicator color="#77c8d1" /> : songs.length === 0 ? (
+        <Text variant="micro" className="py-6 text-center text-text-muted">Bank empty — add songs with ⚡ on any song.</Text>
+      ) : songs.map((s) => (
+        <View key={s.track_id} className="flex-row items-center gap-2 border-t border-border-subtle py-2">
+          <View className="flex-1">
+            <Text variant="caption" className="text-text" numberOfLines={1}>{s.name}</Text>
+            <Text variant="micro" className="text-text-muted" numberOfLines={1}>{s.artist_name}</Text>
+          </View>
+          {s.tempo != null ? <Text variant="micro" className="text-text-muted tabular-nums">{Math.round(s.tempo)} BPM</Text> : null}
+          <View style={{ width: 56, height: 6, borderRadius: 3, backgroundColor: "#22323a", overflow: "hidden" }}>
+            <View style={{ width: `${Math.round((s.energy ?? 0) * 100)}%`, height: "100%", backgroundColor: "#e0c458" }} />
+          </View>
+          <Pressable onPress={() => remove(s.track_id)} hitSlop={8}><Text variant="micro" className="text-text-muted">✕</Text></Pressable>
+        </View>
+      ))}
+    </Modal>
   );
 }
 
@@ -280,6 +310,9 @@ export default function PlaylistBuilderScreen() {
   const [planSaving, setPlanSaving] = useState(false);
   const [planSaved, setPlanSaved] = useState(false);
   const [previewSong, setPreviewSong] = useState<SongData | null>(null);
+  const [bankOpen, setBankOpen] = useState(false);
+  const [bankRefresh, setBankRefresh] = useState(0);
+  const [bankToast, setBankToast] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const flat = items ? flatItems(items) : [];
 
@@ -335,6 +368,12 @@ export default function PlaylistBuilderScreen() {
   }
   function addSeg() { setItems((prev) => [...(prev ?? []), makeSegment({ type: "easy", duration_s: 600 })]); setDirty(true); }
   function regenerate() { if (items) { runGenerate(items, genres, excluded, garminId); setDirty(false); } }
+  async function bankSong(s: SongData) {
+    const r = await addPumpUp({ track_id: s.track_id, name: s.name, artist_name: s.artist_name, tempo: s.tempo, energy: s.energy });
+    setBankRefresh((k) => k + 1);
+    setBankToast(r.ok ? `Added “${s.name}” to the bank` : r.error || "Couldn't add to bank");
+    setTimeout(() => setBankToast(null), 2500);
+  }
   async function savePlan() {
     const name = planName.trim();
     if (!name || !items) return;
@@ -401,10 +440,15 @@ export default function PlaylistBuilderScreen() {
       <View className="w-full max-w-2xl gap-4">
         <View className="flex-row items-center justify-between">
           <Text variant="headline">{items ? workoutName : "New playlist"}</Text>
-          <Pressable onPress={() => (items ? (abortRef.current?.abort(), setItems(null), setAssignments({}), setSessionId(null)) : router.back())}>
-            <Text variant="caption" className="text-teal">{items ? "Change run" : "Close"}</Text>
-          </Pressable>
+          <View className="flex-row items-center gap-3">
+            {items ? <Pressable onPress={() => setBankOpen(true)}><Text variant="caption" style={{ color: "#e0c458" }}>⚡ Bank</Text></Pressable> : null}
+            <Pressable onPress={() => (items ? (abortRef.current?.abort(), setItems(null), setAssignments({}), setSessionId(null)) : router.back())}>
+              <Text variant="caption" className="text-teal">{items ? "Change run" : "Close"}</Text>
+            </Pressable>
+          </View>
         </View>
+        <BankModal visible={bankOpen} onClose={() => setBankOpen(false)} refreshKey={bankRefresh} />
+        {bankToast ? <Card className="border-teal-dim"><Text variant="micro" className="text-teal">{bankToast}</Text></Card> : null}
 
         {!items ? (
           <>
@@ -424,7 +468,7 @@ export default function PlaylistBuilderScreen() {
             {flat.map((seg, i) => (
               <SegmentCard key={seg.id} seg={seg} index={i} panel={assignments[i]} onExclude={exclude} onWiden={() => widen(i)}
                 onEdit={(s) => editSeg(i, s)} onRemove={() => removeSeg(i)} onMove={(d) => moveSeg(i, d)} canUp={i > 0} canDown={i < flat.length - 1}
-                onPreview={setPreviewSong} />
+                onPreview={setPreviewSong} onBank={bankSong} />
             ))}
             {/* Timeline footer: add / save-plan / total */}
             <Card className="gap-2">
