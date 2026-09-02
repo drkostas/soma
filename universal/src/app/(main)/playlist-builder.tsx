@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ScrollView, View, TextInput, Pressable, ActivityIndicator } from "react-native";
+import { ScrollView, View, TextInput, Pressable, ActivityIndicator, Linking } from "react-native";
 import { router } from "expo-router";
 import { Text, Card, Button, Pill, Badge } from "soma-style";
 import {
-  BPM_DEFAULTS, TYPE_COLORS, parsedToItems, flatItems, segsForGenerate, generatePlaylist,
-  fetchGarminRuns, fetchGarminRunDetail, fetchGenres, postBlacklist,
+  TYPE_COLORS, parsedToItems, flatItems, segsForGenerate, generatePlaylist,
+  fetchGarminRuns, fetchGarminRunDetail, fetchGenres, postBlacklist, saveSpotifyPlaylist,
   type SegmentItem, type Segment, type SongData, type SSEEvent, type GarminRunMeta, type GenreBucket,
 } from "../../lib/playlist";
 import { fetchJson } from "../../lib/api";
@@ -172,6 +172,10 @@ export default function PlaylistBuilderScreen() {
   const [genres, setGenres] = useState<string[]>([]);
   const [sessionId, setSessionId] = useState<string | number | null>(null);
   const [genErr, setGenErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedUrl, setSavedUrl] = useState<string | null>(null);
+  const [spotifyPlaylistId, setSpotifyPlaylistId] = useState<string | null>(null);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const flat = items ? flatItems(items) : [];
 
@@ -211,7 +215,32 @@ export default function PlaylistBuilderScreen() {
 
   function onPick(name: string, gid: string | null, its: SegmentItem[]) {
     setWorkoutName(name); setGarminId(gid); setItems(its); setAssignments({}); setSessionId(null); setExcluded(new Set()); setGenres([]);
+    setSavedUrl(null); setSpotifyPlaylistId(null); setSaveErr(null);
     runGenerate(its, [], new Set(), gid);
+  }
+
+  // Save the generated session to Spotify (POST create, or PUT update if already saved).
+  // track_ids = unique non-excluded songs across all segments (incl. transitions), matching web.
+  async function saveToSpotify() {
+    if (sessionId == null) return;
+    setSaving(true); setSaveErr(null);
+    const track_ids = [...new Set(Object.values(assignments).flatMap((p) => p.songs.filter((s) => !excluded.has(s.track_id)).map((s) => s.track_id)))];
+    const song_assignments: Record<number, SongData[]> = {};
+    for (const k in assignments) song_assignments[Number(k)] = assignments[k].songs;
+    const r = await saveSpotifyPlaylist({
+      session_id: sessionId,
+      name: `Soma: ${workoutName} · ${new Date().toLocaleDateString()}`,
+      track_ids, song_assignments, playlist_id: spotifyPlaylistId,
+    });
+    setSaving(false);
+    if (r.ok) {
+      setSavedUrl(r.playlist_url ?? null);
+      if (r.playlist_id) setSpotifyPlaylistId(r.playlist_id);
+    } else if (r.status === 401) {
+      setSaveErr("Spotify isn't connected. Connect it on the web app (Sources) to save playlists.");
+    } else {
+      setSaveErr(r.error || `Save failed (${r.status})`);
+    }
   }
   function toggleGenre(g: string) {
     const next = genres.includes(g) ? genres.filter((x) => x !== g) : [...genres, g];
@@ -267,6 +296,22 @@ export default function PlaylistBuilderScreen() {
             {flat.map((seg, i) => (
               <SegmentCard key={seg.id} seg={seg} index={i} panel={assignments[i]} onExclude={exclude} onWiden={() => widen(i)} />
             ))}
+            <Card className="gap-2">
+              {savedUrl ? (
+                <>
+                  <View className="flex-row items-center gap-2">
+                    <Badge label="On Spotify" tone="success" />
+                    <Text variant="caption" className="text-text-secondary">Saved to your Spotify.</Text>
+                  </View>
+                  <Button label="Open in Spotify" variant="secondary" onPress={() => Linking.openURL(savedUrl)} />
+                  <Button label={saving ? "Updating…" : "Update on Spotify"} variant="ghost" disabled={saving} onPress={saveToSpotify} />
+                </>
+              ) : (
+                <Button label={saving ? "Saving…" : "Save to Spotify"} variant="primary" disabled={saving || sessionId == null} onPress={saveToSpotify} />
+              )}
+              {saveErr ? <Text variant="micro" className="text-danger">{saveErr}</Text> : null}
+              {sessionId == null && !savedUrl ? <Text variant="micro" className="text-text-muted">Songs are still loading — save once generation completes.</Text> : null}
+            </Card>
           </>
         )}
       </View>
