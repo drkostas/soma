@@ -1,0 +1,36 @@
+# Soma verify flow (T0 gate): open ONE screen by deep link and assert that a
+# marker fetched live from the real API is visible on the device.
+#
+# This is the "done is derived, never asserted" check from the plan: the marker
+# is a real number the screen must render (e.g. today's steps from
+# /api/health/today), passed in by universal/scripts/verify-device.sh, so a pass
+# proves the emulator/phone rendered live data from soma.gkos.dev — not a static
+# header, not a mock, not Expo web.
+#
+# Run via the script, not by hand:
+#   universal/scripts/verify-device.sh overview
+# which resolves ROUTE + MARKER and invokes:
+#   maestro --device <id> test -e ROUTE=universal://overview -e MARKER=983 .maestro/verify-screen.yaml
+appId: dev.gkos.soma
+name: Soma verify screen
+tags:
+  - verify
+---
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 10000
+- openLink: ${ROUTE}
+- waitForAnimationToEnd:
+    timeout: 10000
+# The marker arrives over the network from the real API and the screen is long: the
+# card that renders it is usually BELOW the fold (Maestro sees off-screen nodes as
+# visible:false). So scroll the screen until the marker is on-screen, up to 40 s.
+# This fails honestly if the value never renders.
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+    visibilityPercentage: 60
+- takeScreenshot: verify-${SCREEN}
