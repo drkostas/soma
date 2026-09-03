@@ -1035,14 +1035,46 @@ export function usePresets() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
     fetchJson<{ presets: Preset[]; ingredients: Ingredient[] }>("/api/nutrition/presets")
       .then((d) => alive && (setPresets(d.presets ?? []), setIngredients(d.ingredients ?? []), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)));
     return () => { alive = false; };
-  }, []);
-  return { presets, ingredients, error };
+  }, [tick]);
+  /** Refetch — e.g. after a researched ingredient is confirmed into the catalog. */
+  const reload = useCallback(() => setTick((t) => t + 1), []);
+  return { presets, ingredients, error, reload };
+}
+
+/* ---- T3a ingredient research: propose from USDA (local table) + Open Food Facts, confirm before use ---- */
+export interface IngredientProposal {
+  id: number; name: string; brand?: string | null;
+  calories_per_100g: number | null; protein_per_100g: number | null; carbs_per_100g: number | null;
+  fat_per_100g: number | null; fiber_per_100g: number | null;
+  source: "usda" | "off"; source_id: string; source_url: string; confidence: number; rationale: string; flags: string[];
+}
+export async function researchIngredient(query: string): Promise<{ query: string; proposals: IngredientProposal[]; warnings: string[] }> {
+  const r = await fetch(`${API_BASE}/api/nutrition/ingredients/research`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS }, body: JSON.stringify({ query }),
+  });
+  const j = (await r.json().catch(() => ({}))) as { error?: string; query?: string; proposals?: IngredientProposal[]; warnings?: string[] };
+  if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+  return { query: j.query ?? query, proposals: j.proposals ?? [], warnings: j.warnings ?? [] };
+}
+export interface ConfirmIngredientBody {
+  proposal_id: number; id: string; name: string; category: string; is_raw: boolean;
+  unit?: string; grams_per_unit?: number | null; raw_to_cooked_ratio?: number | null; shrink_priority?: number;
+  calories_per_100g: number; protein_per_100g: number; carbs_per_100g: number; fat_per_100g: number; fiber_per_100g: number;
+  update_existing?: boolean;
+}
+export async function confirmIngredient(body: ConfirmIngredientBody): Promise<{ ok: boolean; status: number; ingredient?: Ingredient; error?: string; presets_using?: { id: string; name: string }[] }> {
+  const r = await fetch(`${API_BASE}/api/nutrition/ingredients/confirm`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS }, body: JSON.stringify(body),
+  });
+  const j = (await r.json().catch(() => ({}))) as { ok?: boolean; ingredient?: Ingredient; error?: string; presets_using?: { id: string; name: string }[] };
+  return { ok: r.ok && Boolean(j.ok), status: r.status, ingredient: j.ingredient, error: j.error, presets_using: j.presets_using };
 }
 
 export interface Drink {
