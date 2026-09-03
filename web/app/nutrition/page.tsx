@@ -177,7 +177,7 @@ async function getPresets() {
 
 async function getIngredients() {
   const sql = getDb();
-  return sql`SELECT * FROM ingredients ORDER BY category, name`;
+  return sql`SELECT * FROM ingredients WHERE status = 'confirmed' ORDER BY category, name`;
 }
 
 async function getTrainingDay(date: string) {

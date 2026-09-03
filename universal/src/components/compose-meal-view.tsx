@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { View, ScrollView, TextInput, Pressable } from "react-native";
+import { IngredientResearchSheet } from "./ingredient-research-sheet";
 import { Text, Button } from "soma-style";
 import {
   logComposedMeal, deleteMeal, savePreset,
@@ -44,7 +45,7 @@ function autoMealName(items: { ingredient_id: string; name?: string }[]): string
  *  a max-yolks clamp, live macros + running totals + a volume-score hint, and
  *  a save-as-preset step after logging. Full parity with the web ComposeMealView. */
 export function ComposeMealView({
-  ingredients, date, slot, slotBudget, onLogged, initialGrams, editMealId, onTotalsChange,
+  ingredients, date, slot, slotBudget, onLogged, initialGrams, editMealId, onTotalsChange, onIngredientAdded,
 }: {
   ingredients: Ingredient[]; date: string; slot: string; onLogged: () => void;
   /** The slot's kcal budget — seeds the auto-solver so the preview ≈ budget (web parity). */
@@ -56,8 +57,11 @@ export function ComposeMealView({
   /** Emits the in-progress meal totals on every change, so the screen can fold
    *  them into the day's live preview (remaining kcal + macro bars). */
   onTotalsChange?: (t: { calories: number; protein: number; carbs: number; fat: number; fiber: number }) => void;
+  /** A researched ingredient was confirmed into the catalog — the parent refetches presets (T3a). */
+  onIngredientAdded?: (ing: Ingredient) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [researchOpen, setResearchOpen] = useState(false);
   const [grams, setGrams] = useState<Record<string, number>>(initialGrams ?? {});
   const [busy, setBusy] = useState(false);
   const [cookedMode, setCookedMode] = useState<Set<string>>(new Set());
@@ -308,7 +312,22 @@ export function ComposeMealView({
             })}
           </View>
         ))}
+        {/* T3a: the catalog is not the world. Research a food from USDA / Open Food Facts and confirm it. */}
+        <Pressable testID="research-row" onPress={() => setResearchOpen(true)} className="mt-1 flex-row items-center gap-2 py-2">
+          <Text variant="caption" className="text-teal">{search.trim() ? `Not finding it? Research “${search.trim()}”…` : "Not finding it? Research an ingredient…"}</Text>
+        </Pressable>
       </ScrollView>
+      <IngredientResearchSheet
+        visible={researchOpen}
+        initialQuery={search.trim()}
+        onClose={() => setResearchOpen(false)}
+        onConfirmed={(ing) => {
+          onIngredientAdded?.(ing);
+          // select it right away; the row renders once the parent's refetch lands
+          setGrams((g) => ({ ...g, [ing.id]: 100 }));
+          setSearch("");
+        }}
+      />
     </View>
   );
 }

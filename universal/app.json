@@ -34,7 +34,8 @@
         }
       ],
       "@bacons/apple-targets",
-      "./plugins/soma-widget/withSomaWidget"
+      "./plugins/soma-widget/withSomaWidget",
+      "./plugins/emulator-cleartext/withEmulatorCleartext"
     ],
     "experiments": {
       "typedRoutes": true,

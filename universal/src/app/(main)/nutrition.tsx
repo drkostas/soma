@@ -88,7 +88,7 @@ export default function NutritionScreen() {
     setLockedSlots(new Set(stored));
   }, [DATE]);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
-  const { presets, ingredients } = usePresets();
+  const { presets, ingredients, reload: reloadPresets } = usePresets();
   const { drinks } = useDrinks();
   const onboard = useOnboard();
   const [tab, setTab] = useState<"Day" | "Trend">("Day");
@@ -721,6 +721,7 @@ export default function NutritionScreen() {
             editMealId={editMeal?.id ?? null}
             onTotalsChange={setComposePreview}
             onLogged={() => { closeLog(); refetch(); doRebalance(slot); }}
+            onIngredientAdded={() => reloadPresets()}
           />
         ) : logMode === "quick" ? (
           <View className="gap-2 rounded-lg border border-border-subtle p-3">
