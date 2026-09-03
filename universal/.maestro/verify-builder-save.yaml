@@ -1,0 +1,45 @@
+# T1.2 — a REAL mutation on device: pick a past run, let the builder generate a playlist
+# against the owner's real Spotify library (SSE from soma.gkos.dev), then save it to
+# Spotify (a Spotify write, allowed by the owner's policy; Garmin writes stay mock).
+# Done is the "On Spotify" badge, and the script then reads the playlist back over the API.
+#
+#   universal/scripts/verify-device.sh playlist-builder --flow .maestro/verify-builder-save.yaml --marker "On Spotify"
+appId: dev.gkos.soma
+name: Soma builder generate + save to Spotify
+tags:
+  - verify
+  - mutation
+---
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 10000
+- openLink: ${ROUTE}
+- waitForAnimationToEnd:
+    timeout: 10000
+# The run list comes from /api/playlist/garmin-runs; pick the newest run (first row).
+- extendedWaitUntil:
+    visible:
+      text: "${RUN}"
+    timeout: 30000
+- tapOn:
+    text: "${RUN}"
+    index: 0
+# Generation streams segment by segment; the badge appears on the SSE "done" event.
+- extendedWaitUntil:
+    visible:
+      text: "Generated"
+    timeout: 180000
+- takeScreenshot: verify-builder-generated
+- scrollUntilVisible:
+    element:
+      text: "Save to Spotify"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+- tapOn:
+    text: "Save to Spotify"
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 60000
+- takeScreenshot: verify-${SCREEN}
