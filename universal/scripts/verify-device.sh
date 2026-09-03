@@ -17,11 +17,12 @@
 set -euo pipefail
 
 SCREEN="${1:-overview}"; shift || true
-MODE="auto"; MARKER=""
+MODE="auto"; MARKER=""; DRY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --marker) MARKER="$2"; MODE="explicit"; shift 2;;
     --activities) MODE="activities"; shift;;
+    --dry) DRY=1; shift;;                       # resolve + print the marker, don't touch the device
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -37,41 +38,100 @@ OUT="/tmp/soma/verify"; mkdir -p "$OUT"
 [ -f "$ENVF" ] || { echo "FAIL: missing $ENVF (API url + token by reference)"; exit 2; }
 set -a; . "$ENVF"; set +a
 : "${EXPO_PUBLIC_API_URL:?}"; : "${EXPO_PUBLIC_API_TOKEN:?}"
-[ -x "$ADB" ] || { echo "FAIL: adb not at $ADB"; exit 2; }
-[ -x "$MAESTRO" ] || { echo "FAIL: maestro not at $MAESTRO"; exit 2; }
+if [ "$DRY" = 1 ]; then
+  api() { curl -sf -m 30 -H "Authorization: Bearer $EXPO_PUBLIC_API_TOKEN" "$EXPO_PUBLIC_API_URL$1"; }
+fi
+[ "$DRY" = 1 ] || [ -x "$ADB" ] || { echo "FAIL: adb not at $ADB"; exit 2; }
+[ "$DRY" = 1 ] || [ -x "$MAESTRO" ] || { echo "FAIL: maestro not at $MAESTRO"; exit 2; }
 # Maestro 2.x needs Java 17+. A non-interactive shell on this Mac defaults to JDK 8
 # (drlab gotcha), so pin it here rather than trusting the caller's environment.
 export JAVA_HOME="${JAVA_HOME_17:-/opt/homebrew/opt/openjdk@17}"
 export PATH="$JAVA_HOME/bin:$PATH"
-"$JAVA_HOME/bin/java" -version 2>&1 | grep -qE 'version "(1[7-9]|[2-9][0-9])' \
+[ "$DRY" = 1 ] || "$JAVA_HOME/bin/java" -version 2>&1 | grep -qE 'version "(1[7-9]|[2-9][0-9])' \
   || { echo "FAIL: Java 17+ not found at $JAVA_HOME (maestro cannot run)"; exit 2; }
 
 # 1. Device up, app installed.
+if [ "$DRY" = 1 ]; then STATE=device; else
 STATE="$($ADB -s "$DEV" get-state 2>/dev/null || true)"
 [ "$STATE" = "device" ] || { echo "FAIL: $DEV state='$STATE' (not up)"; exit 2; }
 $ADB -s "$DEV" shell pm list packages 2>/dev/null | grep -q "dev.gkos.soma" \
   || { echo "FAIL: dev.gkos.soma not installed on $DEV"; exit 2; }
+fi
 
 # 2. The marker: a value the screen must render, fetched LIVE from the real API.
-api() { curl -sf -H "Authorization: Bearer $EXPO_PUBLIC_API_TOKEN" "$EXPO_PUBLIC_API_URL$1"; }
+api() { curl -sf -m 30 -H "Authorization: Bearer $EXPO_PUBLIC_API_TOKEN" "$EXPO_PUBLIC_API_URL$1"; }
+# One marker per screen, formatted EXACTLY as the screen formats it (JS toFixed = round
+# half-up on the binary value, Math.round = floor(x+0.5), toLocaleString = thousands
+# commas). A marker that cannot be derived is exit 2 — never a "pass".
+# (Python source is single-quoted for bash, so it uses double quotes only.)
+MARKERS_PY='
+import json, sys, math, datetime
+from decimal import Decimal, ROUND_HALF_UP
+TODAY = datetime.date.today().isoformat()
+def fixed(x, n):                     # JS Number.prototype.toFixed(n)
+    q = Decimal(1).scaleb(-n)
+    v = Decimal(x).quantize(q, rounding=ROUND_HALF_UP)
+    return str(v) if n else str(int(v))
+def jsround(x):                      # JS Math.round
+    return int(math.floor(float(x) + 0.5))
+def fmt_int(v):                      # Number.toLocaleString()
+    return "{:,}".format(int(v))
+def first_run(d):
+    r = (d if isinstance(d, list) else d.get("runs", []))[0]
+    n = r.get("activity_name")
+    if n not in (None, "", "Run"):
+        return n
+    return "{} km · {} min".format(fixed(r["distance"] / 1000, 1), jsround(r["duration"] / 60))
+def sync_records(d):
+    src = d.get("sources") or {}
+    vals = src.values() if isinstance(src, dict) else src
+    return fmt_int(sum(int((x.get("records") if isinstance(x, dict) else 0) or 0) for x in vals))
+S = {
+  "overview":         ("/api/health/today",                    lambda d: fmt_int(d["total_steps"])),
+  "activities-total": ("/api/overview/fitness",                lambda d: fmt_int(d["total_activities"])),
+  "nutrition":        ("/api/nutrition/plan?date=" + TODAY,    lambda d: "Copy yesterday" if d.get("plan") is None else fmt_int(d["remaining"]["calories"])),
+  "running":          ("/api/running/stats?range=6m",          lambda d: "{} runs · {} km".format(d["stats"]["total_runs"], fixed(d["stats"]["total_km"], 0))),
+  "workouts":         ("/api/workouts/insights?range=6m",      lambda d: "{} workouts logged".format(len(d["calendar"]))),
+  "sleep":            ("/api/stats/sleep?range=90d",           lambda d: "{}h–{}h".format(fixed(d["summary"]["current_min"], 1), fixed(d["summary"]["current_max"], 1))),
+  "activities":       ("/api/activities/summary?range=6m",     lambda d: fmt_int(jsround(d["totals"]["cal"]))),
+  "training":         ("/api/training/breakdown?date=" + TODAY, lambda d: "Readiness {}".format(d["readiness"]["traffic_light"])),
+  "connections":      ("/api/sync/status",                     sync_records),
+  "playlist":         ("/api/playlist/spotify/library",        lambda d: fmt_int(d["total_tracks"])),
+  "playlist-builder": ("/api/playlist/garmin-runs?limit=50",   first_run),
+  "live-dj":          ("/api/playlist/dj/hr-defaults",         lambda d: "Garmin" if (d.get("hr_rest") or d.get("hr_max")) else ""),
+  "more":             (None,                                   lambda d: "BPM-matched running playlists"),   # static screen: navigation checkpoint only
+}
+mode, screen = sys.argv[1], sys.argv[2]
+if screen not in S:
+    sys.exit(3)
+ep, fn = S[screen]
+if mode == "ep":
+    print(ep or ""); sys.exit(0)
+d = json.load(sys.stdin) if ep else {}
+try:
+    print(fn(d))
+except Exception as e:
+    sys.stderr.write("marker expr failed for {}: {!r}\n".format(screen, e)); sys.exit(4)
+'
+marker_for() { # screen → prints the marker; rc 1 = unknown screen, rc 4 = API shape mismatch
+  local ep; ep="$(python3 -c "$MARKERS_PY" ep "$1")" || return 1
+  if [ -z "$ep" ]; then python3 -c "$MARKERS_PY" fmt "$1" <<<'{}'; return; fi
+  api "$ep" | python3 -c "$MARKERS_PY" fmt "$1"
+}
 case "$MODE" in
-  auto)
-    case "$SCREEN" in
-      overview)
-        MARKER="$(api /api/health/today | python3 -c 'import json,sys;v=json.load(sys.stdin).get("total_steps");print(f"{int(v):,}" if v is not None else "")')";;
-      *) echo "FAIL: no auto marker for '$SCREEN' — pass --marker TEXT"; exit 2;;
-    esac;;
-  activities)
-    MARKER="$(api /api/overview/fitness | python3 -c 'import json,sys;v=json.load(sys.stdin).get("total_activities");print(f"{int(v):,}" if v is not None else "")')";;
+  auto)       MARKER="$(marker_for "$SCREEN")" || { echo "FAIL: could not derive a marker for '$SCREEN' (rc=$?) — unknown screen or API shape changed; pass --marker TEXT"; exit 2; };;
+  activities) MARKER="$(marker_for activities-total)";;
   explicit) ;;
 esac
 [ -n "$MARKER" ] || { echo "FAIL: could not resolve a marker from the API for '$SCREEN'"; exit 2; }
+MARKER_RE="$(python3 -c 'import re,sys;print("(?s).*"+re.escape(sys.argv[1])+".*")' "$MARKER")"
 echo "verify $SCREEN on $DEV — expecting live marker: '$MARKER'  (from $EXPO_PUBLIC_API_URL)"
+[ "$DRY" = 1 ] && { echo "DRY $SCREEN: marker='$MARKER' regex='$MARKER_RE'"; exit 0; }
 
 # 3. Drive the device: open the screen, wait for the marker to be visible.
 set +e
 ( cd "$HERE" && "$MAESTRO" --device "$DEV" test \
-    -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER" -e SCREEN="$SCREEN" \
+    -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER_RE" -e SCREEN="$SCREEN" \
     "$FLOW" ) > "$OUT/$SCREEN.maestro.log" 2>&1
 RC=$?
 set -e
