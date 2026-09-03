@@ -25,7 +25,17 @@ tags:
 # The marker arrives over the network from the real API and the screen is long: the
 # card that renders it is usually BELOW the fold (Maestro sees off-screen nodes as
 # visible:false). So scroll the screen until the marker is on-screen, up to 40 s.
+# MARKER is a Java regex built by the script: (?s).*<escaped value>.* — a substring match
+# inside a longer caption ("312 runs · 2841 km · last 6M") still counts.
 # This fails honestly if the value never renders.
+# The marker arrives over the network. If it renders ABOVE the fold, a scroll that starts
+# before it lands pushes it out of view and it is never found (bit us on sleep, 2026-09-03).
+# So first give it up to 20 s to appear where the screen opened, without failing the flow.
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+    optional: true
 - scrollUntilVisible:
     element:
       text: "${MARKER}"
