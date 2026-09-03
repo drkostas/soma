@@ -6,7 +6,7 @@
  * a real ReadableStream unlike RN's global fetch), and exposes GET helpers.
  */
 import { fetch as streamFetch } from "expo/fetch";
-import { API_BASE, AUTH_HEADERS, fetchJson } from "./api";
+import { API_BASE, AUTH_HEADERS, fetchJson, DAEMON_BASE, fetchJsonFrom } from "./api";
 
 export const SEGMENT_TYPES = [
   "warmup", "easy", "aerobic", "tempo", "interval",
@@ -298,7 +298,8 @@ export interface DjStatus {
 export interface DjStartBody { hr_rest: number; hr_max: number; offset: number; genres: string[]; sources: string[] }
 export interface DjControlResult { ok: boolean; status: number; pid?: number; alreadyRunning?: boolean; error?: string }
 
-export const fetchDjStatus = () => fetchJson<DjStatus>(`/api/playlist/dj/status`);
+// The DJ runs on the daemon host (Mac behind tailscale serve); hr-defaults is DB-backed → API host.
+export const fetchDjStatus = () => fetchJsonFrom<DjStatus>(DAEMON_BASE, `/api/playlist/dj/status`);
 export const fetchDjHrDefaults = () => fetchJson<{ hr_rest?: number | null; hr_max?: number | null }>(`/api/playlist/dj/hr-defaults`);
 export interface SpotifyPlaylistMeta { id: string; name: string; tracks: number }
 export const fetchSpotifyPlaylists = () => fetchJson<SpotifyPlaylistMeta[]>(`/api/playlist/spotify/playlists`);
@@ -347,7 +348,7 @@ export async function analyseLibrary(sourceIds: string[], onEvent: (e: AnalyseEv
 
 async function djPost(path: string, body?: unknown): Promise<DjControlResult> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${DAEMON_BASE}${path}`, {
       method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
       body: body != null ? JSON.stringify(body) : undefined,
     });

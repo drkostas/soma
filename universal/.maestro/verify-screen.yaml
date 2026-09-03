@@ -16,9 +16,9 @@ name: Soma verify screen
 tags:
   - verify
 ---
-- launchApp
-- waitForAnimationToEnd:
-    timeout: 10000
+# No launchApp: Maestro's launch hangs forever on ColorOS (the OPPO), while a deep link
+# starts the app instantly everywhere. stopApp first so every run is a cold open.
+- stopApp
 - openLink: ${ROUTE}
 - waitForAnimationToEnd:
     timeout: 10000

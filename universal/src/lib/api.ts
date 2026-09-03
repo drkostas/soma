@@ -2,6 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 
 export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
 
+/** Daemon-class routes (Live DJ today, chat next) run on the Mac behind `tailscale serve`,
+ *  never on Vercel: the DJ is a detached process with local status files. EXPO_PUBLIC_DAEMON_URL
+ *  points the app there (e.g. https://gkos-mac.taile2630d.ts.net:8448); unset → same host as
+ *  the API, which is right for local dev and honest for prod (the call then fails visibly). */
+export const DAEMON_BASE = process.env.EXPO_PUBLIC_DAEMON_URL ?? API_BASE;
+/** Host shown on the Live DJ screen so it is never a mystery where the DJ runs. */
+export const DAEMON_HOST = DAEMON_BASE.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+
 /** Personal API token for prod (soma.gkos.dev gates /api/* behind a session;
     the token bypasses that for this native client). Empty in local dev. */
 const API_TOKEN = process.env.EXPO_PUBLIC_API_TOKEN;
@@ -24,14 +32,19 @@ export function workoutImageSource(workoutId: string) {
  * relative to API_BASE.
  */
 export async function fetchJson<T>(path: string, retries = 1): Promise<T> {
+  return fetchJsonFrom<T>(API_BASE, path, retries);
+}
+
+/** Same as fetchJson but against an explicit base (API_BASE or DAEMON_BASE). */
+export async function fetchJsonFrom<T>(base: string, path: string, retries = 1): Promise<T> {
   try {
-    const r = await fetch(`${API_BASE}${path}`, { headers: AUTH_HEADERS });
+    const r = await fetch(`${base}${path}`, { headers: AUTH_HEADERS });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return (await r.json()) as T;
   } catch (e) {
     if (retries > 0) {
       await new Promise((res) => setTimeout(res, 600));
-      return fetchJson<T>(path, retries - 1);
+      return fetchJsonFrom<T>(base, path, retries - 1);
     }
     throw e;
   }
