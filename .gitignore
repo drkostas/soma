@@ -60,3 +60,7 @@ prompt.md
 multiple_messages
 # Vercel CLI-generated OIDC token (never commit)
 .env.vercel
+
+# T3a: the ingredient research API route is code, not research notes (a broad research/ rule above hides it)
+!web/app/api/nutrition/ingredients/research/
+!web/app/api/nutrition/ingredients/research/**

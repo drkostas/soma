@@ -10,7 +10,7 @@ export async function GET() {
     sql`SELECT id, name, items, tags, meal_slot, total_calories, total_protein,
                total_carbs, total_fat, total_fiber, is_system, use_count, created_at
         FROM preset_meals ORDER BY name`,
-    sql`SELECT * FROM ingredients ORDER BY category, name`,
+    sql`SELECT * FROM ingredients WHERE status = 'confirmed' ORDER BY category, name`,
   ]);
 
   return NextResponse.json({ presets, ingredients });

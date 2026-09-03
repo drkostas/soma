@@ -77,7 +77,8 @@ fi
 # 1c. Never hijack a phone that is in use. If a third-party app is in the foreground (not soma,
 # not the launcher, not the lockscreen) the owner is using it — e.g. Maps while driving — and a
 # deep link would pull soma over it. That is a harness error, and it says why.
-if [ "$DRY" != 1 ]; then
+# (An emulator has no person using it — the guard is for physical devices only.)
+if [ "$DRY" != 1 ] && [ "${DEV#emulator-}" = "$DEV" ]; then
   FG="$($ADB -s "$DEV" shell dumpsys window 2>/dev/null | grep -oE 'mCurrentFocus=Window\{[^}]*\}' | head -1 | sed -E 's/.* ([a-zA-Z0-9_.]+)\/.*/\1/')"
   case "$FG" in ""|dev.gkos.soma|*launcher*|*Launcher*|*nexuslauncher*|*home*) ;;
     *) echo "HARNESS ERROR $SCREEN (not a verification result): $DEV is in use ($FG is in the foreground) — not taking it over; re-run when the phone is free"; exit 2;;

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Ingredient } from "@/lib/portion-solver";
+import { IngredientResearchPanel } from "@/components/ingredient-research-panel";
 
 const CATEGORY_ORDER = ["protein", "carbs", "grain", "vegetable", "fat", "dairy", "fruit", "sauce", "supplement"];
 
@@ -18,11 +19,14 @@ interface IngredientPickerProps {
   onToggle: (id: string) => void;
   onDone: () => void;
   onCancel: () => void;
+  /** T3a: a researched ingredient was confirmed into the catalog — the parent refreshes its list. */
+  onIngredientAdded?: (ing: Ingredient) => void;
 }
 
-export function IngredientPicker({ ingredients, selected, onToggle, onDone, onCancel }: IngredientPickerProps) {
+export function IngredientPicker({ ingredients, selected, onToggle, onDone, onCancel, onIngredientAdded }: IngredientPickerProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [researchOpen, setResearchOpen] = useState(false);
 
   // Filter by search, then group by category
   const filtered = search.trim()
@@ -93,6 +97,19 @@ export function IngredientPicker({ ingredients, selected, onToggle, onDone, onCa
           )}
         </div>
       ))}
+
+      {/* T3a: the catalog is not the world — research a food from USDA / Open Food Facts and confirm it. */}
+      {researchOpen ? (
+        <IngredientResearchPanel
+          initialQuery={search.trim()}
+          onClose={() => setResearchOpen(false)}
+          onConfirmed={(ing) => { setResearchOpen(false); setSearch(""); onIngredientAdded?.(ing); }}
+        />
+      ) : (
+        <button data-testid="research-row" className="text-xs text-primary underline" onClick={() => setResearchOpen(true)}>
+          {search.trim() ? `Not finding it? Research “${search.trim()}”…` : "Not finding it? Research an ingredient…"}
+        </button>
+      )}
 
       {selected.size > 0 && (
         <Button size="sm" className="w-full" onClick={onDone}>
