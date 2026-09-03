@@ -1,0 +1,36 @@
+# T1.2 — a REAL mutation on device: generate from the newest run, bank the first song (⚡) into the pump-up bank.
+#   universal/scripts/verify-device.sh playlist-builder --flow .maestro/verify-builder-bank.yaml --marker "to the bank" --env "RUN=<newest run name>"
+appId: dev.gkos.soma
+name: Soma builder → bank a song
+tags: [verify, mutation]
+---
+- stopApp
+- openLink: ${ROUTE}
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${RUN}"
+    timeout: 30000
+- tapOn:
+    text: "${RUN}"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      text: "Generated"
+    timeout: 180000
+# The per-song ⚡ is the exact text "⚡"; the header "⚡ Bank" does not match an exact "⚡".
+- scrollUntilVisible:
+    element:
+      text: "⚡"
+    direction: DOWN
+    timeout: 30000
+    speed: 30
+- tapOn:
+    text: "⚡"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 15000
+- takeScreenshot: verify-${SCREEN}

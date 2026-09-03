@@ -173,9 +173,10 @@ if [ $RC -eq 0 ]; then
 fi
 # Distinguish "the harness could not run" from "the screen did not show the marker".
 # An infra failure must never masquerade as a verification result (exit 2 vs 1).
-if ! grep -qE "COMPLETED|FAILED" "$OUT/$SCREEN.maestro.log" || grep -qiE "Java 17|No devices|Unable to connect|not found|Failed to connect|maestro: command|unbound variable|syntax error" "$OUT/$SCREEN.maestro.log"; then
+# "not found" alone is NOT a harness error: Maestro's ordinary assertion failure says "Element not found".
+if ! grep -qE "COMPLETED|FAILED" "$OUT/$SCREEN.maestro.log" || grep -qiE "Java 17|No devices|Unable to connect|device .* not found|Failed to connect|maestro: command not found|unbound variable|syntax error|Parsing Failed" "$OUT/$SCREEN.maestro.log"; then
   echo "HARNESS ERROR $SCREEN (not a verification result): maestro could not run — see $OUT/$SCREEN.maestro.log"
-  grep -iE "Java 17|No devices|Unable to connect|not found|Failed to connect|unbound variable|syntax error" "$OUT/$SCREEN.maestro.log" | head -3
+  grep -iE "Java 17|No devices|Unable to connect|device .* not found|Failed to connect|maestro: command not found|unbound variable|syntax error|Parsing Failed" "$OUT/$SCREEN.maestro.log" | head -3
   exit 2
 fi
 echo "FAILED $SCREEN (maestro rc=$RC): '$MARKER' NOT seen on $DEV — see $OUT/$SCREEN.maestro.log and $OUT/$SCREEN.png"

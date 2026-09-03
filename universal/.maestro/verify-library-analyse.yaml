@@ -1,0 +1,34 @@
+# T1.2 — a REAL long job on device: Analyse library (Spotify reads + DB writes) from the Sources modal, wait for "Done".
+#   universal/scripts/verify-device.sh playlist-builder --flow .maestro/verify-library-analyse.yaml --marker "new tracks analysed" --env "RUN=<newest run name>"
+appId: dev.gkos.soma
+name: Soma builder → analyse library
+tags: [verify, mutation, slow]
+---
+- stopApp
+- openLink: ${ROUTE}
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${RUN}"
+    timeout: 30000
+- tapOn:
+    text: "${RUN}"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      text: "Generated"
+    timeout: 180000
+- tapOn:
+    text: "Sources [(].*"
+- extendedWaitUntil:
+    visible:
+      text: "${ANALYSE}"
+    timeout: 20000
+- tapOn:
+    text: "${ANALYSE}"
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 600000
+- takeScreenshot: verify-${SCREEN}
