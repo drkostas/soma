@@ -61,6 +61,19 @@ $ADB -s "$DEV" shell pm list packages 2>/dev/null | grep -q "dev.gkos.soma" \
   || { echo "FAIL: dev.gkos.soma not installed on $DEV"; exit 2; }
 fi
 
+# 1b. The screen must be on and unlocked (the phone dozes; the emulator does not).
+if [ "$DRY" != 1 ]; then
+  WAKE="$($ADB -s "$DEV" shell dumpsys power 2>/dev/null | grep -oE 'mWakefulness=[A-Za-z]+' | head -1)"
+  case "$WAKE" in *Awake*) ;; *) $ADB -s "$DEV" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1; sleep 1;; esac
+  if $ADB -s "$DEV" shell dumpsys window 2>/dev/null | grep -qE 'mCurrentFocus=.*(NotificationShade|Keyguard|StatusBar)'; then
+    $ADB -s "$DEV" shell input keyevent KEYCODE_MENU >/dev/null 2>&1; sleep 1     # dismisses a swipe-only lockscreen
+    $ADB -s "$DEV" shell input swipe 540 1800 540 600 300 >/dev/null 2>&1; sleep 1
+    if $ADB -s "$DEV" shell dumpsys window 2>/dev/null | grep -qE 'mCurrentFocus=.*(NotificationShade|Keyguard|StatusBar)'; then
+      echo "HARNESS ERROR $SCREEN (not a verification result): $DEV is locked with a secure lock — unlock the phone, then re-run"; exit 2
+    fi
+  fi
+fi
+
 # 2. The marker: a value the screen must render, fetched LIVE from the real API.
 api() { curl -sf -m 30 -H "Authorization: Bearer $EXPO_PUBLIC_API_TOKEN" "$EXPO_PUBLIC_API_URL$1"; }
 # One marker per screen, formatted EXACTLY as the screen formats it (JS toFixed = round
@@ -136,7 +149,7 @@ if [ -n "$FLOW_OVERRIDE" ]; then case "$FLOW_OVERRIDE" in /*) FLOW="$FLOW_OVERRI
 [ -f "$FLOW" ] || { echo "FAIL: flow not found: $FLOW"; exit 2; }
 set +e
 ( cd "$HERE" && "$MAESTRO" --device "$DEV" test \
-    -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER_RE" -e SCREEN="$SCREEN" "${EXTRA_ENV[@]}" \
+    -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER_RE" -e SCREEN="$SCREEN" ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
     "$FLOW" ) > "$OUT/$SCREEN.maestro.log" 2>&1
 RC=$?
 set -e
@@ -149,9 +162,9 @@ if [ $RC -eq 0 ]; then
 fi
 # Distinguish "the harness could not run" from "the screen did not show the marker".
 # An infra failure must never masquerade as a verification result (exit 2 vs 1).
-if grep -qiE "Java 17|No devices|Unable to connect|not found|Failed to connect|maestro: command" "$OUT/$SCREEN.maestro.log"; then
+if ! grep -qE "COMPLETED|FAILED" "$OUT/$SCREEN.maestro.log" || grep -qiE "Java 17|No devices|Unable to connect|not found|Failed to connect|maestro: command|unbound variable|syntax error" "$OUT/$SCREEN.maestro.log"; then
   echo "HARNESS ERROR $SCREEN (not a verification result): maestro could not run — see $OUT/$SCREEN.maestro.log"
-  grep -iE "Java 17|No devices|Unable to connect|not found|Failed to connect" "$OUT/$SCREEN.maestro.log" | head -3
+  grep -iE "Java 17|No devices|Unable to connect|not found|Failed to connect|unbound variable|syntax error" "$OUT/$SCREEN.maestro.log" | head -3
   exit 2
 fi
 echo "FAILED $SCREEN (maestro rc=$RC): '$MARKER' NOT seen on $DEV — see $OUT/$SCREEN.maestro.log and $OUT/$SCREEN.png"
