@@ -74,6 +74,16 @@ if [ "$DRY" != 1 ]; then
   fi
 fi
 
+# 1c. Never hijack a phone that is in use. If a third-party app is in the foreground (not soma,
+# not the launcher, not the lockscreen) the owner is using it — e.g. Maps while driving — and a
+# deep link would pull soma over it. That is a harness error, and it says why.
+if [ "$DRY" != 1 ]; then
+  FG="$($ADB -s "$DEV" shell dumpsys window 2>/dev/null | grep -oE 'mCurrentFocus=Window\{[^}]*\}' | head -1 | sed -E 's/.* ([a-zA-Z0-9_.]+)\/.*/\1/')"
+  case "$FG" in ""|dev.gkos.soma|*launcher*|*Launcher*|*nexuslauncher*|*home*) ;;
+    *) echo "HARNESS ERROR $SCREEN (not a verification result): $DEV is in use ($FG is in the foreground) — not taking it over; re-run when the phone is free"; exit 2;;
+  esac
+fi
+
 # 2. The marker: a value the screen must render, fetched LIVE from the real API.
 api() { curl -sf -m 30 -H "Authorization: Bearer $EXPO_PUBLIC_API_TOKEN" "$EXPO_PUBLIC_API_URL$1"; }
 # One marker per screen, formatted EXACTLY as the screen formats it (JS toFixed = round
