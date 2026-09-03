@@ -6,6 +6,7 @@ import {
   fetchDjStatus, fetchDjHrDefaults, startDj, stopDj, fetchGenres, fetchSpotifyPlaylists,
   type DjStatus, type DjStartBody, type GenreBucket, type SpotifyPlaylistMeta,
 } from "../../lib/playlist";
+import { DAEMON_HOST } from "../../lib/api";
 
 /* Offset modes — verbatim from web live-dj-tab.tsx. */
 type OffsetMode = "pump_up" | "normal" | "wind_down";
@@ -124,6 +125,8 @@ export default function LiveDjScreen() {
         <Text variant="caption" className="text-text-secondary">
           Polls your Garmin HR in real time and automatically queues songs that match your effort.
         </Text>
+        {/* Where the DJ actually runs (T2): the daemon host behind tailscale serve, and its live state. */}
+        <Text variant="micro" className="text-text-muted">Daemon: {DAEMON_HOST} · {status.state}</Text>
 
         {ctrlErr ? <Card><Text variant="micro" className="text-danger">{ctrlErr}</Text></Card> : null}
 
