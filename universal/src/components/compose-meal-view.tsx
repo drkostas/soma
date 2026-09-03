@@ -295,6 +295,11 @@ export function ComposeMealView({
         onChangeText={setSearch}
         className="rounded-md border border-border-subtle px-3 py-2 text-text"
       />
+      {/* T3a: the catalog is not the world. Research a food from USDA / Open Food Facts and confirm it — above the
+          list so it is reachable without scrolling 80+ rows (a person or a Maestro flow). */}
+      <Pressable testID="research-row" onPress={() => setResearchOpen(true)} className="flex-row items-center gap-2 py-1">
+        <Text variant="caption" className="text-teal">{search.trim() ? `Not finding it? Research “${search.trim()}”…` : "Not finding it? Research an ingredient…"}</Text>
+      </Pressable>
       <ScrollView className="max-h-72" keyboardShouldPersistTaps="handled">
         {groups.length === 0 ? (
           <Text variant="caption" className="text-text-muted">No ingredients match.</Text>
@@ -312,10 +317,6 @@ export function ComposeMealView({
             })}
           </View>
         ))}
-        {/* T3a: the catalog is not the world. Research a food from USDA / Open Food Facts and confirm it. */}
-        <Pressable testID="research-row" onPress={() => setResearchOpen(true)} className="mt-1 flex-row items-center gap-2 py-2">
-          <Text variant="caption" className="text-teal">{search.trim() ? `Not finding it? Research “${search.trim()}”…` : "Not finding it? Research an ingredient…"}</Text>
-        </Pressable>
       </ScrollView>
       <IngredientResearchSheet
         visible={researchOpen}
