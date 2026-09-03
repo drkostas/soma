@@ -8,6 +8,14 @@
  */
 import type { QueryFn } from "./db";
 
+/** The picker's categories; shrink priority for auto-rebalance per docs/plans/2026-03-16 (carb 1, fat 2, protein 3, vegetable 999).
+ *  (Kept here, not in the route file: a Next.js route may only export HTTP handlers.) */
+export const CATEGORIES = ["carbs", "condiment", "dairy", "dessert", "drink", "fat", "fruit", "grain", "protein", "restaurant", "sauce", "snack", "supplement", "treat", "vegetable"] as const;
+export const SHRINK_BY_CATEGORY: Record<string, number> = {
+  carbs: 1, grain: 1, fruit: 1, fat: 2, condiment: 2, sauce: 2, dairy: 2, dessert: 2, drink: 2, snack: 2, treat: 2, restaurant: 2,
+  protein: 3, supplement: 3, vegetable: 999,
+};
+
 export interface Proposal {
   name: string;
   brand?: string | null;

@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { CATEGORIES, SHRINK_BY_CATEGORY } from "@/lib/ingredient-research";
 
 export const dynamic = "force-dynamic";
 
-/** The picker's categories; shrink priority for auto-rebalance per docs/plans/2026-03-16 (carb 1, fat 2, protein 3, vegetable 999). */
-export const CATEGORIES = ["carbs", "condiment", "dairy", "dessert", "drink", "fat", "fruit", "grain", "protein", "restaurant", "sauce", "snack", "supplement", "treat", "vegetable"] as const;
-export const SHRINK_BY_CATEGORY: Record<string, number> = {
-  carbs: 1, grain: 1, fruit: 1, fat: 2, condiment: 2, sauce: 2, dairy: 2, dessert: 2, drink: 2, snack: 2, treat: 2, restaurant: 2,
-  protein: 3, supplement: 3, vegetable: 999,
-};
 
 interface ConfirmBody {
   proposal_id: number;
