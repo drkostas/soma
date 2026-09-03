@@ -11,10 +11,19 @@ tags:
 - openLink: ${ROUTE}
 - waitForAnimationToEnd:
     timeout: 10000
+# The log panel opens from a slot card ("+ Log Breakfast"), which sits below the fold.
+- scrollUntilVisible:
+    element:
+      text: "[+] Log Breakfast"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+- tapOn:
+    text: "[+] Log Breakfast"
 - extendedWaitUntil:
     visible:
       text: "Compose"
-    timeout: 30000
+    timeout: 20000
 - tapOn:
     text: "Compose"
 - extendedWaitUntil:
