@@ -24,13 +24,46 @@ if (!databaseUrl) { console.error("[sync] DATABASE_URL not set"); process.exit(1
 const sql = neon(databaseUrl) as unknown as QueryFn;
 const webBaseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.SOMA_WEB_URL || "https://soma.gkos.dev";
 
+// Run record (#643): one sync_log row per pipeline run so /api/sync/status and the
+// Connections screen reflect THIS pipeline, not the retired Python one (its last row
+// was 2026-07-16). Derived, never asserted: "last sync" is simply the newest row.
+const startedAt = new Date();
+const failures: string[] = [];
+let stepsRun = 0;
+let recordsTouched = 0;
+
+/** Sum every numeric leaf of a step result — a coarse "records touched" count. */
+function countNumbers(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.max(0, Math.trunc(v));
+  if (Array.isArray(v)) return v.reduce<number>((a, x) => a + countNumbers(x), 0);
+  if (v && typeof v === "object") return Object.values(v).reduce<number>((a, x) => a + countNumbers(x), 0);
+  return 0;
+}
+
 async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
   const t0 = Date.now();
+  stepsRun++;
   try {
     const r = await fn();
+    recordsTouched += countNumbers(r);
     console.log(`[sync] ${name} OK (${Date.now() - t0}ms):`, JSON.stringify(r));
   } catch (e) {
+    failures.push(`${name}: ${(e as Error).message}`);
     console.error(`[sync] ${name} FAILED (${Date.now() - t0}ms):`, (e as Error).message);
+  }
+}
+
+/** Append the run to sync_log. Policy: a failed INSERT never fails the pipeline. */
+async function recordRun(): Promise<void> {
+  const status = failures.length === 0 ? "success" : failures.length === stepsRun ? "failed" : "partial";
+  const error = failures.length ? failures.join("; ").slice(0, 2000) : null;
+  try {
+    await sql`
+      INSERT INTO sync_log (sync_type, status, records_synced, error_message, started_at, completed_at)
+      VALUES ('full_pipeline', ${status}, ${recordsTouched}, ${error}, ${startedAt.toISOString()}, NOW())`;
+    console.log(`[sync] run recorded: ${status}, ${recordsTouched} records, ${failures.length}/${stepsRun} steps failed`);
+  } catch (e) {
+    console.error("[sync] could not record the run in sync_log:", (e as Error).message);
   }
 }
 
@@ -77,4 +110,5 @@ if (garminClient) {
 // 5. Telegram + push notifications for workouts now on Garmin.
 await step("notify", () => notifyPendingWorkouts(sql));
 
+await recordRun();
 console.log("[sync] pipeline complete");
