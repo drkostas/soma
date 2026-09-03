@@ -31,6 +31,16 @@ function hasApiToken(req: { headers: Headers }): boolean {
   return req.headers.get("authorization") === `Bearer ${token}`;
 }
 
+/** Does the request carry the shared chat-tunnel token? The Vercel proxy sets it on every
+    forwarded /api/chat* request (chat-transport.ts). Scoped to /api/chat* only; the chat routes
+    validate it again (requireToken). Without this, the tunnel only worked while DEMO_MODE let
+    anonymous requests through — the demo gate was doing the boundary's job (soma#671). */
+function hasChatToken(req: { headers: Headers }): boolean {
+  const token = process.env.SOMA_CHAT_TOKEN?.trim();
+  if (!token) return false;
+  return req.headers.get("x-soma-chat-token") === token;
+}
+
 export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
@@ -41,6 +51,9 @@ export default auth((req) => {
 
   // Personal API token: native apps + widgets reach /api/* without a session.
   if (isApi && hasApiToken(req)) return withTokenCors(NextResponse.next());
+
+  // Chat tunnel: the shared chat token reaches /api/chat* without a session or demo mode.
+  if (isApi && pathname.startsWith("/api/chat") && hasChatToken(req)) return NextResponse.next();
 
   // Demo mode: READ-ONLY. Reads and page views need no auth, but every /api/*
   // handler runs auth-less here, so an anonymous visitor could otherwise POST/
