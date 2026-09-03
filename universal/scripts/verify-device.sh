@@ -9,6 +9,7 @@
 #   universal/scripts/verify-device.sh overview            # auto marker: today's steps
 #   universal/scripts/verify-device.sh overview --activities   # auto marker: lifetime activity count
 #   universal/scripts/verify-device.sh running --marker "202 runs"   # explicit marker
+#   universal/scripts/verify-device.sh playlist-builder --flow .maestro/verify-builder-save.yaml --marker "On Spotify" --env "RUN=Athens Running"   # a mutation flow
 #   ANDROID_SERIAL=100.99.159.74:5555 universal/scripts/verify-device.sh overview   # the phone
 #
 # Needs: ~/.config/soma/app.env (EXPO_PUBLIC_API_URL + EXPO_PUBLIC_API_TOKEN, chmod 600,
@@ -17,12 +18,14 @@
 set -euo pipefail
 
 SCREEN="${1:-overview}"; shift || true
-MODE="auto"; MARKER=""; DRY=0
+MODE="auto"; MARKER=""; DRY=0; FLOW_OVERRIDE=""; EXTRA_ENV=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --marker) MARKER="$2"; MODE="explicit"; shift 2;;
     --activities) MODE="activities"; shift;;
-    --dry) DRY=1; shift;;                       # resolve + print the marker, don't touch the device
+    --dry) DRY=1; shift;;
+    --flow) FLOW_OVERRIDE="$2"; shift 2;;            # run this Maestro flow instead of verify-screen.yaml (relative to universal/)
+    --env) EXTRA_ENV+=(-e "$2"); shift 2;;            # extra -e KEY=VALUE for the flow (repeatable)                       # resolve + print the marker, don't touch the device
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -129,9 +132,11 @@ echo "verify $SCREEN on $DEV — expecting live marker: '$MARKER'  (from $EXPO_P
 [ "$DRY" = 1 ] && { echo "DRY $SCREEN: marker='$MARKER' regex='$MARKER_RE'"; exit 0; }
 
 # 3. Drive the device: open the screen, wait for the marker to be visible.
+if [ -n "$FLOW_OVERRIDE" ]; then case "$FLOW_OVERRIDE" in /*) FLOW="$FLOW_OVERRIDE";; *) FLOW="$HERE/$FLOW_OVERRIDE";; esac; fi
+[ -f "$FLOW" ] || { echo "FAIL: flow not found: $FLOW"; exit 2; }
 set +e
 ( cd "$HERE" && "$MAESTRO" --device "$DEV" test \
-    -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER_RE" -e SCREEN="$SCREEN" \
+    -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER_RE" -e SCREEN="$SCREEN" "${EXTRA_ENV[@]}" \
     "$FLOW" ) > "$OUT/$SCREEN.maestro.log" 2>&1
 RC=$?
 set -e
