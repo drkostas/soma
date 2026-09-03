@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useState, useMemo } from "react";
 import { MACRO_COLORS } from "soma-style/colors";
 import { Trash2, Plus, ChevronDown, ChevronUp, X } from "lucide-react";
@@ -177,6 +179,7 @@ export function MealCard({
   const [skipping, setSkipping] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
+  const router = useRouter();   // T3a: refresh the server-loaded ingredient list after a confirm
   const [composedPortions, setComposedPortions] = useState<PortionResult[] | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
@@ -869,6 +872,7 @@ export function MealCard({
               onToggle={handleToggleIngredient}
               onDone={handleIngredientsDone}
               onCancel={handleComposeCancel}
+              onIngredientAdded={(ing) => { setSelectedIngredients((prev) => new Set(prev).add(ing.id)); router.refresh(); }}
             />
           )}
 
