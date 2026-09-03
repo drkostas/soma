@@ -1,0 +1,59 @@
+# T3a.5 — a REAL mutation on device: research a food the catalog does not have, pick the first
+# candidate, fill any unknown macro (an unknown is never 0), confirm, and see it in the picker.
+#   universal/scripts/verify-device.sh nutrition --flow .maestro/verify-ingredient-research.yaml --marker "<expected name>" --env QUERY=skyr
+appId: dev.gkos.soma
+name: Soma ingredient research → confirm
+tags:
+  - verify
+  - mutation
+---
+- stopApp
+- openLink: ${ROUTE}
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "Compose"
+    timeout: 30000
+- tapOn:
+    text: "Compose"
+- extendedWaitUntil:
+    visible:
+      id: "research-row"
+    timeout: 20000
+- tapOn:
+    id: "research-row"
+- extendedWaitUntil:
+    visible:
+      id: "research-query"
+    timeout: 10000
+- tapOn:
+    id: "research-query"
+- inputText: ${QUERY}
+- hideKeyboard
+- tapOn:
+    id: "research-go"
+- extendedWaitUntil:
+    visible:
+      id: "proposal-0"
+    timeout: 90000
+- takeScreenshot: verify-research-proposals
+- tapOn:
+    id: "proposal-0"
+- extendedWaitUntil:
+    visible:
+      id: "research-confirm"
+    timeout: 10000
+# Open Food Facts rows often lack fiber; the form refuses an empty macro, so fill it explicitly.
+- tapOn:
+    id: "macro-fiber_per_100g"
+- inputText: "0"
+- hideKeyboard
+- takeScreenshot: verify-research-form
+- tapOn:
+    id: "research-confirm"
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 30000
+- takeScreenshot: verify-${SCREEN}
