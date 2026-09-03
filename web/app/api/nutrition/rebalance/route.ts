@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   let calToRemove = Math.abs(remaining);
 
   // 4. Get ingredient shrink priorities
-  const ingredientRows = await sql`SELECT id, shrink_priority, calories_per_100g FROM ingredients`;
+  const ingredientRows = await sql`SELECT id, shrink_priority, calories_per_100g FROM ingredients WHERE status = 'confirmed'`;
   const ingMap: Record<string, { priority: number; calPer100g: number }> = {};
   for (const r of ingredientRows) {
     ingMap[r.id as string] = {
