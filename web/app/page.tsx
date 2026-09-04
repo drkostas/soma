@@ -493,7 +493,8 @@ async function getLatestSleep() {
     SELECT
       (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int as total,
       (raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'value')::int as score,
-      (raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'qualifierKey') as quality
+      (raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'qualifierKey') as quality,
+      date::text as date
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
@@ -873,7 +874,15 @@ export default async function HomePage({
               const secs = health?.sleep_time_seconds || latestSleep?.total;
               return secs ? `${(secs / 3600).toFixed(1)}h` : "—";
             })(),
-            subtitle: latestSleep?.score ? `Score: ${latestSleep.score}` : undefined,
+            // The value falls back to the latest recorded night; say WHEN that was
+            // once it is older than last night, instead of passing it off as today's (#647).
+            subtitle: (() => {
+              const score = latestSleep?.score ? `Score: ${latestSleep.score}` : "";
+              const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+              const stale = !health?.sleep_time_seconds && latestSleep?.date && latestSleep.date < yesterday;
+              const when = stale ? `last recorded ${latestSleep.date}` : "";
+              return [score, when].filter(Boolean).join(" · ") || undefined;
+            })(),
             icon: <Moon className="h-4 w-4 text-indigo-400" />,
             info: "Total sleep time from Garmin sleep tracking. Recommended: 7-9 hours",
             trend: sleepTrendPct != null ? { value: sleepTrendPct, label: "7-day avg vs prior week" } : null,

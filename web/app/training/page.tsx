@@ -50,6 +50,9 @@ async function getRaceInfo() {
 
 async function getReadiness() {
   const sql = getDb();
+  // Today's row only: readiness is about last night, so an older row is not a
+  // fallback — with no row the card says "No readiness data" (#647).
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const rows = await safeQuery(
     () => sql`
       SELECT r.composite_score, r.traffic_light,
@@ -57,7 +60,7 @@ async function getReadiness() {
              h.training_readiness_level AS garmin_readiness_level
       FROM daily_readiness r
       LEFT JOIN daily_health_summary h ON r.date = h.date
-      ORDER BY r.date DESC
+      WHERE r.date = ${today}
       LIMIT 1
     `,
     [],

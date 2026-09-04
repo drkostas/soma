@@ -132,6 +132,7 @@ const TL_COLOR: Record<string, string> = {
   amber: "#e0a458",
   yellow: "#e0a458",
   red: "#e06060",
+  unknown: "#9aa3ad",
 };
 
 function formDescriptor(tsb: number): string {
@@ -228,7 +229,11 @@ export default function OverviewScreen() {
                 <Badge label={readiness.traffic_light.toUpperCase()} tone={TL_TONE[readiness.traffic_light] ?? "teal"} />
               </View>
               <View className="flex-row items-end gap-2">
-                {readiness.composite_score != null && readiness.composite_score > 0 ? (
+                {readiness.traffic_light === "unknown" ? (
+                  <Text variant="caption" className="text-text-muted">
+                    No sleep data for last night — readiness unknown until the watch syncs a night.
+                  </Text>
+                ) : readiness.composite_score != null && readiness.composite_score > 0 ? (
                   <>
                     <Text variant="display" style={{ color: TL_COLOR[readiness.traffic_light] ?? "#77c8d1" }}>
                       {readinessScore(readiness.composite_score)}
