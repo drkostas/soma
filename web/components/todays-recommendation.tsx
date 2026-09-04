@@ -59,6 +59,10 @@ export function TodaysRecommendation({
   } else if (trafficLight === "yellow") {
     detail = `Readiness YELLOW — keep it easy. ${adjustedPace ? `Target ${formatPace(adjustedPace)}/km` : ""}`;
     bgClass = "bg-yellow-500/5 border-yellow-500/20";
+  } else if (trafficLight === "unknown") {
+    icon = <AlertTriangle className="h-5 w-5 text-muted-foreground" />;
+    detail = "Readiness unknown — no sleep data for last night. Train by feel and keep hard sessions honest.";
+    bgClass = "bg-muted/30 border-muted";
   } else {
     // Green
     if (isHard) {

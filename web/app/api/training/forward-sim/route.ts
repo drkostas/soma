@@ -99,7 +99,7 @@ export async function GET() {
   const pmc = pmcRows[0] ?? { ctl: 0, atl: 0, tsb: 0 };
   const fitness = fitnessRows[0] ?? { vo2max: 47, vdot_adjusted: 47, weight_kg: 80.5 };
   const banister = banisterRows[0] ?? { p0: 0, k1: 0.05, k2: 0.08, tau1: 42, tau2: 7, n_anchors: 0, current_vdot: 0 };
-  const readiness = readinessRows[0] ?? { composite_score: 0, traffic_light: "green", flags: [] };
+  const readiness = readinessRows[0] ?? { composite_score: null, traffic_light: "unknown", flags: [] };
   const calib = calibRows[0] ?? { phase: 1, data_days: 0, weights: { hrv: 0.25, sleep: 0.25, rhr: 0.25, bb: 0.25 }, force_equal: false };
 
   // Race-calibrated VDOT from Banister model — no Garmin fallback

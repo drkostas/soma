@@ -25,17 +25,22 @@ export interface ReadinessSignals {
   sleep_z: number | null;
   rhr_z: number | null;
   bb_z: number | null;
-  sleep_hours: number;
+  /** Last night's sleep in hours; null when the night is missing (#647). */
+  sleep_hours: number | null;
   body_battery_morning?: number | null;
 }
+
+/** "unknown" = last night is missing; never rendered as green. */
+export type TrafficLight = "green" | "yellow" | "red" | "unknown";
 
 export interface Readiness {
   hrv_z_score: number | null;
   sleep_z_score: number | null;
   rhr_z_score: number | null;
   body_battery_z_score: number | null;
-  composite_score: number;
-  traffic_light: "green" | "yellow" | "red";
+  /** null when the light is unknown (no last-night inputs to score). */
+  composite_score: number | null;
+  traffic_light: TrafficLight;
   flags: string[];
 }
 
@@ -49,22 +54,27 @@ export function computeReadiness(signals: ReadinessSignals): Readiness {
   const composite = zValues.length ? zValues.reduce((a, b) => a + b, 0) / zValues.length : 0.0;
 
   const flags: string[] = [];
-  let trafficLight: "green" | "yellow" | "red" = "green";
+  // Last night is the anchor of a readiness call. Without it (watch not worn, sleep
+  // not synced) the light is "unknown" — never green by default (#647). Hard safety
+  // overrides below can still force RED from the inputs that do exist.
+  const unknown = sleep_hours === null || sleep_hours === undefined;
+  let trafficLight: TrafficLight = unknown ? "unknown" : "green";
 
-  if (sleep_hours < 5.0) { flags.push("sleep_under_5h"); trafficLight = "red"; }
+  if (unknown) flags.push("no_sleep_data");
+  else if (sleep_hours < 5.0) { flags.push("sleep_under_5h"); trafficLight = "red"; }
   if (bodyBatteryMorning !== null && bodyBatteryMorning < 25) { flags.push("body_battery_critical"); trafficLight = "red"; }
   if (hrv_z !== null && hrv_z !== undefined && hrv_z < -0.5) flags.push("hrv_below_swc");
 
   const flaggedCount = zValues.filter((z) => z < -1.0).length;
   if (flaggedCount >= 3) { flags.push("3_of_4_flagged"); trafficLight = "red"; }
-  else if (flaggedCount >= 2 && trafficLight !== "red") { flags.push("2_of_4_flagged"); trafficLight = "yellow"; }
+  else if (flaggedCount >= 2 && trafficLight === "green") { flags.push("2_of_4_flagged"); trafficLight = "yellow"; }
 
   return {
     hrv_z_score: hrv_z,
     sleep_z_score: sleep_z,
     rhr_z_score: rhr_z,
     body_battery_z_score: bb_z,
-    composite_score: r(composite, 4),
+    composite_score: trafficLight === "unknown" ? null : r(composite, 4),
     traffic_light: trafficLight,
     flags,
   };
@@ -87,7 +97,7 @@ export async function computeDailyReadiness(sql: QueryFn, targetDate: string): P
 
   const noData = (flag: string): Readiness => ({
     hrv_z_score: null, sleep_z_score: null, rhr_z_score: null, body_battery_z_score: null,
-    composite_score: 0.0, traffic_light: "green", flags: [flag],
+    composite_score: null, traffic_light: "unknown", flags: [flag],
   });
   if (!rows.length) return noData("no_data");
 
@@ -110,7 +120,9 @@ export async function computeDailyReadiness(sql: QueryFn, targetDate: string): P
   const rhrZ = rhrRaw !== null ? -rhrRaw : null; // inverted
   const bbZ = todayBb !== null ? zScore(todayBb, baseline("body_battery_at_wake")) : null;
 
-  const sleepHours = todaySleep !== null ? todaySleep / 3600.0 : 8.0;
+  // No default night: a missing sleep_time_seconds stays null and yields "unknown"
+  // (the old 8.0 h stand-in produced a green light from resting HR alone; #647).
+  const sleepHours = todaySleep !== null ? todaySleep / 3600.0 : null;
 
   const result = computeReadiness({
     hrv_z: hrvZ, sleep_z: sleepZ, rhr_z: rhrZ, bb_z: bbZ,
