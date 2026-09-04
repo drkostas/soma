@@ -1,0 +1,28 @@
+# Soma verify flow: the GPS route map inside an activity detail (T1 gap: "maps unverified on
+# device"). Opens the running screen, taps the newest route thumbnail (its name is passed in as
+# TAP from the live API), and waits for the map caption the native RouteMap renders under real
+# tiles. Run via: universal/scripts/verify-device.sh running --flow .maestro/verify-route-map.yaml \
+#   --marker "green start, red finish" --env TAP="<first route name>"
+appId: dev.gkos.soma
+name: Soma verify route map
+tags:
+  - verify
+---
+- stopApp
+- openLink: ${ROUTE}
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "Recent routes"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+- tapOn:
+    text: "${TAP}"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- takeScreenshot: verify-${SCREEN}
