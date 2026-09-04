@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   const sql = getDb();
   const [readiness] = await sql`
-    SELECT traffic_light, composite_score, hrv_z_score, sleep_z_score, rhr_z_score, body_battery_z_score
+    SELECT traffic_light, composite_score, hrv_z_score, sleep_z_score, rhr_z_score, body_battery_z_score, flags
     FROM daily_readiness WHERE date = ${date}
   `;
   const [pmc] = await sql`
@@ -22,7 +22,11 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     date,
-    readiness: readiness || null,
+    // No row for the date = nothing to score yet: say "unknown", never nothing (#647).
+    readiness: readiness || {
+      traffic_light: "unknown", composite_score: null, hrv_z_score: null, sleep_z_score: null,
+      rhr_z_score: null, body_battery_z_score: null, flags: ["no_data"],
+    },
     pmc: pmc || null,
     fitness: fitness || null,
   });

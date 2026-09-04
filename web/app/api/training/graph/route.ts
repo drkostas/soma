@@ -65,7 +65,11 @@ export async function GET(request: Request) {
           (SELECT body_battery_max FROM daily_health_summary WHERE date <= ${date} AND body_battery_max IS NOT NULL ORDER BY date DESC LIMIT 1) as body_battery_max,
           (SELECT sleep_time_seconds FROM daily_health_summary WHERE date <= ${date} AND sleep_time_seconds IS NOT NULL ORDER BY date DESC LIMIT 1) as sleep_time_seconds,
           (SELECT resting_heart_rate FROM daily_health_summary WHERE date <= ${date} AND resting_heart_rate IS NOT NULL ORDER BY date DESC LIMIT 1) as resting_heart_rate,
-          (SELECT date::text FROM daily_health_summary WHERE date <= ${date} ORDER BY date DESC LIMIT 1) as data_date
+          (SELECT date::text FROM daily_health_summary WHERE date <= ${date} ORDER BY date DESC LIMIT 1) as data_date,
+          (SELECT avg_overnight_hrv FROM daily_health_summary WHERE date = ${date}) as avg_overnight_hrv_today,
+          (SELECT sleep_time_seconds FROM daily_health_summary WHERE date = ${date}) as sleep_time_seconds_today,
+          (SELECT body_battery_at_wake FROM daily_health_summary WHERE date = ${date}) as body_battery_at_wake_today,
+          (SELECT date::text FROM daily_health_summary WHERE date <= ${date} AND sleep_time_seconds IS NOT NULL ORDER BY date DESC LIMIT 1) as sleep_data_date
       `.catch(() => []),
       sql`
         SELECT phase, data_days, weights, force_equal
@@ -102,6 +106,15 @@ export async function GET(request: Request) {
   const sleepHours = sleepSec != null ? sleepSec / 3600 : null;
   const rhrRaw = health ? Number(health.resting_heart_rate) || null : null;
   const bbRaw = health ? Number(health.body_battery_at_wake) || null : null;
+  // Same-day inputs for the hard overrides AND the raw HRV/sleep/body-battery nodes
+  // (#647): the model computation for a date must show that date's inputs, and a
+  // safety rule must never fire from a night that is days old. Missing today → the rule stays off and no_sleep_data
+  // says so instead.
+  const hrvToday = health ? Number(health.avg_overnight_hrv_today) || null : null;
+  const sleepSecToday = health ? Number(health.sleep_time_seconds_today) || null : null;
+  const sleepHoursToday = sleepSecToday != null ? sleepSecToday / 3600 : null;
+  const bbToday = health ? Number(health.body_battery_at_wake_today) || null : null;
+  const sleepDataDate: string | null = (health as any)?.sleep_data_date ?? null;
   const epocRaw = pmc ? Number(pmc.daily_load) || null : null;
   const weightKg = fitness ? Number(fitness.weight_kg) || null : null;
 
@@ -179,10 +192,10 @@ export async function GET(request: Request) {
 
   const nodes: GraphNode[] = [
     // Raw layer — raw values don't have a natural neutral; mirror their z-score activation
-    { id: "hrv_raw", column: "raw", label: "HRV (overnight)", value: hrvRaw, unit: "ms", color: colorForNode("hrv_z", hrvZ), normalizedValue: zNorm(hrvZ), tooltip: { ...tooltip("hrv_raw"), inputs: [] } },
-    { id: "sleep_raw", column: "raw", label: "Sleep", value: sleepHours != null ? round(sleepHours, 1) : null, unit: "h", color: colorForNode("sleep_z", sleepZ), normalizedValue: zNorm(sleepZ), tooltip: { ...tooltip("sleep_raw"), inputs: [] } },
+    { id: "hrv_raw", column: "raw", label: "HRV (overnight)", value: hrvToday, unit: "ms", color: colorForNode("hrv_z", hrvZ), normalizedValue: zNorm(hrvZ), tooltip: { ...tooltip("hrv_raw"), inputs: [] } },
+    { id: "sleep_raw", column: "raw", label: "Sleep", value: sleepHoursToday != null ? round(sleepHoursToday, 1) : null, unit: "h", color: colorForNode("sleep_z", sleepZ), normalizedValue: zNorm(sleepZ), tooltip: { ...tooltip("sleep_raw"), inputs: [] } },
     { id: "rhr_raw", column: "raw", label: "RHR", value: rhrRaw, unit: "bpm", color: colorForNode("rhr_z", rhrZ), normalizedValue: zNorm(rhrZ), tooltip: { ...tooltip("rhr_raw"), inputs: [] } },
-    { id: "bb_raw", column: "raw", label: "Body Battery", value: bbRaw, unit: "/100", color: colorForNode("bb_z", bbZ), normalizedValue: zNorm(bbZ), tooltip: { ...tooltip("bb_raw"), inputs: [] } },
+    { id: "bb_raw", column: "raw", label: "Body Battery", value: bbToday, unit: "/100", color: colorForNode("bb_z", bbZ), normalizedValue: zNorm(bbZ), tooltip: { ...tooltip("bb_raw"), inputs: [] } },
     { id: "epoc_raw", column: "raw", label: "EPOC", value: epocRaw, unit: "", color: "oklch(0.7 0.05 250)", normalizedValue: 0, tooltip: { ...tooltip("epoc_raw"), inputs: [] } },
     { id: "weight_raw", column: "raw", label: "Weight", value: weightKg != null ? round(weightKg, 1) : null, unit: "kg", color: "oklch(0.7 0.05 250)", normalizedValue: 0, tooltip: { ...tooltip("weight_raw"), inputs: [] } },
 
@@ -299,18 +312,25 @@ export async function GET(request: Request) {
 
   // ─── Build overrides ──────────────────────────────────────
 
-  const flags: string[] = readiness?.flags ?? [];
+  // Flags only count when the readiness row is the requested day's (#647).
+  const flags: string[] = (readiness as any)?.data_date === date ? (readiness?.flags ?? []) : [];
   const overrides: Override[] = [
     {
+      rule: "no_sleep_data",
+      triggered: sleepHoursToday == null,
+      message: `No sleep data for ${date}${sleepDataDate ? ` (last night recorded: ${sleepDataDate})` : ""} — readiness unknown.`,
+      severity: "yellow",
+    },
+    {
       rule: "sleep_under_5h",
-      triggered: sleepHours != null && sleepHours < 5.0,
-      message: `Sleep under 5 hours (${sleepHours != null ? sleepHours.toFixed(1) : "?"}h) — forced RED.`,
+      triggered: sleepHoursToday != null && sleepHoursToday < 5.0,
+      message: `Sleep under 5 hours (${sleepHoursToday != null ? sleepHoursToday.toFixed(1) : "?"}h) — forced RED.`,
       severity: "red",
     },
     {
       rule: "body_battery_critical",
-      triggered: bbRaw != null && bbRaw < 25,
-      message: `Body Battery at wake < 25 (${bbRaw ?? "?"}) — forced RED.`,
+      triggered: bbToday != null && bbToday < 25,
+      message: `Body Battery at wake < 25 (${bbToday ?? "?"}) — forced RED.`,
       severity: "red",
     },
     {
