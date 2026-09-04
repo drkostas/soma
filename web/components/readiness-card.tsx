@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Activity } from "lucide-react";
 
 interface ReadinessData {
-  composite_score: number;
+  composite_score: number | null;
   traffic_light: string;
   hrv_z_score: number | null;
   sleep_z_score: number | null;
@@ -17,6 +17,7 @@ const lightColors: Record<string, string> = {
   green: "oklch(62% 0.17 142)",
   yellow: "oklch(80% 0.18 87)",
   red: "oklch(60% 0.22 25)",
+  unknown: "oklch(60% 0.02 250)",
 };
 
 function ZBar({ label, value }: { label: string; value: number | null }) {
@@ -92,7 +93,7 @@ export function ReadinessCard({ data, garminScore, garminLevel }: ReadinessCardP
     );
   }
 
-  const color = lightColors[data.traffic_light] || lightColors.green;
+  const color = lightColors[data.traffic_light] || lightColors.unknown;
   const flags = typeof data.flags === "string" ? JSON.parse(data.flags) : data.flags || [];
 
   return (
@@ -110,16 +111,17 @@ export function ReadinessCard({ data, garminScore, garminLevel }: ReadinessCardP
             style={{ backgroundColor: color }}
           >
             <span className="text-xs font-bold text-white uppercase">
-              {data.traffic_light === "green" ? "GO" : data.traffic_light === "yellow" ? "EZ" : "X"}
+              {data.traffic_light === "green" ? "GO" : data.traffic_light === "yellow" ? "EZ" : data.traffic_light === "red" ? "X" : "?"}
             </span>
           </div>
           <div>
             <div className="text-lg font-semibold tabular-nums">
-              {data.composite_score >= 0 ? "+" : ""}
-              {Number(data.composite_score).toFixed(2)}
+              {data.composite_score == null
+                ? "—"
+                : `${data.composite_score >= 0 ? "+" : ""}${Number(data.composite_score).toFixed(2)}`}
             </div>
             <div className="text-[10px] text-muted-foreground capitalize">
-              {data.traffic_light} — {data.traffic_light === "green" ? "train as planned" : data.traffic_light === "yellow" ? "reduce intensity" : "rest or easy only"}
+              {data.traffic_light} — {data.traffic_light === "green" ? "train as planned" : data.traffic_light === "yellow" ? "reduce intensity" : data.traffic_light === "red" ? "rest or easy only" : "no sleep data for last night"}
             </div>
           </div>
         </div>

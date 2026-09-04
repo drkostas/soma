@@ -65,7 +65,10 @@ export async function GET(request: Request) {
           (SELECT body_battery_max FROM daily_health_summary WHERE date <= ${date} AND body_battery_max IS NOT NULL ORDER BY date DESC LIMIT 1) as body_battery_max,
           (SELECT sleep_time_seconds FROM daily_health_summary WHERE date <= ${date} AND sleep_time_seconds IS NOT NULL ORDER BY date DESC LIMIT 1) as sleep_time_seconds,
           (SELECT resting_heart_rate FROM daily_health_summary WHERE date <= ${date} AND resting_heart_rate IS NOT NULL ORDER BY date DESC LIMIT 1) as resting_heart_rate,
-          (SELECT date::text FROM daily_health_summary WHERE date <= ${date} ORDER BY date DESC LIMIT 1) as data_date
+          (SELECT date::text FROM daily_health_summary WHERE date <= ${date} ORDER BY date DESC LIMIT 1) as data_date,
+          (SELECT sleep_time_seconds FROM daily_health_summary WHERE date = ${date}) as sleep_time_seconds_today,
+          (SELECT body_battery_at_wake FROM daily_health_summary WHERE date = ${date}) as body_battery_at_wake_today,
+          (SELECT date::text FROM daily_health_summary WHERE date <= ${date} AND sleep_time_seconds IS NOT NULL ORDER BY date DESC LIMIT 1) as sleep_data_date
       `.catch(() => []),
       sql`
         SELECT phase, data_days, weights, force_equal
@@ -102,6 +105,14 @@ export async function GET(request: Request) {
   const sleepHours = sleepSec != null ? sleepSec / 3600 : null;
   const rhrRaw = health ? Number(health.resting_heart_rate) || null : null;
   const bbRaw = health ? Number(health.body_battery_at_wake) || null : null;
+  // Same-day inputs for the hard overrides (#647). The raw nodes above fall back to
+  // the latest non-null row for display, but a safety rule must never fire from a
+  // night that is days old. Missing today → the rule stays off and no_sleep_data
+  // says so instead.
+  const sleepSecToday = health ? Number(health.sleep_time_seconds_today) || null : null;
+  const sleepHoursToday = sleepSecToday != null ? sleepSecToday / 3600 : null;
+  const bbToday = health ? Number(health.body_battery_at_wake_today) || null : null;
+  const sleepDataDate: string | null = (health as any)?.sleep_data_date ?? null;
   const epocRaw = pmc ? Number(pmc.daily_load) || null : null;
   const weightKg = fitness ? Number(fitness.weight_kg) || null : null;
 
@@ -299,18 +310,25 @@ export async function GET(request: Request) {
 
   // ─── Build overrides ──────────────────────────────────────
 
-  const flags: string[] = readiness?.flags ?? [];
+  // Flags only count when the readiness row is the requested day's (#647).
+  const flags: string[] = (readiness as any)?.data_date === date ? (readiness?.flags ?? []) : [];
   const overrides: Override[] = [
     {
+      rule: "no_sleep_data",
+      triggered: sleepHoursToday == null,
+      message: `No sleep data for ${date}${sleepDataDate ? ` (last night recorded: ${sleepDataDate})` : ""} — readiness unknown.`,
+      severity: "yellow",
+    },
+    {
       rule: "sleep_under_5h",
-      triggered: sleepHours != null && sleepHours < 5.0,
-      message: `Sleep under 5 hours (${sleepHours != null ? sleepHours.toFixed(1) : "?"}h) — forced RED.`,
+      triggered: sleepHoursToday != null && sleepHoursToday < 5.0,
+      message: `Sleep under 5 hours (${sleepHoursToday != null ? sleepHoursToday.toFixed(1) : "?"}h) — forced RED.`,
       severity: "red",
     },
     {
       rule: "body_battery_critical",
-      triggered: bbRaw != null && bbRaw < 25,
-      message: `Body Battery at wake < 25 (${bbRaw ?? "?"}) — forced RED.`,
+      triggered: bbToday != null && bbToday < 25,
+      message: `Body Battery at wake < 25 (${bbToday ?? "?"}) — forced RED.`,
       severity: "red",
     },
     {
