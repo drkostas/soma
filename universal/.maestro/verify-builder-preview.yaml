@@ -1,0 +1,44 @@
+# Soma verify flow: the Spotify embed (a WebView) inside the playlist builder — the last surface
+# the T1 audit listed as unverified on device. Generates a playlist for the newest run (RUN from
+# the live API, real Spotify reads), taps the first song of the first segment (testID song-0-0),
+# and waits for the "Preview" caption the app renders above the embed. The embed itself is a
+# WebView, so its contents are evidence in the screenshot, not in the accessibility tree.
+# Run via: universal/scripts/verify-device.sh playlist-builder --flow .maestro/verify-builder-preview.yaml \
+#   --marker "Preview" --env RUN="<newest run name>"
+appId: dev.gkos.soma
+name: Soma builder song preview (Spotify embed)
+tags:
+  - verify
+---
+- stopApp
+- openLink: ${ROUTE}
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${RUN}"
+    timeout: 30000
+- tapOn:
+    text: "${RUN}"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      text: "Generated"
+    timeout: 180000
+- scrollUntilVisible:
+    element:
+      id: "song-0-0"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+- tapOn:
+    id: "song-0-0"
+# The preview card sits below every segment card and the save row, so it is off-screen after
+# the tap (Maestro reads off-screen nodes as not visible): scroll to it rather than wait.
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+- takeScreenshot: verify-${SCREEN}
