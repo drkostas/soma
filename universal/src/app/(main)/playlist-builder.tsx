@@ -242,7 +242,7 @@ function SegmentCard({ seg, index, panel, onExclude, onWiden, onEdit, onRemove, 
           {panel?.warning ? <Text variant="micro" style={{ color: "#e0a458" }}>{panel.warning}</Text> : null}
           {songs.map((s, i) => (
             <View key={`${s.track_id}-${i}`} className="flex-row items-center gap-2 border-t border-border-subtle py-1.5">
-              <Pressable className="flex-1" onPress={() => onPreview(s)}>
+              <Pressable className="flex-1" onPress={() => onPreview(s)} testID={`song-${index}-${i}`}>
                 <Text variant="caption" className="text-text" numberOfLines={1}>{s.name}</Text>
                 <Text variant="micro" className="text-text-muted" numberOfLines={1}>
                   {s.artist_name}{s.tempo ? ` · ${Math.round(s.tempo)} bpm` : ""}{s.is_half_time ? " ·½" : ""} · {songDur(s.duration_ms)}
