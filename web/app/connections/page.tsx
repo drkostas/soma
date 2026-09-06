@@ -167,7 +167,19 @@ async function getPageData() {
         FROM strava_bridge_uploads
         ORDER BY last_sync DESC NULLS LAST
         LIMIT 11
-      `,
+      `.catch(() => sql`
+        -- The demo database has no strava_bridge_uploads: the stats without the bridge row.
+        SELECT source_platform, destination,
+               COUNT(*)::int as total,
+               COUNT(*) FILTER (WHERE status = 'sent')::int as sent_count,
+               COUNT(*) FILTER (WHERE status = 'external')::int as external_count,
+               COUNT(*) FILTER (WHERE status = 'error')::int as error_count,
+               MAX(processed_at) as last_sync
+        FROM activity_sync_log
+        GROUP BY source_platform, destination
+        ORDER BY last_sync DESC NULLS LAST
+        LIMIT 10
+      `),
       sql`
         SELECT 'garmin' as platform,
                EXISTS(SELECT 1 FROM garmin_raw_data LIMIT 1) as has_data,
