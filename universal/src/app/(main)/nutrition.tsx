@@ -57,11 +57,13 @@ function niceDate(iso: string): string {
 
 /** Color a day's deficit against the daily goal: green = met the goal deficit,
  *  amber = a deficit but short of goal, red = a surplus (ate above burn). */
+// The plan route's deficit is ate − burn: NEGATIVE when in deficit (good), positive
+// is a surplus. Same sign convention as the web's trend table (#721).
 function deficitTone(deficit: number, goalPerDay: number): string {
-  if (deficit <= 0) return "#e06060"; // surplus
-  if (goalPerDay > 0 && deficit >= goalPerDay) return "#6ad4a0"; // met goal
-  if (goalPerDay > 0) return "#e0a458"; // short of goal
-  return "#6ad4a0";
+  if (deficit > 0) return "#e06060"; // surplus
+  if (goalPerDay > 0 && deficit <= -goalPerDay) return "#6ad4a0"; // met goal
+  if (goalPerDay > 0 && deficit < 0) return "#e0a458"; // short of goal
+  return "#8a97a3";
 }
 
 function shiftDate(iso: string, days: number): string {
@@ -706,7 +708,7 @@ export default function NutritionScreen() {
               const totalActual = data?.trend7d?.totalDeficit != null
                 ? Number(data.trend7d.totalDeficit)
                 : days.reduce((s, d) => s + (d.deficit || 0), 0);
-              const goalTotal = goalPerDay * days.length;
+              const goalTotal = goalPerDay * (data?.trend7d?.closedDays ?? days.length);
               return (
                 <Card className="gap-0.5">
                   <View className="flex-row justify-between pb-1">
@@ -715,24 +717,41 @@ export default function NutritionScreen() {
                       ate / burn · deficit{goalPerDay > 0 ? ` · goal −${Math.round(goalPerDay)}/day` : ""}
                     </Text>
                   </View>
-                  {days.map((d) => (
-                    <View key={d.date} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
-                      <Text variant="caption" className={d.isToday ? "font-semibold text-teal" : "text-text-secondary"}>
-                        {niceDate(d.date).replace(/,.*/, "").slice(0, 3)} {d.date.slice(8)}
-                      </Text>
-                      <Text variant="caption" className="tabular-nums text-text-muted">{Math.round(d.ate)} / {Math.round(d.burn)}</Text>
-                      <Text variant="caption" className="w-16 text-right tabular-nums" style={{ color: deficitTone(d.deficit, goalPerDay) }}>
-                        {d.deficit > 0 ? "+" : ""}{Math.round(d.deficit)}
+                  {days.map((d) => {
+                    // Same three readings as the web table (#703/#717/#721): a day with
+                    // nothing logged shows "–"; an open day (today or never closed) shows
+                    // its running log in parentheses; only a counted day earns a colour.
+                    const unobserved = (d.coverage ?? 0) === 0 && !(d.ate > 0);
+                    const open = !d.closed;
+                    const counted = d.counted === true;
+                    const ateText = unobserved ? "–" : open ? `(${Math.round(d.ate)})` : String(Math.round(d.ate));
+                    const defText = unobserved ? "–" : `${open ? "(" : ""}${d.deficit > 0 ? "+" : ""}${Math.round(d.deficit)}${open ? ")" : ""}`;
+                    return (
+                      <View key={d.date} className="flex-row items-center justify-between border-b border-border-subtle py-1.5" testID={`trend-row-${d.date}`}>
+                        <Text variant="caption" className={d.isToday ? "font-semibold text-teal" : "text-text-secondary"}>
+                          {niceDate(d.date).replace(/,.*/, "").slice(0, 3)} {d.date.slice(8)}
+                        </Text>
+                        <Text variant="caption" className="tabular-nums text-text-muted">{ateText} / {Math.round(d.burn)}</Text>
+                        <Text variant="caption" className="w-16 text-right tabular-nums" style={{ color: counted ? deficitTone(d.deficit, goalPerDay) : "#8a97a3" }}>
+                          {defText}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                  {/* A total over a partly logged week is not a week's deficit (#699/#703). */}
+                  {data?.engagement?.state === "complete" && (data?.trend7d?.closedDays ?? 0) > 0 ? (
+                    <View className="flex-row items-center justify-between pt-1.5">
+                      <Text variant="caption" className="font-semibold text-text">Total ({data?.trend7d?.closedDays}d)</Text>
+                      <Text variant="caption" className="tabular-nums text-text-muted">{Math.round(sumAte)} / {Math.round(sumBurn)}</Text>
+                      <Text variant="caption" className="w-16 text-right font-semibold tabular-nums" style={{ color: deficitTone(totalActual, goalTotal) }}>
+                        {totalActual > 0 ? "+" : ""}{Math.round(totalActual)}
                       </Text>
                     </View>
-                  ))}
-                  <View className="flex-row items-center justify-between pt-1.5">
-                    <Text variant="caption" className="font-semibold text-text">Total ({days.length}d)</Text>
-                    <Text variant="caption" className="tabular-nums text-text-muted">{Math.round(sumAte)} / {Math.round(sumBurn)}</Text>
-                    <Text variant="caption" className="w-16 text-right font-semibold tabular-nums" style={{ color: deficitTone(totalActual, goalTotal) }}>
-                      {totalActual > 0 ? "+" : ""}{Math.round(totalActual)}
+                  ) : (
+                    <Text variant="micro" className="pt-1.5 text-text-muted">
+                      Weekly total shows after {data?.engagement?.weekFloorDays ?? 3} full days.
                     </Text>
-                  </View>
+                  )}
                 </Card>
               );
             })() : (

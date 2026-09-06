@@ -80,7 +80,8 @@ export interface SomaBreakdown {
   targetIntake?: number;
   adjustedTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number };
 }
-export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean }
+/** One 7-day trend row. `counted` = closed AND over the coverage floor (#699); only those feed totals or earn a colour. */
+export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean; coverage?: number | null; counted?: boolean }
 export interface LoggedDrink {
   id: number; name: string; drink_type: string; quantity: number;
   calories: number; carbs?: number; alcohol_grams?: number; fat_oxidation_pause_hours?: number;
@@ -100,7 +101,7 @@ export interface SomaPlan {
   trend7d?: {
     adherence?: { ratio: number; status: string; weeklyActual: number; weeklyGoal: number } | null;
     days?: TrendDay[];
-    totalDeficit?: number; goalDeficit?: number;
+    totalDeficit?: number; goalDeficit?: number; closedDays?: number;
   };
   /** Is nutrition in use this week (#698/#714). Gate the log-derived numbers on state === "complete". */
   engagement?: { state: "absent" | "partial" | "complete"; coverage: number; basis: string; weekFloorDays?: number };

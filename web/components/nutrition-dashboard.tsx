@@ -890,11 +890,16 @@ export function NutritionDashboard({
                             const deficitColor = d.deficit <= -trend7d.goalDeficit ? "text-green-500"
                               : d.deficit < 0 ? "text-amber-500"
                               : d.deficit > 0 ? "text-rose-500" : "text-muted-foreground";
-                            const isInProgress = d.isToday && !d.closed;
+                            // Any open day is in progress, today or a past day never
+                            // closed: its ate is the running log (#717), so it reads
+                            // parenthesised and muted, never as a settled deficit.
+                            const isInProgress = !d.closed;
                             // A day with nothing logged has no deficit to show, in
                             // progress or not: "(−2363)" for an unlogged today is the
                             // same fabrication the hero no longer makes (#703).
                             const unobserved = (d.coverage ?? 0) === 0 && !(d.ate > 0);
+                            // Colour is a verdict; only a counted day earns one (#699).
+                            const tone = d.counted ? deficitColor : "text-muted-foreground";
                             return (
                               <React.Fragment key={d.date}>
                                 <span>
@@ -903,10 +908,10 @@ export function NutritionDashboard({
                                     ate {unobserved ? "–" : isInProgress ? `(${d.ate})` : d.ate} · burn {d.burn}
                                   </span>
                                 </span>
-                                <span className={`tabular-nums text-right hidden sm:block ${isInProgress ? "text-muted-foreground" : ""}`}>
+                                <span className={`tabular-nums text-right hidden sm:block ${isInProgress ? "text-muted-foreground" : ""}`} data-testid={`trend-ate-${d.date}`}>
                                   {unobserved ? "\u2013" : isInProgress ? `(${d.ate})` : d.ate || "\u2013"} / {d.burn || "\u2013"}
                                 </span>
-                                <span className={`tabular-nums text-right font-medium ${isInProgress || !(d.ate > 0) ? "text-muted-foreground" : deficitColor}`}>
+                                <span className={`tabular-nums text-right font-medium ${tone}`} data-testid={`trend-deficit-${d.date}`} data-counted={d.counted ? "1" : "0"}>
                                   {unobserved
                                     ? "\u2013"
                                     : isInProgress

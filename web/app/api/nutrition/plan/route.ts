@@ -8,6 +8,7 @@ import { computeWeeklyAdherence } from "@/lib/adherence";
 import { meetsCoverageFloor } from "@/lib/coverage";
 import { nutritionEngagement, WEEK_ENGAGEMENT_FLOOR_DAYS } from "@/lib/engagement";
 import { getWeightTrend } from "@/lib/weight-trend";
+import { trendAte } from "@/lib/trend-ate";
 import { computeAlcoholDisplacement } from "macro-engine-core";
 
 export const runtime = "edge";
@@ -496,7 +497,13 @@ export async function GET(req: NextRequest) {
           SELECT unnest(COALESCE(n.skipped_slots, ARRAY[]::text[]))
         ) u
         WHERE u.s IN ('breakfast', 'lunch', 'dinner', 'pre_sleep')
-      ) AS coverage
+      ) AS coverage,
+      (
+        -- What was actually logged that day. Open days read this; closed
+        -- days keep actual_calories, which close-day reconciled (#717).
+        SELECT COALESCE((SELECT SUM(m.calories) FROM meal_log m WHERE m.date = n.date), 0)
+             + COALESCE((SELECT SUM(d.calories) FROM drink_log d WHERE d.date = n.date), 0)
+      ) AS logged_calories
     FROM nutrition_day n
     WHERE n.date >= ${date}::date - interval '6 days'
       AND n.date <= ${date}::date
@@ -531,7 +538,13 @@ export async function GET(req: NextRequest) {
     goalDeficit,
     days: trendRows.map((r: Record<string, unknown>) => {
       const isCurrentDay = String(r.date) === date;
-      const ate = isCurrentDay ? consumed.calories : (Number(r.actual_calories) || 0);
+      const ate = trendAte({
+        isToday: isCurrentDay,
+        closed: r.status === "closed",
+        actualCalories: r.actual_calories as number | null,
+        loggedCalories: r.logged_calories as number | null,
+        todayConsumed: consumed.calories,
+      });
       const burn = Math.round(computeBurn(r, isCurrentDay));
       const deficit = ate - burn; // negative = deficit (good), positive = surplus (bad)
       return {
