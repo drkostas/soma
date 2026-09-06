@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { deficitWindow, countsForDeficit, windowLabel } from "@/lib/deficit-window";
 
 export const runtime = "edge";
 
@@ -167,6 +168,15 @@ export async function GET() {
   const deficitRows = await sql`
     SELECT n.date::text AS date, n.target_calories, n.actual_calories, n.deficit_used, n.status,
            h.total_kilocalories AS garmin_burn, h.bmr_kilocalories AS bmr, h.total_steps,
+           (
+             SELECT COUNT(DISTINCT s)::float / 4
+             FROM (
+               SELECT m.meal_slot AS s FROM meal_log m WHERE m.date = n.date AND m.calories > 0
+               UNION
+               SELECT unnest(COALESCE(n.skipped_slots, ARRAY[]::text[]))
+             ) u
+             WHERE u.s IN ('breakfast', 'lunch', 'dinner', 'pre_sleep')
+           ) AS coverage,
            COALESCE((SELECT SUM((raw_json->>'calories')::float) FROM garmin_activity_raw
              WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'running'
              AND (raw_json->>'startTimeLocal')::date = n.date), 0) AS run_cal,
@@ -194,11 +204,16 @@ export async function GET() {
   `;
   const todayConsumed = Number(todayMealRows[0]?.total || 0) + Number(todayDrinkRows[0]?.total || 0);
 
-  let cumulativeDeficit = 0;
+  // Per-day rows first; the cumulative/goal-pace series is filled afterwards
+  // over the CURRENT window only (#728): a day counts when it is closed and its
+  // coverage clears the floor, and a window breaks at a gap of more than seven
+  // days. Days outside the window are still returned for the charts, with
+  // cumulative/goalPace null, so they render as context, never as a sum.
   const dailyDeficits: {
     date: string; bmr: number; dailyActivity: number; runCal: number; runDistKm: number;
     gymCal: number; gymTitle: string; totalBurn: number; consumed: number;
-    deficit: number; cumulative: number; goalPace: number; closed: boolean; isToday: boolean;
+    deficit: number; cumulative: number | null; goalPace: number | null; closed: boolean; isToday: boolean;
+    coverage: number | null; counted: boolean; inWindow: boolean;
   }[] = [];
 
   for (let i = 0; i < deficitRows.length; i++) {
@@ -235,7 +250,7 @@ export async function GET() {
     }
 
     const deficit = consumed - totalBurn; // negative = deficit (good)
-    cumulativeDeficit += deficit;
+    const coverage = typeof r.coverage === "number" ? r.coverage : r.coverage != null ? Number(r.coverage) : null;
 
     dailyDeficits.push({
       date: dateStr,
@@ -248,25 +263,36 @@ export async function GET() {
       totalBurn: Math.round(totalBurn),
       consumed: Math.round(consumed),
       deficit: Math.round(deficit),
-      cumulative: Math.round(cumulativeDeficit),
-      goalPace: -goalDeficit * dailyDeficits.length, // will fix after push
+      cumulative: null,
+      goalPace: null,
       closed: isClosed,
       isToday,
+      coverage,
+      counted: countsForDeficit({ date: dateStr, closed: isClosed, coverage, deficit }),
+      inWindow: false,
     });
-    // Fix goalPace for this entry (index-based)
-    dailyDeficits[dailyDeficits.length - 1].goalPace = -(goalDeficit * dailyDeficits.length);
+  }
+  // The current window: cumulative and goal pace run over its counted days only.
+  const win = deficitWindow(dailyDeficits.map(d => ({ date: d.date, closed: d.closed, coverage: d.coverage, deficit: d.deficit })), todayStr);
+  let cumulativeDeficit = 0;
+  let windowIndex = 0;
+  for (const d of dailyDeficits) {
+    if (!win.countedDates.has(d.date)) continue;
+    d.inWindow = true;
+    windowIndex += 1;
+    cumulativeDeficit += d.deficit;
+    d.cumulative = Math.round(cumulativeDeficit);
+    d.goalPace = -(goalDeficit * windowIndex);
   }
 
   // Deficit stats from dailyDeficits
-  const closedEntries = dailyDeficits.filter(d => d.closed);
-  const totalActualDeficit = closedEntries.length > 0
-    ? closedEntries.reduce((s, d) => s + d.deficit, 0)
-    : 0;
-  const closedDeficitDays = closedEntries.length;
-  const avgActualDeficit = closedDeficitDays > 0 ? Math.round(-totalActualDeficit / closedDeficitDays) : 0;
+  // Deficit stats over the window; 0 when no day counts (the UI reads window.active).
+  const totalActualDeficit = -win.totalDeficit; // negative = deficit, matching the per-day sign
+  const closedDeficitDays = win.countedDays;
+  const avgActualDeficit = win.avgDeficit ?? 0;
 
   // Compute calorie-predicted weight from cumulative deficit
-  const firstDeficitDate = dailyDeficits.length > 0 ? dailyDeficits[0].date : null;
+  const firstDeficitDate = win.start;
   let startWeightForPrediction = currentWeight;
   if (firstDeficitDate && weights.length > 0) {
     const match = weights.findLast(w => w.date <= firstDeficitDate);
@@ -274,11 +300,13 @@ export async function GET() {
     else if (weights[0]) startWeightForPrediction = weights[0].smoothed;
   }
 
-  const calPredicted: { date: string; weight: number; closed: boolean }[] = dailyDeficits.map(d => ({
-    date: d.date,
-    weight: Math.round((startWeightForPrediction + d.cumulative / 7700) * 10) / 10, // cumulative is negative for deficit
-    closed: d.closed,
-  }));
+  const calPredicted: { date: string; weight: number; closed: boolean }[] = dailyDeficits
+    .filter(d => d.inWindow && d.cumulative != null)
+    .map(d => ({
+      date: d.date,
+      weight: Math.round((startWeightForPrediction + (d.cumulative as number) / 7700) * 10) / 10, // cumulative is negative for deficit
+      closed: d.closed,
+    }));
 
   // On track assessment
   const onTrack = !targetDatePassed && requiredDeficit <= deficit * 1.1; // within 10% of current deficit
@@ -316,6 +344,14 @@ export async function GET() {
       avgActualDeficit,
       closedDeficitDays,
       totalActualDeficit: Math.round(-totalActualDeficit), // positive = total deficit achieved
+      // The window every summed number above refers to (#728).
+      window: {
+        start: win.start,
+        end: win.end,
+        countedDays: win.countedDays,
+        active: win.active,
+        label: windowLabel(win),
+      },
     },
     weights,
     goalLine,
