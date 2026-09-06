@@ -6,6 +6,7 @@
  * and Neon. Stage: sync cutover (#187).
  */
 import { writeFileSync, renameSync, readFileSync, unlinkSync } from "fs";
+import { ensureDjPaths } from "./dj-paths";
 import { GarminAuth, DBTokenStore } from "garmin-auth";
 import { healGarminTokenRow } from "./garmin-token-heal";
 import { getDb } from "./db";
@@ -19,7 +20,7 @@ const HR_SHIFT_THRESHOLD = 8;
 const HR_WINDOW_SECONDS = 86_400; // Garmin syncs infrequently
 const SOURCE_REFRESH_INTERVAL = 20;
 const HR_HISTORY_MAX_SECONDS = 7_200;
-const PLAYED_HISTORY_FILE = "/tmp/soma-dj-played.json";
+const PLAYED_HISTORY_FILE = ensureDjPaths().playedFile; // outside /tmp (#668)
 const PROFILE_URL = "/userprofile-service/socialProfile";
 
 const nowS = () => Date.now() / 1000;

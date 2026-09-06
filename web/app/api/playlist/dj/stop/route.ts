@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { readFileSync, unlinkSync } from "fs";
+import { ensureDjPaths } from "@/lib/dj-paths";
 
 export const runtime = "nodejs";
 
-const STATUS_FILE = "/tmp/soma-dj-status.json";
-const PID_FILE = "/tmp/soma-dj-pid";
+const { statusFile: STATUS_FILE, pidFile: PID_FILE } = ensureDjPaths();
 
 export async function POST() {
   try {

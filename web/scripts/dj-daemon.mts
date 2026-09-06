@@ -4,6 +4,7 @@
  * Python daemon took, loads the local env, and runs the loop until SIGTERM.
  */
 import { runDaemon } from "../lib/dj-daemon";
+import { ensureDjPaths } from "../lib/dj-paths";
 
 function arg(name: string, def: string): string {
   const i = process.argv.indexOf(`--${name}`);
@@ -17,6 +18,6 @@ await runDaemon({
   offset: parseInt(arg("offset", "0"), 10),
   genres: list(arg("genres", "")),
   sources: list(arg("sources", "liked")),
-  statusFile: arg("status-file", "/tmp/soma-dj-status.json"),
-  pidFile: arg("pid-file", "/tmp/soma-dj-pid"),
+  statusFile: arg("status-file", ensureDjPaths().statusFile),
+  pidFile: arg("pid-file", ensureDjPaths().pidFile),
 });
