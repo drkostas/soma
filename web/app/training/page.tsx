@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Card, CardContent } from "@/components/ui/card";
 import { TrainingDashboard } from "@/components/training-dashboard";
 import { getDb } from "@/lib/db";
+import { getLivePlan, getTrailingLoad, type LivePlan } from "@/lib/live-plan";
 import { Target } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
 import { projectVdotSeries, DEFAULT_BANISTER, type DailyLoad } from "@/lib/banister-projection";
@@ -19,33 +20,31 @@ async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-async function getTrainingPlan() {
+/**
+ * The plan this page renders, gated by the live rule (#701). A plan whose race
+ * was months ago and that has no sessions near today is DORMANT: it comes back
+ * with no days and no race, plus the engagement object saying why, and the
+ * page shows what Garmin actually observed instead of a phantom schedule.
+ */
+async function getPlanForPage(): Promise<{
+  planDays: any[];
+  raceInfo: { race_date: string; goal_time_seconds: number | null; plan_name: string | null } | null;
+  live: LivePlan;
+}> {
   const sql = getDb();
-  return safeQuery(
-    () => sql`
-      SELECT d.*, d.day_date::text as day_date,
-             p.plan_name, p.race_date::text as race_date, p.goal_time_seconds
-      FROM training_plan_day d
-      JOIN training_plan p ON d.plan_id = p.id
-      WHERE p.status = 'active'
-      ORDER BY d.day_date
-    `,
-    [],
-  );
-}
-
-async function getRaceInfo() {
-  const sql = getDb();
-  const rows = await safeQuery(
-    () => sql`
-      SELECT race_date::text as race_date, goal_time_seconds, plan_name
-      FROM training_plan
-      WHERE status = 'active'
-      LIMIT 1
-    `,
-    [],
-  );
-  return rows[0] || null;
+  const live = await getLivePlan(sql);
+  if (!live.plan) return { planDays: [], raceInfo: null, live };
+  const { plan } = live;
+  const planDays = live.days.map((d) => ({
+    ...d,
+    plan_name: plan.plan_name,
+    race_date: plan.race_date,
+    goal_time_seconds: plan.goal_time_seconds,
+  }));
+  const raceInfo = plan.race_date
+    ? { race_date: plan.race_date, goal_time_seconds: plan.goal_time_seconds, plan_name: plan.plan_name }
+    : null;
+  return { planDays, raceInfo, live };
 }
 
 async function getReadiness() {
@@ -174,16 +173,10 @@ async function getTrajectoryData(
 
   if (actuals.length === 0) return { trajectory: [], norms: { ctlMin: 0, ctlRange: 1, readinessMin: 0, readinessRange: 1, weightMin: 70, weightRange: 10 } };
 
-  // Query rest days from the active plan to filter them from the X-axis
-  const restDays = await safeQuery(
-    () => sql`
-      SELECT day_date::text as day_date FROM training_plan_day
-      WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
-        AND run_type = 'rest'
-    `,
-    [],
-  );
-  const restDatesSet = new Set(restDays.map((r: any) => r.day_date));
+  // Rest days come from the LIVE plan's days passed in (already gated by the
+  // live rule), not from a raw status='active' join that would resurrect a
+  // dormant plan's calendar (#701).
+  const restDatesSet = new Set(planDays.filter((d: any) => d.run_type === "rest").map((d: any) => d.day_date));
 
   // Race-calibrated VDOT from Banister model — no Garmin fallback
   const banisterCurrentVdot = banister?.current_vdot ? Number(banister.current_vdot) : 0;
@@ -358,17 +351,24 @@ async function getTrajectoryData(
 }
 
 export default async function TrainingPage() {
-  const [planDays, raceInfo, readiness, pmcLatest, fitnessLatest, referenceData, banisterParams] = await Promise.all([
-    getTrainingPlan(),
-    getRaceInfo(),
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const [planForPage, readiness, pmcLatest, fitnessLatest, referenceData, banisterParams, trailingLoad] = await Promise.all([
+    getPlanForPage(),
     getReadiness(),
     getPMCLatest(),
     getFitnessLatest(),
     getReferenceData(),
     getBanisterParams(),
+    getTrailingLoad(getDb(), today, 28),
   ]);
-
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const { planDays, raceInfo, live } = planForPage;
+  const engagement = live.engagement;
+  const fallback = {
+    windowDays: trailingLoad.windowDays,
+    meanDailyLoad: Math.round(trailingLoad.meanDailyLoad * 10) / 10,
+    activeDays: trailingLoad.activeDays,
+    label: `if you keep doing what you're doing (last ${trailingLoad.windowDays} days, ${trailingLoad.activeDays} sessions)`,
+  };
 
   // Trajectory data (depends on raceInfo, banister params, and plan days)
   let trajectoryData: { date: string; optimal: number; actual: number | null; projectedVdot: number | null; ctl: number | null; readiness: number | null; weightEffect: number | null }[] = [];
@@ -396,7 +396,12 @@ export default async function TrainingPage() {
     ? vdotFromHmSeconds(Number(raceInfo.goal_time_seconds))
     : 49;
 
-  const hasNoPlan = planDays.length === 0;
+  // "No live plan" is a first-class state, not an empty one (#698, #701). The
+  // athlete may be training without a script — Garmin still records every
+  // session — so load, fitness, readiness and the model-vs-Garmin comparison
+  // all render regardless. Only the plan-specific surfaces (schedule, race
+  // countdown, week counter) go away, replaced by what was actually observed.
+  const planLive = engagement.planLive;
 
   // Days until race for the thin header bar. Keep the raw (signed) value: a
   // negative number means the race is in the past — clamping it to 0 made a
@@ -407,11 +412,12 @@ export default async function TrainingPage() {
   const daysUntilRace = rawDaysUntilRace != null ? Math.max(0, rawDaysUntilRace) : 0;
   const racePast = rawDaysUntilRace != null && rawDaysUntilRace < 0;
 
-  // Header subtitle. Don't present a past race or an out-of-window plan as live:
-  // a finished race shows "race completed Nd ago", and the week indicator only
-  // shows when today actually falls inside the plan (not the "Week 1" fallback).
-  const planSubtitle = hasNoPlan
-    ? "No active training plan."
+  // Header subtitle. Never present a dormant or unfollowed plan as live: the
+  // engagement basis says exactly what the situation is, in plain words.
+  const planSubtitle = !planLive
+    ? engagement.state === "absent"
+      ? `No training plan · ${fallback.activeDays} sessions in the last ${fallback.windowDays} days`
+      : `${engagement.basis} · ${fallback.activeDays} sessions in the last ${fallback.windowDays} days`
     : racePast
       ? `${raceInfo?.plan_name || "Training Plan"} · race completed ${Math.abs(rawDaysUntilRace as number)}d ago`
       : `${raceInfo?.plan_name || "Training Plan"} · ${daysUntilRace}d to race${todayEntry ? ` · Week ${currentWeek}/${totalWeeks}` : ""}`;
@@ -422,39 +428,42 @@ export default async function TrainingPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Training</h1>
-          <p className="text-sm text-muted-foreground">{planSubtitle}</p>
+          <p className="text-sm text-muted-foreground" data-testid="training-subtitle">{planSubtitle}</p>
         </div>
-        {!hasNoPlan && <TrainingControls />}
+        {planLive && <TrainingControls />}
       </div>
 
-      {hasNoPlan ? (
-        <Card>
-          <CardContent className="py-16 text-center">
-            <Target
-              className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50"
-            />
-            <h2 className="text-lg font-semibold mb-2">No Active Training Plan</h2>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Create a training plan via the sync pipeline to see your schedule,
-              race countdown, and weekly breakdown here.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {/* Training Dashboard — client component managing graph, trajectory, and plan */}
-          <TrainingDashboard
-            planDays={planDays as any}
-            today={today}
-            raceInfo={raceInfo as any}
-            trajectoryData={trajectoryData}
-            trajectoryNorms={trajectoryNorms}
-            currentVdot={currentVdot}
-            goalVdot={goalVdot}
-            referenceData={referenceData as any}
-          />
-        </div>
-      )}
+      <div className="space-y-6">
+        {!planLive && (
+          <Card data-testid="training-no-live-plan">
+            <CardContent className="py-6 flex items-start gap-4">
+              <Target className="h-8 w-8 mt-0.5 text-muted-foreground opacity-50 shrink-0" />
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground" data-testid="training-no-live-plan-title">
+                  {engagement.state === "dormant" ? "Plan is dormant" : engagement.state === "partial" ? "Plan exists, not being followed" : "No training plan"}
+                </h2>
+                <p className="text-sm text-muted-foreground">{engagement.basis}.</p>
+                <p className="text-sm text-muted-foreground">
+                  Everything below is from what you actually did. Projections assume {fallback.label}.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {/* Training Dashboard — client component managing graph, trajectory, and plan */}
+        <TrainingDashboard
+          planDays={planDays as any}
+          today={today}
+          raceInfo={raceInfo as any}
+          trajectoryData={trajectoryData}
+          trajectoryNorms={trajectoryNorms}
+          currentVdot={currentVdot}
+          goalVdot={goalVdot}
+          referenceData={referenceData as any}
+          engagement={engagement}
+          fallback={fallback}
+        />
+      </div>
     </div>
   );
 }

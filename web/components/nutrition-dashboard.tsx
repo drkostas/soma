@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { MACRO_COLORS } from "soma-style/colors";
 import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -336,6 +336,13 @@ export function NutritionDashboard({
   const [breakdown, setBreakdown] = useState<any>(null);
   const [trend7d, setTrend7d] = useState<any>(null);
   const [adaptive, setAdaptive] = useState<any>(null);
+  // Engagement-aware rendering (#698): is nutrition actually in use this
+  // week, and what does the scale say regardless of logging.
+  const [engagement, setEngagement] = useState<any>(null);
+  const [weightTrend, setWeightTrend] = useState<any>(null);
+  const [weightTrendPrimary, setWeightTrendPrimary] = useState<boolean>(false);
+  // Close-day prompt: which slots are neither logged nor explicitly skipped.
+  const [closePrompt, setClosePrompt] = useState<string[] | null>(null);
   const [dataReady, setDataReady] = useState(false);
   const [rebalanceToast, setRebalanceToast] = useState<string | null>(null);
 
@@ -360,6 +367,9 @@ export function NutritionDashboard({
         if (data.breakdown) setBreakdown(data.breakdown);
         if (data.trend7d) setTrend7d(data.trend7d);
         setAdaptive(data.adaptive ?? null);
+        setEngagement(data.engagement ?? null);
+        setWeightTrend(data.weightTrend ?? null);
+        setWeightTrendPrimary(Boolean(data.weightTrendPrimary));
       }
       if (presetsRes.ok) {
         const presetsData = await presetsRes.json();
@@ -495,8 +505,19 @@ export function NutritionDashboard({
     }
   };
 
-  // Close day handler
-  const handleCloseDay = async () => {
+  // Slots that are neither logged with calories nor explicitly skipped. These
+  // are ABSENT, not zero: closing over them silently would turn a
+  // breakfast-only day into a 600-kcal "intake" (#699, #703).
+  const unloggedSlots = useMemo(() => {
+    const logged = new Set(
+      meals.filter((m: any) => Number(m.calories) > 0).map((m: any) => String(m.meal_slot)),
+    );
+    return ["breakfast", "lunch", "dinner", "pre_sleep"].filter(
+      (s) => !logged.has(s) && !skippedSlots.includes(s),
+    );
+  }, [meals, skippedSlots]);
+
+  const postClose = async () => {
     setClosing(true);
     try {
       const res = await fetch("/api/nutrition/close-day", {
@@ -509,7 +530,35 @@ export function NutritionDashboard({
       }
     } finally {
       setClosing(false);
+      setClosePrompt(null);
     }
+  };
+
+  // Close day handler. Asks ONCE about unlogged slots so the day can become
+  // complete (skipped) or stay open, instead of closing over absent data.
+  const handleCloseDay = async () => {
+    if (unloggedSlots.length > 0) {
+      setClosePrompt(unloggedSlots);
+      return;
+    }
+    await postClose();
+  };
+
+  // "I did not eat those": mark each unlogged slot skipped, then close.
+  const skipUnloggedAndClose = async () => {
+    setClosing(true);
+    try {
+      for (const slot of closePrompt ?? []) {
+        await fetch("/api/nutrition/skip-slot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, slot }),
+        });
+      }
+    } finally {
+      setClosing(false);
+    }
+    await postClose();
   };
 
   // Format sleep hours
@@ -646,10 +695,36 @@ export function NutritionDashboard({
                       <span>{goalIntake} goal{deficit > 0 && <span className="text-muted-foreground/50"> (&minus;{deficit})</span>}</span>
                       <span>{totalBurn} burn</span>
                     </div>
-                    {/* Current deficit */}
-                    <div className="text-xs text-center">
-                      <span className={currentDeficit < 0 ? "text-green-500" : "text-rose-500"}>{currentDeficit > 0 ? "+" : ""}{Math.round(currentDeficit)} current deficit</span>
-                    </div>
+                    {/* Current deficit — only a claim when today is actually
+                        observed. With nothing logged, "eaten − burn" is a
+                        fabricated −2363 in green, which is exactly the
+                        "assumes I'm always in deficit" complaint (#698, #703).
+                        Below the coverage floor, say what is true instead. */}
+                    {(() => {
+                      const loggedSlotCount = 4 - unloggedSlots.length;
+                      const todayObserved = isClosed || loggedSlotCount >= 3;
+                      if (todayObserved) {
+                        return (
+                          <div className="text-xs text-center" data-testid="hero-deficit">
+                            <span className={currentDeficit < 0 ? "text-green-500" : "text-rose-500"}>{currentDeficit > 0 ? "+" : ""}{Math.round(currentDeficit)} current deficit</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="text-xs text-center text-muted-foreground" data-testid="hero-not-observed">
+                          {loggedSlotCount === 0
+                            ? "nothing logged yet · deficit unknown"
+                            : `${Math.round(consumedCal)} eaten so far · ${loggedSlotCount} of 4 meals logged · deficit unknown`}
+                        </div>
+                      );
+                    })()}
+                    {/* The scale, at hero level, whenever logging is not
+                        carrying the week — visible without expanding. */}
+                    {weightTrendPrimary && weightTrend && (
+                      <div className="text-[11px] text-center text-muted-foreground" data-testid="hero-weight-trend">
+                        Scale: {weightTrend.basis}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -761,6 +836,44 @@ export function NutritionDashboard({
                       </div>
                     )}
 
+                    {/* Engagement + the scale (#698, #702, #703).
+                        The scale is the ground truth that survives not logging.
+                        When the week is not fully engaged it leads; the
+                        log-derived totals below are hidden rather than shown
+                        as a deficit computed from nothing. */}
+                    {engagement && (
+                      <div className="space-y-1" data-testid="nutrition-engagement">
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] lg:text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            {weightTrendPrimary ? "Scale" : "This Week"}
+                          </div>
+                          <div className="text-[9px] text-muted-foreground/60" data-testid="nutrition-engagement-basis">
+                            {engagement.basis}
+                          </div>
+                        </div>
+                        {weightTrend && (
+                          <div className="flex justify-between items-baseline text-xs" data-testid="nutrition-weight-trend">
+                            <span className="text-muted-foreground">
+                              {weightTrend.kgPerWindow != null ? "Weight trend" : "Weight"}
+                            </span>
+                            <span className={`tabular-nums ${weightTrend.kgPerWindow == null ? "text-muted-foreground" : weightTrend.kgPerWindow < 0 ? "text-green-500" : weightTrend.kgPerWindow > 0 ? "text-amber-400" : ""}`}>
+                              {weightTrend.basis}
+                            </span>
+                          </div>
+                        )}
+                        {engagement.state === "absent" && (
+                          <div className="text-xs text-muted-foreground" data-testid="nutrition-not-tracking">
+                            Not tracking meals this week. Weigh in to keep the trend honest.
+                          </div>
+                        )}
+                        {engagement.state === "partial" && (
+                          <div className="text-xs text-muted-foreground" data-testid="nutrition-partial">
+                            Partly logged. Weekly totals show after {engagement.weekFloorDays} full days; skip a meal you did not eat so the day counts.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* 7-day trend table */}
                     {trend7d && trend7d.days.length > 0 && (
                       <div className="space-y-1">
@@ -778,28 +891,35 @@ export function NutritionDashboard({
                               : d.deficit < 0 ? "text-amber-500"
                               : d.deficit > 0 ? "text-rose-500" : "text-muted-foreground";
                             const isInProgress = d.isToday && !d.closed;
+                            // A day with nothing logged has no deficit to show, in
+                            // progress or not: "(−2363)" for an unlogged today is the
+                            // same fabrication the hero no longer makes (#703).
+                            const unobserved = (d.coverage ?? 0) === 0 && !(d.ate > 0);
                             return (
                               <React.Fragment key={d.date}>
                                 <span>
                                   {dayLabel}
                                   <span className="block sm:hidden text-[9px] text-muted-foreground/60">
-                                    ate {isInProgress ? `(${d.ate})` : d.ate} · burn {d.burn}
+                                    ate {unobserved ? "–" : isInProgress ? `(${d.ate})` : d.ate} · burn {d.burn}
                                   </span>
                                 </span>
                                 <span className={`tabular-nums text-right hidden sm:block ${isInProgress ? "text-muted-foreground" : ""}`}>
-                                  {isInProgress ? `(${d.ate})` : d.ate || "\u2013"} / {d.burn || "\u2013"}
+                                  {unobserved ? "\u2013" : isInProgress ? `(${d.ate})` : d.ate || "\u2013"} / {d.burn || "\u2013"}
                                 </span>
-                                <span className={`tabular-nums text-right font-medium ${isInProgress ? "text-muted-foreground" : deficitColor}`}>
-                                  {isInProgress
-                                    ? `(${d.deficit > 0 ? "+" : ""}${d.deficit})`
-                                    : d.ate > 0 ? `${d.deficit > 0 ? "+" : ""}${d.deficit}` : "\u2013"
+                                <span className={`tabular-nums text-right font-medium ${isInProgress || !(d.ate > 0) ? "text-muted-foreground" : deficitColor}`}>
+                                  {unobserved
+                                    ? "\u2013"
+                                    : isInProgress
+                                      ? `(${d.deficit > 0 ? "+" : ""}${d.deficit})`
+                                      : d.ate > 0 ? `${d.deficit > 0 ? "+" : ""}${d.deficit}` : "\u2013"
                                   } / &minus;{trend7d.goalDeficit}
                                 </span>
                               </React.Fragment>
                             );
                           })}
-                          {/* Total */}
-                          {trend7d.closedDays > 0 && (() => {
+                          {/* Total — only over a fully engaged week. A total over
+                              two closed days is not a week's deficit (#699, #703). */}
+                          {trend7d.closedDays > 0 && engagement?.state === "complete" && (() => {
                             const total = trend7d.totalDeficit; // negative = deficit
                             const goal = -(trend7d.closedDays * trend7d.goalDeficit); // negative target
                             return (
@@ -813,7 +933,7 @@ export function NutritionDashboard({
                             );
                           })()}
                         </div>
-                        {trend7d.adherence && (() => {
+                        {trend7d.adherence && engagement?.state === "complete" && (() => {
                           const a = trend7d.adherence;
                           const label = a.status === "on_track" ? "on track" : a.status === "under" ? "under goal" : "over goal";
                           const color = a.status === "on_track" ? "text-green-500" : "text-amber-400";
@@ -1109,13 +1229,36 @@ export function NutritionDashboard({
           onDrinkLogged={() => handleMealChanged()}
         />
 
-        {/* Close Day button */}
-        {!isClosed && targetCal > 0 && (
+        {/* Close Day button, with a one-time prompt about unlogged slots (#703) */}
+        {!isClosed && targetCal > 0 && closePrompt && (
+          <div className="rounded-lg border border-border bg-card p-3 space-y-2 text-sm" data-testid="close-day-prompt">
+            <div>
+              <span className="font-medium">{closePrompt.length} meal{closePrompt.length === 1 ? "" : "s"} not logged:</span>{" "}
+              <span className="text-muted-foreground">{closePrompt.map((s) => s.replace("_", "-")).join(", ")}</span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Did you skip them, or did you just not log them? Skipped meals make the day count as complete; unlogged ones are unknown and the day will not feed your weekly numbers.
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={skipUnloggedAndClose} disabled={closing} data-testid="close-day-skip">
+                {closing ? "Closing..." : "I skipped them"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={postClose} disabled={closing} data-testid="close-day-anyway">
+                Close anyway
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setClosePrompt(null)} disabled={closing} data-testid="close-day-cancel">
+                Leave open
+              </Button>
+            </div>
+          </div>
+        )}
+        {!isClosed && targetCal > 0 && !closePrompt && (
           <Button
             variant="outline"
             className="w-full"
             onClick={handleCloseDay}
             disabled={closing}
+            data-testid="close-day"
           >
             {closing ? "Closing..." : "Close Day"}
           </Button>

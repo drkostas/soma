@@ -62,6 +62,10 @@ interface TrainingDashboardProps {
   currentVdot: number;
   goalVdot: number;
   referenceData: ReferenceData;
+  /** Whether a plan is live and why (#701). Absent means "assume live" for older callers. */
+  engagement?: { state: string; planLive: boolean; basis: string; planName: string | null };
+  /** What the athlete has actually been doing; the projection baseline when no plan is live. */
+  fallback?: { windowDays: number; meanDailyLoad: number; activeDays: number; label: string };
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -253,7 +257,14 @@ export function TrainingDashboard({
   currentVdot,
   goalVdot,
   referenceData,
+  engagement,
+  fallback,
 }: TrainingDashboardProps) {
+  // A plan is live unless the server said otherwise. Everything that is
+  // ABOUT the plan (schedule, next session, edits) hides when it is not;
+  // everything from Garmin (load, fitness, readiness, comparison) stays.
+  const planLive = engagement ? engagement.planLive : true;
+
   // Client-side state
   const [sliderValue, setSliderValue] = useState(1.0);
   const [graphData, setGraphData] = useState<GraphApiResponse | null>(null);
@@ -747,20 +758,35 @@ export function TrainingDashboard({
         </>
       )}
 
-      {/* Training Plan — full 5-week plan */}
-      <h3 className="text-sm font-medium text-muted-foreground">Training Plan</h3>
-      <TrainingPlanView
-        days={planDays}
-        today={today}
-        activityMatches={activityMatches}
-        deltaWorkouts={deltaWorkouts}
-        onStepsEdited={setEditedSteps}
-        projectedDays={forwardSim}
-        sliderActive={Math.abs(sliderValue - 1.0) > 0.001}
-      />
+      {/* Training Plan — only when a plan is LIVE. A dormant or unfollowed
+          plan is not shown as a schedule with missed days; the page-level card
+          has already said what the situation is, and the fallback label below
+          says what the projections assume instead (#701, #703). */}
+      {planLive ? (
+        <>
+          <h3 className="text-sm font-medium text-muted-foreground">Training Plan</h3>
+          <div data-testid="training-plan-section">
+            <TrainingPlanView
+              days={planDays}
+              today={today}
+              activityMatches={activityMatches}
+              deltaWorkouts={deltaWorkouts}
+              onStepsEdited={setEditedSteps}
+              projectedDays={forwardSim}
+              sliderActive={Math.abs(sliderValue - 1.0) > 0.001}
+            />
+          </div>
+        </>
+      ) : (
+        fallback && (
+          <p className="text-xs text-muted-foreground" data-testid="training-fallback-note">
+            Projections assume {fallback.label}: about {Math.round(fallback.meanDailyLoad)} load/day.
+          </p>
+        )
+      )}
 
-      {/* Delta save button */}
-      {isDirty && (
+      {/* Delta save button — only meaningful against a live plan */}
+      {planLive && isDirty && (
         <div className="sticky bottom-4 flex justify-center z-40">
           <button
             onClick={handleSave}
@@ -780,14 +806,17 @@ export function TrainingDashboard({
         </div>
       )}
 
-      {/* Floating training intensity slider */}
-      <FloatingSlider
-        value={sliderValue}
-        onChange={setSliderValue}
-        savedValue={1.0}
-        onSave={handleSave}
-        onReset={() => setSliderValue(1.0)}
-      />
+      {/* Floating training intensity slider — it scales PLAN workouts, so
+          there is nothing for it to scale without a live plan */}
+      {planLive && (
+        <FloatingSlider
+          value={sliderValue}
+          onChange={setSliderValue}
+          savedValue={1.0}
+          onSave={handleSave}
+          onReset={() => setSliderValue(1.0)}
+        />
+      )}
     </div>
   );
 }
