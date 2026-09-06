@@ -21,12 +21,14 @@ export async function GET() {
     `;
 
     // Spotify library status (features cached for tempo-matched playlists).
+    // The demo database has no spotify tables: no Spotify block, not a 500 (this
+    // endpoint had been 500 on the demo since the counts landed).
     const spotifyRows = await sql`
       SELECT
         (SELECT COUNT(*)::int FROM spotify_track_features)  AS tracks,
         (SELECT COUNT(*)::int FROM spotify_artist_genres)   AS artists,
         (SELECT MAX(cached_at) FROM spotify_track_features) AS last_sync
-    `;
+    `.catch(() => []);
     const sp = (spotifyRows as Record<string, unknown>[])[0] ?? null;
     const spotify = sp && Number(sp.tracks) > 0
       ? { tracks: Number(sp.tracks), artists: Number(sp.artists), last_sync: (sp.last_sync as string | null) ?? null }
