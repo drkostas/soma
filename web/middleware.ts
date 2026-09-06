@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
+import { tailnetIdentityOk } from "@/lib/chat-transport";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -45,6 +46,10 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
+  // The chat routes answer their own preflight with an origin allowlist (#670): the
+  // browser calls the Mac over the tailnet from https://soma.gkos.dev.
+  if (isApi && pathname.startsWith("/api/chat") && req.method === "OPTIONS") return NextResponse.next();
+
   if (isDev && isApi && req.method === "OPTIONS") {
     return withDevCors(new NextResponse(null, { status: 204 }), true);
   }
@@ -52,8 +57,9 @@ export default auth((req) => {
   // Personal API token: native apps + widgets reach /api/* without a session.
   if (isApi && hasApiToken(req)) return withTokenCors(NextResponse.next());
 
-  // Chat tunnel: the shared chat token reaches /api/chat* without a session or demo mode.
-  if (isApi && pathname.startsWith("/api/chat") && hasChatToken(req)) return NextResponse.next();
+  // Chat: the shared chat token (the old Vercel proxy) or the tailnet identity that
+  // tailscale serve injects (#670) reaches /api/chat* without a session or demo mode.
+  if (isApi && pathname.startsWith("/api/chat") && (hasChatToken(req) || tailnetIdentityOk(req))) return NextResponse.next();
 
   // Demo mode: READ-ONLY. Reads and page views need no auth, but every /api/*
   // handler runs auth-less here, so an anonymous visitor could otherwise POST/
