@@ -5,6 +5,7 @@ import type { Mode } from "@/lib/mode-engine";
 import type { SlotBudgets } from "@/lib/nutrition-types";
 import { computeAdaptiveContext } from "@/lib/adaptive-tdee";
 import { computeWeeklyAdherence } from "@/lib/adherence";
+import { meetsCoverageFloor } from "@/lib/coverage";
 import { computeAlcoholDisplacement } from "macro-engine-core";
 
 export const runtime = "edge";
@@ -473,18 +474,31 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 7-day rolling trend ──
+  // `coverage` = (distinct slots with logged kcal ∪ explicitly skipped) / 4,
+  // the same definition lib/adaptive-tdee uses, so a closed-but-empty day is
+  // treated identically everywhere (#699).
   const trendRows = await sql`
     SELECT
-      date::text AS date,
-      target_calories,
-      actual_calories,
-      status,
-      manual_override,
-      deficit_used
-    FROM nutrition_day
-    WHERE date >= ${date}::date - interval '6 days'
-      AND date <= ${date}::date
-    ORDER BY date
+      n.date::text AS date,
+      n.target_calories,
+      n.actual_calories,
+      n.status,
+      n.manual_override,
+      n.deficit_used,
+      (
+        SELECT COUNT(DISTINCT s)::float / 4
+        FROM (
+          SELECT m.meal_slot AS s FROM meal_log m
+           WHERE m.date = n.date AND m.calories > 0
+          UNION
+          SELECT unnest(COALESCE(n.skipped_slots, ARRAY[]::text[]))
+        ) u
+        WHERE u.s IN ('breakfast', 'lunch', 'dinner', 'pre_sleep')
+      ) AS coverage
+    FROM nutrition_day n
+    WHERE n.date >= ${date}::date - interval '6 days'
+      AND n.date <= ${date}::date
+    ORDER BY n.date
   `;
 
   // Goal deficit from profile (the user's real target, e.g. 800/day)
@@ -503,6 +517,14 @@ export async function GET(req: NextRequest) {
     return target + defUsed;
   };
 
+  // A day feeds the cumulative deficit and weekly adherence only when it is
+  // closed AND its logging coverage clears the floor. A closed day with one
+  // meal logged is absent data, not a 600-kcal day; counting it is how the
+  // week reads as a huge deficit the user never had (#699).
+  const counts = (r: Record<string, unknown>) =>
+    r.status === "closed" && meetsCoverageFloor(r.coverage as number | null);
+  const counted = trendRows.filter(counts);
+
   const trend7d = {
     goalDeficit,
     days: trendRows.map((r: Record<string, unknown>) => {
@@ -516,31 +538,30 @@ export async function GET(req: NextRequest) {
         burn,
         deficit,
         closed: r.status === "closed",
+        // Surfaced so the UI can distinguish "closed and complete" from
+        // "closed but barely logged" instead of painting both the same.
+        coverage: typeof r.coverage === "number" ? r.coverage : null,
+        counted: counts(r),
         isToday: isCurrentDay,
       };
     }),
-    // Cumulative deficit: sum of (ate - burn) for closed days only
-    totalDeficit: trendRows
-      .filter((r: Record<string, unknown>) => r.status === "closed")
-      .reduce((sum: number, r: Record<string, unknown>) => {
-        const ate = Number(r.actual_calories) || 0;
-        const burn = Math.round(computeBurn(r, false));
-        return sum + (ate - burn);
-      }, 0),
-    closedDays: trendRows.filter((r: Record<string, unknown>) => r.status === "closed").length,
-    goalExpectedDeficit: trendRows
-      .filter((r: Record<string, unknown>) => r.status === "closed")
-      .length * goalDeficit,
+    // Cumulative deficit: sum of (ate - burn) over counted days only
+    totalDeficit: counted.reduce((sum: number, r: Record<string, unknown>) => {
+      const ate = Number(r.actual_calories) || 0;
+      const burn = Math.round(computeBurn(r, false));
+      return sum + (ate - burn);
+    }, 0),
+    closedDays: counted.length,
+    goalExpectedDeficit: counted.length * goalDeficit,
     // Weekly adherence (±10% band). Achieved deficit = burn − ate, summed over
-    // closed days (positive = in deficit); goal = closed days × goal/day.
+    // counted days (positive = in deficit); goal = counted days × goal/day.
     adherence: (() => {
-      const closed = trendRows.filter((r: Record<string, unknown>) => r.status === "closed");
-      const weeklyActual = closed.reduce((s: number, r: Record<string, unknown>) => {
+      const weeklyActual = counted.reduce((s: number, r: Record<string, unknown>) => {
         const ate = Number(r.actual_calories) || 0;
         const burn = Math.round(computeBurn(r, false));
         return s + (burn - ate);
       }, 0);
-      return computeWeeklyAdherence(weeklyActual, closed.length * goalDeficit);
+      return computeWeeklyAdherence(weeklyActual, counted.length * goalDeficit);
     })(),
   };
 
