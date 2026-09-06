@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getLivePlan } from "@/lib/live-plan";
 import {
   type GraphNode,
   type GraphEdge,
@@ -145,20 +146,13 @@ export async function GET(request: Request) {
   const calibDataDays = calib ? Number(calib.data_days) || 0 : 0;
   const calibForceEqual = calib?.force_equal ?? false;
 
-  // Fetch today's run type from the active training plan
+  // Today's prescribed run type, but only from a LIVE plan. A dormant plan's
+  // day (if one even coincides) is not today's prescription (#701). With no
+  // live plan the pace node defaults to "easy", which is the honest neutral.
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-  let todayPlan: Record<string, unknown>[] = [];
-  try {
-    todayPlan = await sql`
-      SELECT d.run_type FROM training_plan_day d
-      JOIN training_plan p ON d.plan_id = p.id
-      WHERE p.status = 'active' AND d.day_date = ${todayStr}
-      LIMIT 1
-    `;
-  } catch {
-    // training_plan tables may not exist yet — gracefully skip
-  }
-  const runType = (todayPlan[0]?.run_type as string) || "easy";
+  const livePlan = await getLivePlan(sql, todayStr);
+  const todayPlanDay = livePlan.days.find((d) => d.day_date === todayStr);
+  const runType = todayPlanDay?.run_type || "easy";
   const currentVdot = vdotAdj ?? 0;
   const basePace = getBasePace(currentVdot, runType);
 

@@ -1,19 +1,15 @@
 import { getDb } from "@/lib/db";
 import { NextResponse } from "next/server";
+import { getLivePlan } from "@/lib/live-plan";
 
 export async function GET() {
   try {
     const sql = getDb();
 
-    // Get active plan days
-    const planDays = await sql`
-      SELECT d.id, d.day_date::text as day_date, d.run_type, d.target_distance_km,
-             d.workout_steps, d.completed
-      FROM training_plan_day d
-      JOIN training_plan p ON d.plan_id = p.id
-      WHERE p.status = 'active'
-      ORDER BY d.day_date
-    `.catch(() => []);
+    // Only a LIVE plan has sessions worth matching activities against. A
+    // dormant plan (race months ago, nothing near today) would otherwise
+    // produce a wall of "missed" days for a script nobody is following (#701).
+    const { days: planDays } = await getLivePlan(sql);
 
     if (planDays.length === 0) return NextResponse.json([]);
 
