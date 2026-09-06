@@ -778,27 +778,31 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                 const f = freshness(last?.date ?? null, todayKey());
                 return (
               <div
-                className="grid grid-cols-3 gap-4 mb-4"
+                className="mb-4"
                 data-testid="sleep-hrv-latest"
                 data-freshness={f.stale ? "stale" : "fresh"}
                 data-observed={last?.date ?? ""}
                 data-max-age-days={RECOVERY_MAX_AGE_DAYS}
               >
+              {f.stale && (
+                <p className="text-xs text-muted-foreground mb-2">{staleHeadline("HRV reading", f)} · the last values are from {last?.date}</p>
+              )}
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <div className="text-xs text-muted-foreground">Weekly Avg{f.stale ? "" : ` · ${last?.date}`}</div>
                   <div className="text-2xl font-bold">
                     {f.stale ? "—" : Number(last?.weekly_avg) || "—"}
                     {f.stale ? null : <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>}
                   </div>
-                  {f.stale && <div className="text-xs text-muted-foreground">last {Number(last?.weekly_avg) || "—"} ms on {last?.date}</div>}
+                  {f.stale && <div className="text-xs text-muted-foreground">last {Number(last?.weekly_avg) || "—"} ms</div>}
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">{f.stale ? staleHeadline("HRV reading", f) : `Last night · ${last?.date}`}</div>
+                  <div className="text-xs text-muted-foreground">{f.stale ? "Last night" : `Last night · ${last?.date}`}</div>
                   <div className="text-2xl font-bold">
                     {f.stale ? "—" : Number(last?.last_night_avg) || "—"}
                     {f.stale ? null : <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>}
                   </div>
-                  {f.stale && <div className="text-xs text-muted-foreground">last {Number(last?.last_night_avg) || "—"} ms on {last?.date}</div>}
+                  {f.stale && <div className="text-xs text-muted-foreground">last {Number(last?.last_night_avg) || "—"} ms</div>}
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Status</div>
@@ -815,6 +819,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                     })()}
                   </div>
                 </div>
+              </div>
               </div>
                 );
               })()}
@@ -923,16 +928,20 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                 return (
                   <>
                     <div
-                      className="grid grid-cols-3 gap-4 mb-4"
+                      className="mb-4"
                       data-testid="sleep-spo2-latest"
                       data-freshness={fresh.stale ? "stale" : "fresh"}
                       data-observed={latest?.date ?? ""}
                       data-max-age-days={RECOVERY_MAX_AGE_DAYS}
                     >
+                    {fresh.stale && (
+                      <p className="text-xs text-muted-foreground mb-2">{staleHeadline("SpO2 reading", fresh)} · the last value is from {latest.date}</p>
+                    )}
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <div className="text-xs text-muted-foreground">{fresh.stale ? staleHeadline("SpO2 reading", fresh) : `Last night · ${latest.date}`}</div>
+                        <div className="text-xs text-muted-foreground">{fresh.stale ? "Last night" : `Last night · ${latest.date}`}</div>
                         <div className="text-2xl font-bold">{fresh.stale ? "—" : `${Number(latest.avg_spo2).toFixed(0)}%`}</div>
-                        {fresh.stale && <div className="text-xs text-muted-foreground">last {Number(latest.avg_spo2).toFixed(0)}% on {latest.date}</div>}
+                        {fresh.stale && <div className="text-xs text-muted-foreground">last {Number(latest.avg_spo2).toFixed(0)}%</div>}
                       </div>
                       <div>
                         <div className="text-xs text-muted-foreground">{fresh.stale ? "Avg of the last 7 recorded" : "7-Day Avg"}</div>
@@ -942,6 +951,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                         <div className="text-xs text-muted-foreground">Lowest</div>
                         <div className="text-2xl font-bold">{minSpo2 && minSpo2 < 100 ? `${minSpo2}%` : "—"}</div>
                       </div>
+                    </div>
                     </div>
                     <SpO2Chart data={data} />
                   </>
