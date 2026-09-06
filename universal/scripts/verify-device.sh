@@ -53,6 +53,15 @@ export PATH="$JAVA_HOME/bin:$PATH"
 [ "$DRY" = 1 ] || "$JAVA_HOME/bin/java" -version 2>&1 | grep -qE 'version "(1[7-9]|[2-9][0-9])' \
   || { echo "FAIL: Java 17+ not found at $JAVA_HOME (maestro cannot run)"; exit 2; }
 
+# 0. A stale `offline` adb entry (a phone that dropped its Tailscale/tcpip link) makes Maestro's
+# device enumeration abort with "Device X was requested, but it is not connected" even though
+# X is fine. Drop only the offline entries; connected devices are never touched.
+if [ "$DRY" != 1 ]; then
+  $ADB devices 2>/dev/null | awk 'NR>1 && $2=="offline"{print $1}' | while read -r stale; do
+    echo "note: dropping stale offline adb entry $stale"; $ADB disconnect "$stale" >/dev/null 2>&1 || true
+  done
+fi
+
 # 1. Device up, app installed.
 if [ "$DRY" = 1 ]; then STATE=device; else
 STATE="$($ADB -s "$DEV" get-state 2>/dev/null || true)"
