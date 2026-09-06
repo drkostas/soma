@@ -951,7 +951,7 @@ export default async function HomePage({
                       <>
                         <div className="text-2xl font-bold text-muted-foreground" data-testid="overview-readiness-unknown">unknown</div>
                         <div className="text-xs text-muted-foreground">
-                          {recovery.readiness ? `Garmin ${recovery.readiness.score} · no night since ${recovery.model.date}` : "no night recorded"}
+                          {[recovery.readiness ? `Garmin ${recovery.readiness.score}` : "", latestSleep?.date ? `no night recorded since ${latestSleep.date}` : "no night recorded"].filter(Boolean).join(" · ")}
                         </div>
                       </>
                     ) : recovery.model?.composite_score != null ? (
