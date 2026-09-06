@@ -328,7 +328,7 @@ export function ActivitySyncManager({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Activity Sync Manager</CardTitle>
+          <CardTitle className="text-[1rem]">Activity Sync Manager</CardTitle>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{syncedCount}/{activities.length} synced to Strava</span>
             {!stravaConnected && (

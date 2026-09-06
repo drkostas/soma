@@ -439,7 +439,7 @@ export default async function TrainingPage() {
             <CardContent className="py-6 flex items-start gap-4">
               <Target className="h-8 w-8 mt-0.5 text-muted-foreground opacity-50 shrink-0" />
               <div className="space-y-1">
-                <h2 className="text-base font-semibold text-foreground" data-testid="training-no-live-plan-title">
+                <h2 className="text-[1rem] font-semibold text-foreground" data-testid="training-no-live-plan-title">
                   {engagement.state === "dormant" ? "Plan is dormant" : engagement.state === "partial" ? "Plan exists, not being followed" : "No training plan"}
                 </h2>
                 <p className="text-sm text-muted-foreground">{engagement.basis}.</p>

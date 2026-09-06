@@ -396,7 +396,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                                 <div key={i} className="flex items-center gap-3 py-2.5 border-b border-border/30 hover:bg-accent/10 -mx-2 px-2 rounded transition-colors">
                                   {/* Split number */}
                                   <div className="w-7 text-center shrink-0">
-                                    <span className="text-base font-bold">{i + 1}</span>
+                                    <span className="text-[1rem] font-bold">{i + 1}</span>
                                   </div>
 
                                   {/* Main metrics */}
