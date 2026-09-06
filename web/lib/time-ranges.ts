@@ -16,3 +16,17 @@ export function rangeToDays(range: string | undefined): number {
   const found = RANGES.find((r) => r.value === range);
   return found ? found.days : 180;
 }
+
+/**
+ * Days for a range key coming from either client. The web sends the RANGES
+ * keys (1w … all); the app's JSON routes historically accepted "7d/14d/90d/1y"
+ * and silently fell back to 30 days for anything else, which turned the app's
+ * default 6M into a 30-day window (#743). Accept both shapes.
+ */
+export function parseRangeDays(range: string | null | undefined, fallbackDays = 180): number {
+  if (!range) return fallbackDays;
+  const m = /^(\d+)d$/.exec(range);
+  if (m) return Number(m[1]);
+  const found = RANGES.find((r) => r.value === range);
+  return found ? found.days : fallbackDays;
+}
