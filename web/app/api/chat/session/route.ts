@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readChatConfig, writeChatConfig } from "@/lib/chat-config";
-import { chatMode, proxyToLocal, requireToken } from "@/lib/chat-transport";
+import { chatMode, chatGone, chatPreflight, proxyToLocal, requireToken, withCors } from "@/lib/chat-transport";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
+async function getImpl(req: NextRequest) {
+  if (chatMode() === "gone") return chatGone();
   if (chatMode() === "proxy") return proxyToLocal(req, "/api/chat/session");
   const denied = requireToken(req);
   if (denied) return denied;
@@ -13,7 +14,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ...cfg, mode: "local" });
 }
 
-export async function PUT(req: NextRequest) {
+async function putImpl(req: NextRequest) {
+  if (chatMode() === "gone") return chatGone();
   if (chatMode() === "proxy") return proxyToLocal(req, "/api/chat/session");
   const denied = requireToken(req);
   if (denied) return denied;
@@ -28,4 +30,17 @@ export async function PUT(req: NextRequest) {
   // the next /api/chat call".
   await writeChatConfig({ sessionId: body.sessionId });
   return NextResponse.json({ sessionId: body.sessionId });
+}
+
+/** CORS preflight for the browser calling the Mac directly over the tailnet (#670). */
+export function OPTIONS(req: NextRequest) {
+  return chatPreflight(req);
+}
+
+export async function GET(req: NextRequest) {
+  return withCors(req, await getImpl(req));
+}
+
+export async function PUT(req: NextRequest) {
+  return withCors(req, await putImpl(req));
 }
