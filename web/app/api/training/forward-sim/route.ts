@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getLivePlan, getTrailingLoad } from "@/lib/live-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +26,12 @@ export async function GET() {
     readinessRows,
     calibRows,
     fitnessRows,
-    planDays,
+    livePlan,
     garminLoadRows,
     garminReadinessRows,
     garminVo2Rows,
     garminRaceRows,
+    trailingLoad,
   ] = await Promise.all([
     // Current PMC
     sql`SELECT ctl, atl, tsb FROM pmc_daily ORDER BY date DESC LIMIT 1`
@@ -53,17 +55,11 @@ export async function GET() {
         FROM fitness_trajectory WHERE vo2max IS NOT NULL
         ORDER BY date DESC LIMIT 1`
       .catch(() => []),
-    // All plan days (past + future for complete trajectory)
-    sql`SELECT d.id, d.day_date::text as day_date, d.week_number, d.run_type,
-               d.run_title, d.target_distance_km, d.workout_steps,
-               d.load_level, d.gym_workout, d.gym_notes, d.completed,
-               d.garmin_workout_id, d.garmin_push_status,
-               d.actual_distance_km
-        FROM training_plan_day d
-        JOIN training_plan p ON d.plan_id = p.id
-        WHERE p.status = 'active'
-        ORDER BY d.day_date`
-      .catch(() => []),
+    // The LIVE plan and all its days (past + future), or no plan at all. This
+    // no longer trusts status='active': a plan whose race was months ago and
+    // that has no sessions near today is dormant, and the sim must not project
+    // from it (#701). `livePlan.engagement` says which case we are in.
+    getLivePlan(sql, today),
     // Garmin 7-day/28-day load for comparison (last 90 days)
     sql`SELECT date::text as date, daily_load, ctl, atl
         FROM pmc_daily
@@ -94,7 +90,15 @@ export async function GET() {
           AND vo2max IS NOT NULL
         ORDER BY date`
       .catch(() => []),
+    // What the athlete has actually been doing over the trailing 28 days. When
+    // no plan is live this is the projection baseline: "if you keep doing what
+    // you're doing", which the UI must label as an observation, not a plan.
+    getTrailingLoad(sql, today, 28),
   ]);
+
+  // Empty unless the plan is live; every downstream use of planDays inherits
+  // the live rule from this one line.
+  const planDays = livePlan.days;
 
   const pmc = pmcRows[0] ?? { ctl: 0, atl: 0, tsb: 0 };
   const fitness = fitnessRows[0] ?? { vo2max: 47, vdot_adjusted: 47, weight_kg: 80.5 };
@@ -130,6 +134,16 @@ export async function GET() {
   return NextResponse.json({
     today,
     epocScaleFactor,
+    // Whether there is a plan worth simulating from, and why. Clients gate
+    // the plan-driven projection on `engagement.planLive` and otherwise draw
+    // the `fallback` baseline, labelled as what the athlete has been doing.
+    engagement: livePlan.engagement,
+    fallback: {
+      windowDays: trailingLoad.windowDays,
+      meanDailyLoad: Math.round(trailingLoad.meanDailyLoad * 10) / 10,
+      activeDays: trailingLoad.activeDays,
+      label: `if you keep doing what you're doing (last ${trailingLoad.windowDays} days, ${trailingLoad.activeDays} sessions)`,
+    },
     pmc: {
       ctl: Number(pmc.ctl),
       atl: Number(pmc.atl),

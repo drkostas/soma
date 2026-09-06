@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getLivePlan } from "@/lib/live-plan";
 import { projectVdotSeries, DEFAULT_BANISTER, type DailyLoad } from "@/lib/banister-projection";
 import { vdotFromHmSeconds } from "@/lib/vdot-utils";
 
@@ -18,12 +19,15 @@ async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 export async function GET() {
   const sql = getDb();
 
-  const raceRows = await safeQuery(
-    () => sql`SELECT race_date::text AS race_date, goal_time_seconds FROM training_plan WHERE status = 'active' LIMIT 1`,
-    [] as Record<string, unknown>[],
-  );
-  const race = raceRows[0] ?? null;
-  if (!race?.race_date) return NextResponse.json({ trajectory: [], raceDate: null, goalVdot: null });
+  // Only a LIVE plan has a race worth projecting toward. The Knoxville plan's
+  // race was five months ago; projecting "to the race" from it drew a curve
+  // toward a date in the past (#701). Dormant/absent → the same empty shape
+  // the app already handles, plus the engagement so it can say why.
+  const livePlan = await getLivePlan(sql);
+  const race = livePlan.plan;
+  if (!race?.race_date) {
+    return NextResponse.json({ trajectory: [], raceDate: null, goalVdot: null, engagement: livePlan.engagement });
+  }
   const raceDate = String(race.race_date);
   const goalVdot = race.goal_time_seconds ? vdotFromHmSeconds(Number(race.goal_time_seconds)) : null;
 
@@ -32,13 +36,11 @@ export async function GET() {
     [] as Record<string, unknown>[],
   ))[0] ?? null;
 
-  const planDays = await safeQuery(
-    () => sql`SELECT day_date::text AS day_date, run_type, target_distance_km
-              FROM training_plan_day
-              WHERE plan_id = (SELECT id FROM training_plan WHERE status = 'active' LIMIT 1)
-              ORDER BY day_date`,
-    [] as Record<string, unknown>[],
-  );
+  const planDays: Record<string, unknown>[] = livePlan.days.map((d) => ({
+    day_date: d.day_date,
+    run_type: d.run_type,
+    target_distance_km: d.target_distance_km,
+  }));
 
   const [actuals, pmcRows] = await Promise.all([
     safeQuery(() => sql`SELECT date::text AS date, vo2max FROM fitness_trajectory WHERE vo2max IS NOT NULL ORDER BY date`, [] as Record<string, unknown>[]),
