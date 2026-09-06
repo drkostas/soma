@@ -1,0 +1,30 @@
+# Soma verify flow for the nutrition Trend tab (#717/#721): open the nutrition screen by
+# deep link, switch to the Trend tab, and assert a marker fetched live from the real API
+# is visible. Run via universal/scripts/verify-device.sh:
+#   universal/scripts/verify-device.sh nutrition --flow .maestro/verify-nutrition-trend.yaml --marker "(465)"
+appId: dev.gkos.soma
+name: Soma verify nutrition trend tab
+tags:
+  - verify
+---
+- stopApp
+- openLink: ${ROUTE}
+- waitForAnimationToEnd:
+    timeout: 10000
+- tapOn:
+    text: "Trend"
+- waitForAnimationToEnd:
+    timeout: 5000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+    optional: true
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+    visibilityPercentage: 60
+- takeScreenshot: verify-${SCREEN}
