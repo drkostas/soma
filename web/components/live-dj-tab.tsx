@@ -1,6 +1,7 @@
 // web/components/live-dj-tab.tsx
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { hrAgeLabel, hrAgeTone } from "@/lib/hr-freshness";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -572,19 +573,18 @@ export default function LiveDjTab() {
             {/* HR + Target BPM */}
             <div className="flex items-center gap-3 text-xs">
               {status.hr ? (
-                <span className={cn(
-                  "text-muted-foreground",
-                  (status.hr_age_s ?? 0) > 3600 && "text-amber-600 dark:text-amber-400"
-                )}>
+                <span
+                  className={cn(
+                    "text-muted-foreground",
+                    hrAgeTone(status.hr_age_s) !== "fresh" && "text-amber-600 dark:text-amber-400",
+                  )}
+                  data-testid="dj-hr"
+                  data-hr-age-s={status.hr_age_s ?? ""}
+                  data-hr-tone={hrAgeTone(status.hr_age_s)}
+                >
                   HR <span className="font-medium">{status.hr} bpm</span>
                   {status.hr_age_s != null && (
-                    <span className="opacity-70 ml-1">
-                      ({status.hr_age_s < 120
-                        ? "just now"
-                        : status.hr_age_s < 3600
-                          ? `${Math.round(status.hr_age_s / 60)}m ago`
-                          : `${Math.round(status.hr_age_s / 3600)}h ago — stale`})
-                    </span>
+                    <span className="opacity-70 ml-1">({hrAgeLabel(status.hr_age_s)})</span>
                   )}
                 </span>
               ) : (

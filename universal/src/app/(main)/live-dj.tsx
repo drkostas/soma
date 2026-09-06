@@ -25,10 +25,20 @@ function formatElapsed(ms: number): string {
   const m = Math.floor(s / 60);
   return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
 }
+// Twin of web/lib/hr-freshness.ts (#668): five minutes is the line past which the
+// sample is no longer what your heart is doing, whatever the daemon still queues on.
+const HR_STALE_SECONDS = 300;
+function hrAgeTone(sec: number | null | undefined): "fresh" | "stale" | "old" {
+  if (sec == null) return "fresh";
+  if (sec >= 3600) return "old";
+  if (sec > HR_STALE_SECONDS) return "stale";
+  return "fresh";
+}
 function hrAgeLabel(sec: number): string {
   if (sec < 120) return "just now";
-  if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
-  return `${Math.round(sec / 3600)}h ago — stale`;
+  if (sec <= HR_STALE_SECONDS) return `${Math.round(sec / 60)}m ago`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m ago · stale`;
+  return `${Math.round(sec / 3600)}h ago · stale`;
 }
 const formatReason = (r: string) => r.replace(/_/g, " ");
 
@@ -230,7 +240,7 @@ export default function LiveDjScreen() {
 
             <View className="flex-row items-center gap-3">
               {status.hr ? (
-                <Text variant="caption" className="text-text-secondary">HR <Text variant="caption" className="text-text">{status.hr} bpm</Text>{status.hr_age_s != null ? ` (${hrAgeLabel(status.hr_age_s)})` : ""}</Text>
+                <Text variant="caption" className="text-text-secondary" testID="dj-hr">HR <Text variant="caption" className="text-text">{status.hr} bpm</Text>{status.hr_age_s != null ? <Text variant="caption" style={{ color: hrAgeTone(status.hr_age_s) === "fresh" ? undefined : "#e0a458" }}>{` (${hrAgeLabel(status.hr_age_s)})`}</Text> : null}</Text>
               ) : <Text variant="caption" className="italic text-text-muted">Waiting for Garmin HR…</Text>}
               {status.target_bpm ? <Text variant="caption" className="text-text-secondary">→ target <Text variant="caption" className="text-teal">{status.target_bpm} BPM</Text></Text> : null}
             </View>
