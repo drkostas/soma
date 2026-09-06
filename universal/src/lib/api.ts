@@ -102,6 +102,11 @@ export interface SomaPlan {
     days?: TrendDay[];
     totalDeficit?: number; goalDeficit?: number;
   };
+  /** Is nutrition in use this week (#698/#714). Gate the log-derived numbers on state === "complete". */
+  engagement?: { state: "absent" | "partial" | "complete"; coverage: number; basis: string; weekFloorDays?: number };
+  /** The scale: OLS over 14 days, null slope until 3 weigh-ins. Leads when weightTrendPrimary. */
+  weightTrend?: { kgPerWindow: number | null; windowDays: number; weighIns: number; latestKg: number | null; basis: string } | null;
+  weightTrendPrimary?: boolean;
 }
 
 export interface Today {
@@ -273,6 +278,17 @@ export interface ForwardSim {
     fitness: ComparisonPoint[];
     racePrediction: ComparisonPoint[];
   } | null;
+  /** Whether a plan is LIVE and why (#698/#714). planDays is empty unless planLive. */
+  engagement?: {
+    state: "absent" | "partial" | "complete" | "dormant";
+    coverage: number;
+    basis: string;
+    planLive: boolean;
+    planName: string | null;
+    trailingCompletion: number | null;
+  };
+  /** What the athlete actually did over the trailing window; the projection baseline when no plan is live. */
+  fallback?: { windowDays: number; meanDailyLoad: number; activeDays: number; label: string };
 }
 
 /** The full forward-simulation payload: schedule + PMC + readiness + fitness + comparison. */

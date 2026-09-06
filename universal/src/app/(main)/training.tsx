@@ -168,6 +168,31 @@ export default function TrainingScreen() {
           <Card><Text variant="body" className="text-danger">API: {error} — is soma running on :3456?</Text></Card>
         ) : null}
 
+        {/* No live plan is a first-class state (#698/#714). The athlete may train
+            without a script and Garmin records every session either way, so
+            load, readiness and fitness stay; only the schedule goes. Say why in
+            plain words, and label what the projections assume instead. */}
+        {sim?.engagement && !sim.engagement.planLive ? (
+          <Card className="gap-1" testID="training-no-live-plan">
+            <Text variant="eyebrow">Plan</Text>
+            <Text variant="body" className="text-text" testID="training-no-live-plan-title">
+              {sim.engagement.state === "dormant"
+                ? "Plan is dormant"
+                : sim.engagement.state === "partial"
+                  ? "Plan exists, not being followed"
+                  : "No training plan"}
+            </Text>
+            <Text variant="caption" className="text-text-secondary" testID="training-no-live-plan-basis">
+              {sim.engagement.basis}.
+            </Text>
+            {sim.fallback ? (
+              <Text variant="micro" testID="training-fallback-note">
+                Everything below is from what you actually did. Projections assume {sim.fallback.label}: about {Math.round(sim.fallback.meanDailyLoad)} load/day.
+              </Text>
+            ) : null}
+          </Card>
+        ) : null}
+
         {/* Safety-rail overrides — hard readiness rules that force RED/YELLOW */}
         {graphOverrides.length ? (
           <View className="gap-2">
