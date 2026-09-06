@@ -17,6 +17,7 @@ import { RespirationChart } from "@/components/respiration-chart";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import { freshness, staleHeadline, todayKey, RECOVERY_MAX_AGE_DAYS } from "@/lib/freshness";
 import {
   Moon,
   Sunrise,
@@ -408,7 +409,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Sleep & Recovery</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {stats?.total_nights
-              ? `${Number(stats.total_nights)} nights tracked`
+              ? `${Number(stats.total_nights)} nights recorded in this range${lastNight?.date ? ` · last night recorded ${lastNight.date}` : ""}`
               : "No sleep data yet."}
           </p>
         </div>
@@ -420,6 +421,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
         <StatCard
           title="Avg Sleep"
           value={stats?.avg_hours ? `${Number(stats.avg_hours).toFixed(1)}h` : "—"}
+          subtitle={stats?.total_nights ? `based on ${Number(stats.total_nights)} nights` : undefined}
           icon={<Moon className="h-4 w-4 text-indigo-400" />}
           info="Average total sleep time per night. Recommended: 7-9 hours"
         />
@@ -446,17 +448,30 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
         />
       </div>
 
-      {/* Last Night Detail */}
-      {lastNight && (
-        <Card className="mb-6">
+      {/* Last Night Detail — dated, and demoted once the night is older than the
+          watch's cadence allows: absent is unknown, not the last night we saw (#731). */}
+      {lastNight && (() => {
+        const f = freshness(lastNight.date, todayKey());
+        return (
+        <Card className={`mb-6 ${f.stale ? "opacity-80" : ""}`} data-testid="sleep-last-night">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <CardTitle
+              className="text-sm font-medium text-muted-foreground flex items-center gap-2"
+              data-freshness={f.stale ? "stale" : "fresh"}
+              data-observed={lastNight.date}
+              data-max-age-days={RECOVERY_MAX_AGE_DAYS}
+            >
               <Moon className="h-4 w-4" />
-              Last Night
-              {qualityBadge(lastNight.quality)}
+              {f.stale ? staleHeadline("night", f) : `Last night · ${lastNight.date}`}
+              {f.stale ? null : qualityBadge(lastNight.quality)}
             </CardTitle>
+            {f.stale && (
+              <p className="text-xs text-muted-foreground" data-testid="sleep-last-night-stale">
+                The values below are from {lastNight.date}, {f.ageDays} days ago, not last night.
+              </p>
+            )}
           </CardHeader>
-          <CardContent>
+          <CardContent className={f.stale ? "text-muted-foreground" : ""}>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Total</div>
@@ -500,7 +515,8 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             </div>
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
 
       {/* Charts Row 1: Sleep Stages + Score */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -565,7 +581,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Clock className="h-4 w-4 text-emerald-400" />
               Sleep Regularity
-              <span className="ml-auto text-xs font-normal">Last {sleepRegularity.nights} nights</span>
+              <span className="ml-auto text-xs font-normal">based on {sleepRegularity.nights} nights in this range</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -757,27 +773,39 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              {(() => {
+                const last = hrvTrend[hrvTrend.length - 1] as { date?: string; weekly_avg?: number; last_night_avg?: number; status?: string } | undefined;
+                const f = freshness(last?.date ?? null, todayKey());
+                return (
+              <div
+                className="grid grid-cols-3 gap-4 mb-4"
+                data-testid="sleep-hrv-latest"
+                data-freshness={f.stale ? "stale" : "fresh"}
+                data-observed={last?.date ?? ""}
+                data-max-age-days={RECOVERY_MAX_AGE_DAYS}
+              >
                 <div>
-                  <div className="text-xs text-muted-foreground">Weekly Avg</div>
+                  <div className="text-xs text-muted-foreground">Weekly Avg{f.stale ? "" : ` · ${last?.date}`}</div>
                   <div className="text-2xl font-bold">
-                    {Number(hrvTrend[hrvTrend.length - 1]?.weekly_avg) || "—"}
-                    <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
+                    {f.stale ? "—" : Number(last?.weekly_avg) || "—"}
+                    {f.stale ? null : <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>}
                   </div>
+                  {f.stale && <div className="text-xs text-muted-foreground">last {Number(last?.weekly_avg) || "—"} ms on {last?.date}</div>}
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Last Night</div>
+                  <div className="text-xs text-muted-foreground">{f.stale ? staleHeadline("HRV reading", f) : `Last night · ${last?.date}`}</div>
                   <div className="text-2xl font-bold">
-                    {Number(hrvTrend[hrvTrend.length - 1]?.last_night_avg) || "—"}
-                    <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>
+                    {f.stale ? "—" : Number(last?.last_night_avg) || "—"}
+                    {f.stale ? null : <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>}
                   </div>
+                  {f.stale && <div className="text-xs text-muted-foreground">last {Number(last?.last_night_avg) || "—"} ms on {last?.date}</div>}
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Status</div>
                   <div className="text-2xl font-bold capitalize">
                     {(() => {
-                      const s = hrvTrend[hrvTrend.length - 1]?.status as string;
-                      if (!s) return "—";
+                      const s = last?.status as string;
+                      if (!s || f.stale) return "—";
                       const colors: Record<string, string> = {
                         BALANCED: "text-green-400",
                         LOW: "text-red-400",
@@ -788,6 +816,8 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                   </div>
                 </div>
               </div>
+                );
+              })()}
               <HRVChart
                 data={(hrvTrend as any[]).map((h: any) => ({
                   date: h.date,
@@ -885,19 +915,27 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                 const data = (spo2Trend as any[]).filter((d: any) => d.avg_spo2 > 0);
                 if (data.length === 0) return <p className="text-sm text-muted-foreground">No SpO2 data</p>;
                 const latest = data[data.length - 1];
+                const fresh = freshness(latest?.date ?? null, todayKey());
                 const recent7 = data.slice(-7);
                 const avg7 = recent7.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / recent7.length;
                 const lowVals = data.filter((d: any) => d.low_spo2 && Number(d.low_spo2) > 0).map((d: any) => Number(d.low_spo2));
                 const minSpo2 = lowVals.length > 0 ? Math.min(...lowVals) : null;
                 return (
                   <>
-                    <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div
+                      className="grid grid-cols-3 gap-4 mb-4"
+                      data-testid="sleep-spo2-latest"
+                      data-freshness={fresh.stale ? "stale" : "fresh"}
+                      data-observed={latest?.date ?? ""}
+                      data-max-age-days={RECOVERY_MAX_AGE_DAYS}
+                    >
                       <div>
-                        <div className="text-xs text-muted-foreground">Last Night</div>
-                        <div className="text-2xl font-bold">{Number(latest.avg_spo2).toFixed(0)}%</div>
+                        <div className="text-xs text-muted-foreground">{fresh.stale ? staleHeadline("SpO2 reading", fresh) : `Last night · ${latest.date}`}</div>
+                        <div className="text-2xl font-bold">{fresh.stale ? "—" : `${Number(latest.avg_spo2).toFixed(0)}%`}</div>
+                        {fresh.stale && <div className="text-xs text-muted-foreground">last {Number(latest.avg_spo2).toFixed(0)}% on {latest.date}</div>}
                       </div>
                       <div>
-                        <div className="text-xs text-muted-foreground">7-Day Avg</div>
+                        <div className="text-xs text-muted-foreground">{fresh.stale ? "Avg of the last 7 recorded" : "7-Day Avg"}</div>
                         <div className="text-2xl font-bold">{avg7.toFixed(0)}%</div>
                       </div>
                       <div>
