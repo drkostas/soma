@@ -852,11 +852,11 @@ export function NutritionDashboard({
                           </div>
                         </div>
                         {weightTrend && (
-                          <div className="flex justify-between items-baseline text-xs" data-testid="nutrition-weight-trend">
-                            <span className="text-muted-foreground">
+                          <div className="flex justify-between items-baseline gap-3 text-xs" data-testid="nutrition-weight-trend">
+                            <span className="text-muted-foreground shrink-0">
                               {weightTrend.kgPerWindow != null ? "Weight trend" : "Weight"}
                             </span>
-                            <span className={`tabular-nums ${weightTrend.kgPerWindow == null ? "text-muted-foreground" : weightTrend.kgPerWindow < 0 ? "text-green-500" : weightTrend.kgPerWindow > 0 ? "text-amber-400" : ""}`}>
+                            <span className={`tabular-nums text-right ${weightTrend.kgPerWindow == null ? "text-muted-foreground" : weightTrend.kgPerWindow < 0 ? "text-green-500" : weightTrend.kgPerWindow > 0 ? "text-amber-400" : ""}`}>
                               {weightTrend.basis}
                             </span>
                           </div>
@@ -881,7 +881,7 @@ export function NutritionDashboard({
                           <div className="text-[10px] lg:text-xs font-medium text-muted-foreground uppercase tracking-wider">7-Day Trend</div>
                           <div className="text-[9px] text-muted-foreground/60">goal: &minus;{trend7d.goalDeficit}/day</div>
                         </div>
-                        <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5 text-xs">
+                        <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5 text-xs" data-testid="trend-table">
                           <span className="text-muted-foreground text-[10px]">Date</span>
                           <span className="text-muted-foreground text-[10px] text-right hidden sm:block">Ate / Burn</span>
                           <span className="text-muted-foreground text-[10px] text-right">Deficit / Goal</span>
