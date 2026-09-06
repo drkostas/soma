@@ -891,21 +891,27 @@ export function NutritionDashboard({
                               : d.deficit < 0 ? "text-amber-500"
                               : d.deficit > 0 ? "text-rose-500" : "text-muted-foreground";
                             const isInProgress = d.isToday && !d.closed;
+                            // A day with nothing logged has no deficit to show, in
+                            // progress or not: "(−2363)" for an unlogged today is the
+                            // same fabrication the hero no longer makes (#703).
+                            const unobserved = (d.coverage ?? 0) === 0 && !(d.ate > 0);
                             return (
                               <React.Fragment key={d.date}>
                                 <span>
                                   {dayLabel}
                                   <span className="block sm:hidden text-[9px] text-muted-foreground/60">
-                                    ate {isInProgress ? `(${d.ate})` : d.ate} · burn {d.burn}
+                                    ate {unobserved ? "–" : isInProgress ? `(${d.ate})` : d.ate} · burn {d.burn}
                                   </span>
                                 </span>
                                 <span className={`tabular-nums text-right hidden sm:block ${isInProgress ? "text-muted-foreground" : ""}`}>
-                                  {isInProgress ? `(${d.ate})` : d.ate || "\u2013"} / {d.burn || "\u2013"}
+                                  {unobserved ? "\u2013" : isInProgress ? `(${d.ate})` : d.ate || "\u2013"} / {d.burn || "\u2013"}
                                 </span>
-                                <span className={`tabular-nums text-right font-medium ${isInProgress ? "text-muted-foreground" : deficitColor}`}>
-                                  {isInProgress
-                                    ? `(${d.deficit > 0 ? "+" : ""}${d.deficit})`
-                                    : d.ate > 0 ? `${d.deficit > 0 ? "+" : ""}${d.deficit}` : "\u2013"
+                                <span className={`tabular-nums text-right font-medium ${isInProgress || !(d.ate > 0) ? "text-muted-foreground" : deficitColor}`}>
+                                  {unobserved
+                                    ? "\u2013"
+                                    : isInProgress
+                                      ? `(${d.deficit > 0 ? "+" : ""}${d.deficit})`
+                                      : d.ate > 0 ? `${d.deficit > 0 ? "+" : ""}${d.deficit}` : "\u2013"
                                   } / &minus;{trend7d.goalDeficit}
                                 </span>
                               </React.Fragment>
