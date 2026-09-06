@@ -16,6 +16,7 @@ import { InteractiveThisWeek } from "@/components/interactive-this-week";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import { freshness, staleHeadline, todayKey, RECOVERY_MAX_AGE_DAYS } from "@/lib/freshness";
 import { readinessScore, trafficLightText } from "@/lib/readiness";
 import {
   Footprints,
@@ -446,6 +447,7 @@ async function getRecoverySummary() {
   const [bb, hrv, tr, model] = await Promise.all([
     sql`
       SELECT
+        date::text as date,
         (raw_json->>'bodyBatteryChargedValue')::int as charged,
         (raw_json->>'bodyBatteryDrainedValue')::int as drained
       FROM garmin_raw_data
@@ -456,6 +458,7 @@ async function getRecoverySummary() {
     `,
     sql`
       SELECT
+        date::text as date,
         (raw_json->'hrvSummary'->>'weeklyAvg')::int as weekly_avg,
         (raw_json->'hrvSummary'->>'lastNightAvg')::int as last_night,
         raw_json->'hrvSummary'->>'status' as status
@@ -466,6 +469,7 @@ async function getRecoverySummary() {
     `,
     sql`
       SELECT
+        date::text as date,
         (raw_json->0->>'score')::int as score,
         raw_json->0->>'level' as level
       FROM garmin_raw_data
@@ -474,7 +478,7 @@ async function getRecoverySummary() {
       ORDER BY date DESC LIMIT 1
     `,
     sql`
-      SELECT traffic_light, composite_score
+      SELECT date::text as date, traffic_light, composite_score
       FROM daily_readiness
       ORDER BY date DESC LIMIT 1
     `.catch(() => []),  // demo DB has no daily_readiness table — fall back to Garmin readiness
@@ -870,18 +874,19 @@ export default async function HomePage({
           {
             metric: "sleep",
             title: "Sleep",
+            // A night older than the watch's cadence is not the headline: absent is
+            // unknown, not the last night we saw (#713, #731).
             value: (() => {
-              const secs = health?.sleep_time_seconds || latestSleep?.total;
-              return secs ? `${(secs / 3600).toFixed(1)}h` : "—";
+              if (health?.sleep_time_seconds) return `${(health.sleep_time_seconds / 3600).toFixed(1)}h`;
+              const f = freshness(latestSleep?.date ?? null, todayKey());
+              return !f.stale && latestSleep?.total ? `${(latestSleep.total / 3600).toFixed(1)}h` : "—";
             })(),
-            // The value falls back to the latest recorded night; say WHEN that was
-            // once it is older than last night, instead of passing it off as today's (#647).
             subtitle: (() => {
-              const score = latestSleep?.score ? `Score: ${latestSleep.score}` : "";
-              const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-              const stale = !health?.sleep_time_seconds && latestSleep?.date && latestSleep.date < yesterday;
-              const when = stale ? `last recorded ${latestSleep.date}` : "";
-              return [score, when].filter(Boolean).join(" · ") || undefined;
+              if (health?.sleep_time_seconds) return latestSleep?.score ? `Score: ${latestSleep.score}` : undefined;
+              const f = freshness(latestSleep?.date ?? null, todayKey());
+              if (!f.stale) return [latestSleep?.score ? `Score: ${latestSleep.score}` : "", latestSleep?.date ?? ""].filter(Boolean).join(" · ") || undefined;
+              const last = latestSleep?.total ? ` · last ${(latestSleep.total / 3600).toFixed(1)}h` : "";
+              return `${staleHeadline("night", f)}${last}`;
             })(),
             icon: <Moon className="h-4 w-4 text-indigo-400" />,
             info: "Total sleep time from Garmin sleep tracking. Recommended: 7-9 hours",
@@ -941,7 +946,15 @@ export default async function HomePage({
                 {(recovery.model || recovery.readiness) && (
                   <div>
                     <div className="text-xs text-muted-foreground mb-1">Readiness</div>
-                    {recovery.model?.composite_score != null ? (
+                    {recovery.model?.traffic_light === "unknown" ? (
+                      // soma's own model says it cannot know (no night): say so, Garmin as the comparison (#731).
+                      <>
+                        <div className="text-2xl font-bold text-muted-foreground" data-testid="overview-readiness-unknown">unknown</div>
+                        <div className="text-xs text-muted-foreground">
+                          {recovery.readiness ? `Garmin ${recovery.readiness.score} · no night since ${recovery.model.date}` : "no night recorded"}
+                        </div>
+                      </>
+                    ) : recovery.model?.composite_score != null ? (
                       // soma's own model readiness (headlined); Garmin below as the comparison.
                       <>
                         <div className={`text-2xl font-bold ${trafficLightText(recovery.model.traffic_light)}`}>
@@ -966,29 +979,35 @@ export default async function HomePage({
                     ) : null}
                   </div>
                 )}
-                {recovery.bodyBattery && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Body Battery</div>
+                {recovery.bodyBattery && (() => {
+                  const f = freshness(recovery.bodyBattery.date, todayKey());
+                  return (
+                  <div data-testid="overview-body-battery" data-freshness={f.stale ? "stale" : "fresh"} data-observed={recovery.bodyBattery.date} data-max-age-days={RECOVERY_MAX_AGE_DAYS}>
+                    <div className="text-xs text-muted-foreground mb-1">Body Battery{f.stale ? "" : ` · ${recovery.bodyBattery.date}`}</div>
                     <div className="text-2xl font-bold">
-                      +{recovery.bodyBattery.charged}
+                      {f.stale ? "—" : `+${recovery.bodyBattery.charged}`}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      −{recovery.bodyBattery.drained} drained
+                      {f.stale ? `${staleHeadline("body battery reading", f)}` : `−${recovery.bodyBattery.drained} drained`}
                     </div>
                   </div>
-                )}
-                {recovery.hrv && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">HRV</div>
+                  );
+                })()}
+                {recovery.hrv && (() => {
+                  const f = freshness(recovery.hrv.date, todayKey());
+                  return (
+                  <div data-testid="overview-hrv" data-freshness={f.stale ? "stale" : "fresh"} data-observed={recovery.hrv.date} data-max-age-days={RECOVERY_MAX_AGE_DAYS}>
+                    <div className="text-xs text-muted-foreground mb-1">HRV{f.stale ? "" : ` · ${recovery.hrv.date}`}</div>
                     <div className="text-2xl font-bold">
-                      {recovery.hrv.last_night ?? recovery.hrv.weekly_avg} ms
+                      {f.stale ? "—" : `${recovery.hrv.last_night ?? recovery.hrv.weekly_avg} ms`}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Weekly avg: {recovery.hrv.weekly_avg} ms
+                      {f.stale ? `${staleHeadline("HRV reading", f)} · last ${recovery.hrv.last_night ?? recovery.hrv.weekly_avg} ms` : `Weekly avg: ${recovery.hrv.weekly_avg} ms`}
                     </div>
                   </div>
-                )}
-                {recovery.hrv?.status && (
+                  );
+                })()}
+                {recovery.hrv?.status && !freshness(recovery.hrv.date, todayKey()).stale && (
                   <div>
                     <div className="text-xs text-muted-foreground mb-1">HRV Status</div>
                     <div className={`text-2xl font-bold ${

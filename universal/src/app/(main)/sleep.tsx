@@ -7,6 +7,7 @@ import { StatDetailModal, type StatDetail } from "../../components/stat-detail-m
 import { TrendArrow } from "../../components/trend-arrow";
 import { LineChart, ChartLegend } from "../../components/line-chart";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
+import { freshness, staleShort, todayKey } from "../../lib/freshness";
 import { SleepDashboard } from "../../components/sleep-dashboard";
 import { RecoveryVitals } from "../../components/recovery-vitals";
 import { SleepRespiratory } from "../../components/sleep-respiratory";
@@ -122,7 +123,10 @@ export default function SleepScreen() {
   const { refreshing, onRefresh } = usePullRefresh(refetch);
 
   const lastSleep = last(sleep);
-  const nights = sleep?.current.length ?? 0;
+  // A night is one sleep_data record with time > 0 (the web header's count),
+  // not the days daily_health_summary happens to carry (#734).
+  const nights = sleepSum?.stats?.nights ?? sleep?.current.length ?? 0;
+  const lastNightFresh = freshness(lastSleep?.date ?? null, todayKey());
 
   // Sleep score isn't served by the stats API; recovery.value2 carries HRV weekly avg.
   const lastRecovery = last(recovery);
@@ -130,6 +134,7 @@ export default function SleepScreen() {
   // below) — /api/stats/recovery.value2 is null here, which rendered the top card
   // as "—" while the card right beneath it showed 64ms. Wire both to one source.
   const hrvLatest = recoveryVitals?.hrv?.latest ?? null;
+  const hrvFresh = freshness(hrvLatest?.date ?? null, todayKey());
   const hrvTrend = (recoveryVitals?.hrv?.trend ?? [])
     .map((p) => p.weekly_avg)
     .filter((v): v is number => v != null);
@@ -160,10 +165,13 @@ export default function SleepScreen() {
       metric: "sleep",
     },
     {
+      // Dated, and demoted once the night is older than two days (#731).
       label: "Last Night",
-      value: fmt1(lastSleep?.value, "h"),
-      sub: lastSleep?.date ?? "no data",
-      cls: "text-teal",
+      value: lastNightFresh.stale ? "—" : fmt1(lastSleep?.value, "h"),
+      sub: lastNightFresh.stale
+        ? `${staleShort("night", lastNightFresh)}${lastSleep?.value != null ? ` · last ${fmt1(lastSleep.value, "h")}` : ""}`
+        : lastSleep?.date ?? "no data",
+      cls: lastNightFresh.stale ? "text-text-muted" : "text-teal",
     },
     {
       label: "Resting HR",
@@ -180,9 +188,11 @@ export default function SleepScreen() {
     },
     {
       label: "HRV (weekly)",
-      value: fmt0(hrvLatest?.weekly_avg, " ms"),
-      sub: hrvLatest?.last_night_avg != null ? `last night ${hrvLatest.last_night_avg} ms` : "weekly avg",
-      cls: "text-lime",
+      value: hrvFresh.stale ? "—" : fmt0(hrvLatest?.weekly_avg, " ms"),
+      sub: hrvFresh.stale
+        ? `${staleShort("HRV", hrvFresh)}${hrvLatest?.weekly_avg != null ? ` · last ${hrvLatest.weekly_avg} ms` : ""}`
+        : hrvLatest?.last_night_avg != null ? `last night ${hrvLatest.last_night_avg} ms · ${hrvLatest.date}` : "weekly avg",
+      cls: hrvFresh.stale ? "text-text-muted" : "text-lime",
       spark: { data: hrvTrend, color: "#cbe896" },
       unit: "ms",
     },
