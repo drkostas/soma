@@ -28,6 +28,12 @@ interface RunningStats {
   longest_run: number | null;
 }
 
+/** Running-only status from soma's own run load (web lib/run-status, #738). */
+interface RunStatus {
+  kind: "none" | "lapsed" | "light" | "easing" | "steady" | "building" | "spiking";
+  label: string; detail: string; runs28: number; lastRun: string | null; daysSinceRun: number | null;
+  acute: number; chronic: number; acwr: number | null;
+}
 interface TrainingStatus {
   status_code: string | null;
   sport: string | null;
@@ -96,6 +102,7 @@ export interface MileageMonth { month: string; km: number; runs: number }
 interface RunningPayload {
   stats: RunningStats | null;
   trainingStatus: TrainingStatus | null;
+  runStatus?: RunStatus | null;
   hrDistribution: HrZone[];
   records: Records | null;
   shoeMileage: ShoeMileage[];
@@ -185,6 +192,7 @@ export default function RunningScreen() {
 
   const stats = data?.stats;
   const ts = data?.trainingStatus;
+  const rs = data?.runStatus ?? null;
   const zones = data?.hrDistribution ?? [];
   const records = data?.records;
   const shoes = data?.shoeMileage ?? [];
@@ -300,34 +308,41 @@ export default function RunningScreen() {
 
         {/* Training Status — only when Garmin actually populated it (else it was
             a card full of dashes next to the live VO2max + load-trend below). */}
-        {ts && (ts.status_code != null || ts.vo2max != null || ts.acute_load != null) ? (
+        {(rs || (ts && (ts.status_code != null || ts.vo2max != null || ts.acute_load != null))) ? (
           <Card className="gap-3">
             <View className="flex-row items-center justify-between">
               <Text variant="eyebrow">Training Status</Text>
-              {statusInfo ? (
+              {rs ? (
+                // soma's running-only verdict (#738); Garmin's all-sport status sits below as the comparison.
                 <Badge
-                  label={statusInfo.label}
-                  tone={
-                    ts.acwr_status === "OPTIMAL"
-                      ? "success"
-                      : ts.acwr_status === "HIGH"
-                        ? "warm"
-                        : "teal"
-                  }
+                  label={rs.label}
+                  tone={rs.kind === "steady" ? "success" : rs.kind === "spiking" ? "danger" : rs.kind === "building" ? "teal" : rs.kind === "easing" ? "warm" : "teal"}
                 />
               ) : null}
             </View>
+            {rs ? (
+              <View className="gap-0.5" testID="running-run-status">
+                <Text variant="micro" className="text-text-muted">Running · last 4 weeks</Text>
+                <Text variant="title" className={rs.kind === "steady" ? "text-success" : rs.kind === "spiking" ? "text-danger" : rs.kind === "building" ? "text-teal" : rs.kind === "easing" ? "text-warm" : "text-text-secondary"}>
+                  {rs.label}
+                </Text>
+                <Text variant="micro" className="text-text-secondary">{rs.detail}</Text>
+              </View>
+            ) : null}
+            {ts && (ts.status_code != null || ts.vo2max != null || ts.acute_load != null) ? (
+            <>
+            <Text variant="micro" className="text-text-muted" testID="running-garmin-status-label">
+              Garmin training status · all sports{ts.sport ? ` (Garmin tags it ${ts.sport.toLowerCase()})` : ""} · 7-day load vs 4-week
+            </Text>
             <View className="flex-row flex-wrap gap-3">
               <View className="min-w-[46%] flex-1 gap-0.5">
                 <Text variant="micro" className="text-text-muted">
-                  Status
+                  Garmin status
                 </Text>
                 <Text variant="title" className={statusInfo?.cls ?? "text-text"}>
                   {statusInfo?.label ?? "—"}
                 </Text>
-                <Text variant="micro" className="capitalize">
-                  {ts.sport?.toLowerCase() ?? ""}
-                </Text>
+                <Text variant="micro">all sports</Text>
               </View>
               <View className="min-w-[46%] flex-1 gap-0.5">
                 <Text variant="micro" className="text-text-muted">
@@ -340,18 +355,18 @@ export default function RunningScreen() {
               </View>
               <View className="min-w-[46%] flex-1 gap-0.5">
                 <Text variant="micro" className="text-text-muted">
-                  Training Load
+                  Garmin 7-day load
                 </Text>
                 <Text variant="title" className="text-warm">
                   {ts.acute_load != null ? Math.round(num(ts.acute_load)) : "—"}
                 </Text>
                 <Text variant="micro">
-                  {ts.chronic_load != null ? `Chronic ${Math.round(num(ts.chronic_load))}` : ""}
+                  {ts.chronic_load != null ? `4-week ${Math.round(num(ts.chronic_load))} · all sports` : "all sports"}
                 </Text>
               </View>
               <View className="min-w-[46%] flex-1 gap-0.5">
                 <Text variant="micro" className="text-text-muted">
-                  ACWR
+                  Garmin ACWR
                 </Text>
                 <Text variant="title" className="text-lime">
                   {ts.acwr != null ? num(ts.acwr).toFixed(2) : "—"}
@@ -361,6 +376,8 @@ export default function RunningScreen() {
                 </Text>
               </View>
             </View>
+            </>
+            ) : null}
           </Card>
         ) : null}
 
