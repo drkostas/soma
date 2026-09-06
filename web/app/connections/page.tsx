@@ -253,7 +253,30 @@ async function getPageData() {
       WHERE ga.endpoint_name = 'summary'
         AND ga.raw_json->>'startTimeGMT' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
       ORDER BY ga.raw_json->>'startTimeGMT' DESC
-    `,
+    `.catch(() =>
+    // The demo database has no strava_bridge_uploads: same rows from activity_sync_log alone.
+    sql`
+      SELECT ga.activity_id::text AS source_id,
+             'garmin' AS source_platform,
+             ga.raw_json->>'activityName' AS name,
+             ga.raw_json->'activityType'->>'typeKey' AS activity_type,
+             ga.raw_json->>'startTimeGMT' AS start_time,
+             (ga.raw_json->>'duration')::numeric AS duration,
+             (ga.raw_json->>'distance')::numeric AS distance,
+             ga.raw_json->>'manufacturer' AS manufacturer,
+             asl.status AS sync_status,
+             asl.destination_id,
+             asl.processed_at AS synced_at
+      FROM garmin_activity_raw ga
+      LEFT JOIN activity_sync_log asl
+        ON asl.source_platform = 'garmin'
+        AND asl.source_id = ga.activity_id::text
+        AND asl.destination = 'strava'
+        AND asl.status IN ('sent', 'external')
+      WHERE ga.endpoint_name = 'summary'
+        AND ga.raw_json->>'startTimeGMT' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
+      ORDER BY ga.raw_json->>'startTimeGMT' DESC
+    `),
     sql`
       SELECT h.hevy_id AS source_id,
              'hevy' AS source_platform,
