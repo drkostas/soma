@@ -695,10 +695,36 @@ export function NutritionDashboard({
                       <span>{goalIntake} goal{deficit > 0 && <span className="text-muted-foreground/50"> (&minus;{deficit})</span>}</span>
                       <span>{totalBurn} burn</span>
                     </div>
-                    {/* Current deficit */}
-                    <div className="text-xs text-center">
-                      <span className={currentDeficit < 0 ? "text-green-500" : "text-rose-500"}>{currentDeficit > 0 ? "+" : ""}{Math.round(currentDeficit)} current deficit</span>
-                    </div>
+                    {/* Current deficit — only a claim when today is actually
+                        observed. With nothing logged, "eaten − burn" is a
+                        fabricated −2363 in green, which is exactly the
+                        "assumes I'm always in deficit" complaint (#698, #703).
+                        Below the coverage floor, say what is true instead. */}
+                    {(() => {
+                      const loggedSlotCount = 4 - unloggedSlots.length;
+                      const todayObserved = isClosed || loggedSlotCount >= 3;
+                      if (todayObserved) {
+                        return (
+                          <div className="text-xs text-center" data-testid="hero-deficit">
+                            <span className={currentDeficit < 0 ? "text-green-500" : "text-rose-500"}>{currentDeficit > 0 ? "+" : ""}{Math.round(currentDeficit)} current deficit</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="text-xs text-center text-muted-foreground" data-testid="hero-not-observed">
+                          {loggedSlotCount === 0
+                            ? "nothing logged yet · deficit unknown"
+                            : `${Math.round(consumedCal)} eaten so far · ${loggedSlotCount} of 4 meals logged · deficit unknown`}
+                        </div>
+                      );
+                    })()}
+                    {/* The scale, at hero level, whenever logging is not
+                        carrying the week — visible without expanding. */}
+                    {weightTrendPrimary && weightTrend && (
+                      <div className="text-[11px] text-center text-muted-foreground" data-testid="hero-weight-trend">
+                        Scale: {weightTrend.basis}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
