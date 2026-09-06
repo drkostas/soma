@@ -35,6 +35,9 @@ export async function GET() {
     // Strava coverage: of recent Garmin activities, how many are on Strava,
     // via soma's own sync (activity_sync_log) OR the Garmin→Strava bridge
     // (strava_bridge_uploads), which is what actually runs today (#736).
+    type StravaRow = { name: string | null; date: string; type_key: string | null; strava_id: string | null };
+    // The demo database is a subset without strava_bridge_uploads: fall back to
+    // activity_sync_log alone rather than 500 the whole endpoint (#748 follow-up).
     const stravaRows = (await sql`
       SELECT g.raw_json->>'activityName' AS name,
         (g.raw_json->>'startTimeLocal')::date::text AS date,
@@ -49,7 +52,19 @@ export async function GET() {
         AND (g.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 90
       ORDER BY (g.raw_json->>'startTimeLocal')::text DESC
       LIMIT 60
-    `) as { name: string | null; date: string; type_key: string | null; strava_id: string | null }[];
+    `.catch(() => sql`
+      SELECT g.raw_json->>'activityName' AS name,
+        (g.raw_json->>'startTimeLocal')::date::text AS date,
+        g.raw_json->'activityType'->>'typeKey' AS type_key,
+        sl.destination_id AS strava_id
+      FROM garmin_activity_raw g
+      LEFT JOIN activity_sync_log sl
+        ON sl.source_id = g.activity_id::text AND sl.destination = 'strava' AND sl.status IN ('sent', 'external')
+      WHERE g.endpoint_name = 'summary'
+        AND (g.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 90
+      ORDER BY (g.raw_json->>'startTimeLocal')::text DESC
+      LIMIT 60
+    `)) as StravaRow[];
     const stravaTotal = stravaRows.length;
     const stravaOn = stravaRows.filter((r) => r.strava_id != null).length;
     const stravaCoverage = stravaTotal > 0
