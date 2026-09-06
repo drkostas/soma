@@ -21,10 +21,85 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-export type ChatMode = "local" | "proxy";
+export type ChatMode = "local" | "proxy" | "gone";
 
+/**
+ * local  — this process can spawn `claude` (the Mac, or a dev server).
+ * proxy  — the old Vercel path: forward to SOMA_CHAT_TUNNEL_URL.
+ * gone   — Vercel with no tunnel URL: the chat moved to the Mac over the
+ *          tailnet (#670); answer 410 instead of trying to spawn claude here.
+ */
 export function chatMode(): ChatMode {
-  return process.env.SOMA_CHAT_TUNNEL_URL ? "proxy" : "local";
+  if (process.env.SOMA_CHAT_TUNNEL_URL) return "proxy";
+  if (process.env.VERCEL) return "gone";
+  return "local";
+}
+
+/** 410 for the Vercel routes once the tunnel is gone: the browser must call the Mac directly. */
+export function chatGone(): NextResponse {
+  return NextResponse.json(
+    { error: "The chat runs on the Mac over the tailnet now; open soma from a tailnet device (NEXT_PUBLIC_SOMA_CHAT_BASE)." },
+    { status: 410 },
+  );
+}
+
+/**
+ * Tailnet identity (#670). tailscale serve injects Tailscale-User-Login on
+ * every proxied request and strips any client-supplied copy (probed
+ * 2026-09-07: a spoofed header never reached the origin). The Mac listens on
+ * loopback only, so a request carrying the configured login came through
+ * serve from that tailnet user. No shared secret leaves the Mac.
+ */
+export function tailnetIdentityOk(req: NextRequest): boolean {
+  const expected = process.env.SOMA_CHAT_TAILNET_LOGIN;
+  if (!expected) return false;
+  const got = req.headers.get("tailscale-user-login");
+  return !!got && got.toLowerCase() === expected.toLowerCase();
+}
+
+/** The browser origin allowed to call the Mac's chat routes cross-origin (https://soma.gkos.dev). */
+export function allowedChatOrigin(req: NextRequest): string | null {
+  const allowed = (process.env.SOMA_CHAT_ALLOWED_ORIGIN ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean);
+  const origin = req.headers.get("origin");
+  if (!origin || !allowed.includes(origin)) return null;
+  return origin;
+}
+
+const CORS_METHODS = "GET, POST, PUT, OPTIONS";
+const CORS_HEADERS = "content-type, x-soma-chat-token";
+
+/** Add CORS headers for the allowed origin; a no-op for same-origin calls. */
+export function withCors<T extends Response>(req: NextRequest, res: T): T {
+  const origin = allowedChatOrigin(req);
+  if (!origin) return res;
+  try {
+    res.headers.set("Access-Control-Allow-Origin", origin);
+    res.headers.set("Vary", "Origin");
+    res.headers.set("Access-Control-Allow-Methods", CORS_METHODS);
+    res.headers.set("Access-Control-Allow-Headers", CORS_HEADERS);
+    return res;
+  } catch {
+    // immutable headers (a fetch() Response): rebuild with the same body
+    const copy = new Response(res.body, { status: res.status, statusText: res.statusText, headers: new Headers(res.headers) });
+    copy.headers.set("Access-Control-Allow-Origin", origin);
+    copy.headers.set("Vary", "Origin");
+    copy.headers.set("Access-Control-Allow-Methods", CORS_METHODS);
+    copy.headers.set("Access-Control-Allow-Headers", CORS_HEADERS);
+    return copy as unknown as T;
+  }
+}
+
+/** OPTIONS preflight for the chat routes: 204 for the allowed origin, 403 otherwise. */
+export function chatPreflight(req: NextRequest): NextResponse {
+  const origin = allowedChatOrigin(req);
+  if (!origin) return new NextResponse(null, { status: 403 });
+  const res = new NextResponse(null, { status: 204 });
+  res.headers.set("Access-Control-Allow-Origin", origin);
+  res.headers.set("Vary", "Origin");
+  res.headers.set("Access-Control-Allow-Methods", CORS_METHODS);
+  res.headers.set("Access-Control-Allow-Headers", CORS_HEADERS);
+  res.headers.set("Access-Control-Max-Age", "600");
+  return res;
 }
 
 /**
@@ -49,6 +124,7 @@ export function requireToken(req: NextRequest): NextResponse | null {
   ) {
     return null;
   }
+  if (tailnetIdentityOk(req)) return null;
   const got = req.headers.get("x-soma-chat-token");
   if (got !== expected) {
     return NextResponse.json(
