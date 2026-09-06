@@ -431,11 +431,39 @@ export default function NutritionScreen() {
                   <Text variant="micro" className="text-text-muted">{goalIntake.toLocaleString()} goal{deficitGoal > 0 ? ` (−${deficitGoal})` : ""}</Text>
                   <Text variant="micro" className="text-text-muted">{totalBurn.toLocaleString()} burn</Text>
                 </View>
-                <Text variant="micro" style={{ color: currentDeficit <= 0 ? "#6ad4a0" : "#f2868c" }}>
-                  {currentDeficit <= 0
-                    ? `${Math.abs(Math.round(currentDeficit)).toLocaleString()} kcal current deficit`
-                    : `+${Math.round(currentDeficit).toLocaleString()} kcal surplus`}
-                </Text>
+                {/* A deficit is a claim about today; make it only when today is
+                    observed. With nothing logged, eaten − burn is a fabricated
+                    green number, the exact "assumes I'm in deficit" complaint
+                    (#698/#714). Same rule as the web hero. */}
+                {(() => {
+                  const logged = new Set(meals.filter((m) => Number(m.calories) > 0).map((m) => String(m.meal_slot)));
+                  const loggedSlotCount = ["breakfast", "lunch", "dinner", "pre_sleep"].filter(
+                    (s) => logged.has(s) || skippedSlots.includes(s),
+                  ).length;
+                  const todayObserved = dayClosed || loggedSlotCount >= 3;
+                  if (todayObserved) {
+                    return (
+                      <Text variant="micro" style={{ color: currentDeficit <= 0 ? "#6ad4a0" : "#f2868c" }} testID="hero-deficit">
+                        {currentDeficit <= 0
+                          ? `${Math.abs(Math.round(currentDeficit)).toLocaleString()} kcal current deficit`
+                          : `+${Math.round(currentDeficit).toLocaleString()} kcal surplus`}
+                      </Text>
+                    );
+                  }
+                  return (
+                    <Text variant="micro" className="text-text-muted" testID="hero-not-observed">
+                      {loggedSlotCount === 0
+                        ? "nothing logged yet · deficit unknown"
+                        : `${Math.round(consumedCal).toLocaleString()} eaten so far · ${loggedSlotCount} of 4 meals logged · deficit unknown`}
+                    </Text>
+                  );
+                })()}
+                {/* The scale, whenever logging is not carrying the week. */}
+                {data?.weightTrendPrimary && data?.weightTrend ? (
+                  <Text variant="micro" className="text-text-muted" testID="hero-weight-trend">
+                    Scale: {data.weightTrend.basis}
+                  </Text>
+                ) : null}
               </View>
             );
           })() : null}
@@ -505,7 +533,42 @@ export default function NutritionScreen() {
               </Card>
             ) : null}
 
-            {/* Adaptive (display-only) */}
+            {/* Engagement + the scale (#698/#714). When the week is not fully
+                logged the scale leads and the log-derived numbers are hidden
+                rather than shown as a deficit computed from nothing. */}
+            {data?.engagement ? (
+              <Card className="gap-1" testID="nutrition-engagement">
+                <View className="flex-row items-center justify-between">
+                  <Text variant="eyebrow">{data.weightTrendPrimary ? "Scale" : "This week"}</Text>
+                  <Text variant="micro" className="text-text-muted" testID="nutrition-engagement-basis">{data.engagement.basis}</Text>
+                </View>
+                {data.weightTrend ? (
+                  <View className="flex-row justify-between">
+                    <Text variant="caption" className="text-text-secondary">{data.weightTrend.kgPerWindow != null ? "Weight trend" : "Weight"}</Text>
+                    <Text
+                      variant="caption"
+                      className="tabular-nums"
+                      style={{ color: data.weightTrend.kgPerWindow == null ? "#8a97a3" : data.weightTrend.kgPerWindow < 0 ? "#6ad4a0" : data.weightTrend.kgPerWindow > 0 ? "#e0a458" : "#e6edf3" }}
+                      testID="nutrition-weight-trend"
+                    >
+                      {data.weightTrend.basis}
+                    </Text>
+                  </View>
+                ) : null}
+                {data.engagement.state === "absent" ? (
+                  <Text variant="caption" className="text-text-muted" testID="nutrition-not-tracking">
+                    Not tracking meals this week. Weigh in to keep the trend honest.
+                  </Text>
+                ) : null}
+                {data.engagement.state === "partial" ? (
+                  <Text variant="caption" className="text-text-muted" testID="nutrition-partial">
+                    Partly logged. Weekly totals show after {data.engagement.weekFloorDays ?? 3} full days; skip a meal you did not eat so the day counts.
+                  </Text>
+                ) : null}
+              </Card>
+            ) : null}
+
+            {/* Adaptive (display-only) — the server already nulls it unless the week is complete */}
             {adaptive && (adaptive.driftFlag || adaptive.dietBreakLevel !== "none") ? (
               <Card className="gap-1">
                 <Text variant="eyebrow">Adaptive</Text>
@@ -619,7 +682,7 @@ export default function NutritionScreen() {
           <>
             {/* Trend tab — body-composition trajectory, then adherence + 7-day table */}
             <BodyCompChart visible={tab === "Trend"} />
-            {adherence ? (
+            {adherence && data?.engagement?.state === "complete" ? (
               <Card className="gap-2">
                 <Text variant="eyebrow">Weekly adherence</Text>
                 <ProgressBar pct={Math.min(adherence.ratio, 1)} color="#6ad4a0" />
