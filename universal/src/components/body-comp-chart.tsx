@@ -87,10 +87,11 @@ function StatusCard({ p }: { p: BodyComp["profile"] }) {
             {slope > 0 ? "+" : ""}{slope.toFixed(2)} kg/wk
           </Text>
         </View>
-        {p.totalActualDeficit != null ? (
+        {p.totalActualDeficit != null && (!p.window || p.window.active) ? (
           <View>
             <Text variant="micro" className="text-text-muted">Total deficit</Text>
             <Text variant="caption" className="tabular-nums">{Math.round(p.totalActualDeficit).toLocaleString()} kcal</Text>
+            {p.window ? <Text variant="micro" className="text-text-muted">{p.window.label}</Text> : null}
           </View>
         ) : null}
         {p.daysRemaining != null ? (
@@ -105,17 +106,24 @@ function StatusCard({ p }: { p: BodyComp["profile"] }) {
             <Text variant="caption" className="tabular-nums">{p.fatToLose.toFixed(1)} kg</Text>
           </View>
         ) : null}
-        {p.avgActualDeficit != null ? (
+        {p.avgActualDeficit != null && (!p.window || p.window.active) ? (
           <View>
             <Text variant="micro" className="text-text-muted">Avg deficit</Text>
             <Text variant="caption" className="tabular-nums">{Math.round(p.avgActualDeficit).toLocaleString()}/day</Text>
           </View>
         ) : null}
       </View>
+      {p.window && !p.window.active ? (
+        // No counted day inside the gap: there is no current deficit to total or average (#728).
+        <Text variant="micro" className="text-text-muted" testID="bodycomp-window-inactive">
+          {p.window.label}
+          {p.window.start ? ` · last window ${shortLabel(p.window.start)} → ${shortLabel(p.window.end ?? p.window.start)}, ${p.window.countedDays} counted days` : ""}
+        </Text>
+      ) : null}
       {p.requiredDeficit != null && p.requiredDeficit > 0 ? (
         <Text variant="micro" className="text-text-muted">
           Need {Math.round(p.requiredDeficit).toLocaleString()} kcal/day{p.targetDate ? ` to hit ${shortLabel(p.targetDate)}` : ""}
-          {p.avgActualDeficit != null ? ` · averaging ${Math.round(p.avgActualDeficit).toLocaleString()}` : ""}
+          {p.avgActualDeficit != null && (!p.window || p.window.active) ? ` · averaging ${Math.round(p.avgActualDeficit).toLocaleString()}` : ""}
         </Text>
       ) : null}
     </Card>
@@ -203,6 +211,11 @@ export function BodyCompChart({ visible }: { visible: boolean }) {
             <Text variant="eyebrow">Cumulative deficit</Text>
             <Text variant="micro" className="text-text-muted tabular-nums">goal {Math.round(goalDeficit)}/day</Text>
           </View>
+          {profile.window ? (
+            <Text variant="micro" className="text-text-muted" testID="bodycomp-cumulative-window">
+              {profile.window.active ? `Summed ${profile.window.label}` : `${profile.window.label} · line ends at the last window`}
+            </Text>
+          ) : null}
           <LineChart
             height={130}
             labels={dLabels}
@@ -222,6 +235,11 @@ export function BodyCompChart({ visible }: { visible: boolean }) {
       {hasBurn && dailyDeficits.length >= 2 ? (
         <Card className="gap-2">
           <Text variant="eyebrow">Burn vs eaten</Text>
+          {profile.window ? (
+            <Text variant="micro" className="text-text-muted">
+              {profile.window.active ? `Counted ${profile.window.label}` : profile.window.label} · days outside the window are context, not a sum
+            </Text>
+          ) : null}
           <LineChart
             height={140}
             labels={dLabels}
