@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { X, Download, Share, Apple, Smartphone } from "lucide-react";
+import { detectMobileBrowser } from "@/lib/mobile-browser";
 
 /** GitHub releases host the sideloadable native builds (widgets need native). */
 const RELEASES_URL = "https://github.com/drkostas/soma/releases/latest";
@@ -23,6 +24,11 @@ export function PWAInstallPrompt() {
     // @ts-expect-error - iOS standalone check
     if (window.navigator.standalone === true) return;
 
+    // Mobile browsers only (#709). On a laptop this is noise, and at phone
+    // widths it sat on top of the Close Day button. macOS Safari used to get
+    // its own "Add to Dock" branch; that is a desktop and is gone.
+    if (!detectMobileBrowser()) return;
+
     // Previously dismissed?
     const dismissedAt = localStorage.getItem("pwa-install-dismissed");
     if (dismissedAt) {
@@ -31,34 +37,26 @@ export function PWAInstallPrompt() {
       if (daysSince < 14) return; // re-show after 2 weeks
     }
 
+    // On a mobile browser the card is useful even when the browser never
+    // fires beforeinstallprompt: the native builds are what carry the widgets.
+    // The Install button itself still appears only once the event has fired.
+    setDismissed(false);
+
     // Chromium: listen for beforeinstallprompt
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setDismissed(false);
     };
     window.addEventListener("beforeinstallprompt", handler);
 
-    // iOS Safari detection (no beforeinstallprompt support)
+    // iOS Safari has no beforeinstallprompt; show the share-sheet hint instead.
     const isIOS =
       /iPad|iPhone|iPod/.test(navigator.userAgent) &&
       !(window as unknown as { MSStream?: unknown }).MSStream;
     const isSafari =
       /Safari/.test(navigator.userAgent) &&
       !/Chrome|CriOS|FxiOS/.test(navigator.userAgent);
-
-    if (isIOS && isSafari) {
-      setShowIOSHint(true);
-      setDismissed(false);
-    }
-
-    // macOS Safari detection
-    const isMacSafari =
-      /Macintosh/.test(navigator.userAgent) && isSafari;
-    if (isMacSafari) {
-      setShowIOSHint(true); // reuse hint with different text
-      setDismissed(false);
-    }
+    if (isIOS && isSafari) setShowIOSHint(true);
 
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
@@ -85,7 +83,10 @@ export function PWAInstallPrompt() {
     /iPad|iPhone|iPod/.test(navigator.userAgent);
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md animate-in slide-in-from-bottom-4 fade-in-0 duration-300">
+    <div
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md animate-in slide-in-from-bottom-4 fade-in-0 duration-300"
+      data-testid="pwa-install-prompt"
+    >
       <div className="bg-card border border-border rounded-xl shadow-lg shadow-black/20 p-4 flex items-start gap-3">
         <div className="shrink-0 w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
           <Download className="h-5 w-5 text-emerald-500" />
@@ -113,7 +114,7 @@ export function PWAInstallPrompt() {
             </p>
           ) : (
             <p className="text-xs text-muted-foreground mt-0.5">
-              Add to your dock for quick access
+              Add to your home screen for quick access
             </p>
           )}
           {deferredPrompt && (
