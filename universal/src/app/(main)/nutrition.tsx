@@ -543,11 +543,11 @@ export default function NutritionScreen() {
                   <Text variant="micro" className="text-text-muted" testID="nutrition-engagement-basis">{data.engagement.basis}</Text>
                 </View>
                 {data.weightTrend ? (
-                  <View className="flex-row justify-between">
+                  <View className="flex-row justify-between gap-3">
                     <Text variant="caption" className="text-text-secondary">{data.weightTrend.kgPerWindow != null ? "Weight trend" : "Weight"}</Text>
                     <Text
                       variant="caption"
-                      className="tabular-nums"
+                      className="tabular-nums flex-1 text-right"
                       style={{ color: data.weightTrend.kgPerWindow == null ? "#8a97a3" : data.weightTrend.kgPerWindow < 0 ? "#6ad4a0" : data.weightTrend.kgPerWindow > 0 ? "#e0a458" : "#e6edf3" }}
                       testID="nutrition-weight-trend"
                     >
