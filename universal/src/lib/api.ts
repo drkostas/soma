@@ -1146,6 +1146,8 @@ export interface BodyCompProfile {
   totalActualDeficit?: number; realisticDate?: string | null;
   fatToLose?: number; requiredDeficit?: number; avgActualDeficit?: number;
   targetDatePassed?: boolean;
+  /** The window every summed deficit number refers to (#728): counted days only, gaps > 7 d break it. */
+  window?: { start: string | null; end: string | null; countedDays: number; active: boolean; label: string };
 }
 export interface BodyComp {
   profile: BodyCompProfile;
@@ -1153,8 +1155,9 @@ export interface BodyComp {
   goalLine: { date: string; weight: number; bf: number }[];
   trendPrediction: { date: string; weight: number; bf: number }[];
   dailyDeficits: {
-    date: string; deficit: number; cumulative: number; goalPace: number; closed: boolean; isToday: boolean;
+    date: string; deficit: number; cumulative: number | null; goalPace: number | null; closed: boolean; isToday: boolean;
     bmr?: number; dailyActivity?: number; runCal?: number; gymCal?: number; totalBurn?: number; consumed?: number;
+    coverage?: number | null; counted?: boolean; inWindow?: boolean;
   }[];
   goalDeficit: number;
 }

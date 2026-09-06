@@ -34,6 +34,8 @@ interface BodyCompData {
     avgActualDeficit: number;
     closedDeficitDays: number;
     totalActualDeficit: number;
+    /** The window every summed number refers to (#728). Absent on older payloads. */
+    window?: { start: string | null; end: string | null; countedDays: number; active: boolean; label: string };
   };
   weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[];
   goalLine: { date: string; weight: number; bf: number }[];
@@ -42,7 +44,8 @@ interface BodyCompData {
   dailyDeficits: {
     date: string; bmr: number; dailyActivity: number; runCal: number; runDistKm: number;
     gymCal: number; gymTitle: string; totalBurn: number; consumed: number;
-    deficit: number; cumulative: number; goalPace: number; closed: boolean; isToday: boolean;
+    deficit: number; cumulative: number | null; goalPace: number | null; closed: boolean; isToday: boolean;
+    coverage?: number | null; counted?: boolean; inWindow?: boolean;
   }[];
   goalDeficit: number;
 }
@@ -208,13 +211,16 @@ export function BodyCompChart() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-xs">
-            <span className="text-muted-foreground">
+            <span className="text-muted-foreground" data-testid="bodycomp-deficit-header">
               deficit: {profile.deficit}/day goal
-              {profile.closedDeficitDays > 0 && (
+              {profile.window && !profile.window.active ? (
+                // No counted day inside the gap: there is no current average to claim (#728).
+                <span className="text-muted-foreground">{" · "}{profile.window.label}</span>
+              ) : profile.closedDeficitDays > 0 ? (
                 <span className={profile.avgActualDeficit >= profile.deficit * 0.9 ? "text-green-500" : "text-amber-500"}>
-                  {" · "}{profile.avgActualDeficit}/day avg ({profile.closedDeficitDays}d)
+                  {" · "}{profile.avgActualDeficit}/day avg{profile.window ? ` (${profile.window.label})` : ` (${profile.closedDeficitDays}d)`}
                 </span>
-              )}
+              ) : null}
             </span>
             <span className="text-muted-foreground">&middot;</span>
             <span className="text-muted-foreground">{profile.fatToLose}kg to lose</span>
@@ -380,11 +386,20 @@ export function BodyCompChart() {
           ...d,
           goalLine: Math.max(0, d.totalBurn - goalDeficit),
           eatenDot: d.consumed, // separate key for scatter overlay
+          // A day outside the current window is context, not a sum: fade it (#728).
+          barOpacity: d.inWindow === false ? 0.3 : 1,
         }));
+        const outside = chartData.filter(d => d.inWindow === false).length;
         return (
         <Card>
           <CardContent className="py-4">
             <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Burn vs Eaten</div>
+            {profile.window && (
+              <div className="text-[10px] text-muted-foreground mb-2" data-testid="bodycomp-burn-window">
+                {profile.window.active ? `Summed ${profile.window.label}` : profile.window.label}
+                {outside > 0 ? ` · ${outside} faded day${outside === 1 ? "" : "s"} outside the current window` : ""}
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground mb-2">
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#94a3b8]" />BMR</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#14b8a6]" />activity</span>
@@ -475,10 +490,18 @@ export function BodyCompChart() {
                     }}
                   />
                   {/* Stacked burn bars */}
-                  <Bar dataKey="bmr" stackId="burn" fill="#94a3b8" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="dailyActivity" stackId="burn" fill="#14b8a6" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="runCal" stackId="burn" fill="#3b82f6" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="gymCal" stackId="burn" fill="#f97316" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="bmr" stackId="burn" fill="#94a3b8" radius={[0, 0, 0, 0]}>
+                    {chartData.map((d, i) => <Cell key={i} fillOpacity={d.barOpacity} />)}
+                  </Bar>
+                  <Bar dataKey="dailyActivity" stackId="burn" fill="#14b8a6" radius={[0, 0, 0, 0]}>
+                    {chartData.map((d, i) => <Cell key={i} fillOpacity={d.barOpacity} />)}
+                  </Bar>
+                  <Bar dataKey="runCal" stackId="burn" fill="#3b82f6" radius={[0, 0, 0, 0]}>
+                    {chartData.map((d, i) => <Cell key={i} fillOpacity={d.barOpacity} />)}
+                  </Bar>
+                  <Bar dataKey="gymCal" stackId="burn" fill="#f97316" radius={[4, 4, 0, 0]}>
+                    {chartData.map((d, i) => <Cell key={i} fillOpacity={d.barOpacity} />)}
+                  </Bar>
                   {/* Goal line (burn - 800) */}
                   <Line type="stepAfter" dataKey="goalLine" stroke="rgba(255,255,255,0.6)" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={true} />
                   {/* Eaten dots */}
@@ -502,6 +525,13 @@ export function BodyCompChart() {
         <Card>
           <CardContent className="py-4">
             <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Cumulative Deficit</div>
+            {profile.window && (
+              <div className="text-[10px] text-muted-foreground mb-2" data-testid="bodycomp-cumulative-window">
+                {profile.window.active
+                  ? `Summed ${profile.window.label}`
+                  : `${profile.window.label}${profile.window.start ? ` · last window ${profile.window.start} → ${profile.window.end}, ${profile.window.countedDays} counted day${profile.window.countedDays === 1 ? "" : "s"}` : ""}`}
+              </div>
+            )}
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
               <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#3b82f6]" />actual</span>
               <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-[#f97316]" />goal pace (&minus;{goalDeficit}/day)</span>
@@ -518,10 +548,14 @@ export function BodyCompChart() {
                     deficitData.push({ date: d.date, cumulative: d.cumulative, goalPace: null });
                   }
                   // Add goal pace line: daily samples so it renders as a smooth straight line
-                  if (goalStart && dailyDeficits.length > 0) {
-                    const startMs = new Date(goalStart.date + "T12:00").getTime();
-                    const lastDataMs = new Date(dailyDeficits[dailyDeficits.length - 1].date + "T12:00").getTime();
-                    const endMs = lastDataMs + 14 * 86400000;
+                  // Goal pace runs over the current window only: from its first counted
+                  // day to its last (+14 days while it is still active) (#728).
+                  const winStart = profile.window?.start ?? goalStart?.date ?? null;
+                  const winEnd = profile.window?.end ?? (dailyDeficits.length ? dailyDeficits[dailyDeficits.length - 1].date : null);
+                  if (winStart && winEnd) {
+                    const startMs = new Date(winStart + "T12:00").getTime();
+                    const lastDataMs = new Date(winEnd + "T12:00").getTime();
+                    const endMs = lastDataMs + (profile.window && !profile.window.active ? 0 : 14) * 86400000;
                     for (let ms = startMs; ms <= endMs; ms += 86400000) { // daily, not weekly
                       const dateStr = new Date(ms).toISOString().slice(0, 10);
                       const days = (ms - startMs) / 86400000;
@@ -551,15 +585,17 @@ export function BodyCompChart() {
                       // Interpolate goal pace
                       let goalPaceVal: number | null = null;
                       if (goalStart) {
-                        const days = (new Date(String(label) + "T12:00").getTime() - new Date(goalStart.date + "T12:00").getTime()) / 86400000;
+                        const paceStart = profile.window?.start ?? goalStart.date;
+                        const days = (new Date(String(label) + "T12:00").getTime() - new Date(paceStart + "T12:00").getTime()) / 86400000;
                         if (days >= 0) goalPaceVal = Math.round(-goalDeficit * days);
                       }
                       return (
                         <div style={{ backgroundColor: "rgba(10,10,12,0.95)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "8px 12px", fontSize: "12px" }}>
                           <div style={{ fontWeight: "bold", marginBottom: 4 }}>{formatDate(String(label))}</div>
-                          {day && <div style={{ color: "#3b82f6" }}>Actual: {day.cumulative.toLocaleString()} kcal</div>}
+                          {day && day.cumulative != null && <div style={{ color: "#3b82f6" }}>Actual: {day.cumulative.toLocaleString()} kcal</div>}
+                          {day && day.cumulative == null && <div style={{ color: "rgba(255,255,255,0.6)" }}>Not counted (outside the current window)</div>}
                           {goalPaceVal != null && <div style={{ color: "#f97316" }}>Goal pace: {goalPaceVal.toLocaleString()} kcal</div>}
-                          {day && goalPaceVal != null && (
+                          {day && day.cumulative != null && goalPaceVal != null && (
                             <div style={{ color: day.cumulative <= goalPaceVal ? "#22c55e" : "#f59e0b", fontSize: 11, marginTop: 2, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 3 }}>
                               {day.cumulative <= goalPaceVal
                                 ? `${(goalPaceVal - day.cumulative).toLocaleString()} kcal ahead`
@@ -572,7 +608,7 @@ export function BodyCompChart() {
                   />
                   <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
                   <Line type="linear" dataKey="goalPace" stroke="#f97316" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={true} />
+                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
