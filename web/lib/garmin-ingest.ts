@@ -9,6 +9,7 @@
  * params inline (the TS client's connectapi(path) takes no separate params arg).
  */
 import { GarminAuth, DBTokenStore, type GarminClient } from "garmin-auth";
+import { healGarminTokenRow } from "./garmin-token-heal";
 import type { QueryFn } from "./db";
 import {
   DAILY_ENDPOINTS, RANGE_ENDPOINTS, DISCOVERY_ENDPOINTS, ACTIVITY_DETAIL_ENDPOINTS,
@@ -194,6 +195,8 @@ export interface IngestResult {
 
 /** Top-level ingestion: auth, resolve stale dates, sync each. */
 export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promise<IngestResult> {
+  // A flat DI row (Python fresh-login) would read as "needs MFA" (#723).
+  await healGarminTokenRow(sql);
   const auth = new GarminAuth({ store: new DBTokenStore(databaseUrl) });
   const client = await auth.client();
   const profile = (await client.connectapi(PROFILE_URL)) as { displayName?: string };
