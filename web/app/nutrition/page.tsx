@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getDb } from "@/lib/db";
+import { getLivePlan } from "@/lib/live-plan";
 import { NutritionDashboard } from "@/components/nutrition-dashboard";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
 import { BodyCompChart } from "@/components/body-comp-chart";
@@ -180,18 +181,25 @@ async function getIngredients() {
   return sql`SELECT * FROM ingredients WHERE status = 'confirmed' ORDER BY category, name`;
 }
 
+/**
+ * Today's prescribed session, but only from a LIVE plan (#701). A dormant
+ * plan's day, if one even coincides with this date, is not a prescription and
+ * must not add planned-run calories to today's budget.
+ */
 async function getTrainingDay(date: string) {
   const sql = getDb();
-  const rows = await sql`
-    SELECT d.run_type, d.run_title, d.target_distance_km,
-           d.target_duration_min, d.load_level, d.gym_workout,
-           p.plan_name
-    FROM training_plan_day d
-    JOIN training_plan p ON d.plan_id = p.id
-    WHERE p.status = 'active' AND d.day_date = ${date}
-    LIMIT 1
-  `;
-  return rows[0] ?? null;
+  const live = await getLivePlan(sql, date);
+  const d = live.days.find((x) => x.day_date === date);
+  if (!d || !live.plan) return null;
+  return {
+    run_type: d.run_type,
+    run_title: d.run_title,
+    target_distance_km: d.target_distance_km,
+    target_duration_min: d.target_duration_min,
+    load_level: d.load_level,
+    gym_workout: d.gym_workout,
+    plan_name: live.plan.plan_name,
+  };
 }
 
 async function getHealthSummary(date: string) {
