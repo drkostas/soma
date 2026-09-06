@@ -19,6 +19,7 @@ import {
   type ActivityRow,
 } from "../../lib/api";
 import { readinessScore } from "../../lib/readiness";
+import { freshness, staleShort, todayKey } from "../../lib/freshness";
 
 interface OverviewTrends {
   steps: number[];
@@ -190,6 +191,8 @@ export default function OverviewScreen() {
 
   const hrvLatest = recovery.data?.hrv?.latest ?? null;
   const hrvSpark = (recovery.data?.hrv?.trend ?? []).map((p) => Number(p.weekly_avg)).filter((v) => isFinite(v));
+  // An HRV reading older than two days is not today's metric (#731).
+  const hrvFresh = freshness(hrvLatest?.date ?? null, todayKey());
 
   const stats: { label: string; value: string; sub: string; cls: string; spark?: number[]; color: string; unit?: string; metric?: string; inverted?: boolean }[] = [
     { label: "Steps", value: data?.total_steps != null ? data.total_steps.toLocaleString() : "—", sub: `${km} km`, cls: "text-teal", spark: trends?.steps, color: "#77c8d1", metric: "steps" },
@@ -199,7 +202,7 @@ export default function OverviewScreen() {
     { label: "Body Battery", value: `${data?.body_battery_max ?? "—"}`, sub: `−${Math.abs(data?.body_battery_drained ?? 0)} drained`, cls: "text-lime", spark: trends?.bodyBattery, color: "#cbe896", metric: "body_battery" },
     { label: "Intensity min", value: `${(data?.moderate_intensity_minutes ?? 0) + (data?.vigorous_intensity_minutes ?? 0)}`, sub: `${data?.vigorous_intensity_minutes ?? 0} vigorous`, cls: "text-indigo", spark: trends?.intensity, color: "#6366b0", unit: "min" },
     { label: "VO₂max", value: vo2.current != null ? Number(vo2.current).toFixed(1) : "—", sub: "ml/kg/min", cls: "text-teal", spark: vo2.trend.filter((x) => isFinite(x)), color: "#77c8d1", metric: "vo2max" },
-    { label: "HRV", value: hrvLatest?.weekly_avg != null ? String(hrvLatest.weekly_avg) : "—", sub: hrvLatest?.status ? String(hrvLatest.status) : "7-night avg", cls: "text-lime", spark: hrvSpark, color: "#cbe896", unit: "ms" },
+    { label: "HRV", value: !hrvFresh.stale && hrvLatest?.weekly_avg != null ? String(hrvLatest.weekly_avg) : "—", sub: hrvFresh.stale ? `${staleShort("HRV", hrvFresh)}${hrvLatest?.weekly_avg != null ? ` · last ${hrvLatest.weekly_avg}` : ""}` : hrvLatest?.status ? String(hrvLatest.status) : "7-night avg", cls: "text-lime", spark: hrvSpark, color: "#cbe896", unit: "ms" },
     { label: "Total activities", value: fitness?.total_activities != null && fitness.total_activities > 0 ? fitness.total_activities.toLocaleString() : "—", sub: "all time", cls: "text-teal", color: "#77c8d1" },
   ];
 
