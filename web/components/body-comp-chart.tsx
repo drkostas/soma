@@ -397,7 +397,7 @@ export function BodyCompChart() {
             {profile.window && (
               <div className="text-[10px] text-muted-foreground mb-2" data-testid="bodycomp-burn-window">
                 {profile.window.active ? `Summed ${profile.window.label}` : profile.window.label}
-                {outside > 0 ? ` · ${outside} faded day${outside === 1 ? "" : "s"} outside the window (open, or under the coverage floor)` : ""}
+                {outside > 0 ? ` · ${outside} faded day${outside === 1 ? "" : "s"} outside the current window` : ""}
               </div>
             )}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground mb-2">
