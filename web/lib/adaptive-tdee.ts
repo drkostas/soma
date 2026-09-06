@@ -10,6 +10,7 @@
  */
 import { computeAdaptiveTdee, recommendDietBreak, type DietBreakLevel } from "macro-engine-core";
 import type { QueryFn } from "@/lib/db";
+import { meetsCoverageFloor, daysBetween, STREAK_MAX_GAP_DAYS } from "@/lib/coverage";
 
 export interface AdaptiveContext {
   effectiveTdee: number;
@@ -29,6 +30,21 @@ interface DayRow {
   is_diet_break: boolean | null;
   is_refeed: boolean | null;
   status: string | null;
+  /**
+   * Logging coverage 0..1 (see lib/coverage). A closed day below the floor is
+   * ABSENT data wearing a "closed" badge: it contributes nothing, exactly like
+   * an unclosed day. `null` means unknown and also contributes nothing.
+   */
+  coverage: number | null;
+}
+
+/**
+ * A day counts toward any inference only when it is closed AND its logging
+ * coverage clears the floor. This is the single guard behind #699: the 53
+ * May–Jun 2026 days that were closed with zero meal_log rows fail it.
+ */
+function contributes(r: DayRow): boolean {
+  return r.status === "closed" && meetsCoverageFloor(r.coverage);
 }
 
 // How far back to look. 130 days covers the diet-break ceiling (112) for the
@@ -42,12 +58,22 @@ const LOOKBACK_DAYS = 130;
  */
 export function countDeficitDuration(rows: DayRow[]): number {
   let n = 0;
+  let lastCounted: string | null = null;
+  const latest = rows.length ? rows[rows.length - 1].date : null;
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i];
-    if (r.status !== "closed") continue; // ignore not-yet-closed days without breaking the streak
+    // Unclosed AND low-coverage days are both absent data: skip without
+    // breaking, but they still consume calendar distance (see gap rule).
+    if (!contributes(r)) continue;
+    // Gap rule: a "consecutive" phase cannot span more than STREAK_MAX_GAP_DAYS
+    // of absent data. Without it the walk-back crosses four empty months and
+    // reports last spring's deficit as the current phase.
+    const anchor = lastCounted ?? latest;
+    if (anchor && daysBetween(r.date, anchor) > STREAK_MAX_GAP_DAYS) break;
     if (r.is_diet_break || r.is_refeed) break;
     if ((Number(r.deficit_used) || 0) <= 0) break;
     n++;
+    lastCounted = r.date;
   }
   return n;
 }
@@ -76,7 +102,7 @@ export function buildDayPoints(
       if (weights[wi].weightKg > 0) lastWeight = weights[wi].weightKg;
       wi++;
     }
-    if (r.status !== "closed") continue;
+    if (!contributes(r)) continue;
     const intake = Number(r.actual_calories) || 0;
     if (intake <= 0) continue;
     if (lastWeight <= 0) continue; // no weigh-in yet — skip until we have one
@@ -89,12 +115,26 @@ export function buildDayPoints(
 }
 
 export async function computeAdaptiveContext(sql: QueryFn): Promise<AdaptiveContext | null> {
+  // Coverage = (distinct slots with logged kcal ∪ explicitly skipped slots) / 4.
+  // Computed in SQL so every consumer of these rows sees the same number.
+  // Only the four canonical slots count; a slot both logged and skipped
+  // counts once (the UNION dedupes).
   const rows = (await sql`
-    SELECT date::text AS date, actual_calories, tdee_used, target_calories,
-           deficit_used, is_diet_break, is_refeed, status
-    FROM nutrition_day
-    WHERE date >= CURRENT_DATE - ${`${LOOKBACK_DAYS} days`}::interval
-    ORDER BY date
+    SELECT n.date::text AS date, n.actual_calories, n.tdee_used, n.target_calories,
+           n.deficit_used, n.is_diet_break, n.is_refeed, n.status,
+           (
+             SELECT COUNT(DISTINCT s)::float / 4
+             FROM (
+               SELECT m.meal_slot AS s FROM meal_log m
+                WHERE m.date = n.date AND m.calories > 0
+               UNION
+               SELECT unnest(COALESCE(n.skipped_slots, ARRAY[]::text[]))
+             ) u
+             WHERE u.s IN ('breakfast', 'lunch', 'dinner', 'pre_sleep')
+           ) AS coverage
+    FROM nutrition_day n
+    WHERE n.date >= CURRENT_DATE - ${`${LOOKBACK_DAYS} days`}::interval
+    ORDER BY n.date
   `) as unknown as DayRow[];
   if (!rows.length) return null;
 
