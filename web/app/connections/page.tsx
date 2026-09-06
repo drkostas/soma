@@ -561,7 +561,7 @@ export default async function ConnectionsPage() {
                       <Icon className="h-5 w-5 text-accent-foreground" />
                     </div>
                     <div>
-                      <CardTitle className="text-base">{config.label}</CardTitle>
+                      <CardTitle className="text-[1rem]">{config.label}</CardTitle>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {config.description}
                       </p>
@@ -619,7 +619,7 @@ export default async function ConnectionsPage() {
                   </svg>
                 </div>
                 <div>
-                  <CardTitle className="text-base">Spotify</CardTitle>
+                  <CardTitle className="text-[1rem]">Spotify</CardTitle>
                   {spotifyConnected && spotifyProfile && (
                     <p className="text-xs text-muted-foreground mt-0.5">{spotifyProfile.display_name}</p>
                   )}
@@ -678,7 +678,7 @@ export default async function ConnectionsPage() {
                   <Bell className="h-5 w-5 text-accent-foreground" />
                 </div>
                 <div>
-                  <CardTitle className="text-base">Push Notifications</CardTitle>
+                  <CardTitle className="text-[1rem]">Push Notifications</CardTitle>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Get notified when workouts sync, milestones hit, and more
                   </p>
@@ -720,7 +720,7 @@ export default async function ConnectionsPage() {
         <div>
           <Card className="h-full">
             <CardHeader>
-              <CardTitle className="text-base">Recent Sync Activity</CardTitle>
+              <CardTitle className="text-[1rem]">Recent Sync Activity</CardTitle>
             </CardHeader>
             <CardContent>
               {syncLog.length === 0 ? (
@@ -766,7 +766,7 @@ export default async function ConnectionsPage() {
       {/* Section 6: Pipeline Operations */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Pipeline Operations</CardTitle>
+          <CardTitle className="text-[1rem]">Pipeline Operations</CardTitle>
         </CardHeader>
         <CardContent>
           <PipelineOperations

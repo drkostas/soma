@@ -117,7 +117,7 @@ export function Sidebar() {
             aria-label="Go to home"
           >
             <SomaLogo size={24} />
-            <span className="text-base font-semibold">Soma</span>
+            <span className="text-[1rem] font-semibold">Soma</span>
           </Link>
         </div>
 

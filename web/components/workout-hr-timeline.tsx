@@ -194,7 +194,7 @@ function UnifiedTooltip({ active, payload, zones, extendedBlocks }: any) {
   return (
     <div className="bg-card text-card-foreground border border-border rounded-lg p-2.5 text-xs shadow-lg min-w-[140px]">
       <div className="flex items-center gap-2">
-        <span className="text-base font-bold" style={{ color: zoneInfo.color }}>
+        <span className="text-[1rem] font-bold" style={{ color: zoneInfo.color }}>
           {hr}
         </span>
         <span className="text-muted-foreground">bpm</span>
