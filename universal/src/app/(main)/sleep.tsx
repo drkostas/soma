@@ -157,8 +157,12 @@ export default function SleepScreen() {
   }[] = [
     {
       label: "Avg Sleep",
-      value: fmt1(sleep?.summary.current_avg, "h"),
-      sub: `${fmt1(sleep?.summary.current_min, "h")}–${fmt1(sleep?.summary.current_max, "h")}`,
+      // The average rests on sleep_data nights (the web's number over the same
+      // window), not on the subset of days daily_health_summary carries (#743).
+      value: sleepSum?.stats?.avg_hours != null ? fmt1(sleepSum.stats.avg_hours, "h") : fmt1(sleep?.summary.current_avg, "h"),
+      sub: sleepSum?.stats?.nights
+        ? `based on ${sleepSum.stats.nights} nights · ${fmt1(sleep?.summary.current_min, "h")}–${fmt1(sleep?.summary.current_max, "h")}`
+        : `${fmt1(sleep?.summary.current_min, "h")}–${fmt1(sleep?.summary.current_max, "h")}`,
       cls: "text-indigo",
       spark: { data: seriesVals(sleep?.current), color: "#6366b0" },
       unit: "h",
