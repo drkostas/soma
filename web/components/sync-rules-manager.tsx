@@ -134,7 +134,7 @@ export function SyncRulesManager({ initialRules }: SyncRulesManagerProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Route className="h-5 w-5 text-primary" />
-            <CardTitle className="text-base">Sync Rules</CardTitle>
+            <CardTitle className="text-[1rem]">Sync Rules</CardTitle>
           </div>
           <Button
             variant="outline"

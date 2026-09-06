@@ -110,7 +110,7 @@ function ActivityDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[420px] sm:max-w-[420px] overflow-y-auto">
         <SheetHeader>
-          <SheetTitle className="text-base">
+          <SheetTitle className="text-[1rem]">
             {summary?.activityName || `Activity ${activityId}`}
           </SheetTitle>
           <SheetDescription>
@@ -486,7 +486,7 @@ export function DuplicateResolver() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-yellow-400" />
-            <CardTitle className="text-base">Duplicate Activities</CardTitle>
+            <CardTitle className="text-[1rem]">Duplicate Activities</CardTitle>
           </div>
           <Badge variant="outline" className="text-xs">
             {currentIndex + 1} of {pairs.length}
