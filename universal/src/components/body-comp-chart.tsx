@@ -117,7 +117,7 @@ function StatusCard({ p }: { p: BodyComp["profile"] }) {
         // No counted day inside the gap: there is no current deficit to total or average (#728).
         <Text variant="micro" className="text-text-muted" testID="bodycomp-window-inactive">
           {p.window.label}
-          {p.window.start ? ` · last window ${shortLabel(p.window.start)} → ${shortLabel(p.window.end ?? p.window.start)}, ${p.window.countedDays} counted days` : ""}
+          {p.window.start ? ` · last window ${shortLabel(p.window.start)} → ${shortLabel(p.window.end ?? p.window.start)}, ${p.window.countedDays} counted day${p.window.countedDays === 1 ? "" : "s"}` : ""}
         </Text>
       ) : null}
       {p.requiredDeficit != null && p.requiredDeficit > 0 ? (

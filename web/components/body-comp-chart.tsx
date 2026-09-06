@@ -529,7 +529,7 @@ export function BodyCompChart() {
               <div className="text-[10px] text-muted-foreground mb-2" data-testid="bodycomp-cumulative-window">
                 {profile.window.active
                   ? `Summed ${profile.window.label}`
-                  : `${profile.window.label}${profile.window.start ? ` · last window ${profile.window.start} → ${profile.window.end}, ${profile.window.countedDays} counted days` : ""}`}
+                  : `${profile.window.label}${profile.window.start ? ` · last window ${profile.window.start} → ${profile.window.end}, ${profile.window.countedDays} counted day${profile.window.countedDays === 1 ? "" : "s"}` : ""}`}
               </div>
             )}
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground mb-2">
