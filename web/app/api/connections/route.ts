@@ -32,16 +32,19 @@ export async function GET() {
       ? { tracks: Number(sp.tracks), artists: Number(sp.artists), last_sync: (sp.last_sync as string | null) ?? null }
       : null;
 
-    // Strava coverage: of recent Garmin activities, how many were forwarded to
-    // Strava (activity_sync_log, source_id cast to text; ids are bigint there).
+    // Strava coverage: of recent Garmin activities, how many are on Strava,
+    // via soma's own sync (activity_sync_log) OR the Garmin→Strava bridge
+    // (strava_bridge_uploads), which is what actually runs today (#736).
     const stravaRows = (await sql`
       SELECT g.raw_json->>'activityName' AS name,
         (g.raw_json->>'startTimeLocal')::date::text AS date,
         g.raw_json->'activityType'->>'typeKey' AS type_key,
-        sl.destination_id AS strava_id
+        COALESCE(sl.destination_id, sbu.strava_activity_id::text) AS strava_id
       FROM garmin_activity_raw g
       LEFT JOIN activity_sync_log sl
         ON sl.source_id = g.activity_id::text AND sl.destination = 'strava' AND sl.status IN ('sent', 'external')
+      LEFT JOIN strava_bridge_uploads sbu
+        ON sbu.garmin_activity_id = g.activity_id
       WHERE g.endpoint_name = 'summary'
         AND (g.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 90
       ORDER BY (g.raw_json->>'startTimeLocal')::text DESC

@@ -95,7 +95,7 @@ function BackfillTab({ progress }: { progress: BackfillProgress[] }) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <StatusIcon status={p.status} />
-                  <CardTitle className="text-base font-semibold">
+                  <CardTitle className="text-[1rem] font-semibold">
                     {p.source.replace(/_/g, " ")}
                   </CardTitle>
                 </div>
@@ -146,7 +146,7 @@ function DataCoverageTab({ dataCounts }: { dataCounts: DataCount[] }) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Database className="h-5 w-5 text-primary" />
-          <CardTitle className="text-base">
+          <CardTitle className="text-[1rem]">
             {totalRecords.toLocaleString()} total records
           </CardTitle>
         </div>
