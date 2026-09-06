@@ -157,8 +157,16 @@ async function getPageData() {
                MAX(processed_at) as last_sync
         FROM activity_sync_log
         GROUP BY source_platform, destination
+        UNION ALL
+        SELECT 'garmin' AS source_platform, 'strava (bridge)' AS destination,
+               COUNT(*)::int AS total,
+               COUNT(*)::int AS sent_count,
+               0::int AS external_count,
+               0::int AS error_count,
+               MAX(uploaded_at) AS last_sync
+        FROM strava_bridge_uploads
         ORDER BY last_sync DESC NULLS LAST
-        LIMIT 10
+        LIMIT 11
       `,
       sql`
         SELECT 'garmin' as platform,
@@ -229,15 +237,19 @@ async function getPageData() {
              (ga.raw_json->>'duration')::numeric AS duration,
              (ga.raw_json->>'distance')::numeric AS distance,
              ga.raw_json->>'manufacturer' AS manufacturer,
-             asl.status AS sync_status,
-             asl.destination_id,
-             asl.processed_at AS synced_at
+             -- Synced when soma's own sync sent it OR the Garmin→Strava bridge uploaded it
+             -- (strava_bridge_uploads); the bridge is what actually runs today (#736).
+             COALESCE(asl.status, CASE WHEN sbu.strava_activity_id IS NOT NULL THEN 'external' END) AS sync_status,
+             COALESCE(asl.destination_id, sbu.strava_activity_id::text) AS destination_id,
+             COALESCE(asl.processed_at, sbu.uploaded_at) AS synced_at
       FROM garmin_activity_raw ga
       LEFT JOIN activity_sync_log asl
         ON asl.source_platform = 'garmin'
         AND asl.source_id = ga.activity_id::text
         AND asl.destination = 'strava'
         AND asl.status IN ('sent', 'external')
+      LEFT JOIN strava_bridge_uploads sbu
+        ON sbu.garmin_activity_id = ga.activity_id
       WHERE ga.endpoint_name = 'summary'
         AND ga.raw_json->>'startTimeGMT' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
       ORDER BY ga.raw_json->>'startTimeGMT' DESC
