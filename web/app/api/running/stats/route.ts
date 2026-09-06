@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { loadRunStatus } from "@/lib/run-status-query";
 import { rangeToDays } from "@/lib/time-ranges";
 
 export const runtime = "edge";
@@ -233,9 +234,13 @@ export async function GET(request: Request) {
 
     const [fastest5k, fastest10k, longest, maxHR, maxCal, fastestPace] = records;
 
+    // Running-only status from soma's own run load; Garmin's trainingStatus below is
+    // all-sport and only tagged running (#738).
+    const runStatus = await loadRunStatus(sql);
     return NextResponse.json({
       stats: statsRows[0] || null,
       trainingStatus: trainingRows[0] || null,
+      runStatus,
       hrDistribution: hrRows,
       records: {
         fastest5k: fastest5k[0] || null,
