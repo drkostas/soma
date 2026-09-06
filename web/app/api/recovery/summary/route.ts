@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { parseRangeDays } from "@/lib/time-ranges";
 
 export const runtime = "edge";
 
@@ -11,7 +12,7 @@ export const runtime = "edge";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "30d";
-  const days = range === "7d" ? 7 : range === "14d" ? 14 : range === "90d" ? 90 : range === "1y" ? 365 : 30;
+  const days = parseRangeDays(range, 30); // app keys (6m…) and legacy Nd keys (#743)
 
   const sql = getDb();
 
