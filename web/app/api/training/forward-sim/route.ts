@@ -129,7 +129,12 @@ export async function GET() {
   const avgRawPlanLoad = rawPlanLoads.length > 0
     ? rawPlanLoads.reduce((s: number, v: number) => s + v, 0) / rawPlanLoads.length
     : 1;
-  const epocScaleFactor = avgActualLoad > 0 ? avgActualLoad / avgRawPlanLoad : 1;
+  // Only meaningful when there are plan loads to scale. With no live plan the
+  // denominator defaults to 1 and this would read as avgActualLoad (~67), a
+  // number that means nothing; report 1 so the client scales nothing by nothing.
+  const epocScaleFactor = livePlan.engagement.planLive && avgActualLoad > 0
+    ? avgActualLoad / avgRawPlanLoad
+    : 1;
 
   return NextResponse.json({
     today,
