@@ -27,4 +27,5 @@ tags:
     timeout: 40000
     speed: 40
     visibilityPercentage: 60
+    centerElement: true
 - takeScreenshot: verify-${SCREEN}
