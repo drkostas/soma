@@ -6,6 +6,8 @@ import type { SlotBudgets } from "@/lib/nutrition-types";
 import { computeAdaptiveContext } from "@/lib/adaptive-tdee";
 import { computeWeeklyAdherence } from "@/lib/adherence";
 import { meetsCoverageFloor } from "@/lib/coverage";
+import { nutritionEngagement, WEEK_ENGAGEMENT_FLOOR_DAYS } from "@/lib/engagement";
+import { getWeightTrend } from "@/lib/weight-trend";
 import { computeAlcoholDisplacement } from "macro-engine-core";
 
 export const runtime = "edge";
@@ -568,6 +570,23 @@ export async function GET(req: NextRequest) {
   // Adaptive TDEE + deficit-duration (display-only — never changes targets).
   const adaptive = await computeAdaptiveContext(sql).catch(() => null);
 
+  // Is nutrition actually in use this week? trendRows is exactly the 7-day
+  // window ending today with per-day coverage, so no extra query (#700).
+  const engagement = nutritionEngagement(
+    trendRows.map((r: Record<string, unknown>) => ({
+      date: String(r.date),
+      status: (r.status as string | null) ?? null,
+      coverage: typeof r.coverage === "number" ? r.coverage : null,
+    })),
+    date,
+  );
+
+  // The scale is the ground truth that survives not logging. When the week
+  // is not fully engaged this is the PRIMARY signal and the log-derived
+  // numbers above are secondary or hidden; when it is, the roles swap (#702).
+  const weightTrend = await getWeightTrend(sql, date);
+  const weightTrendPrimary = engagement.state !== "complete";
+
   return NextResponse.json({
     plan,
     meals: mealRows,
@@ -581,6 +600,11 @@ export async function GET(req: NextRequest) {
     gymCalories,
     breakdown,
     trend7d,
-    adaptive,
+    // Only meaningful when the week is engaged; the UI hides it otherwise
+    // rather than showing a drift computed from nothing.
+    adaptive: engagement.state === "complete" ? adaptive : null,
+    engagement: { ...engagement, weekFloorDays: WEEK_ENGAGEMENT_FLOOR_DAYS },
+    weightTrend,
+    weightTrendPrimary,
   });
 }
