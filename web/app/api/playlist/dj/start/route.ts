@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
 import { writeFileSync, readFileSync, openSync } from "fs";
 import path from "path";
+import { ensureDjPaths } from "@/lib/dj-paths";
 
 export const runtime = "nodejs";
 
-const STATUS_FILE = "/tmp/soma-dj-status.json";
-const PID_FILE = "/tmp/soma-dj-pid";
-const LOG_FILE = "/tmp/soma-dj.log";
+// State lives outside /tmp (#668); the daemon gets the same paths on its argv.
+const { statusFile: STATUS_FILE, pidFile: PID_FILE, logFile: LOG_FILE } = ensureDjPaths();
 // TS daemon (port of the Python dj_daemon.py). Run with tsx (dev/local host).
 const DAEMON_SCRIPT = path.join(process.cwd(), "scripts/dj-daemon.mts");
 
