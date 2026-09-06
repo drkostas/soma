@@ -4,7 +4,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readChatConfig, writeChatConfig } from "@/lib/chat-config";
-import { chatMode, proxyToLocal, requireToken } from "@/lib/chat-transport";
+import { chatMode, chatGone, chatPreflight, proxyToLocal, requireToken, withCors } from "@/lib/chat-transport";
 
 export const runtime = "nodejs";
 // Hobby-plan ceiling for serverless function lifetime. Cold-cache claude
@@ -78,8 +78,9 @@ function isMissingSessionError(evt: ResultEvent): boolean {
   return evt.errors.some((e) => /No conversation found/i.test(e));
 }
 
-export async function POST(req: NextRequest) {
+async function postImpl(req: NextRequest) {
   // Vercel deployment: just forward to the Mac via the cloudflared tunnel.
+  if (chatMode() === "gone") return chatGone();
   if (chatMode() === "proxy") return proxyToLocal(req, "/api/chat");
   // Local (Mac or dev): enforce the shared secret on non-same-origin calls.
   const denied = requireToken(req);
@@ -352,4 +353,13 @@ export async function POST(req: NextRequest) {
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+/** CORS preflight for the browser calling the Mac directly over the tailnet (#670). */
+export function OPTIONS(req: NextRequest) {
+  return chatPreflight(req);
+}
+
+export async function POST(req: NextRequest) {
+  return withCors(req, await postImpl(req));
 }

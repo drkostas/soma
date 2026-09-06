@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chatMode, proxyToLocal, requireToken } from "@/lib/chat-transport";
+import { chatMode, chatGone, chatPreflight, proxyToLocal, requireToken, withCors } from "@/lib/chat-transport";
 
 export const runtime = "nodejs";
 
@@ -29,7 +29,8 @@ function extFor(mime: string): string {
   return "bin";
 }
 
-export async function POST(req: NextRequest) {
+async function postImpl(req: NextRequest) {
+  if (chatMode() === "gone") return chatGone();
   if (chatMode() === "proxy") return proxyToLocal(req, "/api/chat/upload");
   const denied = requireToken(req);
   if (denied) return denied;
@@ -71,4 +72,13 @@ export async function POST(req: NextRequest) {
   await writeFile(path, buf);
 
   return NextResponse.json({ path, name, mime, size: file.size });
+}
+
+/** CORS preflight for the browser calling the Mac directly over the tailnet (#670). */
+export function OPTIONS(req: NextRequest) {
+  return chatPreflight(req);
+}
+
+export async function POST(req: NextRequest) {
+  return withCors(req, await postImpl(req));
 }

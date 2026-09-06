@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { chatUrl, chatTransport } from "@/lib/chat-origin";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -138,7 +139,7 @@ export function ChatWidget() {
   //   "proxy"   = Vercel forwarding to the cloudflared tunnel
   //   "offline" = tunnel unreachable / Mac asleep
   const [transportStatus, setTransportStatus] =
-    useState<"unknown" | "local" | "proxy" | "offline">("unknown");
+    useState<"unknown" | "local" | "proxy" | "tailnet" | "offline">("unknown");
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -188,7 +189,7 @@ export function ChatWidget() {
   }, [open]);
 
   useEffect(() => {
-    fetch("/api/chat/session")
+    fetch(chatUrl("/api/chat/session"))
       .then(async (r) => {
         if (!r.ok) throw new Error(`session http ${r.status}`);
         return r.json();
@@ -201,7 +202,8 @@ export function ChatWidget() {
         // distinguish by host: localhost = direct local, anything else = proxy.
         const host = typeof window !== "undefined" ? window.location.hostname : "";
         const direct = host === "localhost" || host === "127.0.0.1";
-        setTransportStatus(direct ? "local" : "proxy");
+        // tailnet: the browser reached the Mac directly over tailscale serve (#670).
+        setTransportStatus(chatTransport() === "tailnet" ? "tailnet" : direct ? "local" : "proxy");
       })
       .catch(() => {
         setSessionId(null);
@@ -210,7 +212,7 @@ export function ChatWidget() {
     // Best-effort hydrate from the on-disk JSONL — source of truth across
     // devices/browsers. Falls back to localStorage if the route fails or
     // returns no messages.
-    fetch("/api/chat/history")
+    fetch(chatUrl("/api/chat/history"))
       .then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d.messages) && d.messages.length > 0) {
@@ -384,7 +386,7 @@ export function ChatWidget() {
     };
 
     try {
-      const resp = await fetch("/api/chat", {
+      const resp = await fetch(chatUrl("/api/chat"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
@@ -435,7 +437,7 @@ export function ChatWidget() {
           }
           if (eventName === "done") {
             mutateAssistant((m) => ({ ...m, done: true }));
-            fetch("/api/chat/session")
+            fetch(chatUrl("/api/chat/session"))
               .then((r) => r.json())
               .then((d) => setSessionId(d.sessionId ?? null))
               .catch(() => {});
@@ -631,7 +633,7 @@ export function ChatWidget() {
                 } catch {
                   // ignore
                 }
-                await fetch("/api/chat/session", {
+                await fetch(chatUrl("/api/chat/session"), {
                   method: "PUT",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ sessionId: "" }),
@@ -692,7 +694,7 @@ export function ChatWidget() {
                   e.preventDefault();
                   const form = new FormData();
                   form.append("file", blob, blob.name || "pasted.png");
-                  void fetch("/api/chat/upload", { method: "POST", body: form })
+                  void fetch(chatUrl("/api/chat/upload"), { method: "POST", body: form })
                     .then((r) => r.json())
                     .then((d) => {
                       if (d?.path) {
@@ -1069,24 +1071,28 @@ function Dot({ delay = "0ms" }: { delay?: string }) {
 function TransportDot({
   status,
 }: {
-  status: "unknown" | "local" | "proxy" | "offline";
+  status: "unknown" | "local" | "proxy" | "tailnet" | "offline";
 }) {
   const cls =
     status === "local"
       ? "bg-emerald-400"
-      : status === "proxy"
-        ? "bg-sky-400"
-        : status === "offline"
-          ? "bg-rose-400"
-          : "bg-zinc-500";
+      : status === "tailnet"
+        ? "bg-teal-400"
+        : status === "proxy"
+          ? "bg-sky-400"
+          : status === "offline"
+            ? "bg-rose-400"
+            : "bg-zinc-500";
   const title =
     status === "local"
       ? "Local — claude -p running on this machine"
-      : status === "proxy"
-        ? "Proxied via Vercel → your Mac's cloudflared tunnel"
-        : status === "offline"
-          ? "Unreachable — is your Mac awake and the tunnel running?"
-          : "Status unknown";
+      : status === "tailnet"
+        ? "Direct to your Mac over the tailnet (tailscale serve)"
+        : status === "proxy"
+          ? "Proxied via Vercel → your Mac's cloudflared tunnel"
+          : status === "offline"
+            ? "Unreachable — is your Mac awake, and is this device on the tailnet?"
+            : "Status unknown";
   return <span title={title} className={`h-2 w-2 rounded-full ${cls}`} />;
 }
 
