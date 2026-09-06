@@ -17,6 +17,7 @@ import { TrainingLoadChart } from "@/components/training-load-chart";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import { loadRunStatus } from "@/lib/run-status-query";
 import {
   Timer,
   MapPin,
@@ -550,7 +551,7 @@ export default async function RunningPage({
   const cutoffDays = Math.min(rangeDays, 730);
   const cutoff = new Date(Date.now() - cutoffDays * 86400000).toISOString().split("T")[0];
 
-  const [stats, paceHistory, mileage, vo2max, hrPaceData, cadenceStride, records, recentRuns, fitnessScores, trainingStatus, hrDistribution, shoeMileage, splitAnalysis, bestSplits, trainingLoadTrend] =
+  const [stats, paceHistory, mileage, vo2max, hrPaceData, cadenceStride, records, recentRuns, fitnessScores, trainingStatus, hrDistribution, shoeMileage, splitAnalysis, bestSplits, trainingLoadTrend, runStatus] =
     await Promise.all([
       getRunningStats(cutoff),
       getPaceHistory(cutoff),
@@ -567,6 +568,7 @@ export default async function RunningPage({
       getSplitAnalysis(cutoff),
       getBestSplits(cutoff),
       getTrainingLoadTrend(cutoff),
+      loadRunStatus(getDb()),
     ]);
 
   return (
@@ -623,7 +625,7 @@ export default async function RunningPage({
       </div>
 
       {/* Training Status + Training Load (most actionable — "should I run today?") */}
-      {trainingStatus && (
+      {(trainingStatus || runStatus) && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -632,9 +634,27 @@ export default async function RunningPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Running only, from soma's own run load (#738). Garmin's status below covers
+                every sport and is only tagged "running"; it is the comparison, not the verdict. */}
+            <div className="mb-4" data-testid="running-run-status">
+              <div className="text-xs text-muted-foreground mb-1">Running · last 4 weeks</div>
+              <div className={`text-lg font-bold ${
+                runStatus.kind === "steady" ? "text-green-400" :
+                runStatus.kind === "building" ? "text-blue-400" :
+                runStatus.kind === "spiking" ? "text-red-400" :
+                runStatus.kind === "easing" ? "text-yellow-400" : "text-muted-foreground"
+              }`}>{runStatus.label}</div>
+              <div className="text-xs text-muted-foreground">{runStatus.detail}</div>
+            </div>
+            {trainingStatus && (
+            <div className="text-xs text-muted-foreground mb-2" data-testid="running-garmin-status-label">
+              Garmin training status · all sports (Garmin tags it {trainingStatus.sport?.toLowerCase() || "by sport"}) · 7-day load vs 4-week
+            </div>
+            )}
+            {trainingStatus && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <div className="text-xs text-muted-foreground mb-1">Status</div>
+                <div className="text-xs text-muted-foreground mb-1">Garmin status</div>
                 <div className="text-lg font-bold">
                   {(() => {
                     const statusMap: Record<string, { label: string; color: string }> = {
@@ -650,9 +670,7 @@ export default async function RunningPage({
                     return <span className={s.color}>{s.label}</span>;
                   })()}
                 </div>
-                <div className="text-xs text-muted-foreground capitalize">
-                  {trainingStatus.sport?.toLowerCase()}
-                </div>
+                <div className="text-xs text-muted-foreground">all sports</div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">VO2 Max</div>
@@ -662,16 +680,16 @@ export default async function RunningPage({
                 <div className="text-xs text-muted-foreground">ml/kg/min</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground mb-1">Training Load</div>
+                <div className="text-xs text-muted-foreground mb-1">Garmin 7-day load</div>
                 <div className="text-lg font-bold">
                   {trainingStatus.acute_load ? Math.round(Number(trainingStatus.acute_load)) : "—"}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {trainingStatus.chronic_load ? `Chronic: ${Math.round(Number(trainingStatus.chronic_load))}` : ""}
+                  {trainingStatus.chronic_load ? `4-week: ${Math.round(Number(trainingStatus.chronic_load))} · all sports` : "all sports"}
                 </div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground mb-1">ACWR</div>
+                <div className="text-xs text-muted-foreground mb-1">Garmin ACWR</div>
                 <div className="text-lg font-bold">
                   {trainingStatus.acwr ? Number(trainingStatus.acwr).toFixed(2) : "—"}
                 </div>
@@ -683,6 +701,7 @@ export default async function RunningPage({
                 </div>
               </div>
             </div>
+            )}
           </CardContent>
         </Card>
       )}
