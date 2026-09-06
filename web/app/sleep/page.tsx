@@ -797,7 +797,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                   {f.stale && <div className="text-xs text-muted-foreground">last {Number(last?.weekly_avg) || "—"} ms</div>}
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">{f.stale ? "Last night" : `Last night · ${last?.date}`}</div>
+                  <div className="text-xs text-muted-foreground">{f.stale ? "Night" : `Last night · ${last?.date}`}</div>
                   <div className="text-2xl font-bold">
                     {f.stale ? "—" : Number(last?.last_night_avg) || "—"}
                     {f.stale ? null : <span className="text-sm font-normal text-muted-foreground ml-1">ms</span>}
@@ -939,7 +939,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                     )}
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <div className="text-xs text-muted-foreground">{fresh.stale ? "Last night" : `Last night · ${latest.date}`}</div>
+                        <div className="text-xs text-muted-foreground">{fresh.stale ? "Night" : `Last night · ${latest.date}`}</div>
                         <div className="text-2xl font-bold">{fresh.stale ? "—" : `${Number(latest.avg_spo2).toFixed(0)}%`}</div>
                         {fresh.stale && <div className="text-xs text-muted-foreground">last {Number(latest.avg_spo2).toFixed(0)}%</div>}
                       </div>
