@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /** The 10 time ranges, matching web/lib/time-ranges.ts (same tokens hit the same
- *  :3456 backend). */
+ *  backend routes, which parse them through parseRangeDays). */
 export interface TimeRange { label: string; value: string; days: number; }
 export const RANGES: TimeRange[] = [
   { label: "1W", value: "1w", days: 7 },
@@ -16,6 +17,8 @@ export const RANGES: TimeRange[] = [
   { label: "All", value: "all", days: 3650 },
 ];
 
+export const DEFAULT_RANGE = "6m";
+
 export function rangeToDays(range: string | undefined): number {
   if (!range) return 180;
   const f = RANGES.find((r) => r.value === range);
@@ -26,32 +29,57 @@ export function rangeLabel(range: string): string {
   return RANGES.find((r) => r.value === range)?.label ?? range;
 }
 
-/** Clamp a range to the nearest token the /api/stats/* endpoint accepts
- *  (only 7d/30d/90d/1y). Used where a shared range must call that endpoint. */
-export function statsRange(range: string): string {
-  const d = rangeToDays(range);
-  if (d <= 10) return "7d";
-  if (d <= 45) return "30d";
-  if (d <= 200) return "90d";
-  return "1y";
+export function isRangeKey(v: unknown): v is string {
+  return typeof v === "string" && RANGES.some((r) => r.value === v);
 }
 
+/* ---- one shared, persisted range (soma#754) ----
+   Web keeps the choice in localStorage["soma_time_range"] and carries it across pages.
+   The app does the same: one module-level value every screen subscribes to, written to
+   AsyncStorage (localStorage on Expo web) and read back once at startup, so 1W chosen on
+   Running is what Activities opens with, today and after a cold start. */
 const STORAGE_KEY = "soma_time_range";
+let current = DEFAULT_RANGE;
+let hydrated = false;
+let touched = false; // a choice made before the stored value arrives must win
+let hydration: Promise<void> | null = null;
+const listeners = new Set<() => void>();
+const emit = () => { for (const l of listeners) l(); };
+const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
-/** Shared, persisted selected time range — mirrors the web's single
- *  `localStorage["soma_time_range"]` so the choice carries across screens and
- *  sessions. Falls back to in-memory on native (until AsyncStorage is added). */
-export function useRangePref(defaultRange = "6m"): [string, (r: string) => void] {
-  const [range, setRangeState] = useState<string>(() => {
-    try {
-      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-      if (raw && RANGES.some((r) => r.value === raw)) return raw;
-    } catch { /* native / unavailable */ }
-    return defaultRange;
-  });
-  const setRange = (r: string) => {
-    setRangeState(r);
-    try { if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_KEY, r); } catch { /* native */ }
-  };
-  return [range, setRange];
+export function getRangePref(): string { return current; }
+export function isRangeHydrated(): boolean { return hydrated; }
+
+export function setRangePref(next: string): void {
+  if (!isRangeKey(next) || next === current) return;
+  current = next;
+  touched = true;
+  emit();
+  AsyncStorage.setItem(STORAGE_KEY, next).catch(() => { /* storage unavailable: in-memory only */ });
+}
+
+/** Read the stored choice once. Safe to call many times; resolves after the first read. */
+export function hydrateRangePref(): Promise<void> {
+  if (!hydration) {
+    hydration = AsyncStorage.getItem(STORAGE_KEY)
+      .then((v) => { if (!touched && isRangeKey(v) && v !== current) current = v; })
+      .catch(() => { /* keep the default */ })
+      .then(() => { hydrated = true; emit(); });
+  }
+  return hydration;
+}
+
+/** [range, setRange] — shared across screens and sessions. */
+export function useRangePref(): [string, (r: string) => void] {
+  const range = useSyncExternalStore(subscribe, getRangePref, getRangePref);
+  return [range, setRangePref];
+}
+
+export function useRangeHydrated(): boolean {
+  return useSyncExternalStore(subscribe, isRangeHydrated, isRangeHydrated);
+}
+
+/** Test hook: forget everything (module state survives between vitest cases). */
+export function __resetRangePrefForTests(): void {
+  current = DEFAULT_RANGE; hydrated = false; touched = false; hydration = null; listeners.clear();
 }

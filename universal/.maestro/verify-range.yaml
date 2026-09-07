@@ -1,0 +1,57 @@
+# Soma verify flow: the shared time range (soma#754, S1 of #578).
+# Proves on a device that (1) tapping a range chip re-scopes the screen, (2) the choice
+# survives a cold restart (AsyncStorage), (3) another screen opens on the same choice.
+# Run via universal/scripts/verify-device.sh running --flow .maestro/verify-range.yaml --marker "last 6M"
+appId: dev.gkos.soma
+name: Soma verify shared time range
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "range-6m"
+    timeout: 20000
+# Normalise, then pick 1W: the headline must re-scope to the week.
+- tapOn:
+    id: "range-6m"
+- tapOn:
+    id: "range-1w"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*last 1W.*"
+    timeout: 20000
+# Cold restart: the persisted choice must come back without touching a chip.
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*last 1W.*"
+    timeout: 20000
+- takeScreenshot: verify-range-running-1w
+# Another screen opens on the same choice.
+- openLink: universal://activities
+- waitForAnimationToEnd:
+    timeout: 5000
+- extendedWaitUntil:
+    visible:
+      id: "range-1w"
+      selected: true
+    timeout: 20000
+- takeScreenshot: verify-range-activities-1w
+# Leave the device on 6M and let the script's live marker close the loop.
+- tapOn:
+    id: "range-6m"
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 5000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}

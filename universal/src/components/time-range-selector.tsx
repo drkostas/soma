@@ -14,7 +14,7 @@ export function TimeRangeSelector({ value, onChange }: { value: string; onChange
       {RANGES.map((r) => {
         const active = value === r.value;
         return (
-          <Pressable key={r.value} onPress={() => onChange(r.value)} hitSlop={4} accessibilityRole="button" accessibilityLabel={r.label}>
+          <Pressable key={r.value} onPress={() => onChange(r.value)} hitSlop={4} accessibilityRole="button" accessibilityLabel={r.label} accessibilityState={{ selected: active }} testID={`range-${r.value}`}>
             <View
               className="rounded-full px-3 py-1.5"
               style={{ backgroundColor: active ? "#77c8d1" : "#152232", borderWidth: 1, borderColor: active ? "#77c8d1" : "#1a3040" }}

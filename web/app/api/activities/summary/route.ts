@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 
 export const runtime = "edge";
@@ -27,8 +28,6 @@ const ACTIVITY_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-// Screen sends 30d/90d/1y/all; keep a robust local map (web rangeToDays uses 1m/3m/…).
-const RANGE_DAYS: Record<string, number> = { "30d": 30, "90d": 90, "1y": 365, all: 3650 };
 
 function extractJump(name: string | null): number {
   if (!name) return 0;
@@ -40,7 +39,7 @@ const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export async function GET(req: NextRequest) {
   const range = req.nextUrl.searchParams.get("range") ?? "1y";
-  const days = RANGE_DAYS[range] ?? 365;
+  const days = parseRangeDays(range, 365); // all 10 web keys + legacy Nd (soma#754)
   const cutoff = new Date(Date.now() - days * 86400000).toISOString().split("T")[0];
   const sql = getDb();
 
