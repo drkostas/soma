@@ -15,6 +15,9 @@ interface PlatformStatus {
   athlete_name: string | null;
   auth_type: string;
   can_connect: boolean;
+  /** Sync-service platforms: raw data present + newest synced_at (web's "Managed by sync service", soma#785). */
+  has_data?: boolean;
+  last_sync?: string | null;
 }
 
 interface SyncRule {
@@ -127,8 +130,23 @@ const PLATFORM_META: Record<
 
 const PLATFORM_ORDER = ["garmin", "hevy", "strava", "telegram", "surfr"];
 
+/** Web's Activity Sync Manager tabs: All / Running / Strength / Cycling, by Garmin type key. */
+type CoverageTab = "all" | "running" | "strength" | "cycling";
+const COVERAGE_TABS: { key: CoverageTab; label: string }[] = [
+  { key: "all", label: "All" }, { key: "running", label: "Running" }, { key: "strength", label: "Strength" }, { key: "cycling", label: "Cycling" },
+];
+function sportOf(typeKey: string | null): CoverageTab | "other" {
+  const k = (typeKey || "").toLowerCase();
+  if (k.includes("running") || k.includes("treadmill")) return "running";
+  if (k.includes("strength")) return "strength";
+  if (k.includes("cycling") || k.includes("biking") || k.includes("bike")) return "cycling";
+  return "other";
+}
+
 function isConnected(p: PlatformStatus | undefined): boolean {
-  return p?.status === "active" || p?.status === "connected";
+  // Web's rule for sync-service platforms: data in the raw table means the service manages it,
+  // whether or not a credentials row exists (Hevy never has one on this install).
+  return p?.status === "active" || p?.status === "connected" || p?.has_data === true;
 }
 
 function statusBadge(
@@ -221,6 +239,7 @@ export default function ConnectionsScreen() {
   const platforms = conn?.platforms ?? [];
   // optimistic enable/disable overrides so the toggle flips instantly
   const [ruleOverride, setRuleOverride] = useState<Record<number, boolean>>({});
+  const [coverageTab, setCoverageTab] = useState<CoverageTab>("all");
   const [dialogPlatform, setDialogPlatform] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -376,7 +395,9 @@ export default function ConnectionsScreen() {
                 ? "Not yet available"
                 : connected
                   ? meta.kind === "sync-service"
-                    ? `${who}Last synced ${fmtDate(sync?.lastSync ?? null)}`
+                    // The platform's own newest raw row (web's MAX(synced_at)) when the API sends it,
+                    // else the pipeline's last run.
+                    ? `${who}Last synced ${fmtDate(cred?.last_sync ?? sync?.lastSync ?? null)}`
                     : `${who}Connected ${fmtDate(cred?.connected_at)}`
                   : "Not connected";
 
@@ -392,7 +413,7 @@ export default function ConnectionsScreen() {
                   <Badge label={badge.label} tone={badge.tone} />
                 </View>
                 <View className="flex-row items-center justify-between">
-                  <Text variant="micro" className="text-text-secondary flex-1 pr-2">
+                  <Text variant="micro" className="text-text-secondary flex-1 pr-2" testID={`platform-${platform}-detail`}>
                     {detail}
                   </Text>
                   {meta.kind !== "planned" ? (
@@ -559,8 +580,21 @@ export default function ConnectionsScreen() {
             <View className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#142530" }}>
               <View style={{ width: `${Math.round((conn.stravaCoverage.onStrava / conn.stravaCoverage.total) * 100)}%`, height: "100%", backgroundColor: "#fc5200" }} />
             </View>
+            {/* Web's Activity Sync Manager filters the list by sport with counts (soma#785). */}
+            <View className="flex-row flex-wrap gap-1.5">
+              {COVERAGE_TABS.map((t) => {
+                const rows = conn?.stravaCoverage?.recent ?? [];
+                const n = t.key === "all" ? rows.length : rows.filter((a) => sportOf(a.type_key) === t.key).length;
+                const on = coverageTab === t.key;
+                return (
+                  <Pressable key={t.key} onPress={() => setCoverageTab(t.key)} className={`rounded-full px-3 py-1 ${on ? "bg-teal" : "bg-surface-subtle"}`} testID={`coverage-tab-${t.key}`} accessibilityRole="button">
+                    <Text variant="micro" className={on ? "text-base" : "text-text-secondary"}>{t.label} {n}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <View className="gap-0.5">
-              {conn.stravaCoverage.recent.map((a, i) => {
+              {conn.stravaCoverage.recent.filter((a) => coverageTab === "all" || sportOf(a.type_key) === coverageTab).map((a, i) => {
                 const sport = (a.type_key || "").replace(/_v2$/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
                 return (
                   <View key={`${a.date}-${i}`} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
