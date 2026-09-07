@@ -44,9 +44,11 @@ tags:
     timeout: 20000
 - takeScreenshot: verify-chart-steps-goal
 - back
+# Cold open: a warm deep link keeps the previous scroll position and the headline sits off-screen.
+- stopApp
 - openLink: universal://running
 - waitForAnimationToEnd:
-    timeout: 5000
+    timeout: 10000
 - extendedWaitUntil:
     visible:
       text: "${MARKER}"
