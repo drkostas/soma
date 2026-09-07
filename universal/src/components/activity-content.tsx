@@ -141,7 +141,7 @@ export function RecentActivityFeed({ activities, workouts, onSelect, onSelectWor
       ...activities.map((a) => ({ kind: "activity" as const, date: a.date || "", a })),
       ...(workouts ?? []).map((w) => ({ kind: "workout" as const, date: w.start_time || "", w })),
     ];
-    return items.sort((x, y) => y.date.localeCompare(x.date)).slice(0, 8);
+    return items.sort((x, y) => y.date.localeCompare(x.date)).slice(0, 20); // web lists twenty (soma#783)
   }, [activities, workouts]);
   if (!recent.length) return null;
   return (
@@ -164,7 +164,7 @@ export function RecentActivityFeed({ activities, workouts, onSelect, onSelectWor
         const a = it.a;
         const m = meta(a.type_key);
         return (
-          <Pressable key={`${a.activity_id}-${i}`} onPress={() => onSelect(a)} className="flex-row items-center gap-2 border-b border-border-subtle py-2">
+          <Pressable key={`${a.activity_id}-${i}`} onPress={() => onSelect(a)} className="flex-row items-center gap-2 border-b border-border-subtle py-2" testID={`feed-row-${i}`}>
             <Text variant="body">{m.emoji}</Text>
             <View className="flex-1">
               <Text variant="caption" className="text-text" numberOfLines={1}>{a.name || m.label}</Text>
@@ -216,46 +216,52 @@ export function LastGymSession({ activities, workouts, onSelect, onSelectWorkout
 }
 
 /** Gym sessions per week over the last 12 weeks. */
-export function GymFrequency({ activities }: { activities: ActivityRow[] }) {
-  const { weeks, labels } = useMemo(() => {
-    const gym = activities.filter((a) => isGym(a.type_key));
+export function GymFrequency({ days, sinceDays, rangeLabel }: { days: { day: string }[]; sinceDays?: number; rangeLabel?: string }) {
+  // Web's Gym Frequency reads hevy_raw_data for the range: "N workouts · M this week" over
+  // monthly bars. The deep activity feed excludes strength, so the source is the Hevy calendar
+  // from the workout insights (one row per workout day) (soma#783).
+  const { months, labels, total, thisWeek } = useMemo(() => {
     const today = new Date();
-    const dow = today.getDay();
-    const daysToMon = dow === 0 ? 6 : dow - 1;
-    const thisMon = new Date(today);
-    thisMon.setDate(today.getDate() - daysToMon);
-    const w: number[] = [];
-    const l: string[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const ws = new Date(thisMon);
-      ws.setDate(thisMon.getDate() - i * 7);
-      const we = new Date(ws);
-      we.setDate(ws.getDate() + 7);
-      const wsS = ymd(ws), weS = ymd(we);
-      w.push(gym.filter((a) => { const d = (a.date || "").slice(0, 10); return d >= wsS && d < weS; }).length);
-      l.push(niceDate(wsS).replace(/^\w+, /, ""));
+    // Web scopes the headline to the range (the calendar itself comes back unscoped) and counts
+    // "this week" as the last 7 days (NOW - INTERVAL '7 days'), not since Monday.
+    const cutoff = sinceDays ? ymd(new Date(today.getTime() - sinceDays * 86400000)) : "";
+    const ds = days.map((d) => (d.day || "").slice(0, 10)).filter((d) => d && d >= cutoff).sort();
+    const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
+    const monS = ymd(weekAgo);
+    const byMonth = new Map<string, number>();
+    for (const d of ds) byMonth.set(d.slice(0, 7), (byMonth.get(d.slice(0, 7)) ?? 0) + 1);
+    // Fill the months between the first and the last workout so a quiet month shows as zero.
+    const keys: string[] = [];
+    if (ds.length) {
+      const [y0, m0] = ds[0].slice(0, 7).split("-").map(Number); const [y1, m1] = ds[ds.length - 1].slice(0, 7).split("-").map(Number);
+      for (let y = y0, m = m0; y < y1 || (y === y1 && m <= m1); m++) { if (m > 12) { m = 1; y++; } keys.push(`${y}-${String(m).padStart(2, "0")}`); }
     }
-    return { weeks: w, labels: l };
-  }, [activities]);
-  if (weeks.every((v) => v === 0)) return null;
-  // Web's expanded gym-frequency dialog draws a moving average over the bars; a
-  // 4-week window is the weekly-series equivalent of its 3-month line (soma#756).
-  const ma = weeks.map((_, i) => { const from = Math.max(0, i - 3); const slice = weeks.slice(from, i + 1); return slice.reduce((a, b) => a + b, 0) / slice.length; });
+    const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return {
+      months: keys.map((k) => byMonth.get(k) ?? 0),
+      labels: keys.map((k) => `${MON[Number(k.slice(5, 7)) - 1]} '${k.slice(2, 4)}`),
+      total: ds.length,
+      thisWeek: ds.filter((d) => d >= monS).length,
+    };
+  }, [days, sinceDays]);
+  if (!total) return null;
   const chart = {
     labels,
-    xTicks: 4,
+    xTicks: Math.min(4, labels.length),
     yFormat: (v: number) => String(Math.round(v)),
-    series: [
-      { values: weeks, color: "#e0a458", width: 2.2, label: "Sessions" },
-      { values: ma, color: "#5a7a8a", width: 1.4, dashed: true, label: "4-wk avg" },
-    ],
+    yMin: 0,
+    series: [{ values: months, color: "#e0a458", mode: "bars" as const, label: "Workouts" }],
   };
   return (
     <Card className="gap-2">
       <ExpandableChart title="Gym frequency" chart={chart}>
+        <View className="flex-row items-end gap-2" testID="gym-frequency-headline">
+          <Text variant="headline" className="tabular-nums">{total}</Text>
+          <Text variant="micro" className="text-text-muted mb-0.5">workouts{rangeLabel ? ` · ${rangeLabel}` : ""} · {thisWeek} this week</Text>
+        </View>
         <LineChart height={110} interactive {...chart} />
       </ExpandableChart>
-      <ChartLegend items={[{ color: "#e0a458", label: "sessions / week · last 12 weeks" }, { color: "#5a7a8a", label: "4-wk avg", dashed: true }]} />
+      <ChartLegend items={[{ color: "#e0a458", label: "workouts per month" }]} />
     </Card>
   );
 }
