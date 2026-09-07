@@ -355,6 +355,30 @@ export default function SleepScreen() {
           </Card>
         ) : null}
 
+        {(rhr?.current?.length ?? 0) >= 2 ? (
+          <Card className="gap-2">
+            {(() => {
+              const vals = rhr!.current.map((p) => finiteOrNull(p.value));
+              const nn = vals.filter((v): v is number => v != null);
+              const avg = nn.length ? nn.reduce((a, b) => a + b, 0) / nn.length : null;
+              const latest = nn.at(-1);
+              const rhrChart = {
+                labels: rhr!.current.map((p) => chartLabel(p.date)),
+                xTicks: 4,
+                yFormat: (v: number) => String(Math.round(v)),
+                refLine: avg != null ? { y: avg, color: "#e06060", label: `avg ${Math.round(avg)}` } : undefined,
+                series: [{ values: vals, color: "#e06060", width: 2.2, label: "RHR" }],
+              };
+              return (
+                <ExpandableChart title="Resting heart rate" chart={rhrChart}>
+                  {latest != null && avg != null ? <Text variant="micro" className="text-text-muted tabular-nums">{Math.round(latest)} bpm · avg {Math.round(avg)}</Text> : null}
+                  <LineChart height={130} interactive {...rhrChart} />
+                </ExpandableChart>
+              );
+            })()}
+          </Card>
+        ) : null}
+
         {(battery?.current?.length ?? 0) >= 2 ? (
           <Card className="gap-2">
             {(() => {

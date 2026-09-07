@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { Text, Card } from "soma-style";
-import { LineChart, ChartLegend } from "./line-chart";
+import { LineChart, ChartLegend, ExpandableChart, type LineChartProps } from "./line-chart";
 import type { SchedulePoint } from "../lib/api";
 
 const BED = "#8b7fe0"; // bedtime line (indigo)
@@ -13,7 +13,8 @@ function fmtHour(h: number): string {
   const mins = Math.round((actual - whole) * 60);
   const ampm = whole >= 12 ? "PM" : "AM";
   const h12 = whole % 12 === 0 ? 12 : whole % 12;
-  return `${h12}:${String(mins).padStart(2, "0")} ${ampm}`;
+  // Whole hours (the axis ticks) stay compact so they fit the axis column; readouts keep minutes.
+  return mins === 0 ? `${h12} ${ampm}` : `${h12}:${String(mins).padStart(2, "0")} ${ampm}`;
 }
 
 const chartLabel = (iso: string) => {
@@ -44,25 +45,38 @@ export function SleepScheduleChart({ schedule }: { schedule: SchedulePoint[] | u
   const avgBed = last7.reduce((s, p) => s + norm(p.bedtimeHour), 0) / last7.length;
   const avgWake = last7.reduce((s, p) => s + p.wakeHour, 0) / last7.length;
 
+  // Web's domain: whole hours around the data (floor−1 … ceil+1, clamped 0…33, ≥6 h span),
+  // on a REVERSED axis so the earlier clock time sits at the top (wake above bedtime).
+  const all = [...bedtimes, ...wakes];
+  let lo = Math.max(0, Math.floor(Math.min(...all)) - 1);
+  let hi = Math.min(33, Math.ceil(Math.max(...all)) + 1);
+  if (hi - lo < 6) { const mid = (lo + hi) / 2; lo = Math.floor(mid - 3); hi = Math.ceil(mid + 3); }
+  // Five whole-hour ticks: stretch the span to a multiple of 4 h (downwards, the top is the wake side).
+  const Y_TICKS = 5;
+  lo = hi - Math.ceil((hi - lo) / (Y_TICKS - 1)) * (Y_TICKS - 1);
+
+  // Web draws bedtime and wake as two stacked Areas, so the night reads as one filled band.
+  const chart: LineChartProps = {
+    labels,
+    xTicks: 4,
+    yMin: lo,
+    yMax: hi,
+    yTicks: Y_TICKS,
+    invertY: true,
+    yFormat: (v) => fmtHour(v),
+    bands: [{ a: 0, b: 1, color: BED, opacity: 0.22 }],
+    series: [
+      { values: bedtimes, color: BED, width: 2.2, label: "Bedtime" },
+      { values: wakes, color: WAKE, width: 2.2, label: "Wake" },
+    ],
+  };
   return (
     <Card className="gap-2">
-      <View className="flex-row items-center justify-between">
-        <Text variant="eyebrow">Sleep schedule</Text>
-        <Text variant="micro" className="text-text-muted tabular-nums">
-          {fmtHour(avgBed)} → {fmtHour(avgWake)}
-        </Text>
-      </View>
-      <LineChart
-        height={150}
-        interactive
-        labels={labels}
-        yFormat={(v) => fmtHour(v)}
-        series={[
-          { values: bedtimes, color: BED, width: 2.2 },
-          { values: wakes, color: WAKE, width: 2.2 },
-        ]}
-      />
-      <ChartLegend items={[{ color: BED, label: "Bedtime" }, { color: WAKE, label: "Wake" }]} />
+      <ExpandableChart title="Sleep schedule" chart={chart}>
+        <Text variant="micro" className="text-text-muted tabular-nums">{fmtHour(avgBed)} → {fmtHour(avgWake)} · last 7 nights</Text>
+        <LineChart height={150} interactive {...chart} />
+      </ExpandableChart>
+      <ChartLegend items={[{ color: BED, label: "Bedtime" }, { color: WAKE, label: "Wake" }, { color: BED, label: "asleep (band)" }]} />
     </Card>
   );
 }
