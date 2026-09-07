@@ -5,7 +5,7 @@ import { TimeRangeSelector } from "../../components/time-range-selector";
 import { useRangePref } from "../../lib/time-range";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { TrendArrow } from "../../components/trend-arrow";
-import { LineChart, ChartLegend } from "../../components/line-chart";
+import { LineChart, ChartLegend, ExpandableChart } from "../../components/line-chart";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
 import { freshness, staleShort, todayKey } from "../../lib/freshness";
 import { SleepDashboard } from "../../components/sleep-dashboard";
@@ -326,9 +326,9 @@ export default function SleepScreen() {
               yMax={100}
               yFormat={(v) => String(Math.round(v))}
               refLines={[
-                { y: 25, color: "#6ad4a0" },
-                { y: 50, color: "#e0c458" },
-                { y: 75, color: "#e06060" },
+                { y: 25, color: "#6ad4a0", label: "low" },
+                { y: 50, color: "#e0c458", label: "med" },
+                { y: 75, color: "#e06060", label: "high" },
               ]}
               series={[
                 { values: stress!.current.map((p) => finiteOrNull(p.value2)), color: "#e06060", dashed: true, width: 1.5, label: "Peak" },
@@ -341,22 +341,23 @@ export default function SleepScreen() {
 
         {(battery?.current?.length ?? 0) >= 2 ? (
           <Card className="gap-2">
-            <View className="flex-row items-center justify-between">
-              <Text variant="eyebrow">Body Battery</Text>
-              <Text variant="micro" className="text-text-muted">charged + drained</Text>
-            </View>
-            <LineChart
-              height={130}
-              interactive
-              labels={battery!.current.map((p) => chartLabel(p.date))}
-              xTicks={4}
-              yFormat={(v) => String(Math.round(v))}
-              yMin={0}
-              series={[
-                { values: battery!.current.map((p) => finiteOrNull(p.value2)), color: "#e06060", width: 1.5, dashed: true, label: "Drained" },
-                { values: battery!.current.map((p) => finiteOrNull(p.value)), color: "#cbe896", width: 2.2, label: "Charged" },
-              ]}
-            />
+            {(() => {
+              const bbChart = {
+                labels: battery!.current.map((p) => chartLabel(p.date)),
+                xTicks: 4,
+                yFormat: (v: number) => String(Math.round(v)),
+                yMin: 0,
+                series: [
+                  { values: battery!.current.map((p) => finiteOrNull(p.value2)), color: "#e06060", width: 1.5, dashed: true, label: "Drained" },
+                  { values: battery!.current.map((p) => finiteOrNull(p.value)), color: "#cbe896", width: 2.2, label: "Charged" },
+                ],
+              };
+              return (
+                <ExpandableChart title="Body Battery" chart={bbChart}>
+                  <LineChart height={130} interactive {...bbChart} />
+                </ExpandableChart>
+              );
+            })()}
             <ChartLegend items={[{ color: "#cbe896", label: "Charged" }, { color: "#e06060", label: "Drained", dashed: true }]} />
           </Card>
         ) : null}
@@ -445,16 +446,17 @@ export default function SleepScreen() {
             {durVals.length >= 2 ? (
               <LineChart
                 height={140}
+                interactive
                 labels={durLabels}
                 yFormat={(v) => `${v.toFixed(1)}h`}
-                refLine={{ y: 7, color: "#6ad4a0" }}
+                refLines={[{ y: 7, color: "#6ad4a0", label: "7h min" }, { y: 9, color: "#77c8d1", label: "9h target" }]}
                 series={[{ values: durSeries, color: "#8b9df0", width: 2.2 }]}
               />
             ) : (
               <Text variant="micro">No sleep data in this range.</Text>
             )}
             <Text variant="micro">
-              Dashed line = 7h target. Showing last {durVals.length} nights.
+              Dashed lines = 7h minimum · 9h target. Showing last {durVals.length} nights.
             </Text>
           </Card>
         </Pressable>

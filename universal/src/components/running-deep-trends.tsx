@@ -2,7 +2,7 @@ import { View } from "react-native";
 import Svg, { Polyline } from "react-native-svg";
 import { Text, Card, Badge } from "soma-style";
 import type { RunningTrends } from "../lib/api";
-import { LineChart, ChartLegend } from "./line-chart";
+import { LineChart, ChartLegend, ExpandableChart } from "./line-chart";
 
 /** Two lines on a shared y-scale (acute vs chronic load). */
 function DualLine({ a, b, colorA, colorB, height = 44 }: { a: number[]; b: number[]; colorA: string; colorB: string; height?: number }) {
@@ -45,6 +45,15 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
   const cadSeries = cad.map((p) => (p.cadence != null && isFinite(Number(p.cadence)) ? Number(p.cadence) : null));
   const strideSeries = cad.map((p) => (p.stride != null && isFinite(Number(p.stride)) ? Number(p.stride) : null));
   const hasStride = strideSeries.filter((v) => v != null).length >= 2;
+  const cadChart = {
+    yFormat: (v: number) => String(Math.round(v)),
+    yFormatRight: (v: number) => `${Math.round(v)}cm`,
+    refLine: { y: 180, color: "#77c8d1", label: "180 spm" },
+    series: [
+      { values: cadSeries, color: "#cbe896", width: 2.2, label: "Cadence" },
+      ...(hasStride ? [{ values: strideSeries, color: "#8b9df0", width: 1.8, axis: "right" as const, label: "Stride" }] : []),
+    ],
+  };
 
   return (
     <View className="gap-4">
@@ -79,12 +88,13 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
               <Text variant="micro" className="text-text-muted">ACWR ratio · sweet spot 0.8–1.3</Text>
               <LineChart
                 height={110}
+                interactive
                 yFormat={(v) => v.toFixed(2)}
                 series={[{ values: acwrSeries, color: "#77c8d1", width: 2 }]}
                 refLines={[
-                  { y: 0.8, color: "#6ad4a0" },
-                  { y: 1.3, color: "#e0c458" },
-                  { y: 1.5, color: "#e06060" },
+                  { y: 0.8, color: "#6ad4a0", label: "0.8" },
+                  { y: 1.3, color: "#e0c458", label: "1.3" },
+                  { y: 1.5, color: "#e06060", label: "1.5 high" },
                 ]}
               />
               <ChartLegend items={[{ color: "#6ad4a0", label: "0.8", dashed: true }, { color: "#e0c458", label: "1.3", dashed: true }, { color: "#e06060", label: "1.5 high", dashed: true }]} />
@@ -95,25 +105,13 @@ export function RunningDeepTrends({ trends }: { trends: RunningTrends | null | u
 
       {cadLast && cadSeries.length >= 2 ? (
         <Card className="gap-2">
-          <View className="flex-row items-center justify-between">
-            <Text variant="eyebrow">Cadence &amp; stride</Text>
-            <Text variant="micro" className="tabular-nums text-text-muted">{cadLast.stride != null ? `stride ${cadLast.stride} cm` : ""}</Text>
-          </View>
-          <View className="flex-row items-end gap-2">
-            <Text variant="display" className="text-lime">{cadLast.cadence}</Text>
-            <Text variant="caption" className="text-text-muted mb-1">spm</Text>
-          </View>
-          <LineChart
-            height={120}
-            interactive
-            yFormat={(v) => String(Math.round(v))}
-            yFormatRight={(v) => `${Math.round(v)}cm`}
-            refLine={{ y: 180, color: "#77c8d1" }}
-            series={[
-              { values: cadSeries, color: "#cbe896", width: 2.2, label: "Cadence" },
-              ...(hasStride ? [{ values: strideSeries, color: "#8b9df0", width: 1.8, axis: "right" as const, label: "Stride" }] : []),
-            ]}
-          />
+          <ExpandableChart title="Cadence & stride" chart={cadChart}>
+            <View className="flex-row items-end gap-2">
+              <Text variant="display" className="text-lime">{cadLast.cadence}</Text>
+              <Text variant="caption" className="text-text-muted mb-1">spm{cadLast.stride != null ? ` · stride ${cadLast.stride} cm` : ""}</Text>
+            </View>
+            <LineChart height={120} interactive {...cadChart} />
+          </ExpandableChart>
           {hasStride ? (
             <ChartLegend items={[{ color: "#cbe896", label: "Cadence spm (L)" }, { color: "#8b9df0", label: "Stride cm (R)" }, { color: "#77c8d1", label: "180 target", dashed: true }]} />
           ) : (

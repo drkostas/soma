@@ -185,7 +185,8 @@ export default function OverviewScreen() {
     { values: wVals, color: "#b17850", width: 2.2, label: "Weight" },
     ...(hasBf ? [{ values: bfVals, color: "#77c8d1", width: 1.6, dashed: true, axis: "right" as const, label: "Body fat" }] : []),
   ];
-  const bodyCompChart = { series: bodyCompSeries, labels: wLabels, yFormat: (v: number) => v.toFixed(1), yFormatRight: (v: number) => `${v.toFixed(0)}%` };
+  const wAvg = wSeries.length ? wSeries.reduce((a, b) => a + b, 0) / wSeries.length : null;
+  const bodyCompChart = { series: bodyCompSeries, labels: wLabels, yFormat: (v: number) => v.toFixed(1), yFormatRight: (v: number) => `${v.toFixed(0)}%`, refLine: wAvg != null ? { y: wAvg, color: "#b17850", label: `avg ${wAvg.toFixed(1)} kg` } : undefined };
 
   // Sleep glance: latest night's score + 7-day series
   const sleepSeries = (sleep?.current ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v));
@@ -367,7 +368,7 @@ export default function OverviewScreen() {
                   kg{bfLatest != null ? ` · ${bfLatest.toFixed(1)}% bf` : ""}{wDelta != null ? ` · ${wDelta >= 0 ? "+" : ""}${wDelta.toFixed(1)} kg/${rangeLabel(range)}` : ""}
                 </Text>
               </View>
-              <LineChart height={130} interactive xTicks={4} labels={wLabels} yFormat={bodyCompChart.yFormat} yFormatRight={bodyCompChart.yFormatRight} series={bodyCompSeries} />
+              <LineChart height={130} interactive xTicks={4} labels={wLabels} yFormat={bodyCompChart.yFormat} yFormatRight={bodyCompChart.yFormatRight} refLine={bodyCompChart.refLine} series={bodyCompSeries} />
             </ExpandableChart>
             {hasBf ? <ChartLegend items={[{ color: "#b17850", label: "Weight (kg)" }, { color: "#77c8d1", label: "Body fat (%)", dashed: true }]} /> : null}
           </Card>

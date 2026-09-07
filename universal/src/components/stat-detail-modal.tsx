@@ -35,6 +35,20 @@ interface StatSeries {
   summary: { current_avg: number | null; current_min: number | null; current_max: number | null; previous_avg: number | null };
 }
 type Range = "7d" | "30d" | "90d" | "1y";
+type RefLine = { y: number; color?: string; dashed?: boolean; label?: string };
+/** Web's stat dialogs draw goal / threshold / average reference lines; mirror them
+ *  per metric (soma#756): 10K steps goal, stress low/med/high, BMR on calories,
+ *  7h/9h on sleep, otherwise the period average. */
+function refLinesFor(metric: string | undefined, avg: number | null | undefined, secondaryAvg: number | null): RefLine[] {
+  switch (metric) {
+    case "steps": return [{ y: 10000, color: "#77c8d1", label: "10K goal" }];
+    case "stress": return [{ y: 25, color: "#6ad4a0", label: "low" }, { y: 50, color: "#e0c458", label: "med" }, { y: 75, color: "#e06060", label: "high" }];
+    case "calories": return secondaryAvg != null && isFinite(secondaryAvg) ? [{ y: secondaryAvg, color: "#e0a458", label: `BMR ~${Math.round(secondaryAvg)}` }] : [];
+    case "sleep": return [{ y: 7, color: "#77c8d1", label: "7h min" }, { y: 9, color: "#6ad4a0", label: "9h target" }];
+    default: return avg != null && isFinite(avg) ? [{ y: avg, color: "#5a7a8a", label: `avg ${Math.round(avg).toLocaleString()}` }] : [];
+  }
+}
+const mean = (xs: (number | null)[]): number | null => { const v = xs.filter((x): x is number => x != null && isFinite(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const RANGES: readonly Range[] = ["7d", "30d", "90d", "1y"] as const;
 
 /** Detail dialog for a stat card. With `metric`, fetches the real trend for a
@@ -85,6 +99,7 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
                 labels={labels}
                 xTicks={4}
                 yFormat={(v) => `${Math.round(v).toLocaleString()}`}
+                refLine={avg != null ? { y: avg, color: "#5a7a8a", label: "avg" } : undefined}
                 series={dots
                   ? [{ values: vals, color: stat.color, mode: "dots" as const, width: 3 }]
                   : [{ values: vals, color: stat.color, width: 2.2 }]}
@@ -131,6 +146,7 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
                 labels={labels}
                 xTicks={4}
                 yFormat={(v) => `${Math.round(v).toLocaleString()}`}
+                refLines={refLinesFor(stat.metric, sm?.current_avg, hasTwo ? mean(cur2) : null)}
                 series={hasTwo ? [
                   { values: cur, color: stat.color, width: 2.2, label: two!.primary },
                   { values: cur2, color: two!.color, width: 1.6, dashed: true, label: two!.secondary },
@@ -178,7 +194,7 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
         {s.length >= 2 ? (
           <View className="gap-1">
             <Text variant="eyebrow" className="text-text-muted">Trend · last {s.length} days</Text>
-            <LineChart height={160} interactive series={[{ values: s, color: stat.color, width: 2.2 }]} yFormat={(v) => `${Math.round(v).toLocaleString()}`} />
+            <LineChart height={160} interactive refLine={avg != null ? { y: avg, color: "#5a7a8a", label: `avg ${Math.round(avg).toLocaleString()}` } : undefined} series={[{ values: s, color: stat.color, width: 2.2 }]} yFormat={(v) => `${Math.round(v).toLocaleString()}`} />
             <View className="mt-1 flex-row justify-between">
               <Text variant="micro" className="text-text-muted tabular-nums">min {fmt(min)}</Text>
               <Text variant="micro" className="text-text-muted tabular-nums">avg {fmt(avg)}</Text>
