@@ -51,8 +51,15 @@ function StagesTrend({ nights, height = 112 }: { nights: SleepNight[]; height?: 
   if (data.length < 2) return null;
   // Keep the 9h target inside the plot even on short-sleep months.
   const maxTotal = Math.max(...data.map((n) => n.total ?? 0), 9 * 3600) || 1;
+  const maxH = maxTotal / 3600;
   return (
-    <View style={{ height }}>
+    <View className="flex-row">
+    <View className="w-7 justify-between" style={{ height }}>
+      <Text variant="micro" className="tabular-nums text-text-muted">{Math.round(maxH)}h</Text>
+      <Text variant="micro" className="tabular-nums text-text-muted">{Math.round(maxH / 2)}h</Text>
+      <Text variant="micro" className="tabular-nums text-text-muted">0h</Text>
+    </View>
+    <View className="flex-1" style={{ height }}>
       {SLEEP_GUIDES.map((g) => {
         const pct = ((g.h * 3600) / maxTotal) * 100;
         return pct > 0 && pct < 100 ? (
@@ -79,6 +86,7 @@ function StagesTrend({ nights, height = 112 }: { nights: SleepNight[]; height?: 
           </View>
         );
       })}
+    </View>
     </View>
     </View>
   );
