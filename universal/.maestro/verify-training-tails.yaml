@@ -1,0 +1,47 @@
+# Soma verify flow: training tails (soma#776): the trajectory card still renders (and, once a
+# plan is live, expands with the annotated chart). Run via
+# universal/scripts/verify-device.sh training --flow .maestro/verify-training-tails.yaml
+appId: dev.gkos.soma
+name: Soma verify training tails
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://training
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- scrollUntilVisible:
+    element:
+      text: "(?i)fitness trajectory"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-training-trajectory-card
+# Live-plan branch (optional): the annotated chart expands when the endpoint has points.
+- runFlow:
+    when:
+      visible:
+        id: "expand-trajectory-to-race"
+    commands:
+      - tapOn:
+          id: "expand-trajectory-to-race"
+      - extendedWaitUntil:
+          visible:
+            text: "(?s).*Trajectory to race · expanded.*"
+          timeout: 10000
+      - takeScreenshot: verify-training-trajectory-expanded
+      - back
+- stopApp
+- openLink: universal://training
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}

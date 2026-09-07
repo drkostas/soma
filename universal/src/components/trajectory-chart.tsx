@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card, SegmentedControl } from "soma-style";
-import { LineChart, ChartLegend, chartDateLabel } from "./line-chart";
+import { LineChart, ChartLegend, ExpandableChart, chartDateLabel, type LineChartProps } from "./line-chart";
+import { todayKey } from "../lib/freshness";
+import { trajectoryAnnotations } from "../lib/trajectory-annotations";
 import { getHMPrediction } from "../lib/vdot-pace-zones";
 import type { ForwardSim, TrajectoryData } from "../lib/api";
 
@@ -57,12 +59,15 @@ export function TrajectoryChart({ comparison, trajectory }: { comparison: Forwar
     for (let i = optimal.length - 1; i >= 0; i--) if (optimal[i] != null) { lastOptimal = optimal[i]; break; }
     const projHM = lastOptimal != null ? getHMPrediction(lastOptimal) : null;
     const goalHM = trajectory?.goalVdot != null ? getHMPrediction(trajectory.goalVdot) : null;
+    // Web's annotations (soma#776) from the pure helper (unit-tested; no plan is live today).
+    const ann = trajectoryAnnotations(t, { goalVdot: trajectory?.goalVdot ?? null, raceDate: trajectory?.raceDate ?? null, today: todayKey(), hmTime: (v) => timeStr(getHMPrediction(v)) });
     return {
       labels: t.map((p) => chartDateLabel(p.date)),
       optimal, actual,
       hereDot: actual.map((v, i) => (i === hereIdx ? v : null)),
       cur: hereIdx >= 0 ? actual[hereIdx] : null,
       projHM, goalHM,
+      ...ann,
     };
   }, [trajectory]);
   const src = useMemo(() => {
@@ -108,23 +113,34 @@ export function TrajectoryChart({ comparison, trajectory }: { comparison: Forwar
       </View>
       {useTraj ? (
         <>
-          <LineChart
-            height={175}
-            interactive
-            xTicks={4}
-            labels={traj.labels}
-            yFormat={(v) => v.toFixed(1)}
-            refLine={trajectory?.goalVdot != null ? { y: trajectory.goalVdot, color: "#e0c458" } : undefined}
-            series={[
-              { values: traj.optimal, color: "#77c8d1", width: 1.6, dashed: true, label: "Optimal" },
-              { values: traj.actual, color: "#6ad4a0", width: 2.4, label: "Actual" },
-              { values: traj.hereDot, color: "#ffffff", mode: "dots" as const, width: 3 },
-            ]}
-          />
+          {(() => {
+            const chart: LineChartProps = {
+              xTicks: 4,
+              labels: traj.labels,
+              yFormat: (v: number) => v.toFixed(1),
+              refAreas: traj.refAreas,
+              refLines: traj.refLines,
+              xLines: traj.xLines,
+              xBands: traj.xBands,
+              series: [
+                { values: traj.optimal, color: "#77c8d1", width: 1.6, dashed: true, label: "Optimal" },
+                { values: traj.actual, color: "#6ad4a0", width: 2.4, label: "Actual" },
+                { values: traj.hereDot, color: "#ffffff", mode: "dots" as const, width: 3 },
+              ],
+            };
+            return (
+              <ExpandableChart title="Trajectory to race" chart={chart}>
+                <LineChart height={175} interactive {...chart} />
+              </ExpandableChart>
+            );
+          })()}
           <ChartLegend items={[
             { color: "#6ad4a0", label: "Actual VDOT" },
             { color: "#77c8d1", label: "Optimal (to race)", dashed: true },
-            ...(trajectory?.goalVdot != null ? [{ color: "#e0c458", label: `Goal ${trajectory.goalVdot.toFixed(1)}`, dashed: true }] : []),
+            ...(trajectory?.goalVdot != null ? [{ color: "#6ad4a0", label: "A goal zone" }, { color: "#e0c458", label: "B goal zone" }] : []),
+            ...(traj.hasToday ? [{ color: "#e0c458", label: "Today" }] : []),
+            ...(traj.hasRace ? [{ color: "#c084fc", label: "Race", dashed: true }] : []),
+            ...(traj.hasTaper ? [{ color: "#8b9df0", label: "Taper (12 d)" }] : []),
           ]} />
           {traj.projHM != null ? (
             <View className="mt-1 flex-row items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: "#16241b" }}>
