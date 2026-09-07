@@ -20,6 +20,8 @@ export interface ChartSeries {
   sizes?: (number | null)[];
   /** Fill under the line down to the plot floor (web's elevation Area). */
   area?: boolean;
+  /** Bar series with the same stack key pile up per x index (web's stacked BarChart). */
+  stack?: string;
 }
 
 export interface LineChartProps {
@@ -80,6 +82,14 @@ export function LineChart(props: LineChartProps) {
     return all;
   };
   const lExtra: number[] = [];
+  // Stacked bars: the axis must reach the summed height per index.
+  const stackTops = new Map<string, number[]>();
+  for (const s of series) if (s.mode === "bars" && s.stack) {
+    const acc = stackTops.get(s.stack) ?? [];
+    s.values.forEach((v, i) => { acc[i] = (acc[i] ?? 0) + (v != null && isFinite(v) ? v : 0); });
+    stackTops.set(s.stack, acc);
+  }
+  for (const tops of stackTops.values()) for (const t of tops) if (t != null && isFinite(t)) lExtra.push(t);
   if (refLine && isFinite(refLine.y)) lExtra.push(refLine.y);
   if (refLines) for (const r of refLines) if (isFinite(r.y)) lExtra.push(r.y);
   if (refAreas) for (const a of refAreas) { if (isFinite(a.y1)) lExtra.push(a.y1); if (isFinite(a.y2)) lExtra.push(a.y2); }
@@ -222,11 +232,15 @@ export function LineChart(props: LineChartProps) {
               if (s.mode === "bars") {
                 const bw = n > 1 ? Math.max(1.5, (VBW / (n - 1)) * 0.7) : 8;
                 const floorY = padTop + plotH;
-                return s.values.map((v, i) =>
-                  v == null || !isFinite(v) ? null : (
-                    <Rect key={`${si}-${i}`} x={xAt(i) - bw / 2} y={Math.min(yOf(s, v), floorY)} width={bw} height={Math.max(0.5, Math.abs(floorY - yOf(s, v)))} fill={s.color} fillOpacity={0.85} rx={1} />
-                  ),
-                );
+                // Stacked: this series starts where the earlier series of the same stack ended.
+                const base: number[] = [];
+                if (s.stack) for (let k = 0; k < si; k++) { const o = series[k]; if (o.mode === "bars" && o.stack === s.stack) o.values.forEach((v, i) => { base[i] = (base[i] ?? 0) + (v != null && isFinite(v) ? v : 0); }); }
+                return s.values.map((v, i) => {
+                  if (v == null || !isFinite(v) || v <= 0) return null;
+                  const b = base[i] ?? 0; const y0 = yOf(s, b + (s.stack ? 0 : 0)); const yTop = yOf(s, b + v);
+                  const bottom = s.stack ? yOf(s, b) : floorY;
+                  return <Rect key={`${si}-${i}`} x={xAt(i) - bw / 2} y={Math.min(yTop, bottom)} width={bw} height={Math.max(0.5, Math.abs(bottom - yTop))} fill={s.color} fillOpacity={0.85} rx={s.stack ? 0 : 1} />;
+                });
               }
               if (s.mode === "dots") {
                 return s.values.map((v, i) =>

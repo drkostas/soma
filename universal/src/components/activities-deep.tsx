@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { View, Pressable, TextInput } from "react-native";
-import Svg, { Circle, Polyline } from "react-native-svg";
-import { ExpandableChart } from "./line-chart";
+import { ExpandableChart, LineChart, type LineChartProps } from "./line-chart";
 import { Text, Card } from "soma-style";
 import type { ActivitiesDeep, ActivityRow, KiteSession } from "../lib/api";
 import { ActivityDetailModal } from "./activity-detail-modal";
@@ -47,27 +46,21 @@ export function ActivitiesMonthly({ monthly }: { monthly: ActivitiesDeep["monthl
   const max = Math.max(...totals) || 1;
   const sports = [...new Set(data.flatMap((m) => Object.keys(m.sports)))];
 
-  const bars = (height: number) => (
-    <View className="flex-row items-end gap-1" style={{ height }}>
-      {data.map((m, i) => {
-        const total = totals[i];
-        return (
-          <View key={m.month} className="flex-1 items-center justify-end self-stretch gap-0.5">
-            <View className="w-full overflow-hidden rounded-t-sm" style={{ height: `${Math.max(3, (total / max) * 100)}%` }}>
-              {Object.entries(m.sports).map(([s, c]) => (
-                <View key={s} style={{ height: `${(c / total) * 100}%`, backgroundColor: sportColor(s) }} />
-              ))}
-            </View>
-            <Text variant="micro" className="text-text-muted" style={{ fontSize: 8 }}>{i % labelStep === 0 || i === data.length - 1 ? shortMonth(m.month) : ""}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
+  // Web's stacked BarChart through the shared chart: one bar series per sport on one stack,
+  // a count axis, month ticks and tap-to-read listing every sport's count (soma#773).
+  void max; void labelStep;
+  const chart: LineChartProps = {
+    labels: data.map((m) => shortMonth(m.month)),
+    xTicks: Math.min(data.length, 6),
+    yMin: 0,
+    yFormat: (v) => `${Math.round(v)}`,
+    series: sports.map((s) => ({ values: data.map((m) => m.sports[s] ?? null), color: sportColor(s), mode: "bars" as const, stack: "sports", label: s })),
+  };
   return (
     <Card className="gap-2">
-      <ExpandableChart title="Monthly activity" renderExpanded={() => bars(240)}>
-        {bars(112)}
+      <ExpandableChart title="Monthly activity" chart={chart}>
+        <Text variant="micro" className="text-text-muted">sessions per month · {totals.reduce((a, b) => a + b, 0)} in range</Text>
+        <LineChart height={120} interactive {...chart} />
       </ExpandableChart>
       <View className="flex-row flex-wrap gap-x-3 gap-y-1">
         {sports.map((s) => (
@@ -104,18 +97,17 @@ export function KiteDeepDive({ sessions }: { sessions: KiteSession[] }) {
     return slice.reduce((a, b) => a + b, 0) / slice.length;
   });
   const minS = Math.min(...speeds), maxS = Math.max(...speeds), rS = maxS - minS || 1;
-  const H = 90;
-  const x = (i: number) => (i / Math.max(1, speeds.length - 1)) * 96 + 2;
-  const speedSvg = (h: number) => {
-    const y = (v: number) => h - ((v - minS) / rS) * (h - 10) - 5;
-    return (
-      <Svg width="100%" height={h} viewBox={`0 0 100 ${h}`} preserveAspectRatio="none">
-        <Polyline points={ma.map((v, i) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke="#22d3ee" strokeWidth={1.4} opacity={0.9} />
-        {speeds.map((v, i) => (
-          <Circle key={i} cx={x(i)} cy={y(v)} r={2} fill="#22d3ee" fillOpacity={0.5} />
-        ))}
-      </Svg>
-    );
+  void minS; void rS;
+  // Web's Max Speed Progression (scatter + moving average) through the shared chart:
+  // dots per session, a line for the moving average, a knots axis, dated ticks, tap-to-read.
+  const speedChart: LineChartProps = {
+    labels: withSpeed.map((s) => s.date),
+    xTicks: Math.min(withSpeed.length, 4),
+    yFormat: (v) => `${v.toFixed(0)} kt`,
+    series: [
+      { values: speeds, color: "#22d3ee", mode: "dots", width: 3, label: "Max speed" },
+      { values: ma, color: "#22d3ee", width: 1.4, label: "Moving avg" },
+    ],
   };
 
   return (
@@ -127,8 +119,8 @@ export function KiteDeepDive({ sessions }: { sessions: KiteSession[] }) {
 
       {speeds.length >= 3 ? (
         <View className="gap-1">
-          <ExpandableChart title="Max speed progression" renderExpanded={() => speedSvg(240)}>
-            {speedSvg(H)}
+          <ExpandableChart title="Max speed progression" chart={speedChart}>
+            <LineChart height={110} interactive {...speedChart} />
           </ExpandableChart>
           <Text variant="micro" className="text-text-muted">max speed per session · line = moving avg</Text>
         </View>
@@ -282,7 +274,7 @@ export function SnowDeepDive({ all }: { all: ActivityRow[] }) {
   );
 }
 
-const PAGE = 12;
+const PAGE = 20; // web pages 20 rows
 type SortKey = "date" | "distance_km" | "duration_min" | "avg_hr" | "calories" | "elev_gain";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "date", label: "Date" }, { key: "distance_km", label: "Dist" }, { key: "duration_min", label: "Time" },
@@ -330,7 +322,7 @@ export function ActivitiesList({ all }: { all: ActivityRow[] }) {
     <Card className="gap-2">
       <View className="flex-row items-center justify-between">
         <Text variant="eyebrow">All activities</Text>
-        <Text variant="micro" className="tabular-nums text-text-muted">{filtered.length} total</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">{filtered.length ? `${cur * PAGE + 1}–${Math.min((cur + 1) * PAGE, filtered.length)} of ${filtered.length}` : "0 activities"}</Text>
       </View>
 
       <TextInput
