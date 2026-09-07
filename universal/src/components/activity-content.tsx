@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { View, Pressable, ScrollView } from "react-native";
 import { Text, Card } from "soma-style";
 import type { ActivityRow, MonthSports } from "../lib/api";
-import { LineChart } from "./line-chart";
+import { LineChart, ExpandableChart, ChartLegend } from "./line-chart";
 
 const SPORT_META: Record<string, { color: string; emoji: string; label: string }> = {
   running: { color: "#77c8d1", emoji: "🏃", label: "Run" },
@@ -199,11 +199,24 @@ export function GymFrequency({ activities }: { activities: ActivityRow[] }) {
     return { weeks: w, labels: l };
   }, [activities]);
   if (weeks.every((v) => v === 0)) return null;
+  // Web's expanded gym-frequency dialog draws a moving average over the bars; a
+  // 4-week window is the weekly-series equivalent of its 3-month line (soma#756).
+  const ma = weeks.map((_, i) => { const from = Math.max(0, i - 3); const slice = weeks.slice(from, i + 1); return slice.reduce((a, b) => a + b, 0) / slice.length; });
+  const chart = {
+    labels,
+    xTicks: 4,
+    yFormat: (v: number) => String(Math.round(v)),
+    series: [
+      { values: weeks, color: "#e0a458", width: 2.2, label: "Sessions" },
+      { values: ma, color: "#5a7a8a", width: 1.4, dashed: true, label: "4-wk avg" },
+    ],
+  };
   return (
     <Card className="gap-2">
-      <Text variant="eyebrow">Gym frequency</Text>
-      <LineChart height={110} series={[{ values: weeks, color: "#e0a458", width: 2.2 }]} labels={labels} yFormat={(v) => String(Math.round(v))} />
-      <Text variant="micro" className="text-text-muted">sessions / week · last 12 weeks</Text>
+      <ExpandableChart title="Gym frequency" chart={chart}>
+        <LineChart height={110} interactive {...chart} />
+      </ExpandableChart>
+      <ChartLegend items={[{ color: "#e0a458", label: "sessions / week · last 12 weeks" }, { color: "#5a7a8a", label: "4-wk avg", dashed: true }]} />
     </Card>
   );
 }

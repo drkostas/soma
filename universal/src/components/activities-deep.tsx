@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { View, Pressable, TextInput } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
+import { ExpandableChart } from "./line-chart";
 import { Text, Card } from "soma-style";
 import type { ActivitiesDeep, ActivityRow, KiteSession } from "../lib/api";
 import { ActivityDetailModal } from "./activity-detail-modal";
@@ -46,24 +47,28 @@ export function ActivitiesMonthly({ monthly }: { monthly: ActivitiesDeep["monthl
   const max = Math.max(...totals) || 1;
   const sports = [...new Set(data.flatMap((m) => Object.keys(m.sports)))];
 
+  const bars = (height: number) => (
+    <View className="flex-row items-end gap-1" style={{ height }}>
+      {data.map((m, i) => {
+        const total = totals[i];
+        return (
+          <View key={m.month} className="flex-1 items-center justify-end self-stretch gap-0.5">
+            <View className="w-full overflow-hidden rounded-t-sm" style={{ height: `${Math.max(3, (total / max) * 100)}%` }}>
+              {Object.entries(m.sports).map(([s, c]) => (
+                <View key={s} style={{ height: `${(c / total) * 100}%`, backgroundColor: sportColor(s) }} />
+              ))}
+            </View>
+            <Text variant="micro" className="text-text-muted" style={{ fontSize: 8 }}>{i % labelStep === 0 || i === data.length - 1 ? shortMonth(m.month) : ""}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
   return (
     <Card className="gap-2">
-      <Text variant="eyebrow">Monthly activity</Text>
-      <View className="h-28 flex-row items-end gap-1">
-        {data.map((m, i) => {
-          const total = totals[i];
-          return (
-            <View key={m.month} className="flex-1 items-center justify-end self-stretch gap-0.5">
-              <View className="w-full overflow-hidden rounded-t-sm" style={{ height: `${Math.max(3, (total / max) * 100)}%` }}>
-                {Object.entries(m.sports).map(([s, c]) => (
-                  <View key={s} style={{ height: `${(c / total) * 100}%`, backgroundColor: sportColor(s) }} />
-                ))}
-              </View>
-              <Text variant="micro" className="text-text-muted" style={{ fontSize: 8 }}>{i % labelStep === 0 || i === data.length - 1 ? shortMonth(m.month) : ""}</Text>
-            </View>
-          );
-        })}
-      </View>
+      <ExpandableChart title="Monthly activity" renderExpanded={() => bars(240)}>
+        {bars(112)}
+      </ExpandableChart>
       <View className="flex-row flex-wrap gap-x-3 gap-y-1">
         {sports.map((s) => (
           <View key={s} className="flex-row items-center gap-1">
@@ -101,7 +106,17 @@ export function KiteDeepDive({ sessions }: { sessions: KiteSession[] }) {
   const minS = Math.min(...speeds), maxS = Math.max(...speeds), rS = maxS - minS || 1;
   const H = 90;
   const x = (i: number) => (i / Math.max(1, speeds.length - 1)) * 96 + 2;
-  const y = (v: number) => H - ((v - minS) / rS) * (H - 10) - 5;
+  const speedSvg = (h: number) => {
+    const y = (v: number) => h - ((v - minS) / rS) * (h - 10) - 5;
+    return (
+      <Svg width="100%" height={h} viewBox={`0 0 100 ${h}`} preserveAspectRatio="none">
+        <Polyline points={ma.map((v, i) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke="#22d3ee" strokeWidth={1.4} opacity={0.9} />
+        {speeds.map((v, i) => (
+          <Circle key={i} cx={x(i)} cy={y(v)} r={2} fill="#22d3ee" fillOpacity={0.5} />
+        ))}
+      </Svg>
+    );
+  };
 
   return (
     <Card className="gap-3">
@@ -112,12 +127,9 @@ export function KiteDeepDive({ sessions }: { sessions: KiteSession[] }) {
 
       {speeds.length >= 3 ? (
         <View className="gap-1">
-          <Svg width="100%" height={H} viewBox={`0 0 100 ${H}`} preserveAspectRatio="none">
-            <Polyline points={ma.map((v, i) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke="#22d3ee" strokeWidth={1.4} opacity={0.9} />
-            {speeds.map((v, i) => (
-              <Circle key={i} cx={x(i)} cy={y(v)} r={2} fill="#22d3ee" fillOpacity={0.5} />
-            ))}
-          </Svg>
+          <ExpandableChart title="Max speed progression" renderExpanded={() => speedSvg(240)}>
+            {speedSvg(H)}
+          </ExpandableChart>
           <Text variant="micro" className="text-text-muted">max speed per session · line = moving avg</Text>
         </View>
       ) : null}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, Pressable, ScrollView } from "react-native";
 import { Text, Card } from "soma-style";
-import { LineChart } from "./line-chart";
+import { LineChart, ExpandableChart } from "./line-chart";
 import { fetchJson } from "../lib/api";
 import type { WorkoutInsights } from "../lib/api";
 
@@ -27,10 +27,13 @@ function StrengthProgression({ names, unit }: { names: string[]; unit: "kg" | "l
   }, [sel]);
   if (!names.length) return null;
   const vals = prog.map((p) => (unit === "lb" ? p.maxWeight * KG_TO_LB : p.maxWeight));
+  const chart = { series: [{ values: vals, color: "#cbe896", width: 2.2 }], labels: prog.map((p) => p.date), yFormat: (v: number) => `${Math.round(v)} ${unit}` };
 
   return (
     <Card className="gap-2">
-      <Text variant="eyebrow">Strength progression</Text>
+      <ExpandableChart title="Strength progression" chart={chart}>
+      <View />
+      </ExpandableChart>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 pr-2">
         {names.map((n) => (
           <Pressable key={n} onPress={() => setSel(n)} className={`rounded-full px-3 py-1 ${sel === n ? "bg-teal" : "bg-surface-subtle"}`}>
@@ -41,7 +44,7 @@ function StrengthProgression({ names, unit }: { names: string[]; unit: "kg" | "l
       {loading && !vals.length ? (
         <Text variant="micro" className="text-text-muted">Loading…</Text>
       ) : vals.length >= 2 ? (
-        <LineChart height={140} series={[{ values: vals, color: "#cbe896", width: 2.2 }]} yFormat={(v) => `${Math.round(v)} ${unit}`} />
+        <LineChart height={140} interactive xTicks={4} {...chart} />
       ) : (
         <Text variant="micro" className="text-text-muted">Not enough sessions for {sel}.</Text>
       )}
