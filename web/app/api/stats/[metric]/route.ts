@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 
 export const runtime = "edge";
@@ -55,10 +56,10 @@ export async function GET(
   }
 
   const range = request.nextUrl.searchParams.get("range") || "30d";
-  const days = RANGE_DAYS[range];
+  const days = RANGE_DAYS[range] ?? parseRangeDays(range, 0); // web keys too (soma#754)
   if (!days) {
     return NextResponse.json(
-      { error: `Invalid range: ${range}. Use 7d, 30d, 90d, or 1y` },
+      { error: `Invalid range: ${range}. Use 7d, 30d, 90d, 1y or a web range key (1w … all)` },
       { status: 400 }
     );
   }

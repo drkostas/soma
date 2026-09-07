@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
 import { TimeRangeSelector } from "../../components/time-range-selector";
-import { useRangePref, statsRange } from "../../lib/time-range";
+import { useRangePref } from "../../lib/time-range";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { TrendArrow } from "../../components/trend-arrow";
 import { LineChart, ChartLegend } from "../../components/line-chart";
@@ -62,8 +62,7 @@ function useSleepRecovery(range: string) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    // /api/stats/* only accepts 7d/30d/90d/1y — clamp the shared range to it.
-    const get = (m: string) => fetchJson<StatSeries>(`/api/stats/${m}?range=${statsRange(range)}`);
+    const get = (m: string) => fetchJson<StatSeries>(`/api/stats/${m}?range=${range}`);
 
     Promise.all([
       get("sleep"),

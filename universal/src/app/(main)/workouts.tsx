@@ -166,6 +166,7 @@ export default function WorkoutsScreen() {
         <Text variant="caption" className="text-text-secondary">
           Training history and Garmin sync
         </Text>
+        <TimeRangeSelector value={range} onChange={setRange} />
 
         {error ? (
           <Card>
@@ -216,10 +217,7 @@ export default function WorkoutsScreen() {
         </View>
 
         {/* Workout data — volume, stats, top exercises, recent (new /api/workouts/summary) */}
-        <View className="flex-row items-center gap-3">
-          <View className="flex-1">
-            <TimeRangeSelector value={range} onChange={setRange} />
-          </View>
+        <View className="flex-row items-center justify-end gap-3">
           <View className="w-24">
             <SegmentedControl options={["kg", "lb"] as const} value={unit} onChange={(v) => setUnit(v as "kg" | "lb")} />
           </View>
