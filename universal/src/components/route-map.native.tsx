@@ -101,6 +101,7 @@ export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; heigh
           </View>
         </View>
       </View>
+      <Text variant="micro" className="text-text-muted" style={{ fontSize: 8, marginTop: 2 }}>© OpenFreeMap · © OpenStreetMap contributors</Text>
       <Text variant="micro" className="text-text-muted">GPS route · green start, red finish · colour = pace.</Text>
     </View>
   );

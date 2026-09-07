@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { View, Pressable, type LayoutChangeEvent, type GestureResponderEvent } from "react-native";
-import Svg, { Polyline, Line, Circle, Rect, Text as SvgText } from "react-native-svg";
+import Svg, { Polyline, Polygon, Line, Circle, Rect, Text as SvgText } from "react-native-svg";
 import { Text, Modal } from "soma-style";
 
 /**
@@ -18,6 +18,8 @@ export interface ChartSeries {
   label?: string;
   axis?: "left" | "right";
   sizes?: (number | null)[];
+  /** Fill under the line down to the plot floor (web's elevation Area). */
+  area?: boolean;
 }
 
 export interface LineChartProps {
@@ -40,6 +42,8 @@ export interface LineChartProps {
   xTicks?: number;
   /** Enable tap/drag to read the exact value(s) at a point. */
   interactive?: boolean;
+  /** Flip the left axis so smaller values sit higher (web's reversed pace axis). */
+  invertY?: boolean;
 }
 
 const VBW = 320;
@@ -53,7 +57,7 @@ export function chartDateLabel(iso: string): string {
 /** A compact react-native-svg line/scatter chart with y-axis labels, dated x
  *  ticks, an optional right axis, and optional tap-to-read cursor + callout. */
 export function LineChart(props: LineChartProps) {
-  const { series, labels, height = 120, yFormat, yFormatRight, refLine, refLines, refAreas, yMin, yMax, xTicks, interactive } = props;
+  const { series, labels, height = 120, yFormat, yFormatRight, refLine, refLines, refAreas, yMin, yMax, xTicks, interactive, invertY } = props;
   const fmtL = yFormat ?? ((v: number) => String(Math.round(v)));
   const fmtR = yFormatRight ?? fmtL;
   const [active, setActive] = useState<number | null>(null);
@@ -92,7 +96,7 @@ export function LineChart(props: LineChartProps) {
   const plotH = height - padTop - padBottom;
   const n = Math.max(...series.map((s) => s.values.length));
   const xAt = (i: number) => (n <= 1 ? 0 : (i / (n - 1)) * VBW);
-  const yAtL = (v: number) => padTop + (1 - (v - loL) / rangeL) * plotH;
+  const yAtL = (v: number) => padTop + (invertY ? (v - loL) / rangeL : 1 - (v - loL) / rangeL) * plotH;
   const yAtR = (v: number) => padTop + (1 - (v - loR) / rangeR) * plotH;
   const yOf = (s: ChartSeries, v: number) => (s.axis === "right" ? yAtR(v) : yAtL(v));
 
@@ -130,8 +134,8 @@ export function LineChart(props: LineChartProps) {
       <View className="flex-row">
         {/* left axis labels */}
         <View className="w-9 justify-between" style={{ height, paddingVertical: padTop }}>
-          <Text variant="micro" className="text-text-muted tabular-nums">{fmtL(hiL)}</Text>
-          <Text variant="micro" className="text-text-muted tabular-nums">{fmtL(loL)}</Text>
+          <Text variant="micro" className="text-text-muted tabular-nums">{fmtL(invertY ? loL : hiL)}</Text>
+          <Text variant="micro" className="text-text-muted tabular-nums">{fmtL(invertY ? hiL : loL)}</Text>
         </View>
 
         <View
@@ -203,9 +207,16 @@ export function LineChart(props: LineChartProps) {
                 else cur.push(`${xAt(i)},${yOf(s, v)}`);
               });
               if (cur.length) segs.push(cur.join(" "));
-              return segs.map((pts, gi) => (
-                <Polyline key={`${si}-${gi}`} points={pts} fill="none" stroke={s.color} strokeWidth={s.width ?? 2} strokeDasharray={s.dashed ? "5 4" : undefined} strokeLinejoin="round" strokeLinecap="round" />
-              ));
+              const floor = padTop + plotH;
+              return segs.map((pts, gi) => {
+                const first = pts.split(" ")[0]?.split(",")[0]; const last = pts.split(" ").at(-1)?.split(",")[0];
+                return (
+                  <Fragment key={`${si}-${gi}`}>
+                    {s.area && first != null && last != null ? <Polygon points={`${first},${floor} ${pts} ${last},${floor}`} fill={s.color} fillOpacity={0.14} /> : null}
+                    <Polyline points={pts} fill="none" stroke={s.color} strokeWidth={s.width ?? 2} strokeDasharray={s.dashed ? "5 4" : undefined} strokeLinejoin="round" strokeLinecap="round" />
+                  </Fragment>
+                );
+              });
             })}
             {/* interactive cursor */}
             {callout != null ? (
