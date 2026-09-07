@@ -17,8 +17,17 @@ export async function GET(request: Request) {
     SELECT ctl, atl, tsb FROM pmc_daily WHERE date = ${date}
   `;
   const [fitness] = await sql`
-    SELECT vo2max, decoupling_pct, weight_kg, vdot_adjusted FROM fitness_trajectory WHERE date = ${date}
+    SELECT vo2max, decoupling_pct, weight_kg, vdot_adjusted, efficiency_factor, race_prediction_seconds
+    FROM fitness_trajectory WHERE date = ${date}
   `;
+  // Web's External Comparison Signals draw 30-day sparklines from fitness_trajectory
+  // (efficiency factor, decoupling, race prediction, weight); ship the same rows (soma#786).
+  const history = await sql`
+    SELECT date::text AS date, efficiency_factor, decoupling_pct, race_prediction_seconds, vdot_adjusted, weight_kg
+    FROM fitness_trajectory
+    WHERE date >= ${date}::date - interval '30 days' AND date <= ${date}::date
+    ORDER BY date
+  `.catch(() => []);
 
   return NextResponse.json({
     date,
@@ -29,5 +38,6 @@ export async function GET(request: Request) {
     },
     pmc: pmc || null,
     fitness: fitness || null,
+    history,
   });
 }
