@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { TimeRangeSelector } from "../../components/time-range-selector";
 import { useRangePref, rangeToDays, rangeLabel } from "../../lib/time-range";
+import { InfoHint, STAT_INFO, TREND_7D, TREND_7D_LOWER } from "../../components/info-hint";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, chartDateLabel } from "../../components/line-chart";
@@ -15,6 +16,7 @@ import {
   useSomaPlan,
   useRecoverySummary,
   useActivitiesDeep,
+  useWorkoutsSummary,
   fetchJson,
   usePullRefresh,
   todayLocal,
@@ -97,14 +99,14 @@ function useOverviewFitness() {
   return f;
 }
 
-interface Vo2maxResp { stats: { vo2max: number | null } | null; trends: { vo2max: number[] } }
+interface Vo2maxResp { stats: { vo2max: number | null; total_runs?: number | string | null; total_km?: number | string | null } | null; trends: { vo2max: number[] } }
 /** Current VO2max + its trend, from /api/running/stats. */
 function useVo2max(range: string) {
-  const [v, setV] = useState<{ current: number | null; trend: number[] }>({ current: null, trend: [] });
+  const [v, setV] = useState<{ current: number | null; trend: number[]; runs: number; km: number }>({ current: null, trend: [], runs: 0, km: 0 });
   useEffect(() => {
     let alive = true;
     fetchJson<Vo2maxResp>(`/api/running/stats?range=${range}`)
-      .then((d) => alive && setV({ current: d.stats?.vo2max ?? (d.trends?.vo2max?.at(-1) ?? null), trend: d.trends?.vo2max ?? [] }))
+      .then((d) => alive && setV({ current: d.stats?.vo2max ?? (d.trends?.vo2max?.at(-1) ?? null), trend: d.trends?.vo2max ?? [], runs: Number(d.stats?.total_runs ?? 0) || 0, km: Number(d.stats?.total_km ?? 0) || 0 }))
       .catch(() => {});
     return () => { alive = false; };
   }, [range]);
@@ -157,6 +159,7 @@ export default function OverviewScreen() {
   const vo2 = useVo2max(range);
   const recovery = useRecoverySummary("30d");
   const { data: activitiesDeep } = useActivitiesDeep(range);
+  const { data: wkSum } = useWorkoutsSummary(range);
   const fitness = useOverviewFitness();
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
@@ -198,16 +201,23 @@ export default function OverviewScreen() {
   // An HRV reading older than two days is not today's metric (#731).
   const hrvFresh = freshness(hrvLatest?.date ?? null, todayKey());
 
-  const stats: { label: string; value: string; sub: string; cls: string; spark?: number[]; color: string; unit?: string; metric?: string; inverted?: boolean }[] = [
-    { label: "Steps", value: data?.total_steps != null ? data.total_steps.toLocaleString() : "—", sub: `${km} km`, cls: "text-teal", spark: trends?.steps, color: "#77c8d1", metric: "steps" },
-    { label: "Active Calories", value: data?.active_kilocalories != null ? Math.round(data.active_kilocalories).toLocaleString() : "—", sub: `${data?.total_kilocalories != null ? Math.round(data.total_kilocalories).toLocaleString() : "—"} total`, cls: "text-warm", spark: trends?.calories, color: "#b17850", unit: "kcal", metric: "calories" },
-    { label: "Resting HR", value: `${data?.resting_heart_rate ?? "—"}`, sub: `${data?.min_heart_rate ?? "—"}–${data?.max_heart_rate ?? "—"} bpm`, cls: "text-danger", spark: trends?.rhr, color: "#e06060", unit: "bpm", metric: "rhr", inverted: true },
-    { label: "Avg Stress", value: `${data?.avg_stress_level ?? "—"}`, sub: `Peak ${data?.max_stress_level ?? "—"}`, cls: "text-warning", spark: trends?.stress, color: "#e0a458", metric: "stress", inverted: true },
+  // Web's "Total Activities" card counts every Garmin activity plus Hevy workouts in the
+  // range, with a running-km subtitle (soma#758). The activity feed here excludes runs and
+  // gym, so add the runs from the running stats and the workouts from the summary.
+  const rangeOther = activitiesDeep?.all?.length ?? 0;
+  const rangeGym = Number(wkSum?.stats?.total_workouts ?? 0) || 0;
+  const rangeTotal = rangeOther + vo2.runs + rangeGym;
+  const rangeRunKm = vo2.km;
+  const stats: { label: string; value: string; sub: string; cls: string; spark?: number[]; color: string; unit?: string; metric?: string; inverted?: boolean; info?: string; trend?: string }[] = [
+    { label: "Steps", info: STAT_INFO.steps, trend: TREND_7D, value: data?.total_steps != null ? data.total_steps.toLocaleString() : "—", sub: `${km} km`, cls: "text-teal", spark: trends?.steps, color: "#77c8d1", metric: "steps" },
+    { label: "Active Calories", info: STAT_INFO.calories, trend: TREND_7D, value: data?.active_kilocalories != null ? Math.round(data.active_kilocalories).toLocaleString() : "—", sub: `${data?.total_kilocalories != null ? Math.round(data.total_kilocalories).toLocaleString() : "—"} total`, cls: "text-warm", spark: trends?.calories, color: "#b17850", unit: "kcal", metric: "calories" },
+    { label: "Resting HR", info: STAT_INFO.rhr, trend: TREND_7D_LOWER, value: `${data?.resting_heart_rate ?? "—"}`, sub: `${data?.min_heart_rate ?? "—"}–${data?.max_heart_rate ?? "—"} bpm`, cls: "text-danger", spark: trends?.rhr, color: "#e06060", unit: "bpm", metric: "rhr", inverted: true },
+    { label: "Avg Stress", info: STAT_INFO.stress, trend: TREND_7D_LOWER, value: `${data?.avg_stress_level ?? "—"}`, sub: `Peak ${data?.max_stress_level ?? "—"}`, cls: "text-warning", spark: trends?.stress, color: "#e0a458", metric: "stress", inverted: true },
     { label: "Body Battery", value: `${data?.body_battery_max ?? "—"}`, sub: `−${Math.abs(data?.body_battery_drained ?? 0)} drained`, cls: "text-lime", spark: trends?.bodyBattery, color: "#cbe896", metric: "body_battery" },
     { label: "Intensity min", value: `${(data?.moderate_intensity_minutes ?? 0) + (data?.vigorous_intensity_minutes ?? 0)}`, sub: `${data?.vigorous_intensity_minutes ?? 0} vigorous`, cls: "text-indigo", spark: trends?.intensity, color: "#6366b0", unit: "min" },
-    { label: "VO₂max", value: vo2.current != null ? Number(vo2.current).toFixed(1) : "—", sub: "ml/kg/min", cls: "text-teal", spark: vo2.trend.filter((x) => isFinite(x)), color: "#77c8d1", metric: "vo2max" },
+    { label: "VO₂max", info: STAT_INFO.vo2max, trend: TREND_7D, value: vo2.current != null ? Number(vo2.current).toFixed(1) : "—", sub: "ml/kg/min", cls: "text-teal", spark: vo2.trend.filter((x) => isFinite(x)), color: "#77c8d1", metric: "vo2max" },
     { label: "HRV", value: !hrvFresh.stale && hrvLatest?.weekly_avg != null ? String(hrvLatest.weekly_avg) : "—", sub: hrvFresh.stale ? `${staleShort("HRV", hrvFresh)}${hrvLatest?.weekly_avg != null ? ` · last ${hrvLatest.weekly_avg}` : ""}` : hrvLatest?.status ? String(hrvLatest.status) : "7-night avg", cls: "text-lime", spark: hrvSpark, color: "#cbe896", unit: "ms" },
-    { label: "Total activities", value: fitness?.total_activities != null && fitness.total_activities > 0 ? fitness.total_activities.toLocaleString() : "—", sub: "all time", cls: "text-teal", color: "#77c8d1" },
+    { label: "Total activities", info: STAT_INFO.activities, value: rangeTotal ? rangeTotal.toLocaleString() : "—", sub: rangeTotal ? `${Math.round(rangeRunKm)} km running · ${rangeLabel(range)}` : "in this range", cls: "text-teal", color: "#77c8d1", metric: "activities" },
   ];
 
   return (
@@ -341,11 +351,23 @@ export default function OverviewScreen() {
               {plan?.plan ? `of ${Math.round(plan.plan.target_calories)} target` : "no plan today"}
             </Text>
           </Card>
-          <Card className="min-w-[30%] flex-1 gap-1">
-            <Text variant="eyebrow">Sleep</Text>
-            <Text variant="headline" className="text-indigo">{sleepLatest != null ? `${sleepLatest.toFixed(1)}h` : "—"}</Text>
-            <Text variant="micro">{sleepAvg != null ? `7d avg ${sleepAvg.toFixed(1)}h` : "hours"}</Text>
-          </Card>
+          <Pressable
+            className="min-w-[30%] flex-1"
+            disabled={sleepSeries.length < 2}
+            onPress={() => setStatDetail({ label: "Sleep", value: sleepLatest != null ? `${sleepLatest.toFixed(1)}h` : "—", sub: sleepAvg != null ? `7d avg ${sleepAvg.toFixed(1)}h` : "hours", spark: sleepSeries, color: "#8b9df0", unit: "h", metric: "sleep", info: STAT_INFO.sleep })}
+          >
+            <Card className="gap-1">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center gap-1.5">
+                  <Text variant="eyebrow">Sleep</Text>
+                  <InfoHint title="Sleep" text={STAT_INFO.sleep} trend={TREND_7D} />
+                </View>
+                <TrendArrow series={sleep?.current?.map((p) => (p.value != null ? Number(p.value) : null))} />
+              </View>
+              <Text variant="headline" className="text-indigo">{sleepLatest != null ? `${sleepLatest.toFixed(1)}h` : "—"}</Text>
+              <Text variant="micro">{sleepAvg != null ? `7d avg ${sleepAvg.toFixed(1)}h` : "hours"}</Text>
+            </Card>
+          </Pressable>
           <Card className="min-w-[30%] flex-1 gap-1">
             <Text variant="eyebrow">Weight</Text>
             <Text variant="headline" className="text-warm">{wLatest != null ? wLatest.toFixed(1) : "—"}</Text>
@@ -381,7 +403,10 @@ export default function OverviewScreen() {
             <Pressable key={s.label} className="min-w-[46%] flex-1" onPress={() => setStatDetail(s)}>
               <Card className="gap-1">
                 <View className="flex-row items-center justify-between">
-                  <Text variant="eyebrow">{s.label}</Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <Text variant="eyebrow">{s.label}</Text>
+                    {s.info ? <InfoHint title={s.label} text={s.info} trend={s.trend} /> : null}
+                  </View>
                   <View className="flex-row items-center gap-1.5">
                     <TrendArrow series={s.spark} inverted={s.inverted} />
                     <Text variant="micro" className="text-text-muted">›</Text>

@@ -165,21 +165,29 @@ export function LineChart(props: LineChartProps) {
               ) : null,
             )}
             {/* reference-line labels (web parity: "10K goal", "avg 52", "180 spm" …) */}
-            {[...(refLine ? [refLine] : []), ...(refLines ?? [])].map((r, ri) => {
-              if (!r.label || r.y < loL || r.y > hiL) return null;
-              // Sit above the line, or just below it when the line hugs the top edge; keep
-              // clear of the right-axis labels on dual-axis charts by using the left edge.
+            {(() => {
+              // Labels sit above their line (below it when it hugs the top edge), on the right,
+              // or on the left on dual-axis charts; neighbours closer than a text line alternate
+              // sides so "1.3" and "1.5 high" never overprint (soma#756).
+              const labelled = [...(refLine ? [refLine] : []), ...(refLines ?? [])]
+                .filter((r) => r.label && r.y >= loL && r.y <= hiL)
+                .sort((a, b) => yAtL(a.y) - yAtL(b.y));
+              let lastY = -100; let lastRight = rightS.length !== 0;
+              return labelled.map((r, ri) => {
               const ly = yAtL(r.y);
               const ty = ly < 14 ? ly + 10 : ly - 3;
-              const tw = r.label.length * 4.4 + 4;
-              const atRight = rightS.length === 0;
+              const tw = r.label!.length * 4.4 + 4;
+              let atRight = rightS.length === 0;
+              if (Math.abs(ly - lastY) < 11) atRight = !lastRight;
+              lastY = ly; lastRight = atRight;
               return (
                 <Fragment key={`rt-${ri}`}>
                   <Rect x={atRight ? VBW - 2 - tw : 2} y={ty - 8} width={tw} height={10} rx={2} fill="#0c1519" fillOpacity={0.8} />
                   <SvgText x={atRight ? VBW - 4 : 4} y={ty} fontSize={8} fill={r.color ?? "#3a5563"} textAnchor={atRight ? "end" : "start"} opacity={0.95}>{r.label}</SvgText>
                 </Fragment>
               );
-            })}
+              });
+            })()}
             {series.map((s, si) => {
               if (s.mode === "dots") {
                 return s.values.map((v, i) =>
