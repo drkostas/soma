@@ -22,6 +22,8 @@ export interface ChartSeries {
   area?: boolean;
   /** Bar series with the same stack key pile up per x index (web's stacked BarChart). */
   stack?: string;
+  /** Per-index fill opacity for bars (web fades days outside the current window, soma#782). */
+  opacities?: (number | null)[];
 }
 
 export interface LineChartProps {
@@ -104,8 +106,15 @@ export function LineChart(props: LineChartProps) {
     );
   }
 
-  const loL = yMin != null ? yMin : Math.min(...lAll);
-  const hiL = yMax != null ? yMax : Math.max(...lAll);
+  let loL = yMin != null ? yMin : Math.min(...lAll);
+  let hiL = yMax != null ? yMax : Math.max(...lAll);
+  if (hiL === loL) {
+    // A flat or single-valued series would collapse the axis to one label ("-1k / -1k");
+    // pad it so the value sits mid-plot and the two ticks differ (soma#782).
+    const pad = Math.abs(hiL) * 0.1 || 1;
+    if (yMin == null) loL -= pad;
+    if (yMax == null) hiL += pad;
+  }
   const rangeL = hiL - loL || 1;
   const loR = rAll.length ? Math.min(...rAll) : 0;
   const hiR = rAll.length ? Math.max(...rAll) : 1;
@@ -239,7 +248,7 @@ export function LineChart(props: LineChartProps) {
                   if (v == null || !isFinite(v) || v <= 0) return null;
                   const b = base[i] ?? 0; const y0 = yOf(s, b + (s.stack ? 0 : 0)); const yTop = yOf(s, b + v);
                   const bottom = s.stack ? yOf(s, b) : floorY;
-                  return <Rect key={`${si}-${i}`} x={xAt(i) - bw / 2} y={Math.min(yTop, bottom)} width={bw} height={Math.max(0.5, Math.abs(bottom - yTop))} fill={s.color} fillOpacity={0.85} rx={s.stack ? 0 : 1} />;
+                  return <Rect key={`${si}-${i}`} x={xAt(i) - bw / 2} y={Math.min(yTop, bottom)} width={bw} height={Math.max(0.5, Math.abs(bottom - yTop))} fill={s.color} fillOpacity={s.opacities?.[i] ?? 0.85} rx={s.stack ? 0 : 1} />;
                 });
               }
               if (s.mode === "dots") {
@@ -257,7 +266,16 @@ export function LineChart(props: LineChartProps) {
               });
               if (cur.length) segs.push(cur.join(" "));
               const floor = padTop + plotH;
-              return segs.map((pts, gi) => {
+              // A point with no drawable neighbour would vanish from a polyline; draw it as a dot
+              // so a one-day window still shows its value (soma#782).
+              const lone = s.values.map((v, i) => {
+                if (v == null || !isFinite(v)) return null;
+                const prev = s.values[i - 1], next = s.values[i + 1];
+                const hasPrev = prev != null && isFinite(prev), hasNext = next != null && isFinite(next);
+                return !hasPrev && !hasNext ? <Circle key={`${si}-lone-${i}`} cx={xAt(i)} cy={yOf(s, v)} r={2.6} fill={s.color} /> : null;
+              });
+              if (!segs.some((p) => p.includes(" "))) return lone;
+              return [...lone, ...segs.map((pts, gi) => {
                 const first = pts.split(" ")[0]?.split(",")[0]; const last = pts.split(" ").at(-1)?.split(",")[0];
                 return (
                   <Fragment key={`${si}-${gi}`}>
@@ -265,7 +283,7 @@ export function LineChart(props: LineChartProps) {
                     <Polyline points={pts} fill="none" stroke={s.color} strokeWidth={s.width ?? 2} strokeDasharray={s.dashed ? "5 4" : undefined} strokeLinejoin="round" strokeLinecap="round" />
                   </Fragment>
                 );
-              });
+              })];
             })}
             {/* interactive cursor */}
             {callout != null ? (

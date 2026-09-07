@@ -1,0 +1,56 @@
+# Soma verify flow: nutrition Trend tails (soma#782): status line, stacked burn vs eaten (expand),
+# cumulative deficit with goal pace. Run via
+# universal/scripts/verify-device.sh nutrition --flow .maestro/verify-nutrition-trend-tails.yaml --marker "<today's burn>"
+appId: dev.gkos.soma
+name: Soma verify nutrition trend tails
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://nutrition
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- tapOn:
+    text: "Trend"
+- extendedWaitUntil:
+    visible:
+      id: "bodycomp-status"
+    timeout: 45000
+- takeScreenshot: verify-nutrition-trend-status
+- scrollUntilVisible:
+    element:
+      id: "expand-cumulative-deficit"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-nutrition-trend-cumulative
+- scrollUntilVisible:
+    element:
+      id: "expand-burn-vs-eaten"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-nutrition-trend-burn
+- tapOn:
+    id: "expand-burn-vs-eaten"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Burn vs eaten · expanded.*"
+    timeout: 10000
+- takeScreenshot: verify-nutrition-trend-burn-expanded
+- back
+- stopApp
+- openLink: universal://nutrition
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}
