@@ -1,0 +1,67 @@
+# Soma verify flow: stat-card info hints + the overview Sleep card (soma#758, S3 of #578).
+# Run via universal/scripts/verify-device.sh overview --flow .maestro/verify-stat-info.yaml --marker "<today's steps>"
+appId: dev.gkos.soma
+name: Soma verify stat info hints
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://overview
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "info-sleep"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "info-sleep"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Recommended: 7-9 hours.*"
+    timeout: 10000
+- takeScreenshot: verify-stat-info-sleep
+- back
+- scrollUntilVisible:
+    element:
+      id: "info-steps"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "info-steps"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Daily step count from your Garmin watch.*"
+    timeout: 10000
+- takeScreenshot: verify-stat-info-steps
+- back
+- openLink: universal://sleep
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "info-avg-score"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "info-avg-score"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*80\\+ = Excellent.*"
+    timeout: 10000
+- takeScreenshot: verify-stat-info-score
+- back
+- openLink: universal://overview
+- waitForAnimationToEnd:
+    timeout: 5000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}
