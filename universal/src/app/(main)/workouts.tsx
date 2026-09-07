@@ -1,5 +1,5 @@
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Text, Card, Badge, ProgressBar, SegmentedControl, Sparkline } from "soma-style";
 import { TimeRangeSelector } from "../../components/time-range-selector";
 import { useRangePref } from "../../lib/time-range";
@@ -50,6 +50,14 @@ function useWorkouts() {
   return { data, error, refetch: () => setReload((n) => n + 1) };
 }
 
+/** ISO timestamp → local calendar day (Hevy start times are UTC; the day is what web joins on). */
+function localDayOf(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+export { localDayOf };
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return dateStr;
@@ -85,6 +93,15 @@ export default function WorkoutsScreen() {
   })();
 
   const recent = data?.recent ?? [];
+  // Web's Recent Workouts rows carry Garmin calories and avg HR; the sync list has the kcal and
+  // the insights HR trend has the HR, both keyed by local day + title (soma#784).
+  const enrich = useMemo(() => {
+    const m = new Map<string, { kcal?: number; hr?: number }>();
+    const key = (iso: string, title: string) => `${localDayOf(iso)}|${(title || "").trim().toLowerCase()}`;
+    for (const w of recent) if (w.kcal > 0) m.set(key(w.date, w.title), { ...(m.get(key(w.date, w.title)) ?? {}), kcal: w.kcal });
+    for (const h of insights?.hrTrend ?? []) { const hr = Number(h.avg_hr); if (isFinite(hr) && hr > 0) { const k = key(h.date, h.title); m.set(k, { ...(m.get(k) ?? {}), hr: Math.round(hr) }); } }
+    return m;
+  }, [recent, insights]);
   const totalSynced = data?.totalSynced ?? 0;
   const syncedThisWeek = data?.syncedThisWeek ?? 0;
   const syncedCount = recent.filter((w) => w.synced).length;
@@ -218,11 +235,12 @@ export default function WorkoutsScreen() {
 
         {/* Workout data — volume, stats, top exercises, recent (new /api/workouts/summary) */}
         <View className="flex-row items-center justify-end gap-3">
-          <View className="w-24">
+          {/* 96 px wrapped "kg" into "k / g" on a Pixel 7 (soma#784): give the two pills room. */}
+          <View className="w-36" testID="unit-toggle">
             <SegmentedControl options={["kg", "lb"] as const} value={unit} onChange={(v) => setUnit(v as "kg" | "lb")} />
           </View>
         </View>
-        <WorkoutsDashboard summary={wkSum} unit={unit} topRich={insights?.topExercises} />
+        <WorkoutsDashboard summary={wkSum} unit={unit} topRich={insights?.topExercises} enrich={enrich} />
 
         {/* Anatomical muscle activation map + 4-metric toggle (new /api/workouts/bodymap) */}
         <MuscleBodyMapSection data={bodyMap} />
