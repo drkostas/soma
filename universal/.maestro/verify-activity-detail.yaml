@@ -1,0 +1,69 @@
+# Soma verify flow: the activity detail modal (soma#760, S4 of #578).
+# Opens the newest run from the Running screen and checks the tabs web has: the Splits
+# table header, the Share tab's branding toggle + Strava upload, the Charts pace pill.
+# Run via universal/scripts/verify-device.sh running --flow .maestro/verify-activity-detail.yaml --marker "last 6M"
+appId: dev.gkos.soma
+name: Soma verify activity detail
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "(?i).*athens running.*"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    text: "(?i).*athens running.*"
+    index: 0
+# The Map tab only appears once the detail has loaded (and Splits is disabled until then).
+- extendedWaitUntil:
+    visible:
+      id: "tab-map"
+    timeout: 30000
+- tapOn:
+    id: "tab-splits"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*fastest .*"
+    timeout: 10000
+- takeScreenshot: verify-activity-splits
+- tapOn:
+    id: "tab-share"
+- extendedWaitUntil:
+    visible:
+      text: "Upload to Strava"
+    timeout: 10000
+- assertVisible:
+    text: "Show branding"
+- takeScreenshot: verify-activity-share
+- tapOn:
+    id: "tab-charts"
+- extendedWaitUntil:
+    visible:
+      text: "overlay"
+    timeout: 10000
+- takeScreenshot: verify-activity-charts
+- tapOn:
+    id: "tab-overview"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*°C.*"
+    timeout: 10000
+    optional: true
+- takeScreenshot: verify-activity-overview
+- back
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}

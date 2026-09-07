@@ -35,7 +35,8 @@
       ],
       "@bacons/apple-targets",
       "./plugins/soma-widget/withSomaWidget",
-      "./plugins/emulator-cleartext/withEmulatorCleartext"
+      "./plugins/emulator-cleartext/withEmulatorCleartext",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,
