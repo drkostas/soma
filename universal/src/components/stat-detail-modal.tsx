@@ -14,6 +14,8 @@ export interface StatDetail {
   unit?: string;
   /** If set, the modal fetches /api/stats/[metric] for a range toggle + previous-period overlay. */
   metric?: string;
+  /** Web's stat-card tooltip text, shown under the value (soma#758). */
+  info?: string;
   /** Pre-supplied dated timeline (e.g. per-workout duration/calories); renders a dated chart with tap-to-read. */
   timeline?: { date: string; value: number; label?: string }[];
   /** How to draw the timeline: connected line (cumulative/monthly) or scatter dots (per-workout). */
@@ -90,6 +92,7 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
             <Text variant="display" className="tabular-nums" style={{ color: stat.color }}>{stat.value}</Text>
             <Text variant="body" className="mb-1 text-text-muted">{stat.sub}</Text>
           </View>
+          {stat.info ? <Text variant="caption" className="text-text-secondary">{stat.info}</Text> : null}
           {pts.length >= 2 ? (
             <View className="gap-1">
               <Text variant="eyebrow" className="text-text-muted">{pts.length} {stat.timelineNoun ?? "workouts"}</Text>
@@ -135,6 +138,7 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
             <Text variant="display" className="tabular-nums" style={{ color: stat.color }}>{stat.value}</Text>
             <Text variant="body" className="mb-1 text-text-muted">{stat.sub}</Text>
           </View>
+          {stat.info ? <Text variant="caption" className="text-text-secondary">{stat.info}</Text> : null}
           <SegmentedControl options={RANGES} value={range} onChange={(v) => setRange(v as Range)} />
           {loading && !data ? (
             <Text variant="body" className="text-text-muted">Loading…</Text>
@@ -191,6 +195,7 @@ export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; on
           <Text variant="display" className="tabular-nums" style={{ color: stat.color }}>{stat.value}</Text>
           <Text variant="body" className="mb-1 text-text-muted">{stat.sub}</Text>
         </View>
+        {stat.info ? <Text variant="caption" className="text-text-secondary">{stat.info}</Text> : null}
         {s.length >= 2 ? (
           <View className="gap-1">
             <Text variant="eyebrow" className="text-text-muted">Trend · last {s.length} days</Text>

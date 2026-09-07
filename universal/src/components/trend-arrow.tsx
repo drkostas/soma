@@ -5,15 +5,23 @@ import { Text } from "soma-style";
  *  colored by whether the change is an improvement. `inverted` = lower-is-better
  *  (resting HR, stress), so a decrease reads as green. Matches the web StatCard
  *  trend badge. Renders nothing when there isn't enough data. */
-export function TrendArrow({ series, inverted }: { series?: (number | null)[]; inverted?: boolean }) {
+/** Percent change of the last 7 points vs the 7 before (web's "7-day avg vs prior week")
+ *  when the series has at least 14 points; shorter series fall back to halves. Null when
+ *  there is not enough data. */
+export function trendPct(series?: (number | null)[]): number | null {
   const vals = (series ?? []).filter((v): v is number => typeof v === "number" && isFinite(v));
   if (vals.length < 4) return null;
-  const half = Math.floor(vals.length / 2);
   const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
-  const prior = mean(vals.slice(0, half));
-  const recent = mean(vals.slice(vals.length - half));
+  const win = vals.length >= 14 ? 7 : Math.floor(vals.length / 2);
+  const prior = mean(vals.slice(vals.length - 2 * win, vals.length - win));
+  const recent = mean(vals.slice(vals.length - win));
   if (!prior) return null;
-  const pct = ((recent - prior) / Math.abs(prior)) * 100;
+  return ((recent - prior) / Math.abs(prior)) * 100;
+}
+
+export function TrendArrow({ series, inverted }: { series?: (number | null)[]; inverted?: boolean }) {
+  const pct = trendPct(series);
+  if (pct == null) return null;
   const flat = Math.abs(pct) < 1;
   const up = pct > 0;
   const improving = inverted ? !up : up;

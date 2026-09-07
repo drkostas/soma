@@ -6,6 +6,7 @@ import { useRangePref } from "../../lib/time-range";
 import { StatDetailModal, type StatDetail } from "../../components/stat-detail-modal";
 import { TrendArrow } from "../../components/trend-arrow";
 import { LineChart, ChartLegend, ExpandableChart } from "../../components/line-chart";
+import { InfoHint, STAT_INFO, TREND_7D, TREND_7D_LOWER } from "../../components/info-hint";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
 import { freshness, staleShort, todayKey } from "../../lib/freshness";
 import { SleepDashboard } from "../../components/sleep-dashboard";
@@ -153,9 +154,13 @@ export default function SleepScreen() {
     unit?: string;
     metric?: string;
     inverted?: boolean;
+    info?: string;
+    trend?: string;
   }[] = [
     {
       label: "Avg Sleep",
+      info: STAT_INFO.avg_sleep,
+      trend: TREND_7D,
       // The average rests on sleep_data nights (the web's number over the same
       // window), not on the subset of days daily_health_summary carries (#743).
       value: sleepSum?.stats?.avg_hours != null ? fmt1(sleepSum.stats.avg_hours, "h") : fmt1(sleep?.summary.current_avg, "h"),
@@ -178,6 +183,8 @@ export default function SleepScreen() {
     },
     {
       label: "Resting HR",
+      info: STAT_INFO.rhr,
+      trend: TREND_7D_LOWER,
       value: fmt0(rhr?.summary.current_avg, " bpm"),
       sub:
         rhrDelta == null
@@ -213,6 +220,8 @@ export default function SleepScreen() {
     ? [
         {
           label: "Avg Score",
+          info: STAT_INFO.sleep_score,
+          trend: TREND_7D,
           value: fmt0(st.avg_score),
           sub: "out of 100",
           cls: "text-indigo",
@@ -220,6 +229,8 @@ export default function SleepScreen() {
         },
         {
           label: "Avg Deep",
+          info: STAT_INFO.deep_sleep,
+          trend: TREND_7D,
           value: fmt0(st.avg_deep_pct, "%"),
           sub: st.avg_rem_pct != null ? `REM ${Math.round(st.avg_rem_pct)}%` : "of sleep",
           cls: "text-teal",
@@ -228,6 +239,8 @@ export default function SleepScreen() {
         },
         {
           label: "Avg Sleep HR",
+          info: STAT_INFO.sleep_hr,
+          trend: TREND_7D_LOWER,
           value: fmt0(st.avg_sleep_hr, " bpm"),
           sub: st.avg_spo2 != null ? `SpO₂ ${Math.round(st.avg_spo2)}%` : "during sleep",
           cls: "text-danger",
@@ -285,11 +298,14 @@ export default function SleepScreen() {
                 key={s.label}
                 className="min-w-[46%] flex-1"
                 disabled={!tappable}
-                onPress={() => s.spark && setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark.data, color: s.spark.color, unit: s.unit, metric: s.metric })}
+                onPress={() => s.spark && setStatDetail({ label: s.label, value: s.value, sub: s.sub, spark: s.spark.data, color: s.spark.color, unit: s.unit, metric: s.metric, info: s.info })}
               >
                 <Card className="gap-1">
                   <View className="flex-row items-center justify-between">
-                    <Text variant="eyebrow">{s.label}</Text>
+                    <View className="flex-row items-center gap-1.5">
+                      <Text variant="eyebrow">{s.label}</Text>
+                      {s.info ? <InfoHint title={s.label} text={s.info} trend={s.trend} /> : null}
+                    </View>
                     <View className="flex-row items-center gap-1.5">
                       {s.spark ? <TrendArrow series={s.spark.data} inverted={s.inverted} /> : null}
                       {tappable ? <Text variant="micro" className="text-text-muted">›</Text> : null}
