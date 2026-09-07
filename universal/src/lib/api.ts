@@ -204,7 +204,14 @@ export interface TrainingBreakdown {
     decoupling_pct: number | null;
     weight_kg: number | null;
     vdot_adjusted: number | null;
-  };
+    efficiency_factor?: number | string | null;
+    race_prediction_seconds?: number | string | null;
+  } | null;
+  /** 30-day fitness_trajectory rows for web's external-signal sparklines (soma#786). */
+  history?: {
+    date: string; efficiency_factor: number | string | null; decoupling_pct: number | string | null;
+    race_prediction_seconds: number | string | null; vdot_adjusted: number | string | null; weight_kg: number | string | null;
+  }[];
 }
 
 /** soma's training breakdown: PMC (fitness/fatigue/form), readiness, fitness markers. */
