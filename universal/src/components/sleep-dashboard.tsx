@@ -44,12 +44,24 @@ function StageBar({ n, height = 14 }: { n: SleepNight; height?: number }) {
 }
 
 /** Per-night stacked stage columns (last N nights), heights scaled to max total. */
-function StagesTrend({ nights }: { nights: SleepNight[] }) {
+/** Stacked stage bars per night with web's 7h-min / 9h-target guide lines (soma#756). */
+const SLEEP_GUIDES = [{ h: 7, label: "7h min", color: "#77c8d1" }, { h: 9, label: "9h target", color: "#6ad4a0" }];
+function StagesTrend({ nights, height = 112 }: { nights: SleepNight[]; height?: number }) {
   const data = nights.filter((n) => (n.total ?? 0) > 0).slice(-30);
   if (data.length < 2) return null;
-  const maxTotal = Math.max(...data.map((n) => n.total ?? 0)) || 1;
+  // Keep the 9h target inside the plot even on short-sleep months.
+  const maxTotal = Math.max(...data.map((n) => n.total ?? 0), 9 * 3600) || 1;
   return (
-    <View className="h-28 flex-row items-end gap-0.5">
+    <View style={{ height }}>
+      {SLEEP_GUIDES.map((g) => {
+        const pct = ((g.h * 3600) / maxTotal) * 100;
+        return pct > 0 && pct < 100 ? (
+          <View key={g.label} pointerEvents="none" className="absolute left-0 right-0 items-end" style={{ bottom: `${pct}%`, borderTopWidth: 1, borderColor: g.color, borderStyle: "dashed", opacity: 0.85, zIndex: 1 }}>
+            <Text variant="micro" style={{ color: g.color, fontSize: 8, lineHeight: 10, marginTop: -11 }}>{g.label}</Text>
+          </View>
+        ) : null;
+      })}
+    <View className="absolute inset-0 flex-row items-end gap-0.5">
       {data.map((n, i) => {
         const total = n.total ?? 0;
         const colH = (total / maxTotal) * 100;
@@ -67,6 +79,7 @@ function StagesTrend({ nights }: { nights: SleepNight[] }) {
           </View>
         );
       })}
+    </View>
     </View>
   );
 }
@@ -121,12 +134,13 @@ export function SleepDashboard({ summary }: { summary: SleepSummary | null | und
       ) : null}
 
       <Card className="gap-2">
+        <ExpandableChart title="Sleep stages" renderExpanded={() => <View className="gap-2"><StagesTrend nights={summary.trend} height={240} /><Legend /></View>}>
+          <StagesTrend nights={summary.trend} />
+        </ExpandableChart>
         <View className="flex-row items-center justify-between">
-          <Text variant="eyebrow">Sleep stages</Text>
+          <Legend />
           <Text variant="micro" className="text-text-muted">last {Math.min(30, summary.trend.length)} nights</Text>
         </View>
-        <StagesTrend nights={summary.trend} />
-        <Legend />
       </Card>
 
       {scoreCount >= 2 ? (

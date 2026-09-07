@@ -54,6 +54,7 @@ export function SleepScheduleChart({ schedule }: { schedule: SchedulePoint[] | u
       </View>
       <LineChart
         height={150}
+        interactive
         labels={labels}
         yFormat={(v) => fmtHour(v)}
         series={[

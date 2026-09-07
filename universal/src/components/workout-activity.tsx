@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
-import { LineChart, ChartLegend } from "./line-chart";
+import { LineChart, ChartLegend, ExpandableChart } from "./line-chart";
 import type { WorkoutInsights } from "../lib/api";
 
 const num = (v: unknown): number => { const n = Number(v); return isFinite(n) ? n : 0; };
@@ -213,21 +213,25 @@ export function WorkoutActivity({ insights }: { insights: WorkoutInsights | null
 
       {hrAvg.filter((v) => v != null).length >= 2 ? (
         <Card className="gap-2">
-          <View className="flex-row items-center justify-between">
-            <Text variant="eyebrow">Avg HR per workout</Text>
-            <Text variant="micro" className="text-text-muted">bpm</Text>
-          </View>
-          <LineChart
-            height={130}
-            interactive
-            xTicks={4}
-            labels={hrLabels}
-            yFormat={(v) => String(Math.round(v))}
-            series={[
-              { values: hrMax, color: "#e06060", dashed: true, width: 1.5, label: "Max" },
-              { values: hrAvg, color: "#e0a458", width: 2.2, label: "Avg" },
-            ]}
-          />
+          {(() => {
+            const nn = hrAvg.filter((v): v is number => v != null);
+            const hrMean = nn.reduce((a, b) => a + b, 0) / nn.length;
+            const hrChart = {
+              xTicks: 4,
+              labels: hrLabels,
+              yFormat: (v: number) => String(Math.round(v)),
+              refLine: { y: hrMean, color: "#5a7a8a", label: `avg ${Math.round(hrMean)}` },
+              series: [
+                { values: hrMax, color: "#e06060", dashed: true, width: 1.5, label: "Max" },
+                { values: hrAvg, color: "#e0a458", width: 2.2, label: "Avg" },
+              ],
+            };
+            return (
+              <ExpandableChart title="Avg HR per workout" chart={hrChart}>
+                <LineChart height={130} interactive {...hrChart} />
+              </ExpandableChart>
+            );
+          })()}
           <ChartLegend items={[{ color: "#e0a458", label: "avg" }, { color: "#e06060", label: "max", dashed: true }]} />
         </Card>
       ) : null}
