@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 import { getExerciseMuscles, ALL_MUSCLE_GROUPS, type MuscleGroup } from "@/lib/muscle-groups";
 
@@ -24,7 +25,7 @@ const initMetric = (): MetricMap => {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "1y";
-  const days = range === "30d" ? 30 : range === "90d" ? 90 : range === "6m" ? 182 : range === "all" ? 36500 : 365;
+  const days = parseRangeDays(range, 365); // all 10 web keys + legacy Nd (soma#754)
   const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
   const sql = getDb();

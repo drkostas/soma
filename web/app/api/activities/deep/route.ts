@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 
 export const runtime = "edge";
@@ -23,11 +24,7 @@ const sportOf = (t: string): string => SPORT_OF[t] ?? "Other";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "1y";
-  const days =
-    range === "1m" || range === "30d" ? 30 :
-    range === "3m" || range === "90d" ? 91 :
-    range === "6m" ? 182 :
-    range === "all" ? 20000 : 365;
+  const days = parseRangeDays(range, 365); // all 10 web keys + legacy Nd (soma#754)
 
   const sql = getDb();
 
