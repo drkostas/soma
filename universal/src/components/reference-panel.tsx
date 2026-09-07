@@ -22,11 +22,13 @@ export function ReferencePanel({ metrics }: { metrics: RefMetric[] }) {
       </View>
       <View className="flex-row flex-wrap gap-3">
         {metrics.map((m) => (
-          <View key={m.label} className="min-w-[46%] flex-1 gap-1 rounded-lg border border-border-subtle p-2.5">
+          <View key={m.label} className="min-w-[46%] flex-1 gap-1 rounded-lg border border-border-subtle p-2.5" testID={`ref-${m.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`}>
             <Text variant="micro" className="text-text-muted">{m.label}</Text>
             <View className="flex-row items-center justify-between gap-2">
-              <Text variant="body" className="tabular-nums" style={{ color: m.color }}>{m.value}</Text>
-              {m.spark.length >= 2 ? <Sparkline data={m.spark} color={m.color} height={20} baseline /> : null}
+              <Text variant="body" className="tabular-nums shrink-0" style={{ color: m.color }}>{m.value}</Text>
+              {/* The sparkline measures its container; give it the remaining width so a wide value
+                  ("1:43:44", "73.2 kg") does not push it past the card edge (soma#786). */}
+              {m.spark.length >= 2 ? <View className="flex-1 min-w-0 overflow-hidden" style={{ minWidth: 36 }}><Sparkline data={m.spark} color={m.color} height={20} baseline /></View> : null}
             </View>
             {m.note ? <Text variant="micro" className="text-text-muted">{m.note}</Text> : null}
           </View>

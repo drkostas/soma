@@ -25,6 +25,7 @@ import { TrainingTrends } from "../../components/training-trends";
 import { TrajectoryChart } from "../../components/trajectory-chart";
 import { ReferencePanel, type RefMetric } from "../../components/reference-panel";
 import { PaceComputation } from "../../components/pace-computation";
+import { estimateHMSeconds } from "../../lib/vdot-utils";
 
 /** VO2max trend (last year, chronological) from the shared stats endpoint. */
 function useVo2Trend() {
@@ -97,6 +98,7 @@ export default function TrainingScreen() {
   const vo2Trend = useVo2Trend();
 
   // External comparison signals (Garmin-side + PMC) with trend sparklines.
+  const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), mi = Math.floor((s % 3600) / 60), se = s % 60; return h > 0 ? `${h}:${String(mi).padStart(2, "0")}:${String(se).padStart(2, "0")}` : `${mi}:${String(se).padStart(2, "0")}`; };
   const refMetrics: RefMetric[] = useMemo(() => {
     const c = sim?.comparison;
     const nums = (arr: { [k: string]: number | string }[] | undefined, key: string) =>
@@ -111,16 +113,32 @@ export default function TrainingScreen() {
     if (ctl.length) m.push({ label: "Fitness (CTL)", value: String(Math.round(last(ctl))), spark: ctl, color: "#77c8d1" });
     const atl = nums(c?.load, "atl");
     if (atl.length) m.push({ label: "Fatigue (ATL)", value: String(Math.round(last(atl))), spark: atl, color: "#e0a458" });
+    // Web's External Comparison Signals (training-dashboard.tsx): race prediction, decoupling,
+    // efficiency factor and weight trend, each with its fitness_trajectory sparkline (soma#786).
+    const hist = data?.history ?? [];
+    const series = (key: "efficiency_factor" | "decoupling_pct" | "race_prediction_seconds" | "weight_kg", days?: number) => {
+      const rows = days ? hist.slice(-days) : hist;
+      return rows.map((h) => Number(h[key])).filter((v) => isFinite(v) && v > 0);
+    };
+    // Web: the HM time from the current VDOT (Daniels), else the day's stored prediction; the
+    // sparkline takes each day's stored seconds, else the estimate from that day's VDOT.
+    const rpSpark = hist.map((h) => (h.race_prediction_seconds != null && Number(h.race_prediction_seconds) > 0 ? Number(h.race_prediction_seconds) : Number(h.vdot_adjusted) > 0 ? estimateHMSeconds(Number(h.vdot_adjusted)) : NaN)).filter((v) => isFinite(v) && v > 0);
+    const rp = vdot != null && Number(vdot) > 0 ? estimateHMSeconds(Number(vdot)) : fit?.race_prediction_seconds != null ? Number(fit.race_prediction_seconds) : last(rpSpark);
+    if (rp > 0) m.push({ label: "Race prediction", value: hms(rp), spark: rpSpark, color: "#6ad4a0", note: "HM from current VDOT" });
     const dec = (fit as { decoupling_pct?: number | null } | undefined)?.decoupling_pct;
     if (dec != null) {
       const dv = Number(dec);
       // Aerobic-decoupling thresholds (web parity): <3% tight, >5% high drift.
       const decColor = dv < 3 ? "#6ad4a0" : dv > 5 ? "#e06060" : "#e0a458";
-      const decNote = dv < 3 ? "tight aerobic" : dv > 5 ? "high drift" : "moderate drift";
-      m.push({ label: "Decoupling", value: `${dv.toFixed(1)}%`, spark: [], color: decColor, note: decNote });
+      const decNote = dv < 3 ? "tight aerobic · <3% good" : dv > 5 ? "high drift · >5% caution" : "moderate drift";
+      m.push({ label: "Decoupling", value: `${dv.toFixed(1)}%`, spark: series("decoupling_pct"), color: decColor, note: decNote });
     }
+    const ef = fit?.efficiency_factor != null ? Number(fit.efficiency_factor) : last(series("efficiency_factor"));
+    if (isFinite(ef) && (ef > 0 || series("efficiency_factor").length)) m.push({ label: "Efficiency factor", value: ef.toFixed(2), spark: series("efficiency_factor"), color: "#77c8d1", note: "speed / heart rate · rising = better economy" });
+    const wkg = fit?.weight_kg != null ? Number(fit.weight_kg) : last(series("weight_kg", 14));
+    if (wkg > 0) m.push({ label: "Weight trend", value: `${wkg.toFixed(1)} kg`, spark: series("weight_kg", 14), color: "#e0a458", note: "≈ 1:00–1:15 faster HM per kg of fat" });
     return m;
-  }, [sim, fit]);
+  }, [sim, fit, data, vdot]);
 
   async function onToggleWeighting(mode: "Adaptive" | "Equal") {
     const ok = await toggleCalibration(mode === "Equal");

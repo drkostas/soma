@@ -1,0 +1,37 @@
+# Soma verify flow: training signals (soma#786): Race prediction, Efficiency factor and Weight
+# trend cards with sparklines among the external signals. Run via
+# universal/scripts/verify-device.sh training --flow .maestro/verify-training-tails2.yaml --marker "Plan is dormant"
+appId: dev.gkos.soma
+name: Soma verify training tails 2
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://training
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- scrollUntilVisible:
+    element:
+      id: "ref-efficiency-factor"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- assertVisible:
+    id: "ref-weight-trend"
+- assertVisible:
+    id: "ref-race-prediction"
+- takeScreenshot: verify-training-signals
+- stopApp
+- openLink: universal://training
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}
