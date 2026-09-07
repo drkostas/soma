@@ -230,23 +230,32 @@ export function ActivityBreakdown({ monthly }: { monthly: MonthSports[] }) {
   }, [monthly]);
   if (!totals.length) return null;
   const max = Math.max(...totals.map(([, n]) => n), 1);
-  return (
-    <Card className="gap-2">
-      <Text variant="eyebrow">Activity breakdown</Text>
+  const sum = totals.reduce((a, [, n]) => a + n, 0) || 1;
+  // Web's Activity Breakdown dialog: the same bars, taller, with each sport's share of the total.
+  const bars = (expanded: boolean) => (
+    <View className={expanded ? "gap-2" : "gap-1.5"}>
       {totals.map(([sport, n]) => {
         const m = meta(sport);
         return (
           <View key={sport} className="gap-0.5">
             <View className="flex-row justify-between">
               <Text variant="caption" className="text-text-secondary">{m.emoji} {m.label}</Text>
-              <Text variant="caption" className="tabular-nums text-text-muted">{n}</Text>
+              <Text variant="caption" className="tabular-nums text-text-muted">{n}{expanded ? ` · ${((n / sum) * 100).toFixed(1)}%` : ""}</Text>
             </View>
-            <View className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#16242c" }}>
-              <View className="h-full rounded-full" style={{ width: `${(n / max) * 100}%`, backgroundColor: m.color }} />
+            <View className={expanded ? "h-4 overflow-hidden rounded-md" : "h-2 overflow-hidden rounded-full"} style={{ backgroundColor: "#16242c" }}>
+              <View className="h-full" style={{ width: `${(n / max) * 100}%`, backgroundColor: m.color, borderRadius: expanded ? 4 : 999 }} />
             </View>
           </View>
         );
       })}
+      {expanded ? <Text variant="micro" className="text-text-muted">{sum} activities in this range</Text> : null}
+    </View>
+  );
+  return (
+    <Card className="gap-2">
+      <ExpandableChart title="Activity breakdown" renderExpanded={() => bars(true)}>
+        {bars(false)}
+      </ExpandableChart>
     </Card>
   );
 }

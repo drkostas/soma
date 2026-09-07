@@ -1,0 +1,62 @@
+# Soma verify flow: overview trend chart cards + the Activity breakdown drill-in (soma#769).
+# Run via universal/scripts/verify-device.sh overview --flow .maestro/verify-overview-trends.yaml
+appId: dev.gkos.soma
+name: Soma verify overview trends
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://overview
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "expand-daily-steps"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "expand-daily-steps"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Daily Steps · expanded.*"
+    timeout: 10000
+- takeScreenshot: verify-overview-steps-expanded
+- back
+- scrollUntilVisible:
+    element:
+      id: "expand-stress-trend"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-overview-trend-cards
+- scrollUntilVisible:
+    element:
+      id: "expand-activity-breakdown"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "expand-activity-breakdown"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*activities in this range.*"
+    timeout: 10000
+- takeScreenshot: verify-overview-breakdown-expanded
+- back
+- stopApp
+- openLink: universal://overview
+- waitForAnimationToEnd:
+    timeout: 10000
+# Today's steps sit below the fold on a cold-opened overview: scroll to the live marker.
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+    visibilityPercentage: 60
+- takeScreenshot: verify-${SCREEN}
