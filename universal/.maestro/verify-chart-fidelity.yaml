@@ -1,0 +1,54 @@
+# Soma verify flow: chart fidelity (soma#756, S2 of #578).
+# Proves on a device that (1) a chart's ⤢ expand opens the taller copy in a modal,
+# (2) reference-line labels render (the 10K steps goal in the Steps detail modal).
+# Run via universal/scripts/verify-device.sh running --flow .maestro/verify-chart-fidelity.yaml --marker "last 6M"
+appId: dev.gkos.soma
+name: Soma verify chart fidelity
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "expand-cadence-stride"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "expand-cadence-stride"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Cadence & stride · expanded.*"
+    timeout: 10000
+- takeScreenshot: verify-chart-expand-cadence
+- back
+- openLink: universal://overview
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "STEPS"
+    direction: DOWN
+    timeout: 40000
+    speed: 40
+    centerElement: true
+- tapOn:
+    text: "STEPS"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*10K goal.*"
+    timeout: 20000
+- takeScreenshot: verify-chart-steps-goal
+- back
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 5000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}

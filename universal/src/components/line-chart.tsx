@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
-import { View, type LayoutChangeEvent, type GestureResponderEvent } from "react-native";
-import Svg, { Polyline, Line, Circle, Rect } from "react-native-svg";
+import { Fragment, useState, type ReactNode } from "react";
+import { View, Pressable, type LayoutChangeEvent, type GestureResponderEvent } from "react-native";
+import Svg, { Polyline, Line, Circle, Rect, Text as SvgText } from "react-native-svg";
 import { Text, Modal } from "soma-style";
 
 /**
@@ -29,8 +29,9 @@ export interface LineChartProps {
   yFormat?: (v: number) => string;
   /** Format a right-axis y value (dual-axis). */
   yFormatRight?: (v: number) => string;
-  refLine?: { y: number; color?: string };
-  refLines?: { y: number; color?: string; dashed?: boolean }[];
+  /** A dashed horizontal reference (goal / average / threshold). `label` is drawn at the right edge, like web's ReferenceLine labels (soma#756). */
+  refLine?: { y: number; color?: string; label?: string };
+  refLines?: { y: number; color?: string; dashed?: boolean; label?: string }[];
   /** Translucent horizontal zones (e.g. Ready ≥70 / Moderate 40–70 bands). */
   refAreas?: { y1: number; y2: number; color: string; opacity?: number }[];
   yMin?: number;
@@ -108,6 +109,9 @@ export function LineChart(props: LineChartProps) {
     setActive(i);
   };
   const onLayout = (e: LayoutChangeEvent) => setPlotW(e.nativeEvent.layout.width);
+  // SVG text is invisible to the accessibility tree; expose the reference labels so a
+  // screen reader (and the Maestro device flow) can read "10K goal", "avg 52", … (soma#756).
+  const refLabels = [...(refLine ? [refLine] : []), ...(refLines ?? [])].map((r) => r.label).filter((l): l is string => !!l);
 
   // Active-point callout data
   const callout = active != null
@@ -133,6 +137,8 @@ export function LineChart(props: LineChartProps) {
         <View
           className="flex-1"
           onLayout={onLayout}
+          accessible={refLabels.length > 0}
+          accessibilityLabel={refLabels.length ? `reference lines: ${refLabels.join(", ")}` : undefined}
           onStartShouldSetResponder={() => !!interactive}
           onMoveShouldSetResponder={() => !!interactive}
           onResponderGrant={onTouch}
@@ -158,6 +164,22 @@ export function LineChart(props: LineChartProps) {
                 <Line key={`rl-${ri}`} x1={0} y1={yAtL(r.y)} x2={VBW} y2={yAtL(r.y)} stroke={r.color ?? "#3a5563"} strokeWidth={1} strokeDasharray={r.dashed === false ? undefined : "4 4"} />
               ) : null,
             )}
+            {/* reference-line labels (web parity: "10K goal", "avg 52", "180 spm" …) */}
+            {[...(refLine ? [refLine] : []), ...(refLines ?? [])].map((r, ri) => {
+              if (!r.label || r.y < loL || r.y > hiL) return null;
+              // Sit above the line, or just below it when the line hugs the top edge; keep
+              // clear of the right-axis labels on dual-axis charts by using the left edge.
+              const ly = yAtL(r.y);
+              const ty = ly < 14 ? ly + 10 : ly - 3;
+              const tw = r.label.length * 4.4 + 4;
+              const atRight = rightS.length === 0;
+              return (
+                <Fragment key={`rt-${ri}`}>
+                  <Rect x={atRight ? VBW - 2 - tw : 2} y={ty - 8} width={tw} height={10} rx={2} fill="#0c1519" fillOpacity={0.8} />
+                  <SvgText x={atRight ? VBW - 4 : 4} y={ty} fontSize={8} fill={r.color ?? "#3a5563"} textAnchor={atRight ? "end" : "start"} opacity={0.95}>{r.label}</SvgText>
+                </Fragment>
+              );
+            })}
             {series.map((s, si) => {
               if (s.mode === "dots") {
                 return s.values.map((v, i) =>
@@ -253,27 +275,38 @@ export function ChartLegend({ items }: { items: { color: string; label: string; 
 }
 
 /** Wraps a chart card with a maximize affordance that opens the same chart,
- *  taller + interactive, in a Modal. Pass the inline chart as children and the
- *  LineChart props to render big in the modal. */
+ *  taller + interactive, in a Modal (web's ExpandableChartCard). Pass the inline
+ *  chart as children and either the LineChart props to render big, or
+ *  `renderExpanded` for bespoke bar/SVG charts (soma#756). */
 export function ExpandableChart({
   title,
   children,
   chart,
+  renderExpanded,
+  testID,
 }: {
   title: string;
   children: ReactNode;
-  chart: LineChartProps;
+  chart?: LineChartProps;
+  renderExpanded?: () => ReactNode;
+  testID?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const id = testID ?? `expand-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
   return (
     <View>
       <View className="flex-row items-center justify-between">
         <Text variant="eyebrow">{title}</Text>
-        <Text variant="micro" className="text-teal" onPress={() => setOpen(true)}>⤢ expand</Text>
+        <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Expand ${title}`} testID={id}>
+          <Text variant="micro" className="text-teal">⤢ expand</Text>
+        </Pressable>
       </View>
       {children}
       <Modal visible={open} onClose={() => setOpen(false)} title={title}>
-        <LineChart {...chart} height={300} interactive xTicks={chart.xTicks ?? 4} />
+        <View className="gap-2" testID="expanded-chart">
+          {renderExpanded ? renderExpanded() : chart ? <LineChart {...chart} height={300} interactive xTicks={chart.xTicks ?? 4} /> : null}
+          <Text variant="micro" className="text-text-muted text-center">{title} · expanded</Text>
+        </View>
       </Modal>
     </View>
   );

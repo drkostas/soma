@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card, Sparkline } from "soma-style";
 import type { WorkoutSummary, TopExerciseRich } from "../lib/api";
-import { LineChart } from "./line-chart";
+import { LineChart, ExpandableChart, type LineChartProps } from "./line-chart";
 import { ExerciseDetailModal } from "./exercise-detail-modal";
 import { WorkoutDetailModal } from "./workout-detail-modal";
 
@@ -21,22 +21,20 @@ function kvol(v: number): string {
 }
 
 /** Weekly training-volume as a full trend chart (axes + dated x-labels). */
-function VolumeChart({ weeks }: { weeks: WorkoutSummary["weeklyVolume"] }) {
+/** Weekly volume line with web's average reference line; null when < 2 weeks have volume. */
+function volumeChart(weeks: WorkoutSummary["weeklyVolume"]): LineChartProps | null {
   const recent = weeks.slice(-16);
   const vals = recent.map((w) => num(w.total_volume));
   const nonZero = vals.filter((v) => v > 0);
   if (nonZero.length < 2) return null;
   const labels = recent.map((w) => shortDate(String(w.week)));
   const avg = nonZero.reduce((a, b) => a + b, 0) / nonZero.length;
-  return (
-    <LineChart
-      height={130}
-      labels={labels}
-      yFormat={(v) => kvol(v)}
-      refLine={{ y: avg, color: "#5a7a8a" }}
-      series={[{ values: vals.map((v) => (v > 0 ? v : null)), color: "#77c8d1", width: 2.4 }]}
-    />
-  );
+  return {
+    labels,
+    yFormat: (v: number) => kvol(v),
+    refLine: { y: avg, color: "#5a7a8a", label: `avg ${kvol(avg)}` },
+    series: [{ values: vals.map((v) => (v > 0 ? v : null)), color: "#77c8d1", width: 2.4 }],
+  };
 }
 
 /** Workouts dashboard: summary stats + weekly volume + top exercises (+ optional
@@ -56,6 +54,7 @@ export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", top
       ]
     : [];
   const peakVol = Math.max(0, ...summary.weeklyVolume.map((w) => num(w.total_volume)));
+  const volChart = volumeChart(summary.weeklyVolume);
 
   return (
     <View className="gap-4">
@@ -73,14 +72,12 @@ export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", top
 
       <Text variant="micro" className="text-text-muted">Tap an exercise or workout for detail</Text>
 
-      {summary.weeklyVolume.length >= 2 ? (
+      {volChart ? (
         <Card className="gap-2">
-          <View className="flex-row items-center justify-between">
-            <Text variant="eyebrow">Weekly volume</Text>
-            <Text variant="micro" className="tabular-nums text-text-muted">peak {kvol(peakVol)} kg</Text>
-          </View>
-          <VolumeChart weeks={summary.weeklyVolume} />
-          <Text variant="micro" className="text-text-muted">weight × reps, normal sets</Text>
+          <ExpandableChart title="Weekly volume" chart={volChart}>
+            <LineChart height={130} interactive {...volChart} />
+          </ExpandableChart>
+          <Text variant="micro" className="text-text-muted">weight × reps, normal sets · peak {kvol(peakVol)} kg</Text>
         </Card>
       ) : null}
 
