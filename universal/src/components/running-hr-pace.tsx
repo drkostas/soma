@@ -61,7 +61,14 @@ export function RunningHrPace({ data }: { data: { points: HrPacePoint[] } | null
         <Text variant="micro" className="text-text-muted">tap a dot to read a run</Text>
       )}
 
-      <View style={{ position: "relative", height: H }}>
+      <View className="flex-row">
+      {/* HR axis ticks (web's YAxis) */}
+      <View className="w-8 justify-between" style={{ height: H }}>
+        <Text variant="micro" className="tabular-nums text-text-muted">{Math.round(maxH)}</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">{Math.round((minH + maxH) / 2)}</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">{Math.round(minH)}</Text>
+      </View>
+      <View className="flex-1" style={{ position: "relative", height: H }} accessibilityLabel={`HR ${Math.round(minH)} to ${Math.round(maxH)} bpm, pace ${pace(minP)} to ${pace(maxP)} per km`}>
         <Svg width="100%" height={H} viewBox={`0 0 100 ${H}`} preserveAspectRatio="none">
           {visible.map((p, i) => {
             const cx = ((p.pace as number) - minP) / rP * 96 + 2;
@@ -98,10 +105,15 @@ export function RunningHrPace({ data }: { data: { points: HrPacePoint[] } | null
           })}
         </View>
       </View>
+      </View>
 
-      <View className="flex-row items-center justify-between">
-        <Text variant="micro" className="text-text-muted">← {pace(minP)} faster</Text>
-        <Text variant="micro" className="text-text-muted">slower {pace(maxP)} →</Text>
+      {/* pace axis ticks (web's XAxis): faster on the left */}
+      <View className="flex-row justify-between pl-8">
+        <Text variant="micro" className="tabular-nums text-text-muted">← {pace(minP)} faster</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">{pace(minP + rP * 0.25)}</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">{pace(minP + rP * 0.5)}</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">{pace(minP + rP * 0.75)}</Text>
+        <Text variant="micro" className="tabular-nums text-text-muted">slower {pace(maxP)} →</Text>
       </View>
       <Text variant="micro" className="text-text-muted">HR {Math.round(minH)}–{Math.round(maxH)} bpm (up = higher) · dot = distance</Text>
 
