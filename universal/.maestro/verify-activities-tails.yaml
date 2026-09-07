@@ -1,0 +1,63 @@
+# Soma verify flow: activities tails (soma#773): monthly distribution + max-speed progression as
+# shared charts (expand), 20-row pages. Run via universal/scripts/verify-device.sh activities --flow .maestro/verify-activities-tails.yaml
+appId: dev.gkos.soma
+name: Soma verify activities tails
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://activities
+- waitForAnimationToEnd:
+    timeout: 10000
+# Loaded state first, so the scroll does not start on the skeleton (production can be slow).
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- scrollUntilVisible:
+    element:
+      id: "expand-monthly-activity"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "expand-monthly-activity"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Monthly activity · expanded.*"
+    timeout: 10000
+- takeScreenshot: verify-activities-monthly-expanded
+- back
+- scrollUntilVisible:
+    element:
+      id: "expand-max-speed-progression"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "expand-max-speed-progression"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Max speed progression · expanded.*"
+    timeout: 10000
+- takeScreenshot: verify-activities-kite-expanded
+- back
+- scrollUntilVisible:
+    element:
+      text: "(?s).*1–20 of .*"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    visibilityPercentage: 80
+- takeScreenshot: verify-activities-list-page
+- stopApp
+- openLink: universal://activities
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}
