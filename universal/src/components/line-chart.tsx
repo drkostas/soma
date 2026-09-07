@@ -179,6 +179,7 @@ export function LineChart(props: LineChartProps) {
           onResponderGrant={onTouch}
           onResponderMove={onTouch}
           onResponderRelease={() => interactive && setActive(null)}
+          onResponderTerminate={() => interactive && setActive(null)}
         >
           <Svg width="100%" height={height} viewBox={`0 0 ${VBW} ${height}`}>
             {/* reference bands (drawn under everything) */}

@@ -19,6 +19,7 @@ import {
   useRecoverySummary,
   useActivitiesDeep,
   useWorkoutsSummary,
+  useWorkoutInsights,
   fetchJson,
   usePullRefresh,
   todayLocal,
@@ -116,6 +117,27 @@ function useVo2max(range: string) {
 }
 
 /** This-week vs last-week training totals + streak for the This Week card. */
+/** Today's body battery (charged / drained) from the stats series — web's Recovery Status shows
+ *  "Body Battery · <date> +45 −44 drained" next to the readiness score (soma#783). */
+type BbPoint = { date: string; value: number | null; value2?: number | null };
+/** An ISO timestamp as the LOCAL calendar day (web's "since 2026-08-21", not the UTC 21:00 of the day before). */
+function localDay(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function useBodyBattery() {
+  const [bb, setBb] = useState<BbPoint | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<{ current: BbPoint[] }>("/api/stats/body_battery?range=7d")
+      .then((d) => { const pts = (d.current ?? []).filter((p) => p.value != null); if (alive) setBb(pts.length ? pts[pts.length - 1] : null); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return bb;
+}
+
 function useWeeklyTraining() {
   const [w, setW] = useState<WeeklyTraining | null>(null);
   useEffect(() => {
@@ -162,6 +184,8 @@ export default function OverviewScreen() {
   const recovery = useRecoverySummary("30d");
   const { data: activitiesDeep } = useActivitiesDeep(range);
   const { data: wkSum } = useWorkoutsSummary(range);
+  const { data: wkIns } = useWorkoutInsights(range);
+  const bb = useBodyBattery();
   const fitness = useOverviewFitness();
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
@@ -200,6 +224,7 @@ export default function OverviewScreen() {
   const sleepAvg = sleep?.summary?.current_avg ?? null;
 
   const hrvLatest = recovery.data?.hrv?.latest ?? null;
+  const garminReadiness = recovery.data?.readiness?.latest?.score ?? null;
   const hrvSpark = (recovery.data?.hrv?.trend ?? []).map((p) => Number(p.weekly_avg)).filter((v) => isFinite(v));
   // An HRV reading older than two days is not today's metric (#731).
   const hrvFresh = freshness(hrvLatest?.date ?? null, todayKey());
@@ -271,6 +296,25 @@ export default function OverviewScreen() {
                 <Text variant="micro" className="text-text-secondary">
                   Form {tsb >= 0 ? "+" : ""}{tsb.toFixed(0)} · {formDescriptor(tsb)}
                 </Text>
+              ) : null}
+              {/* Web's Recovery Status row: Garmin's readiness as the comparison, today's body
+                  battery charged/drained, and the HRV reading with its freshness (soma#783). */}
+              {(garminReadiness != null || bb || hrvLatest) ? (
+                <View className="flex-row flex-wrap gap-x-3 gap-y-0.5 mt-0.5" testID="overview-recovery-row">
+                  {garminReadiness != null ? <Text variant="micro" className="text-text-secondary tabular-nums">Garmin {garminReadiness}</Text> : null}
+                  {bb ? (
+                    <Text variant="micro" className="text-text-secondary tabular-nums">
+                      Body Battery{bb.date !== todayKey() ? ` · ${chartDateLabel(bb.date)}` : ""} +{Math.round(bb.value ?? 0)}{bb.value2 != null ? ` / −${Math.round(bb.value2)} drained` : ""}
+                    </Text>
+                  ) : null}
+                  {hrvLatest ? (
+                    <Text variant="micro" className="text-text-secondary tabular-nums">
+                      {hrvFresh.stale
+                        ? `No HRV reading since ${localDay(hrvLatest.date)} · last ${hrvLatest.last_night_avg ?? hrvLatest.weekly_avg ?? "—"} ms`
+                        : `HRV ${hrvLatest.weekly_avg ?? "—"} ms weekly${hrvLatest.last_night_avg != null ? ` · last night ${hrvLatest.last_night_avg}` : ""}`}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
             </View>
           </Card>
@@ -436,7 +480,7 @@ export default function OverviewScreen() {
             <Text variant="eyebrow" className="text-text-muted mt-1">Activity</Text>
             <ActivityHeatmap activities={activitiesDeep.all} />
             <LastGymSession activities={activitiesDeep.all} workouts={wkSum?.recent} onSelect={setSelActivity} onSelectWorkout={setSelWorkout} />
-            <GymFrequency activities={activitiesDeep.all} />
+            <GymFrequency days={wkIns?.calendar ?? []} sinceDays={rangeToDays(range)} rangeLabel={rangeLabel(range)} />
             <RecentActivityFeed activities={activitiesDeep.all} workouts={wkSum?.recent} onSelect={setSelActivity} onSelectWorkout={setSelWorkout} />
             <ActivityBreakdown monthly={activitiesDeep.monthly ?? []} />
           </>

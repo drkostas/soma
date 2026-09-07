@@ -40,9 +40,23 @@ export function ThisWeekCard({ data }: { data: WeeklyTraining | null }) {
   const [open, setOpen] = useState(false);
   const [dayMetric, setDayMetric] = useState<DayMetric>("Sessions");
   const { data: comparison } = useWeeklyComparison(open);
-  if (!data || !data.this_week) return null;
-  const tw = num(data.this_week);
+  if (!data) return null;
   const lw = data.last_week ? num(data.last_week) : null;
+  if (!data.this_week) {
+    // Web keeps the card and says so ("No training this week yet"); last week stays as context (soma#783).
+    return (
+      <Card className="gap-1" testID="this-week-empty">
+        <Text variant="eyebrow">This week</Text>
+        <Text variant="caption" className="text-text-secondary">No training this week yet</Text>
+        {lw ? (
+          <Text variant="micro" className="text-text-muted tabular-nums">
+            last week · {lw.sessions} session{lw.sessions === 1 ? "" : "s"} · {lw.total_hours.toFixed(1)} h · {Math.round(lw.total_km)} km · {Math.round(lw.total_cal).toLocaleString()} kcal
+          </Text>
+        ) : null}
+      </Card>
+    );
+  }
+  const tw = num(data.this_week);
 
   const cmpCfg = DAY_CFG[dayMetric];
   const twDays = comparison?.this_week ?? [];
