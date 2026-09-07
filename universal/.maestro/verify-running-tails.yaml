@@ -1,0 +1,50 @@
+# Soma verify flow: running tails (soma#771): Monthly mileage as the shared chart (expand),
+# HR-vs-pace axis ticks. Run via universal/scripts/verify-device.sh running --flow .maestro/verify-running-tails.yaml
+appId: dev.gkos.soma
+name: Soma verify running tails
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "expand-monthly-mileage"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "expand-monthly-mileage"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Monthly mileage · expanded.*"
+    timeout: 10000
+- takeScreenshot: verify-running-mileage-expanded
+- back
+- scrollUntilVisible:
+    element:
+      text: "(?i)heart rate vs pace"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "(?s).*slower .*→.*"
+    direction: DOWN
+    timeout: 30000
+    speed: 30
+    visibilityPercentage: 80
+- takeScreenshot: verify-running-hrpace
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}
