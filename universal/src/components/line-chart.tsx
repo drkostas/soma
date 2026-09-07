@@ -14,7 +14,7 @@ export interface ChartSeries {
   color: string;
   width?: number;
   dashed?: boolean;
-  mode?: "line" | "dots";
+  mode?: "line" | "dots" | "bars";
   label?: string;
   axis?: "left" | "right";
   sizes?: (number | null)[];
@@ -204,6 +204,15 @@ export function LineChart(props: LineChartProps) {
               });
             })()}
             {series.map((s, si) => {
+              if (s.mode === "bars") {
+                const bw = n > 1 ? Math.max(1.5, (VBW / (n - 1)) * 0.7) : 8;
+                const floorY = padTop + plotH;
+                return s.values.map((v, i) =>
+                  v == null || !isFinite(v) ? null : (
+                    <Rect key={`${si}-${i}`} x={xAt(i) - bw / 2} y={Math.min(yOf(s, v), floorY)} width={bw} height={Math.max(0.5, Math.abs(floorY - yOf(s, v)))} fill={s.color} fillOpacity={0.85} rx={1} />
+                  ),
+                );
+              }
               if (s.mode === "dots") {
                 return s.values.map((v, i) =>
                   v == null || !isFinite(v) ? null : (
