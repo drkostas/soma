@@ -1,0 +1,83 @@
+# Soma verify flow: workouts tails (soma#775): 20 tappable PRs → exercise detail; overview
+# last-gym-session + feed gym rows → workout modal. Run via
+# universal/scripts/verify-device.sh workouts --flow .maestro/verify-workouts-tails.yaml
+appId: dev.gkos.soma
+name: Soma verify workouts tails
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://workouts
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- scrollUntilVisible:
+    element:
+      id: "pr-19"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-workouts-prs-20
+- scrollUntilVisible:
+    element:
+      id: "pr-0"
+    direction: UP
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "pr-0"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*sessions.*"
+    timeout: 15000
+- takeScreenshot: verify-workouts-exercise-modal
+- back
+- stopApp
+- openLink: universal://overview
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "last-gym-session"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "last-gym-session"
+- extendedWaitUntil:
+    visible:
+      id: "tab-hr"
+    timeout: 20000
+- takeScreenshot: verify-overview-last-gym-modal
+- back
+- scrollUntilVisible:
+    element:
+      id: "feed-workout-.*"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "feed-workout-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "tab-hr"
+    timeout: 20000
+- takeScreenshot: verify-overview-feed-gym-modal
+- back
+- stopApp
+- openLink: universal://workouts
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}

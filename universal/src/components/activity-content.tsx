@@ -130,15 +130,38 @@ export function ActivityHeatmap({ activities }: { activities: ActivityRow[] }) {
 }
 
 /** Recent activity feed: the latest N activities, tap for detail. */
-export function RecentActivityFeed({ activities, onSelect }: { activities: ActivityRow[]; onSelect: (a: ActivityRow) => void }) {
-  const recent = useMemo(() =>
-    [...activities].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 8),
-    [activities]);
+type FeedWorkout = { id: string; title: string; start_time: string; exercise_count: number; duration_min: number | null; volume: number };
+type FeedItem = { kind: "activity"; date: string; a: ActivityRow } | { kind: "workout"; date: string; w: FeedWorkout };
+/** Web's recent feed lists Garmin activities AND Hevy workouts and routes each to its own
+ *  dialog (soma#775). The activity feed here excludes gym, so the Hevy workouts from the
+ *  range summary fill that role and open the workout modal. */
+export function RecentActivityFeed({ activities, workouts, onSelect, onSelectWorkout }: { activities: ActivityRow[]; workouts?: FeedWorkout[]; onSelect: (a: ActivityRow) => void; onSelectWorkout?: (w: { id: string; title: string }) => void }) {
+  const recent = useMemo(() => {
+    const items: FeedItem[] = [
+      ...activities.map((a) => ({ kind: "activity" as const, date: a.date || "", a })),
+      ...(workouts ?? []).map((w) => ({ kind: "workout" as const, date: w.start_time || "", w })),
+    ];
+    return items.sort((x, y) => y.date.localeCompare(x.date)).slice(0, 8);
+  }, [activities, workouts]);
   if (!recent.length) return null;
   return (
     <Card className="gap-1">
       <Text variant="eyebrow" className="mb-1">Recent activity</Text>
-      {recent.map((a, i) => {
+      {recent.map((it, i) => {
+        if (it.kind === "workout") {
+          const w = it.w;
+          return (
+            <Pressable key={`w-${w.id}-${i}`} onPress={() => onSelectWorkout?.({ id: w.id, title: w.title })} className="flex-row items-center gap-2 border-b border-border-subtle py-2" testID={`feed-workout-${w.id}`}>
+              <Text variant="body">🏋️</Text>
+              <View className="flex-1">
+                <Text variant="caption" className="text-text" numberOfLines={1}>{w.title || "Workout"}</Text>
+                <Text variant="micro" className="text-text-muted tabular-nums">{w.exercise_count} exercises{w.duration_min ? ` · ${w.duration_min} min` : ""}{w.volume > 0 ? ` · ${w.volume >= 1000 ? `${(w.volume / 1000).toFixed(1)}k` : Math.round(w.volume)} kg` : ""}</Text>
+              </View>
+              <Text variant="micro" className="text-text-muted">{relativeDate(w.start_time)}</Text>
+            </Pressable>
+          );
+        }
+        const a = it.a;
         const m = meta(a.type_key);
         return (
           <Pressable key={`${a.activity_id}-${i}`} onPress={() => onSelect(a)} className="flex-row items-center gap-2 border-b border-border-subtle py-2">
@@ -156,11 +179,27 @@ export function RecentActivityFeed({ activities, onSelect }: { activities: Activ
 }
 
 /** The most recent gym/strength session, tap for detail. */
-export function LastGymSession({ activities, onSelect }: { activities: ActivityRow[]; onSelect: (a: ActivityRow) => void }) {
+export function LastGymSession({ activities, workouts, onSelect, onSelectWorkout }: { activities: ActivityRow[]; workouts?: FeedWorkout[]; onSelect: (a: ActivityRow) => void; onSelectWorkout?: (w: { id: string; title: string }) => void }) {
   const last = useMemo(
     () => [...activities].filter((a) => isGym(a.type_key)).sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0] ?? null,
     [activities],
   );
+  // Web's "Last Workout" is the newest Hevy workout and opens the workout dialog (soma#775).
+  const lastW = useMemo(() => [...(workouts ?? [])].sort((a, b) => (b.start_time || "").localeCompare(a.start_time || ""))[0] ?? null, [workouts]);
+  if (lastW && (!last || (lastW.start_time || "") >= (last.date || ""))) {
+    return (
+      <Pressable onPress={() => onSelectWorkout?.({ id: lastW.id, title: lastW.title })} testID="last-gym-session">
+        <Card className="gap-1">
+          <View className="flex-row items-center justify-between">
+            <Text variant="eyebrow">Last gym session</Text>
+            <Text variant="micro" className="text-text-muted">{relativeDate(lastW.start_time)}</Text>
+          </View>
+          <Text variant="title" numberOfLines={1}>🏋️ {lastW.title || "Workout"}</Text>
+          <Text variant="caption" className="text-text-muted tabular-nums">{lastW.exercise_count} exercises{lastW.duration_min ? ` · ${lastW.duration_min} min` : ""}{lastW.volume > 0 ? ` · ${lastW.volume >= 1000 ? `${(lastW.volume / 1000).toFixed(1)}k` : Math.round(lastW.volume)} kg` : ""}</Text>
+        </Card>
+      </Pressable>
+    );
+  }
   if (!last) return null;
   return (
     <Pressable onPress={() => onSelect(last)}>

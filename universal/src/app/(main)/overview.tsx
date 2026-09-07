@@ -3,6 +3,7 @@ import { TimeRangeSelector } from "../../components/time-range-selector";
 import { useRangePref, rangeToDays, rangeLabel } from "../../lib/time-range";
 import { InfoHint, STAT_INFO, TREND_7D, TREND_7D_LOWER } from "../../components/info-hint";
 import { OverviewTrendCharts } from "../../components/overview-trend-charts";
+import { WorkoutDetailModal } from "../../components/workout-detail-modal";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, chartDateLabel } from "../../components/line-chart";
@@ -170,6 +171,7 @@ export default function OverviewScreen() {
 
   const [statDetail, setStatDetail] = useState<StatDetail | null>(null);
   const [selActivity, setSelActivity] = useState<ActivityRow | null>(null);
+  const [selWorkout, setSelWorkout] = useState<{ id: string; title: string } | null>(null);
   const readiness = training?.readiness;
   const tsb = training?.pmc?.tsb ?? null;
 
@@ -433,9 +435,9 @@ export default function OverviewScreen() {
           <>
             <Text variant="eyebrow" className="text-text-muted mt-1">Activity</Text>
             <ActivityHeatmap activities={activitiesDeep.all} />
-            <LastGymSession activities={activitiesDeep.all} onSelect={setSelActivity} />
+            <LastGymSession activities={activitiesDeep.all} workouts={wkSum?.recent} onSelect={setSelActivity} onSelectWorkout={setSelWorkout} />
             <GymFrequency activities={activitiesDeep.all} />
-            <RecentActivityFeed activities={activitiesDeep.all} onSelect={setSelActivity} />
+            <RecentActivityFeed activities={activitiesDeep.all} workouts={wkSum?.recent} onSelect={setSelActivity} onSelectWorkout={setSelWorkout} />
             <ActivityBreakdown monthly={activitiesDeep.monthly ?? []} />
           </>
         ) : null}
@@ -443,6 +445,7 @@ export default function OverviewScreen() {
 
       <StatDetailModal stat={statDetail} onClose={() => setStatDetail(null)} />
       <ActivityDetailModal activity={selActivity} onClose={() => setSelActivity(null)} />
+      <WorkoutDetailModal id={selWorkout?.id ?? null} title={selWorkout?.title} unit="kg" onClose={() => setSelWorkout(null)} />
     </ScrollView>
   );
 }
