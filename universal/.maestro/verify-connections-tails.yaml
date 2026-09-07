@@ -1,0 +1,50 @@
+# Soma verify flow: connections read side (soma#785): Hevy managed-by-sync-service status, sport
+# filter tabs on the Strava coverage list. Run via
+# universal/scripts/verify-device.sh connections --flow .maestro/verify-connections-tails.yaml --marker "<spotify tracks>"
+appId: dev.gkos.soma
+name: Soma verify connections tails
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://connections
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "platform-hevy-detail"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-connections-hevy
+- scrollUntilVisible:
+    element:
+      id: "coverage-tab-strength"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-connections-coverage-all
+- tapOn:
+    id: "coverage-tab-strength"
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: verify-connections-coverage-strength
+- tapOn:
+    id: "coverage-tab-running"
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: verify-connections-coverage-running
+- stopApp
+- openLink: universal://connections
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-${SCREEN}
