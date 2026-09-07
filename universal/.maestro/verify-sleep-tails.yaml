@@ -1,0 +1,56 @@
+# Soma verify flow: sleep tails (soma#772): schedule band + expand, stages hours axis, RHR card.
+# Run via universal/scripts/verify-device.sh sleep --flow .maestro/verify-sleep-tails.yaml
+appId: dev.gkos.soma
+name: Soma verify sleep tails
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://sleep
+- waitForAnimationToEnd:
+    timeout: 10000
+# Loaded state first (header stat), so the scroll does not start on the skeleton.
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- scrollUntilVisible:
+    element:
+      id: "expand-resting-heart-rate"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-sleep-rhr-card
+- scrollUntilVisible:
+    element:
+      text: "SLEEP STAGES"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-sleep-stages-axis
+- scrollUntilVisible:
+    element:
+      id: "expand-sleep-schedule"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "expand-sleep-schedule"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Sleep schedule · expanded.*"
+    timeout: 10000
+- takeScreenshot: verify-sleep-schedule-expanded
+- back
+- stopApp
+- openLink: universal://sleep
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}

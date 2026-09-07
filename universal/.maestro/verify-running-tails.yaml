@@ -9,6 +9,12 @@ tags:
 - openLink: universal://running
 - waitForAnimationToEnd:
     timeout: 10000
+# Wait for the loaded state (header stats) before scrolling: against production the data can
+# arrive after the animation settles, and a scroll that starts on the skeleton runs off the end.
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
 - scrollUntilVisible:
     element:
       id: "expand-monthly-mileage"
