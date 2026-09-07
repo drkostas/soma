@@ -171,10 +171,19 @@ if [ -n "$FLOW_OVERRIDE" ]; then case "$FLOW_OVERRIDE" in /*) FLOW="$FLOW_OVERRI
 # reconnects on its own), so drop it again right before Maestro starts.
 $ADB devices 2>/dev/null | awk 'NR>1 && $2=="offline"{print $1}' | while read -r stale; do $ADB disconnect "$stale" >/dev/null 2>&1 || true; done
 set +e
-( cd "$HERE" && "$MAESTRO" --device "$DEV" test \
-    -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER_RE" -e SCREEN="$SCREEN" ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
-    "$FLOW" ) > "$OUT/$SCREEN.maestro.log" 2>&1
-RC=$?
+# The bridge can re-register its offline entry in the milliseconds between the drop above and
+# Maestro's device listing ("Device X was requested, but it is not connected"); that is a
+# harness race, not a result, so drop again and retry up to three times before giving up.
+for attempt in 1 2 3; do
+  ( cd "$HERE" && "$MAESTRO" --device "$DEV" test \
+      -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER_RE" -e SCREEN="$SCREEN" ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
+      "$FLOW" ) > "$OUT/$SCREEN.maestro.log" 2>&1
+  RC=$?
+  grep -q "was requested, but it is not connected" "$OUT/$SCREEN.maestro.log" || break
+  echo "note: stale offline adb entry raced Maestro (attempt $attempt) — dropping it and retrying"
+  $ADB devices 2>/dev/null | awk 'NR>1 && $2=="offline"{print $1}' | while read -r stale; do $ADB disconnect "$stale" >/dev/null 2>&1 || true; done
+  sleep 2
+done
 set -e
 
 # 4. Keep the evidence regardless of outcome.
