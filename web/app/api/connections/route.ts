@@ -20,6 +20,20 @@ export async function GET() {
       ORDER BY priority DESC, id
     `;
 
+    // Sync-service platforms (Garmin, Hevy) hold no row in platform_credentials on a
+    // self-hosted install; the web Sync Hub calls them "Managed by sync service" whenever their
+    // raw table has data, dated by the newest synced_at. Expose the same facts (soma#785).
+    const syncService = await sql`
+      SELECT 'garmin' AS platform,
+             EXISTS(SELECT 1 FROM garmin_raw_data LIMIT 1) AS has_data,
+             (SELECT MAX(synced_at) FROM garmin_raw_data) AS last_sync
+      UNION ALL
+      SELECT 'hevy' AS platform,
+             EXISTS(SELECT 1 FROM hevy_raw_data LIMIT 1) AS has_data,
+             (SELECT MAX(synced_at) FROM hevy_raw_data) AS last_sync
+    `.catch(() => [] as { platform: string; has_data: boolean; last_sync: string | null }[]);
+    const syncMap = Object.fromEntries((syncService as any[]).map((r: any) => [r.platform, r]));
+
     // Spotify library status (features cached for tempo-matched playlists).
     // The demo database has no spotify tables: no Spotify block, not a 500 (this
     // endpoint had been 500 on the demo since the counts landed).
@@ -96,6 +110,8 @@ export async function GET() {
             ? "api_key"
             : "oauth2"),
       can_connect: p === "strava",
+      has_data: syncMap[p]?.has_data === true,
+      last_sync: (syncMap[p]?.last_sync as string | null) ?? null,
     }));
 
     return NextResponse.json({ platforms: status, rules, spotify, stravaCoverage });
