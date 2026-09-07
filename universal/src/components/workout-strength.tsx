@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Pressable, ScrollView } from "react-native";
-import { Text, Card } from "soma-style";
+import { Text, Card, Modal } from "soma-style";
 import { LineChart, ExpandableChart } from "./line-chart";
 import { ExerciseDetailModal } from "./exercise-detail-modal";
 import { fetchJson } from "../lib/api";
@@ -14,6 +14,10 @@ interface ProgResp { progression: { date: string; maxWeight: number; estimated1R
 /** Configurable per-exercise strength progression: pick an exercise pill, load
  *  its max-weight-over-time line from /api/workouts/exercise. */
 function StrengthProgression({ names, unit }: { names: string[]; unit: "kg" | "lb" }) {
+  // Web tracks a chosen set of exercises (chips with ✕) and offers "+ Add exercise…" from the
+  // top list; the first three are the default set (soma#784). Local state only.
+  const [tracked, setTracked] = useState<string[]>(names.slice(0, 3));
+  const [picking, setPicking] = useState(false);
   const [sel, setSel] = useState<string | null>(names[0] ?? null);
   const [prog, setProg] = useState<ProgResp["progression"]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,12 +40,35 @@ function StrengthProgression({ names, unit }: { names: string[]; unit: "kg" | "l
       <View />
       </ExpandableChart>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 pr-2">
-        {names.map((n) => (
-          <Pressable key={n} onPress={() => setSel(n)} className={`rounded-full px-3 py-1 ${sel === n ? "bg-teal" : "bg-surface-subtle"}`}>
-            <Text variant="micro" className={sel === n ? "text-base" : "text-text-secondary"}>{n}</Text>
-          </Pressable>
+        {tracked.map((n) => (
+          <View key={n} className={`flex-row items-center rounded-full pl-3 pr-1 py-1 ${sel === n ? "bg-teal" : "bg-surface-subtle"}`}>
+            <Pressable onPress={() => setSel(n)} hitSlop={4}>
+              <Text variant="micro" className={sel === n ? "text-base" : "text-text-secondary"}>{n}</Text>
+            </Pressable>
+            {tracked.length > 1 ? (
+              <Pressable onPress={() => { const next = tracked.filter((t) => t !== n); setTracked(next); if (sel === n) setSel(next[0] ?? null); }} hitSlop={6} accessibilityLabel={`Remove ${n}`} className="px-1.5">
+                <Text variant="micro" className={sel === n ? "text-base" : "text-text-muted"}>✕</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ))}
       </ScrollView>
+      {/* Its own row, not the end of the chip strip: three tracked names already overflow the
+          width on a phone, which pushed the affordance off-screen (device screenshot, soma#784). */}
+      {names.some((n) => !tracked.includes(n)) ? (
+        <Pressable onPress={() => setPicking(true)} className="self-start rounded-full border border-border-subtle px-3 py-1" testID="strength-add" accessibilityRole="button">
+          <Text variant="micro" className="text-teal">+ Add exercise…</Text>
+        </Pressable>
+      ) : null}
+      <Modal visible={picking} onClose={() => setPicking(false)} title="Add exercise">
+        <View className="gap-1">
+          {names.filter((n) => !tracked.includes(n)).map((n, i) => (
+            <Pressable key={n} onPress={() => { setTracked([n, ...tracked]); setSel(n); setPicking(false); }} className="border-b border-border-subtle py-2" testID={`strength-pick-${i}`}>
+              <Text variant="body" className="text-text">{n}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Modal>
       {loading && !vals.length ? (
         <Text variant="micro" className="text-text-muted">Loading…</Text>
       ) : vals.length >= 2 ? (
@@ -59,7 +86,7 @@ export function WorkoutStrength({ insights, unit }: { insights: WorkoutInsights 
   const [prName, setPrName] = useState<string | null>(null);
   if (!insights) return null;
   const w = (kg: number) => `${Math.round((unit === "lb" ? kg * KG_TO_LB : kg) * 10) / 10} ${unit}`;
-  const names = (insights.topExercises ?? []).map((e) => e.exercise).slice(0, 8);
+  const names = (insights.topExercises ?? []).map((e) => e.exercise).slice(0, 20);
   const prs = insights.prs ?? [];
   const split = insights.programSplit ?? [];
   const maxSessions = Math.max(1, ...split.map((p) => num(p.sessions)));
