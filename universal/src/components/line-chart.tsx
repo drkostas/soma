@@ -40,6 +40,9 @@ export interface LineChartProps {
   yMax?: number;
   /** Number of evenly-spaced x labels to draw (default 2 = first + last). */
   xTicks?: number;
+  /** Number of evenly spaced left-axis labels (default 2 = the two ends). Web's charts label
+   *  intermediate ticks; a clock axis with only its two ends reads as a two-hour window. */
+  yTicks?: number;
   /** Enable tap/drag to read the exact value(s) at a point. */
   interactive?: boolean;
   /** Flip the left axis so smaller values sit higher (web's reversed pace axis). */
@@ -48,6 +51,8 @@ export interface LineChartProps {
   xBands?: { i0: number; i1: number; color: string; opacity?: number }[];
   /** Vertical guide lines at an x index (exercise / set boundaries). */
   xLines?: { i: number; color?: string; dashed?: boolean }[];
+  /** Fill between two series (by index) — web's bedtime→wake band (soma#772). */
+  bands?: { a: number; b: number; color: string; opacity?: number }[];
 }
 
 const VBW = 320;
@@ -61,7 +66,7 @@ export function chartDateLabel(iso: string): string {
 /** A compact react-native-svg line/scatter chart with y-axis labels, dated x
  *  ticks, an optional right axis, and optional tap-to-read cursor + callout. */
 export function LineChart(props: LineChartProps) {
-  const { series, labels, height = 120, yFormat, yFormatRight, refLine, refLines, refAreas, yMin, yMax, xTicks, interactive, invertY, xBands, xLines } = props;
+  const { series, labels, height = 120, yFormat, yFormatRight, refLine, refLines, refAreas, yMin, yMax, xTicks, yTicks, interactive, invertY, xBands, xLines, bands } = props;
   const fmtL = yFormat ?? ((v: number) => String(Math.round(v)));
   const fmtR = yFormatRight ?? fmtL;
   const [active, setActive] = useState<number | null>(null);
@@ -138,8 +143,11 @@ export function LineChart(props: LineChartProps) {
       <View className="flex-row">
         {/* left axis labels */}
         <View className="w-9 justify-between" style={{ height, paddingVertical: padTop }}>
-          <Text variant="micro" className="text-text-muted tabular-nums">{fmtL(invertY ? loL : hiL)}</Text>
-          <Text variant="micro" className="text-text-muted tabular-nums">{fmtL(invertY ? hiL : loL)}</Text>
+          {Array.from({ length: Math.max(2, yTicks ?? 2) }, (_: unknown, i: number) => {
+            const t = i / (Math.max(2, yTicks ?? 2) - 1); // 0 = top of the axis
+            const v = invertY ? loL + (hiL - loL) * t : hiL - (hiL - loL) * t;
+            return <Text key={`yt-${i}`} variant="micro" className="text-text-muted tabular-nums">{fmtL(v)}</Text>;
+          })}
         </View>
 
         <View
@@ -169,6 +177,13 @@ export function LineChart(props: LineChartProps) {
             {xLines?.map((l, li) => (
               <Line key={`xl-${li}`} x1={xAt(Math.max(0, Math.min(n - 1, l.i)))} y1={padTop} x2={xAt(Math.max(0, Math.min(n - 1, l.i)))} y2={padTop + plotH} stroke={l.color ?? "#ffffff"} strokeWidth={1} strokeOpacity={l.dashed ? 0.35 : 0.6} strokeDasharray={l.dashed ? "3 3" : undefined} />
             ))}
+            {bands?.map((bd, bi) => {
+              const sa = series[bd.a]; const sb = series[bd.b];
+              if (!sa || !sb) return null;
+              const fwd: string[] = []; const back: string[] = [];
+              sa.values.forEach((v, i) => { const w = sb.values[i]; if (v != null && isFinite(v) && w != null && isFinite(w)) { fwd.push(`${xAt(i)},${yOf(sa, v)}`); back.push(`${xAt(i)},${yOf(sb, w)}`); } });
+              return fwd.length >= 2 ? <Polygon key={`bd-${bi}`} points={[...fwd, ...back.reverse()].join(" ")} fill={bd.color} fillOpacity={bd.opacity ?? 0.18} /> : null;
+            })}
             <Line x1={0} y1={yAtL(hiL)} x2={VBW} y2={yAtL(hiL)} stroke="#1e2f38" strokeWidth={1} />
             <Line x1={0} y1={yAtL(loL)} x2={VBW} y2={yAtL(loL)} stroke="#1e2f38" strokeWidth={1} />
             {refLine && refLine.y >= loL && refLine.y <= hiL ? (
