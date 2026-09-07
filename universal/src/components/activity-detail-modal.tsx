@@ -5,6 +5,7 @@ import * as Sharing from "expo-sharing";
 import { Text, Modal, Badge, Button, Sparkline } from "soma-style";
 import { LineChart, type ChartSeries } from "./line-chart";
 import { RouteMap } from "./route-map";
+import { TabStrip } from "./tab-strip";
 import { fetchJson, activityImageSource, uploadActivityPhotoToStrava, type ActivityRow } from "../lib/api";
 
 interface TSPoint { elapsed_sec: number; hr?: number | null; speed?: number | null; elevation?: number | null; cadence?: number | null; power?: number | null; respiration?: number | null; stride?: number | null }
@@ -50,25 +51,6 @@ function longDate(iso: string | null | undefined): string { if (!iso) return "";
 function prettyKey(k: string): string { return k.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()).trim(); }
 function fmtVal(v: number | string | boolean): string { return typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(2)) : String(v); }
 const mmss = (v: number) => `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`;
-
-/** Horizontal pill tab strip: six tabs never wrap (the segmented control did), a tab can be
- *  shown disabled like web keeps "Splits" visible without laps (soma#760). */
-function TabStrip({ tabs, value, onChange }: { tabs: { key: string; disabled?: boolean }[]; value: string; onChange: (k: string) => void }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-1 py-0.5 pr-2">
-      {tabs.map((t) => {
-        const active = t.key === value;
-        return (
-          <Pressable key={t.key} disabled={t.disabled} onPress={() => onChange(t.key)} hitSlop={4} accessibilityRole="tab" accessibilityState={{ selected: active, disabled: !!t.disabled }} testID={`tab-${t.key.toLowerCase()}`}>
-            <View className="rounded-full px-2 py-1" style={{ backgroundColor: active ? "#77c8d1" : "#152232", borderWidth: 1, borderColor: active ? "#77c8d1" : "#1a3040", opacity: t.disabled ? 0.4 : 1 }}>
-              <Text variant="micro" style={{ color: active ? "#0a1720" : "#a0b4c0", fontWeight: active ? "700" : "500", fontSize: 11.5, lineHeight: 15 }}>{t.key}</Text>
-            </View>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  );
-}
 
 /* ---- Charts tab: web's activity-performance-chart (7 metrics, overlay, reversed pace axis) ---- */
 const PERF_METRICS = ["Pace", "HR", "Elevation", "Cadence", "Power", "Breathing", "Stride"] as const;

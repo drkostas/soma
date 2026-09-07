@@ -44,6 +44,10 @@ export interface LineChartProps {
   interactive?: boolean;
   /** Flip the left axis so smaller values sit higher (web's reversed pace axis). */
   invertY?: boolean;
+  /** Vertical bands between two x indices, drawn under the series (web's ReferenceArea per exercise block). */
+  xBands?: { i0: number; i1: number; color: string; opacity?: number }[];
+  /** Vertical guide lines at an x index (exercise / set boundaries). */
+  xLines?: { i: number; color?: string; dashed?: boolean }[];
 }
 
 const VBW = 320;
@@ -57,7 +61,7 @@ export function chartDateLabel(iso: string): string {
 /** A compact react-native-svg line/scatter chart with y-axis labels, dated x
  *  ticks, an optional right axis, and optional tap-to-read cursor + callout. */
 export function LineChart(props: LineChartProps) {
-  const { series, labels, height = 120, yFormat, yFormatRight, refLine, refLines, refAreas, yMin, yMax, xTicks, interactive, invertY } = props;
+  const { series, labels, height = 120, yFormat, yFormatRight, refLine, refLines, refAreas, yMin, yMax, xTicks, interactive, invertY, xBands, xLines } = props;
   const fmtL = yFormat ?? ((v: number) => String(Math.round(v)));
   const fmtR = yFormatRight ?? fmtL;
   const [active, setActive] = useState<number | null>(null);
@@ -158,6 +162,13 @@ export function LineChart(props: LineChartProps) {
               const yTop = yAtL(hi);
               return <Rect key={`ra-${ai}`} x={0} y={yTop} width={VBW} height={Math.max(0, yAtL(lo) - yTop)} fill={a.color} fillOpacity={a.opacity ?? 0.12} />;
             })}
+            {xBands?.map((b, bi) => {
+              const x0 = xAt(Math.max(0, Math.min(n - 1, b.i0))); const x1 = xAt(Math.max(0, Math.min(n - 1, b.i1)));
+              return x1 > x0 ? <Rect key={`xb-${bi}`} x={x0} y={padTop} width={x1 - x0} height={plotH} fill={b.color} fillOpacity={b.opacity ?? 0.22} /> : null;
+            })}
+            {xLines?.map((l, li) => (
+              <Line key={`xl-${li}`} x1={xAt(Math.max(0, Math.min(n - 1, l.i)))} y1={padTop} x2={xAt(Math.max(0, Math.min(n - 1, l.i)))} y2={padTop + plotH} stroke={l.color ?? "#ffffff"} strokeWidth={1} strokeOpacity={l.dashed ? 0.35 : 0.6} strokeDasharray={l.dashed ? "3 3" : undefined} />
+            ))}
             <Line x1={0} y1={yAtL(hiL)} x2={VBW} y2={yAtL(hiL)} stroke="#1e2f38" strokeWidth={1} />
             <Line x1={0} y1={yAtL(loL)} x2={VBW} y2={yAtL(loL)} stroke="#1e2f38" strokeWidth={1} />
             {refLine && refLine.y >= loL && refLine.y <= hiL ? (
