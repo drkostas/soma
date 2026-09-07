@@ -17,8 +17,23 @@ export const AUTH_HEADERS: Record<string, string> = API_TOKEN ? { Authorization:
 
 /** Image source for an activity's generated share card. Includes the auth
  *  header (React Native <Image> forwards `headers` on native; prod gates /api/*). */
-export function activityImageSource(activityId: string) {
-  return { uri: `${API_BASE}/api/activity/${encodeURIComponent(activityId)}/image`, headers: AUTH_HEADERS };
+export function activityImageSource(activityId: string, branding = true) {
+  return { uri: `${API_BASE}/api/activity/${encodeURIComponent(activityId)}/image?branding=${branding ? "1" : "0"}`, headers: AUTH_HEADERS };
+}
+/** Web's "Upload to Strava" (POST /api/activity/[id]/strava-photo). Resolves with the server's error text on failure (soma#760). */
+export async function uploadActivityPhotoToStrava(activityId: string, branding: boolean): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/activity/${encodeURIComponent(activityId)}/strava-photo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify({ branding }),
+    });
+    if (res.ok) return { ok: true };
+    const j = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: j.error ?? `Upload failed (${res.status})` };
+  } catch (e) {
+    return { ok: false, error: String((e as Error).message ?? e) };
+  }
 }
 /** Shareable summary image for a Hevy workout (/api/workout/[id]/image). */
 export function workoutImageSource(workoutId: string) {
