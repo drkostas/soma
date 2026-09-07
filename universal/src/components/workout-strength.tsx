@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { View, Pressable, ScrollView } from "react-native";
 import { Text, Card } from "soma-style";
 import { LineChart, ExpandableChart } from "./line-chart";
+import { ExerciseDetailModal } from "./exercise-detail-modal";
 import { fetchJson } from "../lib/api";
 import type { WorkoutInsights } from "../lib/api";
 
@@ -54,6 +55,8 @@ function StrengthProgression({ names, unit }: { names: string[]; unit: "kg" | "l
 
 /** Strength progression + PR grid + program split (web parity, #427). */
 export function WorkoutStrength({ insights, unit }: { insights: WorkoutInsights | null | undefined; unit: "kg" | "lb" }) {
+  // Web's PR cards open the exercise dialog; keep the hook above the early return.
+  const [prName, setPrName] = useState<string | null>(null);
   if (!insights) return null;
   const w = (kg: number) => `${Math.round((unit === "lb" ? kg * KG_TO_LB : kg) * 10) / 10} ${unit}`;
   const names = (insights.topExercises ?? []).map((e) => e.exercise).slice(0, 8);
@@ -67,16 +70,20 @@ export function WorkoutStrength({ insights, unit }: { insights: WorkoutInsights 
 
       {prs.length ? (
         <Card className="gap-2">
-          <Text variant="eyebrow">Personal records</Text>
+          <View className="flex-row items-center justify-between">
+            <Text variant="eyebrow">Personal records</Text>
+            <Text variant="micro" className="text-text-muted">{Math.min(prs.length, 20)} of {prs.length} · tap for detail</Text>
+          </View>
           <View className="flex-row flex-wrap gap-3">
-            {prs.slice(0, 8).map((p) => (
-              <View key={p.exercise} className="min-w-[46%] flex-1 gap-0.5">
+            {prs.slice(0, 20).map((p, i) => (
+              <Pressable key={p.exercise} onPress={() => setPrName(p.exercise)} className="min-w-[46%] flex-1 gap-0.5 rounded-md bg-surface-subtle px-2 py-1.5" testID={`pr-${i}`} accessibilityRole="button" accessibilityLabel={`${p.exercise} personal record`}>
                 <Text variant="micro" className="text-text-secondary" numberOfLines={1}>{p.exercise}</Text>
                 <Text variant="title" className="text-lime">{w(num(p.pr_weight))}</Text>
                 {p.reps_at_pr != null ? <Text variant="micro" className="text-text-muted">{num(p.reps_at_pr)} reps</Text> : null}
-              </View>
+              </Pressable>
             ))}
           </View>
+          <ExerciseDetailModal name={prName} unit={unit} onClose={() => setPrName(null)} />
         </Card>
       ) : null}
 
