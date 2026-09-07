@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { TimeRangeSelector } from "../../components/time-range-selector";
 import { useRangePref, rangeToDays, rangeLabel } from "../../lib/time-range";
 import { InfoHint, STAT_INFO, TREND_7D, TREND_7D_LOWER } from "../../components/info-hint";
+import { OverviewTrendCharts } from "../../components/overview-trend-charts";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, chartDateLabel } from "../../components/line-chart";
@@ -423,6 +424,9 @@ export default function OverviewScreen() {
             </Pressable>
           ))}
         </View>
+
+        {/* Web's four page-level trend charts, scoped to the selected range (soma#769) */}
+        <OverviewTrendCharts range={range} />
 
         {/* Activity content — calendar heatmap, recent feed, breakdown */}
         {activitiesDeep?.all?.length ? (
