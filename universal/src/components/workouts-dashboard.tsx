@@ -115,8 +115,8 @@ export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", top
       {showRecent && summary.recent.length ? (
         <Card className="gap-2">
           <Text variant="eyebrow">Recent workouts</Text>
-          {summary.recent.slice(0, 10).map((w) => (
-            <Pressable key={w.id} onPress={() => setWkId({ id: w.id, title: w.title || "Workout" })} className="border-b border-border-subtle py-2">
+          {summary.recent.slice(0, 10).map((w, i) => (
+            <Pressable key={w.id} onPress={() => setWkId({ id: w.id, title: w.title || "Workout" })} className="border-b border-border-subtle py-2" testID={`workout-row-${i}`}>
               <View className="flex-row items-center justify-between">
                 <Text variant="body" className="text-text flex-1" numberOfLines={1}>{w.title || "Workout"}</Text>
                 <View className="flex-row items-center gap-1.5 ml-2">

@@ -1,0 +1,57 @@
+# Soma verify flow: the workout detail modal (soma#761, S5 of #578).
+# Opens the newest workout from the Workouts screen: HR tab (block strip + avg label),
+# Summary (muscle map + working sets), Image (save / share).
+# Run via universal/scripts/verify-device.sh workouts --flow .maestro/verify-workout-detail.yaml
+appId: dev.gkos.soma
+name: Soma verify workout detail
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://workouts
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "RECENT WORKOUTS"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "workout-row-0"
+- extendedWaitUntil:
+    visible:
+      id: "tab-hr"
+    timeout: 20000
+- tapOn:
+    id: "tab-hr"
+- extendedWaitUntil:
+    visible:
+      id: "block-0"
+    timeout: 15000
+- takeScreenshot: verify-workout-hr
+- tapOn:
+    id: "tab-summary"
+- extendedWaitUntil:
+    visible:
+      text: "WORKING SETS"
+    timeout: 10000
+- takeScreenshot: verify-workout-summary
+- tapOn:
+    id: "tab-image"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*share PNG.*"
+    timeout: 10000
+- takeScreenshot: verify-workout-image
+- back
+- stopApp
+- openLink: universal://workouts
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}

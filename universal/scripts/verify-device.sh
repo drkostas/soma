@@ -167,6 +167,9 @@ echo "verify $SCREEN on $DEV — expecting live marker: '$MARKER'  (from $EXPO_P
 # 3. Drive the device: open the screen, wait for the marker to be visible.
 if [ -n "$FLOW_OVERRIDE" ]; then case "$FLOW_OVERRIDE" in /*) FLOW="$FLOW_OVERRIDE";; *) FLOW="$HERE/$FLOW_OVERRIDE";; esac; fi
 [ -f "$FLOW" ] || { echo "FAIL: flow not found: $FLOW"; exit 2; }
+# The stale entry can come back between step 0 and here (an ssh-forwarded adb bridge
+# reconnects on its own), so drop it again right before Maestro starts.
+$ADB devices 2>/dev/null | awk 'NR>1 && $2=="offline"{print $1}' | while read -r stale; do $ADB disconnect "$stale" >/dev/null 2>&1 || true; done
 set +e
 ( cd "$HERE" && "$MAESTRO" --device "$DEV" test \
     -e ROUTE="universal://$SCREEN" -e MARKER="$MARKER_RE" -e SCREEN="$SCREEN" ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
