@@ -1,0 +1,76 @@
+# Soma verify flow: workouts tails, Phase 3 (soma#784): unit toggle, top exercises ten deep with
+# recency, recent rows with kcal/HR + Show all, pickable strength-progression exercises. Run via
+# universal/scripts/verify-device.sh workouts --flow .maestro/verify-workouts-tails2.yaml
+appId: dev.gkos.soma
+name: Soma verify workouts tails 2
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://workouts
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- scrollUntilVisible:
+    element:
+      id: "unit-toggle"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-workouts-unit-toggle
+- scrollUntilVisible:
+    element:
+      id: "top-exercise-9"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-workouts-top-ten
+- scrollUntilVisible:
+    element:
+      id: "workouts-show-all"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-workouts-recent-rows
+- tapOn:
+    id: "workouts-show-all"
+- extendedWaitUntil:
+    visible:
+      id: "workout-row-12"
+    timeout: 10000
+- takeScreenshot: verify-workouts-recent-all
+- scrollUntilVisible:
+    element:
+      id: "strength-add"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-workouts-strength-chips
+- tapOn:
+    id: "strength-add"
+- extendedWaitUntil:
+    visible:
+      id: "strength-pick-0"
+    timeout: 10000
+- takeScreenshot: verify-workouts-strength-picker
+- tapOn:
+    id: "strength-pick-0"
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: verify-workouts-strength-added
+- stopApp
+- openLink: universal://workouts
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}

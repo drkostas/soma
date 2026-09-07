@@ -16,6 +16,17 @@ function shortDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+/** Web's "1w ago" / "3w ago" / "2mo ago" recency on the Top Exercises rows. */
+function relativeAgo(iso: string): string {
+  const d = new Date(iso); if (Number.isNaN(d.getTime())) return "";
+  const days = Math.max(0, Math.round((Date.now() - d.getTime()) / 86400000));
+  if (days < 1) return "today"; if (days < 7) return `${days}d ago`; if (days < 30) return `${Math.round(days / 7)}w ago`;
+  if (days < 365) return `${Math.round(days / 30.4)}mo ago`; return `${Math.round(days / 365)}y ago`;
+}
+function localDay(iso: string): string {
+  const d = new Date(iso); if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function kvol(v: number): string {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`;
 }
@@ -39,10 +50,16 @@ function volumeChart(weeks: WorkoutSummary["weeklyVolume"]): LineChartProps | nu
 
 /** Workouts dashboard: summary stats + weekly volume + top exercises (+ optional
     recent list — hidden on the workouts screen, which has its own sync-status list). */
-export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", topRich }: { summary: WorkoutSummary | null | undefined; showRecent?: boolean; unit?: "kg" | "lb"; topRich?: TopExerciseRich[] }) {
+export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", topRich, enrich }: { summary: WorkoutSummary | null | undefined; showRecent?: boolean; unit?: "kg" | "lb"; topRich?: TopExerciseRich[]; enrich?: Map<string, { kcal?: number; hr?: number }> }) {
   const [exName, setExName] = useState<string | null>(null);
   const [wkId, setWkId] = useState<{ id: string; title: string } | null>(null);
+  const [showAll, setShowAll] = useState(false);
   if (!summary) return null;
+  // Web lists ten top exercises with when each was last done; the rich insights list carries
+  // both (the summary's own list stops at eight and has no recency) (soma#784).
+  const top = (topRich?.length ? topRich.map((t) => ({ name: t.exercise, sessions: num(t.workout_count), last: t.last_performed })) : summary.topExercises.map((e) => ({ name: e.name, sessions: e.sessions, last: null as string | null }))).slice(0, 10);
+  const recentRows = showAll ? summary.recent : summary.recent.slice(0, 10);
+  const more = summary.recent.length - 10;
   const richByName = new Map((topRich ?? []).map((t) => [t.exercise, t]));
   const bestW = (kg: number | null) => (kg == null ? null : `${Math.round((unit === "lb" ? kg * KG_TO_LB : kg) * 10) / 10} ${unit}`);
   const s = summary.stats;
@@ -81,19 +98,22 @@ export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", top
         </Card>
       ) : null}
 
-      {summary.topExercises.length ? (
+      {top.length ? (
         <Card className="gap-2">
           <Text variant="eyebrow">Top exercises</Text>
-          {summary.topExercises.map((e, i) => {
+          {top.map((e, i) => {
             const r = richByName.get(e.name);
             const spark = (r?.recent_weights ?? []).map((x) => Number(x)).filter((x) => isFinite(x));
             const best = r?.best_weight != null ? bestW(Number(r.best_weight)) : null;
             return (
-              <Pressable key={e.name} onPress={() => setExName(e.name)} className="border-b border-border-subtle py-1.5">
+              <Pressable key={e.name} onPress={() => setExName(e.name)} className="border-b border-border-subtle py-1.5" testID={`top-exercise-${i}`}>
                 <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center gap-2 flex-1">
                     <Text variant="micro" className="tabular-nums text-text-muted w-5">{i + 1}</Text>
-                    <Text variant="body" className="text-text-secondary flex-1" numberOfLines={1}>{e.name}</Text>
+                    <View className="flex-1">
+                      <Text variant="body" className="text-text-secondary" numberOfLines={1}>{e.name}</Text>
+                      {e.last ? <Text variant="micro" className="text-text-muted">{relativeAgo(e.last)}</Text> : null}
+                    </View>
                   </View>
                   <View className="flex-row items-center gap-1.5 ml-2">
                     {best ? <Text variant="micro" className="tabular-nums text-lime">{best}</Text> : null}
@@ -114,8 +134,13 @@ export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", top
 
       {showRecent && summary.recent.length ? (
         <Card className="gap-2">
-          <Text variant="eyebrow">Recent workouts</Text>
-          {summary.recent.slice(0, 10).map((w, i) => (
+          <View className="flex-row items-center justify-between">
+            <Text variant="eyebrow">Recent workouts</Text>
+            <Text variant="micro" className="text-text-muted tabular-nums">{summary.recent.length} in range</Text>
+          </View>
+          {recentRows.map((w, i) => {
+            const x = enrich?.get(`${localDay(w.start_time)}|${(w.title || "").trim().toLowerCase()}`);
+            return (
             <Pressable key={w.id} onPress={() => setWkId({ id: w.id, title: w.title || "Workout" })} className="border-b border-border-subtle py-2" testID={`workout-row-${i}`}>
               <View className="flex-row items-center justify-between">
                 <Text variant="body" className="text-text flex-1" numberOfLines={1}>{w.title || "Workout"}</Text>
@@ -125,10 +150,16 @@ export function WorkoutsDashboard({ summary, showRecent = true, unit = "kg", top
                 </View>
               </View>
               <Text variant="micro" className="text-text-muted">
-                {w.exercise_count} exercises{w.duration_min ? ` · ${w.duration_min} min` : ""}{w.volume > 0 ? ` · ${kvol(w.volume)} kg` : ""}
+                {w.exercise_count} exercises{w.duration_min ? ` · ${w.duration_min} min` : ""}{w.volume > 0 ? ` · ${kvol(w.volume)} kg` : ""}{x?.kcal ? ` · ${x.kcal} kcal` : ""}{x?.hr ? ` · ${x.hr} bpm` : ""}
               </Text>
             </Pressable>
-          ))}
+            );
+          })}
+          {more > 0 ? (
+            <Pressable onPress={() => setShowAll((v) => !v)} className="py-1.5" testID="workouts-show-all" accessibilityRole="button">
+              <Text variant="caption" className="text-teal">{showAll ? "Show fewer" : `Show all (${more} more)`}</Text>
+            </Pressable>
+          ) : null}
         </Card>
       ) : null}
 
