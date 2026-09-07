@@ -1,0 +1,62 @@
+# Soma verify flow: overview tails (soma#783): empty-week This Week card, recovery row on the
+# readiness hero, Gym frequency from Hevy (expand), 20-row recent feed. Run via
+# universal/scripts/verify-device.sh overview --flow .maestro/verify-overview-tails.yaml
+appId: dev.gkos.soma
+name: Soma verify overview tails
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://overview
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "overview-recovery-row"
+    timeout: 45000
+- takeScreenshot: verify-overview-recovery-row
+- scrollUntilVisible:
+    element:
+      id: "this-week-empty"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+    centerElement: true
+    optional: true
+- takeScreenshot: verify-overview-this-week
+- scrollUntilVisible:
+    element:
+      id: "expand-gym-frequency"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-overview-gym-frequency
+- tapOn:
+    id: "expand-gym-frequency"
+- extendedWaitUntil:
+    visible:
+      text: "(?s).*Gym frequency · expanded.*"
+    timeout: 10000
+- takeScreenshot: verify-overview-gym-frequency-expanded
+- back
+- scrollUntilVisible:
+    element:
+      id: "feed-row-19"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-overview-feed-20
+- stopApp
+- openLink: universal://overview
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-${SCREEN}
