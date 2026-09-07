@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 
 export const runtime = "edge";
@@ -11,7 +12,7 @@ export const runtime = "edge";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "90d";
-  const days = range === "30d" ? 30 : range === "1y" ? 365 : range === "6m" ? 182 : 90;
+  const days = parseRangeDays(range, 90); // all 10 web keys + legacy Nd (soma#754)
 
   const sql = getDb();
 

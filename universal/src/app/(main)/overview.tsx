@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { TimeRangeSelector } from "../../components/time-range-selector";
+import { useRangePref, rangeToDays, rangeLabel } from "../../lib/time-range";
 import { ScrollView, View, RefreshControl, Pressable } from "react-native";
 import { Text, Card, Badge, Sparkline } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, chartDateLabel } from "../../components/line-chart";
@@ -47,17 +49,17 @@ function useOverviewTrends() {
 
 interface WeightRow { date: string; weight_kg: number | null; bmi: number | null; body_fat_pct: number | null }
 /** Last 30 days of weigh-ins (ascending) for the weight glance + sparkline. */
-function useWeightTrend() {
+function useWeightTrend(days: number) {
   const [rows, setRows] = useState<WeightRow[]>([]);
   useEffect(() => {
     let alive = true;
-    fetchJson<WeightRow[]>("/api/health/weight?days=90")
+    fetchJson<WeightRow[]>(`/api/health/weight?days=${days}`)
       .then((d) => alive && setRows(Array.isArray(d) ? d : []))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, []);
+  }, [days]);
   return rows;
 }
 
@@ -97,15 +99,15 @@ function useOverviewFitness() {
 
 interface Vo2maxResp { stats: { vo2max: number | null } | null; trends: { vo2max: number[] } }
 /** Current VO2max + its trend, from /api/running/stats. */
-function useVo2max() {
+function useVo2max(range: string) {
   const [v, setV] = useState<{ current: number | null; trend: number[] }>({ current: null, trend: [] });
   useEffect(() => {
     let alive = true;
-    fetchJson<Vo2maxResp>("/api/running/stats?range=90d")
+    fetchJson<Vo2maxResp>(`/api/running/stats?range=${range}`)
       .then((d) => alive && setV({ current: d.stats?.vo2max ?? (d.trends?.vo2max?.at(-1) ?? null), trend: d.trends?.vo2max ?? [] }))
       .catch(() => {});
     return () => { alive = false; };
-  }, []);
+  }, [range]);
   return v;
 }
 
@@ -147,13 +149,14 @@ export default function OverviewScreen() {
   const { data, error, refetch } = useToday();
   const { data: training, refetch: refetchTraining } = useTraining(todayLocal());
   const { data: plan, refetch: refetchPlan } = useSomaPlan(todayLocal());
-  const weight = useWeightTrend();
+  const [range, setRange] = useRangePref();
+  const weight = useWeightTrend(rangeToDays(range));
   const sleep = useSleepGlance();
   const trends = useOverviewTrends();
   const weekly = useWeeklyTraining();
-  const vo2 = useVo2max();
+  const vo2 = useVo2max(range);
   const recovery = useRecoverySummary("30d");
-  const { data: activitiesDeep } = useActivitiesDeep("180d");
+  const { data: activitiesDeep } = useActivitiesDeep(range);
   const fitness = useOverviewFitness();
   const { refreshing, onRefresh } = usePullRefresh(() => {
     refetch();
@@ -217,6 +220,7 @@ export default function OverviewScreen() {
           <Text variant="headline">Overview</Text>
           <Text variant="caption" className="text-text-secondary">Today at a glance</Text>
         </View>
+        <TimeRangeSelector value={range} onChange={setRange} />
 
         {error ? <Card><Text variant="body" className="text-danger">API: {error}</Text></Card> : null}
 
@@ -345,7 +349,7 @@ export default function OverviewScreen() {
             <Text variant="eyebrow">Weight</Text>
             <Text variant="headline" className="text-warm">{wLatest != null ? wLatest.toFixed(1) : "—"}</Text>
             <Text variant="micro">
-              {wDelta != null ? `${wDelta >= 0 ? "+" : ""}${wDelta.toFixed(1)} kg/90d` : bfLatest != null ? `${bfLatest.toFixed(1)}% bf` : "kg"}
+              {wDelta != null ? `${wDelta >= 0 ? "+" : ""}${wDelta.toFixed(1)} kg/${rangeLabel(range)}` : bfLatest != null ? `${bfLatest.toFixed(1)}% bf` : "kg"}
             </Text>
             {wSeries.length >= 2 ? (
               <View className="mt-1"><Sparkline data={wSeries} color="#b17850" height={22} baseline /></View>
@@ -360,7 +364,7 @@ export default function OverviewScreen() {
               <View className="flex-row items-end gap-2">
                 <Text variant="display" className="text-warm">{wLatest != null ? wLatest.toFixed(1) : "—"}</Text>
                 <Text variant="caption" className="text-text-muted mb-1">
-                  kg{bfLatest != null ? ` · ${bfLatest.toFixed(1)}% bf` : ""}{wDelta != null ? ` · ${wDelta >= 0 ? "+" : ""}${wDelta.toFixed(1)} kg/90d` : ""}
+                  kg{bfLatest != null ? ` · ${bfLatest.toFixed(1)}% bf` : ""}{wDelta != null ? ` · ${wDelta >= 0 ? "+" : ""}${wDelta.toFixed(1)} kg/${rangeLabel(range)}` : ""}
                 </Text>
               </View>
               <LineChart height={130} interactive xTicks={4} labels={wLabels} yFormat={bodyCompChart.yFormat} yFormatRight={bodyCompChart.yFormatRight} series={bodyCompSeries} />
