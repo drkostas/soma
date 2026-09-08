@@ -10,6 +10,7 @@ import {
   useActivityMatches,
   setDayCompletion,
   toggleCalibration,
+  saveWorkoutSteps,
   applyIntensity,
   fetchJson,
   usePullRefresh,
@@ -23,6 +24,7 @@ import { TrainingPaces } from "../../components/training-paces";
 import { RaceProtocol } from "../../components/race-protocol";
 import { TrainingTrends } from "../../components/training-trends";
 import { TrajectoryChart } from "../../components/trajectory-chart";
+import { StepEditorSheet } from "../../components/step-editor-sheet";
 import { ReferencePanel, type RefMetric } from "../../components/reference-panel";
 import { PaceComputation } from "../../components/pace-computation";
 import { estimateHMSeconds } from "../../lib/vdot-utils";
@@ -93,6 +95,7 @@ export default function TrainingScreen() {
   const readiness = data?.readiness;
   const vdot = fit?.vdot_adjusted ?? sim?.fitness?.vdotAdjusted ?? null;
   const [whatIfFactor, setWhatIfFactor] = useState(1.0);
+  const [editDay, setEditDay] = useState<PlanDay | null>(null);
   // Re-run the forward simulation live as the what-if slider moves (no save).
   const projected = useMemo(() => projectDays(sim, whatIfFactor), [sim, whatIfFactor]);
   const vo2Trend = useVo2Trend();
@@ -257,8 +260,12 @@ export default function TrainingScreen() {
             vdot={vdot}
             projected={projected}
             onToggleComplete={onToggleComplete}
+            onEditSteps={setEditDay}
           />
         ) : null}
+
+        {/* Web's per-step editor: edit a planned day's steps, save through the delta endpoint (soma#794) */}
+        <StepEditorSheet day={editDay} onClose={() => setEditDay(null)} onSave={async (dayId, steps) => { const ok = await saveWorkoutSteps(dayId, steps); if (ok) refetchSim(); return ok; }} />
 
         {/* What-if intensity — preview scaling upcoming workouts + apply */}
         {planDays.length ? (
@@ -295,7 +302,7 @@ export default function TrainingScreen() {
         <TrainingPaces vdot={vdot} />
 
         {/* Pace computation breakdown — mobile replacement for the web DAG */}
-        <PaceComputation nodes={graphNodes} edges={graphEdges} />
+        <PaceComputation nodes={graphNodes} edges={graphEdges} sliderFactor={whatIfFactor} />
 
         {/* Fitness trajectory — the centerpiece: model vs Garmin across
             Fitness (VDOT) / Readiness / Load. Replaces the flat VO2 sparkline. */}
