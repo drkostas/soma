@@ -1,0 +1,34 @@
+# Soma verify flow: Status screen (soma#796), what web's /status shows through the API. Run via
+# universal/scripts/verify-device.sh system --flow .maestro/verify-system.yaml --marker "Status"
+appId: dev.gkos.soma
+name: Soma verify status screen
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://system
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "system-platforms"
+    timeout: 60000
+- assertVisible:
+    text: "Reachable"
+- takeScreenshot: verify-system-loaded
+- stopApp
+- openLink: universal://system
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "system-platforms"
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-${SCREEN}

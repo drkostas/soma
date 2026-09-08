@@ -1,0 +1,48 @@
+# Soma verify flow: Privacy screen (soma#796), web's /privacy text reachable from More. Run via
+# universal/scripts/verify-device.sh privacy --flow .maestro/verify-privacy.yaml --marker "Privacy policy"
+appId: dev.gkos.soma
+name: Soma verify privacy screen
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://privacy
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "privacy-title"
+    timeout: 60000
+- takeScreenshot: verify-privacy-top
+- scrollUntilVisible:
+    element:
+      id: "privacy-contact"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-privacy-contact
+- stopApp
+- openLink: universal://more
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "Privacy"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-more-entries
+- stopApp
+- openLink: universal://privacy
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-${SCREEN}

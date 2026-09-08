@@ -14,6 +14,11 @@ const SECTIONS: { key: string; label: string; hint: string; icon: IconName }[] =
   { key: "sleep", label: "Sleep", hint: "Stages, HRV, respiration", icon: "moon-outline" },
   { key: "playlist", label: "Playlist", hint: "BPM-matched running playlists", icon: "musical-notes-outline" },
   { key: "connections", label: "Sync", hint: "Integrations, sync rules & pipeline status", icon: "sync-outline" },
+  // Web's /status, /login and /privacy as screens (soma#796). "system" not "status": Expo web
+  // reserves the /status route for Metro.
+  { key: "system", label: "Status", hint: "Server, sync pipeline & linked platforms", icon: "pulse-outline" },
+  { key: "login", label: "Sign in", hint: "API URL & token for installs without the built-in token", icon: "key-outline" },
+  { key: "privacy", label: "Privacy", hint: "What Soma stores and why", icon: "shield-checkmark-outline" },
 ];
 
 export default function MoreScreen() {
