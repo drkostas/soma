@@ -30,7 +30,7 @@ function paceColor(pace: number | null): string {
  * with green/red start/end dots. No map library (native gets the real MapLibre
  * basemap). Fed by /api/activity/[id].gps_route.
  */
-export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; height?: number }) {
+export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; height?: number; title?: string }) {
   const pts = (points ?? []).filter((p) => p && isFinite(p.lat) && isFinite(p.lng));
   if (pts.length < 2) return null;
 
