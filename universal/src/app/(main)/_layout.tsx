@@ -37,6 +37,9 @@ function TabsNav() {
       <Tabs.Screen name="playlist-builder" options={{ href: null }} />
       <Tabs.Screen name="live-dj" options={{ href: null }} />
       <Tabs.Screen name="connections" options={{ href: null }} />
+      <Tabs.Screen name="system" options={{ href: null }} />
+      <Tabs.Screen name="login" options={{ href: null }} />
+      <Tabs.Screen name="privacy" options={{ href: null }} />
     </Tabs>
   );
 }

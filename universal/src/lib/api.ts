@@ -1,19 +1,53 @@
 import { useCallback, useEffect, useState } from "react";
 
-export const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { getStoredAuth } from "./auth-store";
+
+/** The build's API base (EXPO_PUBLIC_API_URL). `API_BASE` starts here and can be redirected by
+ *  the sign-in screen for installs without an embedded token (soma#796). */
+export const DEFAULT_API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+export let API_BASE = DEFAULT_API_BASE;
+export function hostOf(base: string): string {
+  return base.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+}
 
 /** Daemon-class routes (Live DJ today, chat next) run on the Mac behind `tailscale serve`,
  *  never on Vercel: the DJ is a detached process with local status files. EXPO_PUBLIC_DAEMON_URL
  *  points the app there (e.g. https://gkos-mac.taile2630d.ts.net:8448); unset → same host as
  *  the API, which is right for local dev and honest for prod (the call then fails visibly). */
-export const DAEMON_BASE = process.env.EXPO_PUBLIC_DAEMON_URL ?? API_BASE;
+export let DAEMON_BASE = process.env.EXPO_PUBLIC_DAEMON_URL ?? API_BASE;
 /** Host shown on the Live DJ screen so it is never a mystery where the DJ runs. */
-export const DAEMON_HOST = DAEMON_BASE.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+export let DAEMON_HOST = hostOf(DAEMON_BASE);
 
 /** Personal API token for prod (soma.gkos.dev gates /api/* behind a session;
     the token bypasses that for this native client). Empty in local dev. */
 const API_TOKEN = process.env.EXPO_PUBLIC_API_TOKEN;
+/** True for the embedded-token build; false for a store or side-loaded install that signs in. */
+export const EMBEDDED_TOKEN = Boolean(API_TOKEN);
 export const AUTH_HEADERS: Record<string, string> = API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
+export type AuthSource = "embedded" | "stored" | "none";
+/** Where the current bearer comes from; the Status and Sign-in screens show it. */
+export let AUTH_SOURCE: AuthSource = API_TOKEN ? "embedded" : "none";
+
+/** Redirect every fetch to `baseUrl` with `token` (soma#796). Module bindings are live, so the
+ *  screens that read `API_BASE` or spread `AUTH_HEADERS` at call time pick the change up at once.
+ *  A null token with source "embedded" restores the build's token; "none" clears the header. */
+export function applyAuth(baseUrl: string | null, token: string | null, source: AuthSource): void {
+  if (baseUrl) {
+    API_BASE = baseUrl.replace(/\/+$/, "");
+    if (!process.env.EXPO_PUBLIC_DAEMON_URL) { DAEMON_BASE = API_BASE; DAEMON_HOST = hostOf(API_BASE); }
+  }
+  if (token) AUTH_HEADERS.Authorization = `Bearer ${token}`;
+  else if (source === "embedded" && API_TOKEN) AUTH_HEADERS.Authorization = `Bearer ${API_TOKEN}`;
+  else delete AUTH_HEADERS.Authorization;
+  AUTH_SOURCE = source;
+}
+/** Startup: apply credentials the sign-in screen stored earlier. A no-op when nothing is stored,
+ *  which keeps the embedded-token build exactly as before. */
+export async function applyStoredAuth(): Promise<void> {
+  const stored = await getStoredAuth().catch(() => null);
+  if (!stored) return;
+  applyAuth(stored.baseUrl || null, stored.token || null, stored.token ? "stored" : AUTH_SOURCE);
+}
 
 /** Image source for an activity's generated share card. Includes the auth
  *  header (React Native <Image> forwards `headers` on native; prod gates /api/*). */

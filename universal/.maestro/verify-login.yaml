@@ -1,0 +1,46 @@
+# Soma verify flow: Sign-in screen (soma#796). Enters a WRONG token and tests the connection so the
+# rejected path is proven; never saves, never types the real token. Run via
+# universal/scripts/verify-device.sh login --flow .maestro/verify-login.yaml --marker "Sign in"
+appId: dev.gkos.soma
+name: Soma verify sign-in screen
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://login
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "login-source"
+    timeout: 60000
+- takeScreenshot: verify-login-initial
+- tapOn:
+    id: "login-token"
+- inputText: "not-a-real-token"
+- hideKeyboard
+- tapOn:
+    id: "login-test"
+- extendedWaitUntil:
+    visible:
+      id: "login-result"
+    timeout: 60000
+- assertVisible:
+    text: "Rejected.*"
+- takeScreenshot: verify-login-rejected
+- tapOn:
+    id: "login-token"
+- eraseText: 40
+- hideKeyboard
+- stopApp
+- openLink: universal://login
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-${SCREEN}
