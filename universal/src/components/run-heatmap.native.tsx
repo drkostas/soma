@@ -1,7 +1,8 @@
-import { useMemo } from "react";
-import { View } from "react-native";
+import { useMemo, useState } from "react";
+import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
 import { Map, Camera, GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
+import { MapFullscreen } from "./map-fullscreen";
 import type { HeatRoute } from "../lib/api";
 
 /** OpenFreeMap dark vector basemap — free, no API key, beautiful streets/labels. */
@@ -17,6 +18,7 @@ type Feature = { type: "Feature"; geometry: { type: "LineString"; coordinates: [
  * /api/running/heatmap.
  */
 export function RunHeatmap({ routes }: { routes: HeatRoute[] }) {
+  const [open, setOpen] = useState(false); // fullscreen pan/zoom (soma#793), above the early return
   const valid = (routes ?? []).filter((r) => Array.isArray(r) && r.length >= 2);
 
   const { geojson, bounds, count } = useMemo(() => {
@@ -63,7 +65,12 @@ export function RunHeatmap({ routes }: { routes: HeatRoute[] }) {
     <Card className="gap-2">
       <View className="flex-row items-center justify-between">
         <Text variant="eyebrow">Route heatmap</Text>
-        <Text variant="micro" className="text-text-muted">{count} routes · last 12 mo</Text>
+        <View className="flex-row items-center gap-3">
+          <Text variant="micro" className="text-text-muted">{count} routes · last 12 mo</Text>
+          <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Expand heatmap" testID="heatmap-expand">
+            <Text variant="micro" className="text-teal">⤢ expand</Text>
+          </Pressable>
+        </View>
       </View>
       <View className="rounded-lg overflow-hidden" style={{ aspectRatio: 1 }}>
         {/* Gestures locked to match web run-heatmap (interactive={false}); the
@@ -84,6 +91,11 @@ export function RunHeatmap({ routes }: { routes: HeatRoute[] }) {
         </Map>
       </View>
       <Text variant="micro" className="text-text-muted">Brighter lines = roads you run most.</Text>
+      <MapFullscreen visible={open} onClose={() => setOpen(false)} title={`Route heatmap · ${count} routes`} bounds={bounds} testID="heatmap-fullscreen">
+        <GeoJSONSource id="routes-fs" data={geojson}>
+          <Layer id="routeLines-fs" type="line" paint={{ "line-color": "#77c8d1", "line-width": 2, "line-opacity": 0.4 }} layout={{ "line-cap": "round", "line-join": "round" }} />
+        </GeoJSONSource>
+      </MapFullscreen>
     </Card>
   );
 }

@@ -1,7 +1,8 @@
-import { useMemo } from "react";
-import { View } from "react-native";
+import { useMemo, useState } from "react";
+import { View, Pressable } from "react-native";
 import { Text } from "soma-style";
 import { Map, Camera, GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
+import { MapFullscreen } from "./map-fullscreen";
 import Svg, { Defs, LinearGradient, Stop, Rect as SvgRect } from "react-native-svg";
 
 /** One GPS sample of a run/ride. lat+lng required; speed drives pace colour. */
@@ -28,7 +29,9 @@ type PointF = { type: "Feature"; properties: { markerType: "start" | "end" }; ge
  * subtle glow and green/red start/end dots. Camera fits the route. The web SVG
  * fallback (route-map.tsx) is used on Expo web. Fed by /api/activity/[id].gps_route.
  */
-export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; height?: number }) {
+export function RouteMap({ points, height = 300, title = "Route" }: { points: RoutePoint[]; height?: number; title?: string }) {
+  // Fullscreen pan/zoom (soma#793); hooks stay above the early return below.
+  const [open, setOpen] = useState(false);
   const { routes, ends, bounds } = useMemo(() => {
     const pts = (points ?? []).filter((p) => p && isFinite(p.lat) && isFinite(p.lng));
     if (pts.length < 2) return { routes: null as null | { type: "FeatureCollection"; features: LineF[] }, ends: null as null | { type: "FeatureCollection"; features: PointF[] }, bounds: null as null | [number, number, number, number] };
@@ -82,6 +85,10 @@ export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; heigh
             </GeoJSONSource>
           ) : null}
         </Map>
+        {/* ⤢ opens the same route in a pannable, zoomable fullscreen map (soma#793). */}
+        <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Expand map" testID="route-map-expand" className="absolute top-2 right-2 rounded-md px-2 py-1" style={{ backgroundColor: "rgba(15,20,26,0.8)" }}>
+          <Text variant="micro" className="text-teal">⤢ expand</Text>
+        </Pressable>
         {/* Pace legend */}
         <View className="absolute bottom-2 left-2 rounded-md px-2 py-1" style={{ backgroundColor: "rgba(15,20,26,0.8)" }}>
           <Text variant="micro" className="text-text-muted">Pace</Text>
@@ -103,6 +110,24 @@ export function RouteMap({ points, height = 300 }: { points: RoutePoint[]; heigh
       </View>
       <Text variant="micro" className="text-text-muted" style={{ fontSize: 8, marginTop: 2 }}>© OpenFreeMap · © OpenStreetMap contributors</Text>
       <Text variant="micro" className="text-text-muted">GPS route · green start, red finish · colour = pace.</Text>
+      <MapFullscreen visible={open} onClose={() => setOpen(false)} title={title} bounds={bounds} testID="route-map-fullscreen"
+        legend={<View className="rounded-md px-2 py-1" style={{ backgroundColor: "rgba(15,20,26,0.8)" }}><Text variant="micro" className="text-text-muted">red = fast · cyan = slow · green start · red finish</Text></View>}>
+          <GeoJSONSource id="route-fs" data={routes}>
+            {/* Two-layer glow + core, matching web run-map.tsx exactly. */}
+            <Layer id="route-fs-glow-outer" type="line" paint={{ "line-color": PACE_COLOR, "line-width": 10, "line-opacity": 0.06, "line-blur": 6 }} layout={{ "line-cap": "round", "line-join": "round" }} />
+            <Layer id="route-fs-glow-mid" type="line" paint={{ "line-color": PACE_COLOR, "line-width": 4, "line-opacity": 0.22, "line-blur": 2 }} layout={{ "line-cap": "round", "line-join": "round" }} />
+            <Layer id="route-fs-core" type="line" paint={{ "line-color": PACE_COLOR, "line-width": 2.5, "line-opacity": 1 }} layout={{ "line-cap": "round", "line-join": "round" }} />
+          </GeoJSONSource>
+          {ends ? (
+            <GeoJSONSource id="route-fs-ends" data={ends}>
+              <Layer id="route-fs-end-dots" type="circle" paint={{
+                "circle-radius": 5,
+                "circle-color": END_COLOR,
+                "circle-stroke-width": 2, "circle-stroke-color": "#ffffff", "circle-opacity": 0.95,
+              }} />
+            </GeoJSONSource>
+          ) : null}
+      </MapFullscreen>
     </View>
   );
 }

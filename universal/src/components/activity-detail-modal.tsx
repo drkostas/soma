@@ -383,7 +383,7 @@ export function ActivityDetailModal({ activity, onClose }: { activity: ActivityR
             </View>
           ) : tab === "Map" ? (
             <View className="gap-2">
-              <RouteMap points={routePts} height={340} />
+              <RouteMap points={routePts} height={340} title={activity?.name || "Route"} />
               <RouteProfile gps={data?.gps_route ?? []} />
             </View>
           ) : tab === "Charts" ? (
