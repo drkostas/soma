@@ -8,13 +8,12 @@
  *
  * Run: node dist/refinalize.js <garmin_id> [<garmin_id> ...]   (DRY unless STRAVA creds)
  */
-import { writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
 import { Pool } from "pg";
 import { stravaCreds, loadSession, saveSession, sessionValid, login, setActivityDetails } from "./strava-web";
 import { kiteActivityName, generateKiteStravaDescription } from "./kite-description";
+import { imagePathFor } from "./share-image";
 
-const SOMA = process.env.SOMA_WEB_URL || process.env.SOMA_BASE_URL || "https://soma.gkos.dev";
 
 async function stravaIdFor(db: Pool, gid: number): Promise<number | null> {
   const r = await db.query("SELECT strava_activity_id FROM strava_bridge_uploads WHERE garmin_activity_id=$1", [gid]);
@@ -30,16 +29,6 @@ async function kitePayloadFor(db: Pool, gid: number): Promise<any | null> {
   const j = r.rows[0]?.raw_json;
   return j == null ? null : (typeof j === "string" ? JSON.parse(j) : j);
 }
-async function imagePathFor(gid: number): Promise<string | null> {
-  try {
-    const resp = await fetch(`${SOMA}/api/activity/${gid}/image`);
-    if (!resp.ok) return null;
-    const path = `/tmp/refinalize_${gid}.png`;
-    await writeFile(path, Buffer.from(await resp.arrayBuffer()));
-    return path;
-  } catch { return null; }
-}
-
 async function main(): Promise<void> {
   const ids = process.argv.slice(2).map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
   if (!ids.length) { console.log("usage: refinalize <garmin_id> ..."); return; }
@@ -58,9 +47,9 @@ async function main(): Promise<void> {
     const isKite = kite && (kite.summary?.jump_count || 0) > 0;
     const title = isKite ? kiteActivityName(summary, kite) : (summary.activityName || "Activity");
     const description = isKite ? generateKiteStravaDescription(summary, kite) : String(summary.description || "");
-    const imagePath = await imagePathFor(gid);
+    const { path: imagePath, note: imageNote, kind } = await imagePathFor(db, gid, "refinalize");
     jobs.push({ gid, stravaId, title, description, imagePath });
-    console.log(`  prepared ${gid} -> strava/${stravaId}: "${title}" (image=${imagePath ? "yes" : "no"})`);
+    console.log(`  prepared ${gid} -> strava/${stravaId}: "${title}" (image=${imagePath ? `${kind} card` : `no: ${imageNote}`})`);
   }
   if (!jobs.length) { console.log("RESULT: nothing to re-finalize"); await db.end(); return; }
 
