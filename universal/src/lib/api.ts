@@ -251,6 +251,17 @@ export function useCalibration(date: string) {
 }
 
 /** Toggle readiness weighting between adaptive and force-equal. Returns true on success. */
+/** Save edited workout steps for one planned day (web's per-step editor → POST
+ *  /api/training/delta/save, `updatedWorkouts[].workoutSteps`). Returns true on success. */
+export async function saveWorkoutSteps(dayId: number, steps: WorkoutStep[]): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/training/delta/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ sliderFactor: 1.0, updatedWorkouts: [{ dayId, workoutSteps: steps }] }),
+  });
+  return res.ok;
+}
+
 export async function toggleCalibration(forceEqual: boolean): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/training/calibration/toggle`, {
     method: "POST",
@@ -862,7 +873,13 @@ export function useWeekdayWeekend(range: string) {
 }
 
 // ---- Training computation graph (nodes → the mobile pace-computation breakdown) ----
-export interface GraphNode { id: string; label: string; value: number | null }
+export interface GraphNode {
+  id: string; label: string; value: number | null;
+  /** Web's graph carries these too (soma#794): the column the node sits in, its unit, and the
+   *  tooltip text (short explanation, formula, source) the DAG shows on hover/tap. */
+  column?: string; unit?: string; color?: string;
+  tooltip?: { short: string; formula?: string; source?: string; inputs?: string[] };
+}
 /** A weighted edge in the readiness/pace computation graph (signal → factor). */
 export interface GraphEdge { from: string; to: string; weight: number }
 /** A hard readiness override (sleep < 5h, Body Battery < 25, HRV/majority flags). */
