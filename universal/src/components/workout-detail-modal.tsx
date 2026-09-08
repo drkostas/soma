@@ -321,7 +321,7 @@ export function WorkoutDetailModal({ id, title, unit, onClose }: { id: string | 
                   <View style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12, backgroundColor: "#0e1a22", overflow: "hidden" }}>
                     <Image source={img} style={{ width: "100%", height: "100%" }} resizeMode="contain" onLoadStart={() => setImgState("loading")} onLoad={() => setImgState("ready")} onError={() => setImgState("error")} />
                     {imgState !== "ready" ? (
-                      <View className="absolute inset-0 items-center justify-center" pointerEvents="none">
+                      <View className="absolute inset-0 items-center justify-center" style={{ pointerEvents: "none" }}>
                         <Text variant="caption" className="text-text-muted">{imgState === "error" ? "The card could not be rendered." : "Rendering the card…"}</Text>
                       </View>
                     ) : null}

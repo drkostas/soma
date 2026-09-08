@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { View } from "react-native";
+import { View, Platform } from "react-native";
 import { Text } from "soma-style";
 import Body, { type ExtendedBodyPart, type Slug } from "react-native-body-highlighter";
 import {
@@ -45,16 +45,21 @@ export function MuscleBodyMap({ volumes, selected, onSelect, scale = 1 }: {
     const mg = b.slug ? SLUG_TO_MUSCLE[b.slug] : undefined;
     if (mg) onSelect(selected === mg ? null : mg);
   };
+  // On web, react-native-svg wraps a pressable <Path> in react-native-web's deprecated Touchable
+  // mixin and spreads responder props onto the DOM node (six "unknown event handler" errors and
+  // a TouchableMixin warning per figure). The web build keeps the figures static; the muscle
+  // chips beside them select a group there. Native keeps tap-to-select on the figure.
+  const onBodyPartPress = Platform.OS === "web" ? undefined : onPress;
 
   return (
     <View className="flex-row items-start justify-center gap-4">
       <View className="items-center">
         <Text variant="micro" className="text-text-muted mb-1">Front</Text>
-        <Body data={data} side="front" scale={scale} defaultFill="#2a2a2e" border="none" onBodyPartPress={onPress} />
+        <Body data={data} side="front" scale={scale} defaultFill="#2a2a2e" border="none" onBodyPartPress={onBodyPartPress} />
       </View>
       <View className="items-center">
         <Text variant="micro" className="text-text-muted mb-1">Back</Text>
-        <Body data={data} side="back" scale={scale} defaultFill="#2a2a2e" border="none" onBodyPartPress={onPress} />
+        <Body data={data} side="back" scale={scale} defaultFill="#2a2a2e" border="none" onBodyPartPress={onBodyPartPress} />
       </View>
     </View>
   );

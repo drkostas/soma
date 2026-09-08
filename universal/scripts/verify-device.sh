@@ -128,7 +128,10 @@ S = {
   "nutrition":        ("/api/nutrition/plan?date=" + TODAY,    lambda d: "Copy yesterday" if d.get("plan") is None else fmt_int(d["remaining"]["calories"])),
   "running":          ("/api/running/stats?range=6m",          lambda d: "{} runs · {} km".format(d["stats"]["total_runs"], fixed(d["stats"]["total_km"], 0))),
   "workouts":         ("/api/workouts/insights?range=6m",      lambda d: "{} workouts logged".format(len(d["calendar"]))),
-  "sleep":            ("/api/stats/sleep?range=90d",           lambda d: "{}h–{}h".format(fixed(d["summary"]["current_min"], 1), fixed(d["summary"]["current_max"], 1))),
+  # range=6m matches DEFAULT_RANGE in lib/time-range, and the screen honours the persisted range
+  # (soma#754); a 90d marker disagreed with a 6M screen and failed a healthy sleep screen.
+  # (No apostrophes or backticks in this block: it lives inside a single-quoted shell string.)
+  "sleep":            ("/api/stats/sleep?range=6m",            lambda d: "{}h–{}h".format(fixed(d["summary"]["current_min"], 1), fixed(d["summary"]["current_max"], 1))),
   "activities":       ("/api/activities/summary?range=6m",     lambda d: fmt_int(jsround(d["totals"]["cal"]))),
   "training":         ("/api/training/breakdown?date=" + TODAY, lambda d: "Readiness {}".format(d["readiness"]["traffic_light"])),
   "connections":      ("/api/sync/status",                     sync_records),
