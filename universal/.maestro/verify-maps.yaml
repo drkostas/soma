@@ -1,0 +1,79 @@
+# Soma verify flow: interactive maps (soma#793): mini-map route thumbnails, the activity map's
+# fullscreen pan/zoom modal, the heatmap's fullscreen modal. Run via
+# universal/scripts/verify-device.sh running --flow .maestro/verify-maps.yaml --marker "last 6M"
+appId: dev.gkos.soma
+name: Soma verify maps
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- scrollUntilVisible:
+    element:
+      id: "route-thumb-0"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- waitForAnimationToEnd:
+    timeout: 8000
+- takeScreenshot: verify-maps-thumbs
+- tapOn:
+    id: "route-thumb-0"
+- extendedWaitUntil:
+    visible:
+      id: "route-map-expand"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 8000
+- takeScreenshot: verify-maps-activity-map
+- tapOn:
+    id: "route-map-expand"
+- extendedWaitUntil:
+    visible:
+      id: "route-map-fullscreen"
+    timeout: 15000
+- waitForAnimationToEnd:
+    timeout: 8000
+- swipe:
+    start: 50%, 60%
+    end: 70%, 40%
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: verify-maps-activity-fullscreen
+- tapOn:
+    id: "route-map-fullscreen-close"
+- back
+- scrollUntilVisible:
+    element:
+      id: "heatmap-expand"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "heatmap-expand"
+- extendedWaitUntil:
+    visible:
+      id: "heatmap-fullscreen"
+    timeout: 15000
+- waitForAnimationToEnd:
+    timeout: 8000
+- takeScreenshot: verify-maps-heatmap-fullscreen
+- tapOn:
+    id: "heatmap-fullscreen-close"
+- stopApp
+- openLink: universal://running
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}
