@@ -14,7 +14,7 @@ import { Text, Card, Badge, type BadgeTone } from "soma-style";
 import { useChat as useChatSheet } from "./ChatContext";
 import { MarkdownText } from "./MarkdownText";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3456";
+import { API_BASE } from "../lib/api";
 
 /* First-pass React Native port of the web chat-widget. Talks to the same
    /api/chat SSE endpoint (a local `claude -p` subprocess on the Mac, or the
