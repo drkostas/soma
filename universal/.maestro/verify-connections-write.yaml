@@ -1,0 +1,108 @@
+# Soma verify flow: Connections write paths (soma#795) with REVERSIBLE actions only — a throwaway
+# kite rule created, toggled off, deleted; Pipeline operations tabs read; disconnect / settings
+# controls asserted present, never tapped. Run via
+# universal/scripts/verify-device.sh connections --flow .maestro/verify-connections-write.yaml --marker "4,186"
+appId: dev.gkos.soma
+name: Soma verify connections write paths
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://connections
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "+ Add rule"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    text: "+ Add rule"
+- extendedWaitUntil:
+    visible:
+      id: "rule-activity-types"
+    timeout: 10000
+- tapOn:
+    id: "rule-src-garmin"
+- tapOn:
+    id: "rule-type-kite"
+- tapOn:
+    id: "rule-dest-telegram"
+- takeScreenshot: verify-connections-rule-form
+- tapOn:
+    text: "Create rule"
+- extendedWaitUntil:
+    visible:
+      id: "rule-row-new"
+    timeout: 20000
+- takeScreenshot: verify-connections-rule-created
+- tapOn:
+    id: "rule-toggle-new"
+- extendedWaitUntil:
+    visible:
+      id: "rule-off-new"
+    timeout: 15000
+- takeScreenshot: verify-connections-rule-off
+- tapOn:
+    id: "rule-delete-new"
+- extendedWaitUntil:
+    notVisible:
+      id: "rule-row-new"
+    timeout: 15000
+- takeScreenshot: verify-connections-rule-deleted
+- scrollUntilVisible:
+    element:
+      id: "tab-backfill"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- tapOn:
+    id: "tab-backfill"
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: verify-connections-backfill
+- tapOn:
+    id: "tab-duplicates"
+- extendedWaitUntil:
+    visible:
+      id: "duplicates-list"
+    timeout: 60000
+- takeScreenshot: verify-connections-duplicates
+- tapOn:
+    id: "tab-coverage"
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: verify-connections-coverage
+- stopApp
+- openLink: universal://connections
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "platform-garmin-detail"
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: "disconnect-strava"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- assertVisible:
+    id: "settings-hevy"
+- takeScreenshot: verify-connections-platform-actions
+- stopApp
+- openLink: universal://connections
+- waitForAnimationToEnd:
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "${MARKER}"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-${SCREEN}
