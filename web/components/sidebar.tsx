@@ -102,27 +102,31 @@ export function Sidebar() {
       {/* Slide-out drawer */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen w-56 2xl:w-64 flex flex-col border-r border-border bg-sidebar transition-transform duration-200 safe-area-pt safe-area-pl safe-area-pb",
+          // Sizing model (soma#363): the slide-out drawer below lg keeps full labels; from lg the
+          // sidebar is always visible as a 4rem icon rail (tablet / narrow desktop), grows to
+          // 14rem with labels from xl and 16rem from 2xl. The content offset in app/layout.tsx and
+          // the demo banner track the same steps.
+          "fixed left-0 top-0 z-40 h-screen w-56 lg:w-16 xl:w-56 2xl:w-64 flex flex-col border-r border-border bg-sidebar transition-[transform,width] duration-200 safe-area-pt safe-area-pl safe-area-pb",
           // Slide-in drawer on mobile; always visible on desktop (lg+).
           drawerOpen ? "translate-x-0" : "-translate-x-full",
           "lg:translate-x-0"
         )}
       >
         {/* Logo + close area */}
-        <div className="flex h-14 items-center gap-3 px-4 border-b border-border">
-          <div className="w-8" /> {/* spacer for hamburger */}
+        <div className="flex h-14 items-center gap-3 px-4 lg:justify-center lg:px-0 xl:justify-start xl:px-4 border-b border-border">
+          <div className="w-8 lg:hidden xl:block" /> {/* spacer for hamburger */}
           <Link
             href="/"
             className="flex items-center gap-2"
             aria-label="Go to home"
           >
             <SomaLogo size={24} />
-            <span className="text-[1rem] font-semibold">Soma</span>
+            <span className="text-[1rem] font-semibold lg:hidden xl:inline">Soma</span>
           </Link>
         </div>
 
         {/* Nav items */}
-        <nav className="flex flex-1 flex-col gap-0.5 p-2 overflow-y-auto">
+        <nav className="flex flex-1 flex-col gap-0.5 p-2 lg:px-1.5 xl:px-2 overflow-y-auto" aria-label="Primary">
           {navItems.map((item) => {
             const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const isLoading = navigatingTo === item.href;
@@ -134,8 +138,12 @@ export function Sidebar() {
                 href={item.href}
                 onClick={() => { if (!isActive) setNavigatingTo(item.href); }}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={item.label}
+                title={`${item.label} (⌘${item.shortcut})`}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-[15px] active:scale-[0.96] active:opacity-70",
+                  // Type: 15px labels (one step above the app's 14px body) and a hint that stays
+                  // readable at 12px / 70% (was 50%, soma#363). On the rail only the icon shows.
+                  "flex items-center gap-3 px-3 py-2.5 lg:justify-center lg:px-0 lg:py-2.5 xl:justify-start xl:px-3 rounded-lg transition-all text-[15px] leading-5 active:scale-[0.96] active:opacity-70",
                   isActive
                     ? "bg-accent text-accent-foreground font-medium"
                     : isLoading
@@ -144,12 +152,12 @@ export function Sidebar() {
                 )}
               >
                 {isLoading ? (
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                  <Loader2 className="h-4 w-4 lg:h-5 lg:w-5 xl:h-4 xl:w-4 shrink-0 animate-spin" />
                 ) : (
-                  <Icon className="h-4 w-4 shrink-0" />
+                  <Icon className="h-4 w-4 lg:h-5 lg:w-5 xl:h-4 xl:w-4 shrink-0" />
                 )}
-                <span>{item.label}</span>
-                <span className="ml-auto text-xs text-muted-foreground/50 hidden md:inline">
+                <span className="lg:hidden xl:inline">{item.label}</span>
+                <span className="ml-auto text-xs tabular-nums text-muted-foreground/70 hidden xl:inline" aria-hidden="true">
                   ⌘{item.shortcut}
                 </span>
               </Link>
@@ -157,7 +165,7 @@ export function Sidebar() {
           })}
 
           {/* Sync button at bottom */}
-          <div className="mt-auto pt-2 border-t border-border">
+          <div className="mt-auto pt-2 border-t border-border lg:flex lg:justify-center xl:block">
             <SyncButton />
           </div>
         </nav>
