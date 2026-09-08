@@ -9,6 +9,12 @@ tags:
 - openLink: universal://sleep
 - waitForAnimationToEnd:
     timeout: 10000
+# The range is shared and persisted (soma#754); the marker is derived for the default 6M, so
+# select it explicitly rather than inheriting whatever a previous flow left behind.
+- tapOn:
+    text: "6M"
+- waitForAnimationToEnd:
+    timeout: 5000
 # Loaded state first (header stat), so the scroll does not start on the skeleton.
 - extendedWaitUntil:
     visible:
