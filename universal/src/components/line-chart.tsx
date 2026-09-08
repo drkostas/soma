@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from "react";
-import { View, Pressable, type LayoutChangeEvent, type GestureResponderEvent } from "react-native";
+import { View, Pressable, type LayoutChangeEvent, type GestureResponderEvent, Platform, type ViewProps, type PointerEvent } from "react-native";
 import Svg, { Polyline, Polygon, Line, Circle, Rect, Text as SvgText } from "react-native-svg";
 import { Text, Modal } from "soma-style";
 
@@ -134,9 +134,8 @@ export function LineChart(props: LineChartProps) {
     ? (tickCount <= 2 ? [0, n - 1] : Array.from({ length: tickCount }, (_, k) => Math.round((k / (tickCount - 1)) * (n - 1))))
     : [];
 
-  const onTouch = (e: GestureResponderEvent) => {
+  const onTouchAt = (x: number) => {
     if (!interactive || plotW <= 0 || n <= 1) return;
-    const x = e.nativeEvent.locationX;
     const i = Math.max(0, Math.min(n - 1, Math.round((x / plotW) * (n - 1))));
     setActive(i);
   };
@@ -144,6 +143,25 @@ export function LineChart(props: LineChartProps) {
   // SVG text is invisible to the accessibility tree; expose the reference labels so a
   // screen reader (and the Maestro device flow) can read "10K goal", "avg 52", … (soma#756).
   const refLabels = [...(refLine ? [refLine] : []), ...(refLines ?? [])].map((r) => r.label).filter((l): l is string => !!l);
+  // Native drives the cursor through the responder system; react-native-web 0.20+ dropped that
+  // system, so on web the same View takes pointer events instead (the responder props would
+  // otherwise land on the DOM node as unknown handlers). `accessible` is native-only too.
+  const touchHandlers: ViewProps = Platform.OS === "web"
+    ? {
+        onPointerDown: (e: PointerEvent) => onTouchAt(e.nativeEvent.offsetX),
+        onPointerMove: (e: PointerEvent) => (e.nativeEvent.buttons ?? 1) > 0 && onTouchAt(e.nativeEvent.offsetX),
+        onPointerUp: () => interactive && setActive(null),
+        onPointerLeave: () => interactive && setActive(null),
+      }
+    : {
+        accessible: refLabels.length > 0,
+        onStartShouldSetResponder: () => !!interactive,
+        onMoveShouldSetResponder: () => !!interactive,
+        onResponderGrant: (e: GestureResponderEvent) => onTouchAt(e.nativeEvent.locationX),
+        onResponderMove: (e: GestureResponderEvent) => onTouchAt(e.nativeEvent.locationX),
+        onResponderRelease: () => interactive && setActive(null),
+        onResponderTerminate: () => interactive && setActive(null),
+      };
 
   // Active-point callout data
   const callout = active != null
@@ -172,14 +190,8 @@ export function LineChart(props: LineChartProps) {
         <View
           className="flex-1"
           onLayout={onLayout}
-          accessible={refLabels.length > 0}
           accessibilityLabel={refLabels.length ? `reference lines: ${refLabels.join(", ")}` : undefined}
-          onStartShouldSetResponder={() => !!interactive}
-          onMoveShouldSetResponder={() => !!interactive}
-          onResponderGrant={onTouch}
-          onResponderMove={onTouch}
-          onResponderRelease={() => interactive && setActive(null)}
-          onResponderTerminate={() => interactive && setActive(null)}
+          {...touchHandlers}
         >
           <Svg width="100%" height={height} viewBox={`0 0 ${VBW} ${height}`}>
             {/* reference bands (drawn under everything) */}
@@ -302,7 +314,7 @@ export function LineChart(props: LineChartProps) {
 
           {/* right axis labels */}
           {rightS.length ? (
-            <View className="absolute right-0 top-0 items-end justify-between" style={{ height, paddingVertical: padTop }} pointerEvents="none">
+            <View className="absolute right-0 top-0 items-end justify-between" style={{ height, paddingVertical: padTop, pointerEvents: "none" }}>
               <Text variant="micro" className="text-text-muted tabular-nums">{fmtR(hiR)}</Text>
               <Text variant="micro" className="text-text-muted tabular-nums">{fmtR(loR)}</Text>
             </View>
@@ -310,7 +322,7 @@ export function LineChart(props: LineChartProps) {
 
           {/* interactive callout box */}
           {callout != null ? (
-            <View pointerEvents="none" className="absolute top-0 rounded-md px-2 py-1" style={{ left: `${Math.max(0, Math.min(70, callout.leftPct - 15))}%`, backgroundColor: "#152028", borderWidth: 1, borderColor: "#2a3a48" }}>
+            <View className="absolute top-0 rounded-md px-2 py-1" style={{ left: `${Math.max(0, Math.min(70, callout.leftPct - 15))}%`, backgroundColor: "#152028", borderWidth: 1, borderColor: "#2a3a48", pointerEvents: "none" }}>
               {callout.label ? <Text variant="micro" className="text-text-muted">{callout.label}</Text> : null}
               {callout.rows.map((r, ri) => (
                 <View key={ri} className="flex-row items-center gap-1">

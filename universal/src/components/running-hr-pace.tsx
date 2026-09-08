@@ -90,7 +90,7 @@ export function RunningHrPace({ data }: { data: { points: HrPacePoint[] } | null
           })}
         </Svg>
         {/* Transparent tap targets over each dot (Circle onPress is unreliable on RN-web-svg). */}
-        <View style={{ position: "absolute", left: 0, right: 0, top: 0, height: H }} pointerEvents="box-none">
+        <View style={{ position: "absolute", left: 0, right: 0, top: 0, height: H, pointerEvents: "box-none" }}>
           {visible.map((p, i) => {
             const cx = ((p.pace as number) - minP) / rP * 96 + 2;
             const cy = H - (((p.hr as number) - minH) / rH) * (H - 8) - 4;

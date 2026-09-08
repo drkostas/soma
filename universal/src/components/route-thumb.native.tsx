@@ -22,7 +22,7 @@ export function RouteThumb({ points }: { points: RoutePoint[]; stroke?: number }
   }, [points]);
   if (!geojson || !bounds) return <View className="h-24 rounded-lg bg-surface-subtle" />;
   return (
-    <View className="h-24 rounded-lg overflow-hidden" pointerEvents="none">
+    <View className="h-24 rounded-lg overflow-hidden" style={{ pointerEvents: "none" }}>
       <Map style={{ flex: 1 }} mapStyle={DARK_STYLE} attribution={false} logo={false}
         dragPan={false} touchZoom={false} doubleTapZoom={false} doubleTapHoldZoom={false} touchRotate={false} touchPitch={false}>
         <Camera bounds={bounds} padding={{ top: 10, bottom: 10, left: 10, right: 10 }} />

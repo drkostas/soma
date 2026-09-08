@@ -63,7 +63,7 @@ function StagesTrend({ nights, height = 112 }: { nights: SleepNight[]; height?: 
       {SLEEP_GUIDES.map((g) => {
         const pct = ((g.h * 3600) / maxTotal) * 100;
         return pct > 0 && pct < 100 ? (
-          <View key={g.label} pointerEvents="none" className="absolute left-0 right-0 items-end" style={{ bottom: `${pct}%`, borderTopWidth: 1, borderColor: g.color, borderStyle: "dashed", opacity: 0.85, zIndex: 1 }}>
+          <View key={g.label} className="absolute left-0 right-0 items-end" style={{ bottom: `${pct}%`, borderTopWidth: 1, borderColor: g.color, borderStyle: "dashed", opacity: 0.85, zIndex: 1, pointerEvents: "none" }}>
             <Text variant="micro" style={{ color: g.color, fontSize: 8, lineHeight: 10, marginTop: -11 }}>{g.label}</Text>
           </View>
         ) : null;
