@@ -1,0 +1,57 @@
+# Soma verify flow: Model Computation node detail (soma#794): tap a DAG node → detail sheet with
+# value, explanation, formula, inputs. The What-if shadow and the step editor need a live plan
+# (their branches are conditional). Run via
+# universal/scripts/verify-device.sh training --flow .maestro/verify-training-dag.yaml --marker "Plan is dormant"
+appId: dev.gkos.soma
+name: Soma verify training dag
+tags:
+  - verify
+---
+- stopApp
+- openLink: universal://training
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 45000
+- scrollUntilVisible:
+    element:
+      id: "dag-node-readiness_factor"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
+- takeScreenshot: verify-training-dag-nodes
+- tapOn:
+    id: "dag-node-readiness_factor"
+- extendedWaitUntil:
+    visible:
+      id: "dag-node-detail"
+    timeout: 10000
+- takeScreenshot: verify-training-dag-detail
+- back
+- tapOn:
+    id: "dag-node-adjusted_pace"
+- extendedWaitUntil:
+    visible:
+      id: "dag-node-detail"
+    timeout: 10000
+- takeScreenshot: verify-training-dag-detail-output
+- back
+# Live-plan branches (optional): What-if shadow, step editor.
+- runFlow:
+    when:
+      visible:
+        id: "dag-shadow"
+    commands:
+      - takeScreenshot: verify-training-dag-shadow
+- stopApp
+- openLink: universal://training
+- waitForAnimationToEnd:
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "${MARKER}"
+    timeout: 20000
+- takeScreenshot: verify-${SCREEN}
