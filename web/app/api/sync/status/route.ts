@@ -84,7 +84,7 @@ export async function GET() {
 
     // Recent run history + per-table data counts (pipeline operations detail).
     const historyRows = await sql`
-      SELECT sync_type, status, records_synced, started_at::text AS started_at
+      SELECT sync_type, status, records_synced, started_at
       FROM sync_log
       ORDER BY started_at DESC
       LIMIT 8
@@ -93,7 +93,7 @@ export async function GET() {
       type: String(r.sync_type),
       status: String(r.status),
       records: Number(r.records_synced) || 0,
-      at: String(r.started_at),
+      at: new Date(r.started_at as string | Date).toISOString(), // ISO so the app's Date() parses it (the ::text form did not)
     }));
 
     const countRows = await sql`

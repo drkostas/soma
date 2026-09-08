@@ -438,12 +438,47 @@ export async function triggerSync(source?: string): Promise<boolean> {
 
 /** Create a sync rule (POST /api/connections/rules). Returns true on success. */
 export async function createSyncRule(rule: {
-  source_platform: string; activity_type: string; destinations: Record<string, unknown>; enabled?: boolean;
-}): Promise<boolean> {
+  source_platform: string; activity_type: string; destinations: Record<string, unknown>; enabled?: boolean; preprocessing?: string[]; priority?: number;
+}): Promise<number | null> {
   const res = await fetch(`${API_BASE}/api/connections/rules`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
     body: JSON.stringify({ enabled: true, ...rule }),
+  });
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { rule?: { id?: number } } | null;
+  return typeof body?.rule?.id === "number" ? body.rule.id : -1;
+}
+
+/** Web's Connections → Disconnect (DELETE /api/connections/[platform] marks the credentials
+ *  disconnected; Spotify has its own POST /api/playlist/spotify/disconnect). Destructive for the
+ *  user's link: callers confirm first, and the device flows never tap it (soma#795). */
+export async function disconnectPlatform(platform: string): Promise<boolean> {
+  const res = platform === "spotify"
+    ? await fetch(`${API_BASE}/api/playlist/spotify/disconnect`, { method: "POST", headers: { ...AUTH_HEADERS } })
+    : await fetch(`${API_BASE}/api/connections/${encodeURIComponent(platform)}`, { method: "DELETE", headers: { ...AUTH_HEADERS } });
+  return res.ok;
+}
+/** Web's Duplicates tab (GET /api/duplicates): candidate pairs of Garmin activities. */
+export interface DuplicateSide { id: number; name: string; type: string; startTime: string; duration: number; distance: number; calories: number | null; avgHr: number | null; maxHr: number | null; detailEndpoints: number }
+export interface DuplicatePairs { pairs: { a: DuplicateSide; b: DuplicateSide }[]; count: number; error?: string }
+export function useDuplicates(enabled: boolean) {
+  const [data, setData] = useState<DuplicatePairs | null>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!enabled || data) return;
+    let alive = true; setLoading(true);
+    fetchJson<DuplicatePairs>("/api/duplicates").then((d) => alive && setData(d)).catch(() => alive && setData({ pairs: [], count: 0, error: "unavailable" })).finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [enabled, data]);
+  return { data, loading };
+}
+/** Web's Activity Sync Manager "Sync" action (POST /api/sync/activity): forward one activity to a
+ *  destination. An outward write (Strava); the device flows never trigger it (soma#795). */
+export async function syncActivityTo(source_platform: string, source_id: string, destination: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/sync/activity`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+    body: JSON.stringify({ source_platform, source_id, destination }),
   });
   return res.ok;
 }

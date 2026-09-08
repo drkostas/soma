@@ -24,8 +24,18 @@ tags:
 - waitForAnimationToEnd:
     timeout: 8000
 - takeScreenshot: verify-maps-thumbs
+# Re-find right before tapping: late-arriving production data can re-lay the gallery out
+# between the scroll and the tap (post-merge run on 2026-09-08 lost the element that way).
+- scrollUntilVisible:
+    element:
+      id: "route-thumb-0"
+    direction: DOWN
+    timeout: 60000
+    speed: 40
+    centerElement: true
 - tapOn:
     id: "route-thumb-0"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       id: "route-map-expand"
