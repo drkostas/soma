@@ -1,43 +1,17 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getRouteSamples, thinSamples } from "@/lib/activity-routes";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-// Extract lat/lng only — heavier thinning for heatmap (many routes on one map)
-function extractLatLng(details: any, thin = 20): Array<[number, number]> {
-  if (!details?.metricDescriptors || !details?.activityDetailMetrics) return [];
-
-  const keyIndex: Record<string, number> = {};
-  for (const desc of details.metricDescriptors as Array<{ key: string; metricsIndex: number }>) {
-    keyIndex[desc.key] = desc.metricsIndex;
-  }
-
-  const latIdx = keyIndex["directLatitude"];
-  const lngIdx = keyIndex["directLongitude"];
-  if (latIdx == null || lngIdx == null) return [];
-
-  const points: Array<[number, number]> = [];
-  const metrics = details.activityDetailMetrics as Array<{ metrics: number[] }>;
-
-  for (let i = 0; i < metrics.length; i += thin) {
-    const m = metrics[i]?.metrics;
-    if (!m) continue;
-    const lat = m[latIdx];
-    const lng = m[lngIdx];
-    if (lat == null || lng == null || (lat === 0 && lng === 0)) continue;
-    points.push([lng, lat]); // GeoJSON is [lng, lat]
-  }
-  return points;
-}
+export const revalidate = 300;
 
 export async function GET() {
   const sql = getDb();
 
+  // Only ids cross the wire here; the GPS samples come from activity_routes (soma#814), derived
+  // once per activity instead of shipping 40 details blobs (7.5 MB) on every call.
   const rows = await sql`
-    SELECT
-      d.raw_json AS details
+    SELECT s.activity_id
     FROM garmin_activity_raw s
     JOIN garmin_activity_raw d
       ON d.activity_id = s.activity_id AND d.endpoint_name = 'details'
@@ -48,9 +22,10 @@ export async function GET() {
     ORDER BY (s.raw_json->>'startTimeLocal')::text DESC
     LIMIT 40
   `;
+  const samples = await getRouteSamples(sql, rows.map((r) => String(r.activity_id)));
 
   const routes = rows
-    .map((row) => extractLatLng(row.details, 20))
+    .map((row) => thinSamples(samples.get(String(row.activity_id)) ?? [], 20).map(([, lat, lng]) => [lng, lat] as [number, number])) // GeoJSON is [lng, lat]
     .filter((pts) => pts.length > 5);
 
   return NextResponse.json({ routes });
