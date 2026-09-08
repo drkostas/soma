@@ -17,6 +17,7 @@ import { findMissed, lookbackStart, type GarminActivitySummary } from "./dedup";
 import { mainGarminClient, getActivitiesByDate, getActivity, downloadFit } from "./garmin";
 import { parseGarthDump, serializeGarthDump, isOauth2Expired, refreshOauth2, uploadFit } from "./facterino";
 import { stravaCreds, loadSession, saveSession, sessionValid, login, ownActivityIds, setActivityDetails } from "./strava-web";
+import { imagePathFor } from "./share-image";
 
 const FORWARD_POLL_MS = 15_000;
 const FORWARD_TRIES = 48; // ~12 min for Garmin→Strava forward
@@ -46,35 +47,6 @@ async function missed(db: Pool, activities: GarminActivitySummary[]): Promise<Ga
   const extRows = await db.query("SELECT raw_json->>'external_id' AS e FROM strava_raw_data WHERE jsonb_typeof(raw_json)='object' AND raw_json->>'external_id' IS NOT NULL");
   const externalIdsJoined = extRows.rows.map((r: any) => r.e).filter(Boolean).join(" ");
   return findMissed(activities, bridged, externalIdsJoined);
-}
-
-/** The workout card (Hevy-enriched) or the activity card for the Strava photo. A miss used to
- *  be silent — the 2026-09-07 "Upper" push reached Strava without its photo and the log said
- *  only "pushed". Now: three attempts (the card render on Vercel can cold-start past a single
- *  fetch), and the outcome is logged and surfaced in the RESULT line as NO_PHOTO. */
-async function imagePathFor(db: Pool, gid: number): Promise<{ path: string | null; note: string }> {
-  const r = await db.query("SELECT hevy_id FROM workout_enrichment WHERE garmin_activity_id=$1 ORDER BY processed_at DESC LIMIT 1", [gid]);
-  const url = r.rows[0]?.hevy_id ? `${SOMA}/api/workout/${r.rows[0].hevy_id}/image` : `${SOMA}/api/activity/${gid}/image`;
-  let note = "";
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(60_000) });
-      if (!resp.ok) { note = `image http ${resp.status}`; }
-      else {
-        const buf = Buffer.from(await resp.arrayBuffer());
-        if (buf.length < 1000) { note = `image too small (${buf.length} B)`; }
-        else {
-          const path = `/tmp/bridge_${gid}.png`;
-          await require("node:fs/promises").writeFile(path, buf);
-          console.log(`image ok for ${gid}: ${buf.length} B from ${url} (attempt ${attempt})`);
-          return { path, note: "" };
-        }
-      }
-    } catch (e) { note = `image fetch failed: ${(e as Error).message.slice(0, 60)}`; }
-    console.log(`image attempt ${attempt} for ${gid}: ${note}`);
-    if (attempt < 3) await new Promise((r) => setTimeout(r, 5000 * attempt));
-  }
-  return { path: null, note };
 }
 
 async function recordUpload(db: Pool, gid: number, sid: number): Promise<void> {
