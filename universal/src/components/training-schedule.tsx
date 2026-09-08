@@ -22,6 +22,8 @@ const RUN_COLOR: Record<string, string> = {
 };
 const runColor = (t: string) => RUN_COLOR[t?.toLowerCase()] ?? "#77c8d1";
 
+/** Local calendar day (the plan's dayDate is a local date string). */
+function localToday(): string { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function shortDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
@@ -58,6 +60,7 @@ function DayRow({
   proj,
   onToggleComplete,
   onOpenMatch,
+  onEditSteps,
 }: {
   day: PlanDay;
   isToday: boolean;
@@ -66,6 +69,7 @@ function DayRow({
   proj?: ProjectedDay;
   onToggleComplete: (day: PlanDay) => void;
   onOpenMatch?: (day: PlanDay, match: ActivityMatch) => void;
+  onEditSteps?: (day: PlanDay) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pushOverride, setPushOverride] = useState<string | null>(null);
@@ -194,6 +198,11 @@ function DayRow({
             </View>
           ))}
           {day.gymNotes ? <Text variant="micro" className="text-text-muted mt-1">Gym: {day.gymNotes}</Text> : null}
+          {onEditSteps && !day.completed && day.dayDate >= localToday() && day.runType?.toLowerCase() !== "rest" ? (
+            <Pressable onPress={() => onEditSteps(day)} className="self-start mt-1" hitSlop={6} accessibilityRole="button" testID={`edit-steps-${day.id}`}>
+              <Text variant="micro" className="text-teal">✎ Edit steps</Text>
+            </Pressable>
+          ) : null}
           {/* Pace-adjustment waterfall (upcoming days only — past days aren't re-adjusted):
               base pace × readiness × fatigue × weight = adjusted */}
           {proj && !day.completed && proj.adjustedPace != null && day.runType?.toLowerCase() !== "rest" ? (
@@ -246,6 +255,7 @@ export function TrainingSchedule({
   vdot = null,
   projected,
   onToggleComplete,
+  onEditSteps,
 }: {
   planDays: PlanDay[];
   today: string;
@@ -253,6 +263,7 @@ export function TrainingSchedule({
   vdot?: number | null;
   projected?: Map<number, ProjectedDay> | null;
   onToggleComplete: (day: PlanDay) => void;
+  onEditSteps?: (day: PlanDay) => void;
 }) {
   // group by week
   const weeks = useMemo(() => {
@@ -314,7 +325,7 @@ export function TrainingSchedule({
             {isOpen ? (
               <View className="mt-1">
                 {days.map((d) => (
-                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} vdot={vdot} proj={projected?.get(d.id)} onToggleComplete={onToggleComplete}
+                  <DayRow key={d.id} day={d} isToday={d.dayDate === today} match={matches?.[d.id]} vdot={vdot} proj={projected?.get(d.id)} onToggleComplete={onToggleComplete} onEditSteps={onEditSteps}
                     onOpenMatch={(day, match) => setOpenMatch({ day, match })} />
                 ))}
               </View>
