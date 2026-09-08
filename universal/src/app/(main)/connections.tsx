@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View, RefreshControl, Pressable } from "react-native";
+import { ScrollView, View, RefreshControl, Pressable, Alert, Linking } from "react-native";
 import { Text, Card, Badge, Button, type BadgeTone } from "soma-style";
-import { fetchJson, usePullRefresh, setRuleEnabled, triggerSync, deleteSyncRule, createSyncRule } from "../../lib/api";
+import { fetchJson, usePullRefresh, setRuleEnabled, triggerSync, deleteSyncRule, createSyncRule, disconnectPlatform, useDuplicates, syncActivityTo, API_BASE } from "../../lib/api";
 import { SyncFlowDiagram, type FlowPlatform, type FlowRule } from "../../components/sync-flow-diagram";
 import { CredentialsDialog } from "../../components/credentials-dialog";
 import { PushNotificationsCard } from "../../components/push-notifications-card";
+import { TabStrip } from "../../components/tab-strip";
 
 // ---- Types (subset of the web /connections page, from fetchable endpoints) ----
 
@@ -31,13 +32,16 @@ interface SyncRule {
 }
 
 interface SpotifyStatus { tracks: number; artists: number; last_sync: string | null }
-interface StravaActivity { name: string | null; date: string; type_key: string | null; onStrava: boolean }
+interface StravaActivity { name: string | null; date: string; type_key: string | null; onStrava: boolean; activity_id?: string | null }
 interface StravaCoverage { total: number; onStrava: number; recent: StravaActivity[] }
+/** Web's Backfill tab rows (backfill_progress). */
+interface BackfillRow { source: string; oldest_date_done: string | null; last_page: number; total_items: number; items_completed: number; status: string; updated_at: string }
 interface ConnectionsResponse {
   platforms: PlatformStatus[];
   rules: SyncRule[];
   spotify?: SpotifyStatus | null;
   stravaCoverage?: StravaCoverage | null;
+  backfill?: BackfillRow[];
 }
 
 interface SourceStatus {
@@ -161,28 +165,45 @@ function statusBadge(
   return { label: "Disconnected", tone: "danger" };
 }
 
+/** Hermes' Date() rejects Postgres' text timestamps ("2026-02-21 04:43:07.647075+00"); normalise
+ *  them to ISO (T separator, millisecond fraction, "+00:00" offset) before parsing. */
+function parseTs(v: string): Date {
+  const d = new Date(v);
+  if (!Number.isNaN(d.getTime())) return d;
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?::?\d{2})?)?$/);
+  if (!m) return d;
+  const frac = m[3] ? `.${m[3].slice(0, 3).padEnd(3, "0")}` : "";
+  let tz = m[4] ?? "Z";
+  if (/^[+-]\d{2}$/.test(tz)) tz = `${tz}:00`;
+  else if (/^[+-]\d{4}$/.test(tz)) tz = `${tz.slice(0, 3)}:${tz.slice(3)}`;
+  return new Date(`${m[1]}T${m[2]}${frac}${tz}`);
+}
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const d = new Date(iso);
+  const d = parseTs(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString();
 }
 
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "No syncs yet";
-  const d = new Date(iso);
+  const d = parseTs(iso);
   if (Number.isNaN(d.getTime())) return "No syncs yet";
   return d.toLocaleString();
 }
 
 /** Inline "add sync rule" form: pick a source + destination, then create. */
-function QuickAddRule({ sources, onCreate }: { sources: string[]; onCreate: (source: string, dest: string) => Promise<boolean> }) {
+/** Web's Add Rule form: source, activity type (* / strength / running / cycling / kite) and
+ *  destination (strava / garmin / telegram) — the app used to allow source + destination only (soma#795). */
+const ACTIVITY_TYPES = [{ value: "*", label: "All" }, { value: "strength", label: "Strength" }, { value: "running", label: "Running" }, { value: "cycling", label: "Cycling" }, { value: "kite", label: "Kite" }];
+function QuickAddRule({ sources, onCreate }: { sources: string[]; onCreate: (source: string, dest: string, activityType: string) => Promise<boolean> }) {
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState<string | null>(null);
   const [dest, setDest] = useState<string | null>(null);
+  const [activityType, setActivityType] = useState<string>("*");
   const [busy, setBusy] = useState(false);
   const srcOptions = sources.length ? sources : ["garmin", "hevy"];
-  const destOptions = ["strava", "telegram"];
+  const destOptions = ["strava", "garmin", "telegram"];
 
   if (!open) {
     return (
@@ -191,8 +212,8 @@ function QuickAddRule({ sources, onCreate }: { sources: string[]; onCreate: (sou
       </Pressable>
     );
   }
-  const Pill = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
-    <Pressable onPress={onPress} hitSlop={4}>
+  const Pill = ({ label, active, onPress, testID }: { label: string; active: boolean; onPress: () => void; testID?: string }) => (
+    <Pressable onPress={onPress} hitSlop={4} testID={testID} accessibilityRole="radio" accessibilityState={{ selected: active }}>
       <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: active ? "#77c8d133" : "#142530" }}>
         <Text variant="micro" style={{ color: active ? "#77c8d1" : "#8aa0ac" }}>{label}</Text>
       </View>
@@ -202,11 +223,15 @@ function QuickAddRule({ sources, onCreate }: { sources: string[]; onCreate: (sou
     <View className="gap-2 border-t border-border-subtle pt-2">
       <Text variant="micro" className="text-text-muted">Source</Text>
       <View className="flex-row flex-wrap gap-2">
-        {srcOptions.map((s) => <Pill key={s} label={s} active={source === s} onPress={() => setSource(s)} />)}
+        {srcOptions.map((s) => <Pill key={s} label={s} active={source === s} onPress={() => setSource(s)} testID={`rule-src-${s}`} />)}
+      </View>
+      <Text variant="micro" className="text-text-muted">Activity type</Text>
+      <View className="flex-row flex-wrap gap-2" testID="rule-activity-types">
+        {ACTIVITY_TYPES.map((t) => <Pill key={t.value} label={t.label} active={activityType === t.value} onPress={() => setActivityType(t.value)} testID={`rule-type-${t.value === "*" ? "all" : t.value}`} />)}
       </View>
       <Text variant="micro" className="text-text-muted">Destination</Text>
       <View className="flex-row flex-wrap gap-2">
-        {destOptions.map((d) => <Pill key={d} label={d} active={dest === d} onPress={() => setDest(d)} />)}
+        {destOptions.map((d) => <Pill key={d} label={d} active={dest === d} onPress={() => setDest(d)} testID={`rule-dest-${d}`} />)}
       </View>
       <View className="flex-row gap-2">
         <Button
@@ -217,7 +242,7 @@ function QuickAddRule({ sources, onCreate }: { sources: string[]; onCreate: (sou
           onPress={async () => {
             if (!source || !dest) return;
             setBusy(true);
-            const ok = await onCreate(source, dest);
+            const ok = await onCreate(source, dest, activityType);
             setBusy(false);
             if (ok) { setOpen(false); setSource(null); setDest(null); }
           }}
@@ -244,6 +269,36 @@ export default function ConnectionsScreen() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [deletedRules, setDeletedRules] = useState<Set<number>>(new Set());
+  // The rule the user just created gets stable "new" test ids so a device flow can toggle and
+  // delete exactly it (soma#795) — no other row is touched by the verify flow.
+  const [lastCreatedId, setLastCreatedId] = useState<number | null>(null);
+  const [opsTab, setOpsTab] = useState<"Coverage" | "Backfill" | "Duplicates">("Coverage");
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const duplicates = useDuplicates(opsTab === "Duplicates");
+  function confirmDisconnect(platform: string, label: string) {
+    Alert.alert(`Disconnect ${label}?`, `Soma keeps the data already synced; the ${label} link is removed and can be re-connected on the web dashboard.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Disconnect", style: "destructive", onPress: async () => {
+        const ok = await disconnectPlatform(platform);
+        setActionMsg(ok ? `${label} disconnected.` : `Couldn't disconnect ${label}.`);
+        if (ok) refetchConn();
+      } },
+    ]);
+  }
+  function confirmSyncToStrava(a: StravaActivity) {
+    if (!a.activity_id) return;
+    Alert.alert("Sync to Strava?", `Forward "${a.name || "this activity"}" from Garmin to Strava now.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sync", onPress: async () => {
+        const ok = await syncActivityTo("garmin", String(a.activity_id), "strava");
+        setActionMsg(ok ? "Queued for Strava. Pull to refresh in a moment." : "Couldn't queue the sync.");
+        if (ok) refetchConn();
+      } },
+    ]);
+  }
+  function openWebSettings(section: string) {
+    Linking.openURL(`${API_BASE}/connections#${section}`).catch(() => setActionMsg("Couldn't open the web dashboard."));
+  }
 
   async function onSyncNow() {
     setSyncing(true); setSyncMsg(null);
@@ -297,13 +352,15 @@ export default function ConnectionsScreen() {
     const groups = new Map<string, SyncRule[]>();
     for (const r of rules) {
       const dest = Object.keys(r.destinations ?? {}).join(", ") || r.activity_type;
-      const key = `${r.source_platform}→${dest}`;
+      const type = r.activity_type && r.activity_type !== "all" ? r.activity_type : "*";
+      const key = `${r.source_platform}→${dest}·${type}`;
       const arr = groups.get(key);
       if (arr) arr.push(r);
       else groups.set(key, [r]);
     }
     return [...groups.entries()].map(([key, rs]) => {
-      const [source, dest] = key.split("→");
+      const [source, destType] = key.split("→");
+      const dest = destType.split("·")[0];
       const effective = [...rs].sort(
         (a, b) => Number(b.enabled) - Number(a.enabled) || b.priority - a.priority || a.id - b.id,
       )[0];
@@ -417,12 +474,24 @@ export default function ConnectionsScreen() {
                     {detail}
                   </Text>
                   {meta.kind !== "planned" ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onPress={() => setDialogPlatform(platform)}
-                      label={connected ? "Configure" : "Connect"}
-                    />
+                    <View className="flex-row items-center gap-1">
+                      {connected && meta.kind === "sync-service" ? (
+                        <Pressable onPress={() => openWebSettings(platform)} hitSlop={8} testID={`settings-${platform}`} accessibilityRole="link" accessibilityLabel={`${meta.label} settings on the web dashboard`} className="rounded-full px-2 py-1">
+                          <Text variant="micro" className="text-text-secondary">Settings ↗</Text>
+                        </Pressable>
+                      ) : null}
+                      {connected && meta.kind === "oauth" ? (
+                        <Pressable onPress={() => confirmDisconnect(platform, meta.label)} hitSlop={8} testID={`disconnect-${platform}`} accessibilityRole="button" accessibilityLabel={`Disconnect ${meta.label}`} className="rounded-full px-2 py-1">
+                          <Text variant="micro" className="text-danger">Disconnect</Text>
+                        </Pressable>
+                      ) : null}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => setDialogPlatform(platform)}
+                        label={connected ? "Configure" : "Connect"}
+                      />
+                    </View>
                   ) : null}
                 </View>
               </Card>
@@ -436,9 +505,13 @@ export default function ConnectionsScreen() {
           {groupedRules.length === 0 ? (
             <Text variant="micro">No sync rules configured.</Text>
           ) : (
-            groupedRules.map((g) => (
+            groupedRules.map((g) => {
+              const isNew = g.effective.id === lastCreatedId;
+              const idSuffix = isNew ? "new" : String(g.effective.id);
+              return (
               <View
                 key={g.key}
+                testID={`rule-row-${idSuffix}`}
                 className="flex-row items-center justify-between border-b border-border-subtle py-2 last:border-0"
               >
                 <View className="flex-1 gap-0.5 pr-2">
@@ -465,25 +538,28 @@ export default function ConnectionsScreen() {
                   </Text>
                 </View>
                 <View className="flex-row items-center gap-3">
-                  <Pressable onPress={() => toggleRule(g.effective.id, g.effective.enabled)} hitSlop={8}>
-                    <Badge
-                      label={g.effective.enabled ? "On" : "Off"}
-                      tone={g.effective.enabled ? "success" : "neutral"}
-                    />
+                  <Pressable onPress={() => toggleRule(g.effective.id, g.effective.enabled)} hitSlop={8} testID={`rule-toggle-${idSuffix}`} accessibilityRole="switch" accessibilityState={{ checked: g.effective.enabled }}>
+                    <View testID={`rule-${g.effective.enabled ? "on" : "off"}-${idSuffix}`}>
+                      <Badge
+                        label={g.effective.enabled ? "On" : "Off"}
+                        tone={g.effective.enabled ? "success" : "neutral"}
+                      />
+                    </View>
                   </Pressable>
-                  <Pressable onPress={() => onDeleteRule(g.effective.id)} hitSlop={8}>
+                  <Pressable onPress={() => onDeleteRule(g.effective.id)} hitSlop={8} testID={`rule-delete-${idSuffix}`} accessibilityRole="button" accessibilityLabel="Delete rule">
                     <Text variant="micro" className="text-danger">Delete</Text>
                   </Pressable>
                 </View>
               </View>
-            ))
+              );
+            })
           )}
           <QuickAddRule
             sources={[...new Set((conn?.rules ?? []).map((r) => r.source_platform))]}
-            onCreate={async (source, dest) => {
-              const ok = await createSyncRule({ source_platform: source, activity_type: "all", destinations: { [dest]: true } });
-              if (ok) refetchConn();
-              return ok;
+            onCreate={async (source, dest, activityType) => {
+              const id = await createSyncRule({ source_platform: source, activity_type: activityType, destinations: { [dest]: { enabled: true } } });
+              if (id != null) { setLastCreatedId(id); refetchConn(); }
+              return id != null;
             }}
           />
         </Card>
@@ -535,10 +611,72 @@ export default function ConnectionsScreen() {
           )}
         </Card>
 
-        {/* Data pipeline — table coverage + recent runs */}
-        {sync && ((sync.tables?.length ?? 0) > 0 || (sync.history?.length ?? 0) > 0) ? (
-          <Card className="gap-3">
-            <Text variant="eyebrow">Data pipeline</Text>
+        {/* Pipeline operations — web's Backfill / Duplicates / Data Coverage tabs (soma#795).
+            Backfill and duplicates are READ here: web's backfill trigger and duplicate resolver
+            both act on Garmin (resolve deletes the duplicate there), so they stay web-only. */}
+        <Card className="gap-3">
+          <View className="flex-row items-center justify-between">
+            <Text variant="eyebrow">Pipeline operations</Text>
+            {actionMsg ? <Text variant="micro" className="text-text-muted flex-1 pl-3 text-right" numberOfLines={2}>{actionMsg}</Text> : null}
+          </View>
+          <TabStrip
+            tabs={[{ key: "Coverage" }, { key: "Backfill" }, { key: "Duplicates" }]}
+            value={opsTab}
+            onChange={(k) => setOpsTab(k as typeof opsTab)}
+          />
+          {opsTab === "Backfill" ? (
+            <View className="gap-2" testID="backfill-list">
+              {(conn?.backfill ?? []).length === 0 ? (
+                <Text variant="micro" className="text-text-muted">No backfill has run yet.</Text>
+              ) : (conn?.backfill ?? []).map((b) => {
+                const pct = b.total_items > 0 ? Math.min(100, Math.round((b.items_completed / b.total_items) * 100)) : 0;
+                const tone: BadgeTone = b.status === "complete" || b.status === "done" ? "success" : b.status === "error" ? "danger" : "warm";
+                return (
+                  <View key={b.source} className="gap-1 border-b border-border-subtle py-1.5">
+                    <View className="flex-row items-center justify-between">
+                      <Text variant="caption" className="text-text">{b.source}</Text>
+                      <Badge label={b.status} tone={tone} />
+                    </View>
+                    <View className="h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: "#142530" }}>
+                      <View style={{ width: `${pct}%`, height: "100%", backgroundColor: "#5ec8c2" }} />
+                    </View>
+                    <Text variant="micro" className="text-text-muted tabular-nums">
+                      {b.items_completed.toLocaleString()}/{b.total_items.toLocaleString()} · page {b.last_page}{b.oldest_date_done ? ` · back to ${fmtDate(b.oldest_date_done)}` : ""} · {fmtDateTime(b.updated_at)}
+                    </Text>
+                  </View>
+                );
+              })}
+              <Text variant="micro" className="text-text-muted">Start or resume a backfill from the web dashboard. It reads your Garmin history page by page.</Text>
+            </View>
+          ) : null}
+          {opsTab === "Duplicates" ? (
+            <View className="gap-2" testID={duplicates.data ? "duplicates-list" : "duplicates-loading"}>
+              {!duplicates.data ? (
+                <Text variant="micro" className="text-text-muted">Scanning Garmin activities for duplicates…</Text>
+              ) : duplicates.data.error ? (
+                <Text variant="micro" className="text-warning">Duplicate scan unavailable right now.</Text>
+              ) : duplicates.data.pairs.length === 0 ? (
+                <Text variant="micro" className="text-text-muted">No duplicate activities found.</Text>
+              ) : duplicates.data.pairs.map((p, i) => (
+                <View key={`${p.a.id}-${p.b.id}`} className="gap-1 border-b border-border-subtle py-1.5" testID={`duplicate-pair-${i}`}>
+                  {[p.a, p.b].map((s) => (
+                    <View key={s.id} className="flex-row items-center justify-between">
+                      <View className="flex-1 pr-2">
+                        <Text variant="caption" className="text-text" numberOfLines={1}>{s.name}</Text>
+                        <Text variant="micro" className="text-text-muted">{fmtDateTime(s.startTime)} · {s.type.replace(/_/g, " ")}</Text>
+                      </View>
+                      <Text variant="micro" className="text-text-secondary tabular-nums">{Math.round(s.duration / 60)} min{s.distance > 0 ? ` · ${(s.distance / 1000).toFixed(1)} km` : ""}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+              {duplicates.data && duplicates.data.pairs.length > 0 ? (
+                <Text variant="micro" className="text-text-muted">Resolving deletes the duplicate on Garmin, so that stays on the web dashboard.</Text>
+              ) : null}
+            </View>
+          ) : null}
+          {opsTab === "Coverage" && sync && ((sync.tables?.length ?? 0) > 0 || (sync.history?.length ?? 0) > 0) ? (
+            <>
             {sync.tables?.length ? (
               <View className="flex-row flex-wrap gap-x-6 gap-y-2">
                 {sync.tables.map((t) => (
@@ -564,8 +702,12 @@ export default function ConnectionsScreen() {
                 ))}
               </View>
             ) : null}
-          </Card>
-        ) : null}
+            </>
+          ) : null}
+          {opsTab === "Coverage" && !(sync && ((sync.tables?.length ?? 0) > 0 || (sync.history?.length ?? 0) > 0)) ? (
+            <Text variant="micro" className="text-text-muted">Pipeline coverage is unavailable right now.</Text>
+          ) : null}
+        </Card>
 
         {/* Strava coverage — how many recent Garmin activities reached Strava */}
         {conn?.stravaCoverage && conn.stravaCoverage.total > 0 ? (
@@ -604,7 +746,13 @@ export default function ConnectionsScreen() {
                     </View>
                     {a.onStrava
                       ? <Badge label="On Strava" tone="warm" />
-                      : <Text variant="micro" className="text-text-muted">not synced</Text>}
+                      : a.activity_id
+                        ? (
+                          <Pressable onPress={() => confirmSyncToStrava(a)} hitSlop={8} testID={`sync-row-${i}`} accessibilityRole="button" accessibilityLabel="Sync to Strava" className="rounded-full bg-surface-subtle px-2.5 py-1">
+                            <Text variant="micro" className="text-teal">Sync to Strava</Text>
+                          </Pressable>
+                        )
+                        : <Text variant="micro" className="text-text-muted">not synced</Text>}
                   </View>
                 );
               })}
@@ -619,7 +767,14 @@ export default function ConnectionsScreen() {
               <Text variant="eyebrow">Spotify</Text>
               <Text variant="micro" className="text-text-muted">Tempo-matched running playlists</Text>
             </View>
-            <Badge label={conn?.spotify ? "Connected" : "Web sign-in"} tone={conn?.spotify ? "success" : "neutral"} />
+            <View className="flex-row items-center gap-2">
+              {conn?.spotify ? (
+                <Pressable onPress={() => confirmDisconnect("spotify", "Spotify")} hitSlop={8} testID="disconnect-spotify" accessibilityRole="button" accessibilityLabel="Disconnect Spotify">
+                  <Text variant="micro" className="text-danger">Disconnect</Text>
+                </Pressable>
+              ) : null}
+              <Badge label={conn?.spotify ? "Connected" : "Web sign-in"} tone={conn?.spotify ? "success" : "neutral"} />
+            </View>
           </View>
           {conn?.spotify ? (
             <>

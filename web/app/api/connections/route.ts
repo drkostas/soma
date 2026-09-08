@@ -34,6 +34,13 @@ export async function GET() {
     `.catch(() => [] as { platform: string; has_data: boolean; last_sync: string | null }[]);
     const syncMap = Object.fromEntries((syncService as any[]).map((r: any) => [r.platform, r]));
 
+    // Web's Pipeline Operations → Backfill tab reads backfill_progress on the server; the app
+    // needs it from the API (soma#795). Absent table → empty list, never a 500.
+    const backfill = await sql`
+      SELECT source, oldest_date_done::text AS oldest_date_done, last_page, total_items, items_completed, status, updated_at
+      FROM backfill_progress ORDER BY source
+    `.catch(() => [] as unknown[]);
+
     // Spotify library status (features cached for tempo-matched playlists).
     // The demo database has no spotify tables: no Spotify block, not a 500 (this
     // endpoint had been 500 on the demo since the counts landed).
@@ -51,14 +58,15 @@ export async function GET() {
     // Strava coverage: of recent Garmin activities, how many are on Strava,
     // via soma's own sync (activity_sync_log) OR the Garmin→Strava bridge
     // (strava_bridge_uploads), which is what actually runs today (#736).
-    type StravaRow = { name: string | null; date: string; type_key: string | null; strava_id: string | null };
+    type StravaRow = { name: string | null; date: string; type_key: string | null; strava_id: string | null; activity_id: string | null };
     // The demo database is a subset without strava_bridge_uploads: fall back to
     // activity_sync_log alone rather than 500 the whole endpoint (#748 follow-up).
     const stravaRows = (await sql`
       SELECT g.raw_json->>'activityName' AS name,
         (g.raw_json->>'startTimeLocal')::date::text AS date,
         g.raw_json->'activityType'->>'typeKey' AS type_key,
-        COALESCE(sl.destination_id, sbu.strava_activity_id::text) AS strava_id
+        COALESCE(sl.destination_id, sbu.strava_activity_id::text) AS strava_id,
+        g.activity_id::text AS activity_id
       FROM garmin_activity_raw g
       LEFT JOIN activity_sync_log sl
         ON sl.source_id = g.activity_id::text AND sl.destination = 'strava' AND sl.status IN ('sent', 'external')
@@ -72,7 +80,8 @@ export async function GET() {
       SELECT g.raw_json->>'activityName' AS name,
         (g.raw_json->>'startTimeLocal')::date::text AS date,
         g.raw_json->'activityType'->>'typeKey' AS type_key,
-        sl.destination_id AS strava_id
+        sl.destination_id AS strava_id,
+        g.activity_id::text AS activity_id
       FROM garmin_activity_raw g
       LEFT JOIN activity_sync_log sl
         ON sl.source_id = g.activity_id::text AND sl.destination = 'strava' AND sl.status IN ('sent', 'external')
@@ -87,7 +96,7 @@ export async function GET() {
       ? {
           total: stravaTotal,
           onStrava: stravaOn,
-          recent: stravaRows.slice(0, 10).map((r) => ({ name: r.name, date: r.date, type_key: r.type_key, onStrava: r.strava_id != null })),
+          recent: stravaRows.slice(0, 10).map((r) => ({ name: r.name, date: r.date, type_key: r.type_key, onStrava: r.strava_id != null, activity_id: r.activity_id })),
         }
       : null;
 
@@ -114,7 +123,7 @@ export async function GET() {
       last_sync: (syncMap[p]?.last_sync as string | null) ?? null,
     }));
 
-    return NextResponse.json({ platforms: status, rules, spotify, stravaCoverage });
+    return NextResponse.json({ platforms: status, rules, spotify, stravaCoverage, backfill });
   } catch (err) {
     console.error("Error fetching connections status:", err);
     return NextResponse.json(
