@@ -1,46 +1,9 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getRouteSamples, thinSamples } from "@/lib/activity-routes";
 
 export const runtime = "nodejs";
 export const revalidate = 300;
-
-function extractGpsPoints(
-  details: any,
-  thin = 8
-): Array<{ lat: number; lng: number; hr: null; speed: number | null; elev: null; cadence: null; dist_m: null }> {
-  if (!details?.metricDescriptors || !details?.activityDetailMetrics) return [];
-
-  const keyIndex: Record<string, number> = {};
-  for (const desc of details.metricDescriptors as Array<{ key: string; metricsIndex: number }>) {
-    keyIndex[desc.key] = desc.metricsIndex;
-  }
-
-  const latIdx = keyIndex["directLatitude"];
-  const lngIdx = keyIndex["directLongitude"];
-  const speedIdx = keyIndex["directSpeed"];
-  if (latIdx == null || lngIdx == null) return [];
-
-  const points: Array<{ lat: number; lng: number; hr: null; speed: number | null; elev: null; cadence: null; dist_m: null }> = [];
-  const metrics = details.activityDetailMetrics as Array<{ metrics: number[] }>;
-
-  for (let i = 0; i < metrics.length; i += thin) {
-    const m = metrics[i]?.metrics;
-    if (!m) continue;
-    const lat = m[latIdx];
-    const lng = m[lngIdx];
-    if (lat == null || lng == null || (lat === 0 && lng === 0)) continue;
-    points.push({
-      lat,
-      lng,
-      hr: null,
-      speed: speedIdx != null ? (m[speedIdx] ?? null) : null,
-      elev: null,
-      cadence: null,
-      dist_m: null,
-    });
-  }
-  return points;
-}
 
 export async function GET() {
   const sql = getDb();
@@ -48,8 +11,7 @@ export async function GET() {
   const rows = await sql`
     SELECT
       s.activity_id,
-      s.raw_json AS summary,
-      d.raw_json AS details
+      s.raw_json AS summary
     FROM garmin_activity_raw s
     JOIN garmin_activity_raw d
       ON d.activity_id = s.activity_id AND d.endpoint_name = 'details'
@@ -61,9 +23,13 @@ export async function GET() {
     LIMIT 6
   `;
 
+  // GPS samples from activity_routes (soma#814) instead of six details blobs per call.
+  const samples = await getRouteSamples(sql, rows.map((r) => String(r.activity_id)));
   const result = rows.map((row) => {
     const summary = row.summary as any;
-    const gps_points = extractGpsPoints(row.details, 8);
+    const gps_points = thinSamples(samples.get(String(row.activity_id)) ?? [], 8).map(([, lat, lng, speed]) => ({
+      lat, lng, hr: null as null, speed, elev: null as null, cadence: null as null, dist_m: null as null,
+    }));
     return {
       activity_id: String(row.activity_id),
       name: summary.activityName || "Run",
