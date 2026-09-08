@@ -152,7 +152,7 @@ export function MacroGoalBar({
                 <View
                   key={i}
                   className="absolute top-0 h-full"
-                  style={{ left: `${pct}%`, width: 2, backgroundColor: base, opacity: crossed ? 0.4 : 1, shadowColor: "#000", shadowOpacity: 0.7, shadowRadius: 0.5, shadowOffset: { width: 0, height: 0 }, elevation: 2 }}
+                  style={{ left: `${pct}%`, width: 2, backgroundColor: base, opacity: crossed ? 0.4 : 1, boxShadow: "0 0 0.5px rgba(0,0,0,0.7)", elevation: 2 }}
                 />
               );
             })
