@@ -3,7 +3,6 @@ import { getDb } from "@/lib/db";
 import { getRouteSamples, thinSamples } from "@/lib/activity-routes";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 export const revalidate = 300;
 
 export async function GET() {
