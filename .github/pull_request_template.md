@@ -44,5 +44,3 @@ universal/scripts/verify-device.sh <screen> [--marker "<live value>"]
 ## Links
 
 Closes #<issue>
-
-
