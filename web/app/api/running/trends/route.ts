@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { rangeToDays } from "@/lib/time-ranges";
 
-export const runtime = "edge";
 
 /**
  * Training-load/ACWR trend + cadence/stride as JSON for the app running screen

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 /* Sport grouping — mirrors SPORT_GROUPS in app/activities/page.tsx. */
 const SPORT_OF: Record<string, string> = {

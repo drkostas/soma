@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 /**
  * hevy2garmin sync status — recent Hevy workouts and their Garmin sync state,

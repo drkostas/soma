@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 /**
  * This-week vs last-week training summary + current training streak, for the

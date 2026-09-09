@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 /**
  * Strength-training data as JSON so the native app can render the workouts

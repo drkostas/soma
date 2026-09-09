@@ -12,7 +12,7 @@
  * is written the moment the forward is seen, BEFORE the finalize.
  */
 import { chromium } from "playwright";
-import { Pool } from "pg";
+import { openDb, type Db } from "./db";
 import { findMissed, lookbackStart, type GarminActivitySummary } from "./dedup";
 import { mainGarminClient, getActivitiesByDate, getActivity, downloadFit } from "./garmin";
 import { parseGarthDump, serializeGarthDump, isOauth2Expired, refreshOauth2, uploadFit } from "./facterino";
@@ -23,7 +23,7 @@ const FORWARD_POLL_MS = 15_000;
 const FORWARD_TRIES = 48; // ~12 min for Garmin→Strava forward
 const SOMA = process.env.SOMA_WEB_URL || process.env.SOMA_BASE_URL || "https://soma.gkos.dev";
 
-async function facterinoAccessToken(db: Pool): Promise<string> {
+async function facterinoAccessToken(db: Db): Promise<string> {
   const r = await db.query(
     "SELECT credentials->>'garth_dump' AS d FROM platform_credentials WHERE platform='garmin_facterino_bridge' AND status='active'",
   );
@@ -39,7 +39,7 @@ async function facterinoAccessToken(db: Pool): Promise<string> {
 }
 
 /** Recent Garmin activities not yet on Strava. */
-async function missed(db: Pool, activities: GarminActivitySummary[]): Promise<GarminActivitySummary[]> {
+async function missed(db: Db, activities: GarminActivitySummary[]): Promise<GarminActivitySummary[]> {
   await db.query(
     "CREATE TABLE IF NOT EXISTS strava_bridge_uploads (garmin_activity_id BIGINT PRIMARY KEY, strava_activity_id BIGINT, uploaded_at TIMESTAMPTZ DEFAULT NOW())",
   );
@@ -49,7 +49,7 @@ async function missed(db: Pool, activities: GarminActivitySummary[]): Promise<Ga
   return findMissed(activities, bridged, externalIdsJoined);
 }
 
-async function recordUpload(db: Pool, gid: number, sid: number): Promise<void> {
+async function recordUpload(db: Db, gid: number, sid: number): Promise<void> {
   await db.query(
     "INSERT INTO strava_bridge_uploads VALUES ($1,$2,NOW()) ON CONFLICT (garmin_activity_id) DO UPDATE SET strava_activity_id=EXCLUDED.strava_activity_id, uploaded_at=NOW()",
     [gid, sid],
@@ -59,7 +59,7 @@ async function recordUpload(db: Pool, gid: number, sid: number): Promise<void> {
 async function main(): Promise<void> {
   const live = process.env.BRIDGE_LIVE === "1";
   const databaseUrl = process.env.DATABASE_URL!;
-  const db = new Pool({ connectionString: databaseUrl });
+  const db = openDb(databaseUrl!);
 
   const garmin = await mainGarminClient(databaseUrl);
   const start = lookbackStart();

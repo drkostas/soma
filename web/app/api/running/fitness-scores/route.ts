@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 /**
  * Endurance + hill fitness scores as JSON for the app running screen (the web

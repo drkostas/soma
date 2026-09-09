@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 const VALID_PLATFORMS = ["garmin", "hevy", "strava", "telegram", "surfr"];
 

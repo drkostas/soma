@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 export const revalidate = 300;
 
 /* 14-day trend series for the universal app's Home (overview) tier-1 KPI cards.

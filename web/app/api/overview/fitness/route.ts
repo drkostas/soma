@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 /**
  * Overview extras that the mobile app needs but were server-only on the web

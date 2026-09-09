@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseRangeDays } from "@/lib/time-ranges";
 
-export const runtime = "edge";
 
 /**
  * Per-night sleep data as JSON so the native app can render the sleep dashboard

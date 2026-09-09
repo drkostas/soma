@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { rangeToDays } from "@/lib/time-ranges";
 
-export const runtime = "edge";
 
 /**
  * Per-run pace vs heart-rate points as JSON for the app running screen's

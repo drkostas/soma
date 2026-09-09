@@ -6,7 +6,7 @@
  * its edit page. The facterino forward carries only the workout data.
  */
 import type { BrowserContext, Page } from "playwright";
-import type { Pool } from "pg";
+import type { Db } from "./db";
 
 export const LOGIN_URL = "https://www.strava.com/login";
 const PHOTO_CDN = "dgtzuqphqg23d.cloudfront.net";
@@ -16,14 +16,14 @@ export function stravaCreds(): { email?: string; password?: string } {
   return { email: process.env.STRAVA_WEB_EMAIL, password: process.env.STRAVA_WEB_PASSWORD };
 }
 
-async function ensureSessionTable(db: Pool): Promise<void> {
+async function ensureSessionTable(db: Db): Promise<void> {
   await db.query(
     "CREATE TABLE IF NOT EXISTS strava_web_session (id INT PRIMARY KEY DEFAULT 1, cookies JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
   );
 }
 
 /** Load stored Playwright cookies (drops `expires`, which add_cookies rejects). */
-export async function loadSession(db: Pool): Promise<any[] | null> {
+export async function loadSession(db: Db): Promise<any[] | null> {
   await ensureSessionTable(db);
   const r = await db.query("SELECT cookies FROM strava_web_session WHERE id = 1");
   const cookies = r.rows[0]?.cookies;
@@ -32,7 +32,7 @@ export async function loadSession(db: Pool): Promise<any[] | null> {
 }
 
 /** Persist the strava cookies for session reuse (Strava rate-limits repeated logins). */
-export async function saveSession(db: Pool, cookies: any[]): Promise<void> {
+export async function saveSession(db: Db, cookies: any[]): Promise<void> {
   const keep = cookies
     .filter((c) => SESSION_COOKIE_NAMES.some((n) => (c.name || "").includes(n)) || (c.domain || "").includes("strava"))
     .map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path, httpOnly: c.httpOnly, secure: c.secure, sameSite: c.sameSite }));

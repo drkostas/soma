@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseRangeDays } from "@/lib/time-ranges";
 
-export const runtime = "edge";
 
 /**
  * HRV + training-readiness as JSON so the native app can render them (the web

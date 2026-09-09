@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 const VALID_METRICS = [
   "steps",

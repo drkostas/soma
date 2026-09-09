@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 
 /**
  * Weekday vs weekend sleep comparison as JSON for the app sleep screen (the web

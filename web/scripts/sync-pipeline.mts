@@ -5,11 +5,10 @@
  * Composes the same ported lib functions the Vercel crons use; each step is
  * non-fatal so one failure doesn't abort the rest, mirroring pipeline.py.
  */
-import { neon } from "@neondatabase/serverless";
 import { GarminAuth, DBTokenStore } from "garmin-auth";
 import { healGarminTokenRow } from "../lib/garmin-token-heal";
 import { HevyClient } from "hevy2garmin";
-import type { QueryFn } from "../lib/db";
+import { getDb, type QueryFn } from "../lib/db";
 import { runGarminIngest } from "../lib/garmin-ingest";
 import { getHevyApiKey, syncAllWorkouts } from "../lib/hevy-ingest";
 import { enrichNewWorkouts } from "../lib/hevy-enrich-run";
@@ -22,7 +21,10 @@ import { notifyPendingWorkouts } from "../lib/notify";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) { console.error("[sync] DATABASE_URL not set"); process.exit(1); }
-const sql = neon(databaseUrl) as unknown as QueryFn;
+// getDb() picks the driver from the URL: Neon's HTTP driver for a *.neon.tech host, a normal
+// Postgres pool for anything else. Choosing `neon()` here meant the pipeline could only ever
+// talk to Neon, and pointed at a local database it built `https://api.0.0.1/sql`.
+const sql: QueryFn = getDb();
 const webBaseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.SOMA_WEB_URL || "https://soma.gkos.dev";
 
 // Run record (#643): one sync_log row per pipeline run so /api/sync/status and the

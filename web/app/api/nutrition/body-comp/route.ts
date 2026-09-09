@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { deficitWindow, countsForDeficit, windowLabel } from "@/lib/deficit-window";
 
-export const runtime = "edge";
 
 export async function GET() {
   const sql = getDb();

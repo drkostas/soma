@@ -1,9 +1,11 @@
 name: Sync Health Data
 
 on:
-  schedule:
-    - cron: '0 0-3,10-23 * * *'    # Hourly, 6am-midnight EDT (UTC-4)
-    - cron: '0 4 * * *'           # Midnight EDT
+  # The schedule is off since 2026-09-09. The pipeline runs on the house machine now, as launchd
+  # job dev.gkos.soma.sync, hourly at :07, because that is where the database is. This workflow
+  # can still reach it through the gateway, so it is kept as a manual fallback rather than
+  # deleted — but two schedulers running the same sync would duplicate every step and notify
+  # twice, so only one of them is armed.
   workflow_dispatch: {}  # Manual trigger from GitHub UI
   repository_dispatch:
     types: [sync-trigger]  # Trigger from API route
