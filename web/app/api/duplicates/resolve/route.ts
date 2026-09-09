@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
 import { execFile } from "child_process";
 import path from "path";
 import { promisify } from "util";
+import { getDb } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,7 @@ interface ResolveRequest {
 }
 
 export async function POST(request: Request) {
-  const sql = neon(process.env.DATABASE_URL!);
+  const sql = getDb();
 
   try {
     const body: ResolveRequest = await request.json();

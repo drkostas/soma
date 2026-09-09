@@ -11,7 +11,6 @@ import { getWeightTrend } from "@/lib/weight-trend";
 import { trendAte } from "@/lib/trend-ate";
 import { computeAlcoholDisplacement } from "macro-engine-core";
 
-export const runtime = "edge";
 
 const VALID_MODES: readonly Mode[] = [
   "standard", "aggressive", "reverse", "maintenance", "bulk", "injured",

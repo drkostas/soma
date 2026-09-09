@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SPOTIFY_SCOPES } from "@/lib/spotify-client";
 
-export const runtime = "edge";
 
 async function sha256Base64url(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);

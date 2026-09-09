@@ -5,13 +5,12 @@
  * the now-correct share image and re-sends it with the activity-type caption.
  * Run: cd web && npx tsx scripts/resend-telegram.mts <garmin_id> [<garmin_id> ...]
  */
-import { neon } from "@neondatabase/serverless";
-import type { QueryFn } from "../lib/db";
+import { getDb, type QueryFn } from "../lib/db";
 import { sendActivityImage } from "../lib/notify-telegram";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) { console.error("DATABASE_URL not set"); process.exit(1); }
-const sql = neon(databaseUrl) as unknown as QueryFn;
+const sql: QueryFn = getDb();
 
 const ids = process.argv.slice(2).map((s) => s.trim()).filter(Boolean);
 if (!ids.length) { console.error("usage: resend-telegram.mts <garmin_id> [<garmin_id> ...]"); process.exit(1); }

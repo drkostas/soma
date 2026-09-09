@@ -15,7 +15,6 @@ import {
 import { getBasePace } from "@/lib/vdot-pace-zones";
 import { estimateHMSeconds } from "@/lib/vdot-utils";
 
-export const runtime = "edge";
 
 /**
  * GET /api/training/graph?date=YYYY-MM-DD

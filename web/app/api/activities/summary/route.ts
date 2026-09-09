@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 
-export const runtime = "edge";
 export const revalidate = 300;
 
 /* Multi-sport activity summary for the universal (React Native) app. Mirrors the

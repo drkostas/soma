@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseRangeDays } from "@/lib/time-ranges";
 
-export const runtime = "edge";
 
 /**
  * Blood-oxygen (SpO2) + respiration-rate trends as JSON for the app sleep screen

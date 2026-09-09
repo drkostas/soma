@@ -3,7 +3,6 @@ import { getDb } from "@/lib/db";
 import { loadRunStatus } from "@/lib/run-status-query";
 import { rangeToDays } from "@/lib/time-ranges";
 
-export const runtime = "edge";
 export const revalidate = 300;
 
 /* Running summary for the universal (React Native) app. Mirrors the data the web
