@@ -11,11 +11,11 @@
  * logs and surfaces (NO_PHOTO in the bridge RESULT line).
  */
 import { writeFile } from "node:fs/promises";
-import type { Pool } from "pg";
+import type { Db } from "./db";
 
 const SOMA = process.env.SOMA_WEB_URL || process.env.SOMA_BASE_URL || "https://soma.gkos.dev";
 
-export async function shareImageUrl(db: Pool, gid: number): Promise<{ url: string; kind: "workout" | "activity" }> {
+export async function shareImageUrl(db: Db, gid: number): Promise<{ url: string; kind: "workout" | "activity" }> {
   const r = await db.query("SELECT hevy_id FROM workout_enrichment WHERE garmin_activity_id=$1 ORDER BY processed_at DESC LIMIT 1", [gid]);
   const hevyId = r.rows[0]?.hevy_id as string | undefined;
   return hevyId
@@ -23,7 +23,7 @@ export async function shareImageUrl(db: Pool, gid: number): Promise<{ url: strin
     : { url: `${SOMA}/api/activity/${gid}/image`, kind: "activity" };
 }
 
-export async function imagePathFor(db: Pool, gid: number, prefix = "bridge"): Promise<{ path: string | null; note: string; kind: "workout" | "activity" }> {
+export async function imagePathFor(db: Db, gid: number, prefix = "bridge"): Promise<{ path: string | null; note: string; kind: "workout" | "activity" }> {
   const { url, kind } = await shareImageUrl(db, gid);
   let note = "";
   for (let attempt = 1; attempt <= 3; attempt++) {

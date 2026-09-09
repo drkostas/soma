@@ -9,22 +9,22 @@
  * Run: node dist/refinalize.js <garmin_id> [<garmin_id> ...]   (DRY unless STRAVA creds)
  */
 import { chromium } from "playwright";
-import { Pool } from "pg";
+import { openDb, type Db } from "./db";
 import { stravaCreds, loadSession, saveSession, sessionValid, login, setActivityDetails } from "./strava-web";
 import { kiteActivityName, generateKiteStravaDescription } from "./kite-description";
 import { imagePathFor } from "./share-image";
 
 
-async function stravaIdFor(db: Pool, gid: number): Promise<number | null> {
+async function stravaIdFor(db: Db, gid: number): Promise<number | null> {
   const r = await db.query("SELECT strava_activity_id FROM strava_bridge_uploads WHERE garmin_activity_id=$1", [gid]);
   return r.rows[0]?.strava_activity_id ? Number(r.rows[0].strava_activity_id) : null;
 }
-async function summaryFor(db: Pool, gid: number): Promise<any> {
+async function summaryFor(db: Db, gid: number): Promise<any> {
   const r = await db.query("SELECT raw_json FROM garmin_activity_raw WHERE activity_id=$1 AND endpoint_name='summary'", [gid]);
   const j = r.rows[0]?.raw_json;
   return j == null ? {} : (typeof j === "string" ? JSON.parse(j) : j);
 }
-async function kitePayloadFor(db: Pool, gid: number): Promise<any | null> {
+async function kitePayloadFor(db: Db, gid: number): Promise<any | null> {
   const r = await db.query("SELECT raw_json FROM garmin_activity_raw WHERE activity_id=$1 AND endpoint_name='kite_jumps'", [gid]);
   const j = r.rows[0]?.raw_json;
   return j == null ? null : (typeof j === "string" ? JSON.parse(j) : j);
@@ -33,7 +33,7 @@ async function main(): Promise<void> {
   const ids = process.argv.slice(2).map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
   if (!ids.length) { console.log("usage: refinalize <garmin_id> ..."); return; }
 
-  const db = new Pool({ connectionString: process.env.DATABASE_URL });
+  const db = openDb(process.env.DATABASE_URL!);
 
   // Resolve each activity's Strava id + title/description/image up front (this is
   // pure DB + the ported kite/run text + the share image — no Strava writes yet).
