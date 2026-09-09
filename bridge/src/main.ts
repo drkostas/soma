@@ -40,9 +40,30 @@ async function facterinoAccessToken(db: Db): Promise<string> {
 
 /** Recent Garmin activities not yet on Strava. */
 async function missed(db: Db, activities: GarminActivitySummary[]): Promise<GarminActivitySummary[]> {
-  await db.query(
-    "CREATE TABLE IF NOT EXISTS strava_bridge_uploads (garmin_activity_id BIGINT PRIMARY KEY, strava_activity_id BIGINT, uploaded_at TIMESTAMPTZ DEFAULT NOW())",
-  );
+  // Bootstrap for a fresh database. A forker deploying this against an empty Postgres needs the
+  // ledger created on first run, so the statement stays.
+  //
+  // ⛔ BUT IT CANNOT BE FATAL, BECAUSE `IF NOT EXISTS` DOES NOT MEAN "SKIP THE PERMISSION CHECK".
+  // Postgres tests CREATE on the schema before it looks to see whether the table is already there,
+  // so a least-privilege application role is refused with 42501 even when the table exists and
+  // nothing needs creating. This estate's roles hold exactly the SELECT/INSERT they use and no
+  // DDL, which is the point of them, and that turned a no-op bootstrap line into a hard failure
+  // of every bridge run.
+  //
+  // Swallowing 42501 here hides nothing: the very next statement selects from this table, so a
+  // table that genuinely does not exist still fails immediately, with `relation does not exist`,
+  // which is the honest error for that condition. Any other error still throws.
+  try {
+    await db.query(
+      "CREATE TABLE IF NOT EXISTS strava_bridge_uploads (garmin_activity_id BIGINT PRIMARY KEY, strava_activity_id BIGINT, uploaded_at TIMESTAMPTZ DEFAULT NOW())",
+    );
+  } catch (err) {
+    if ((err as { code?: string })?.code !== "42501") throw err;
+    console.warn(
+      "[bridge] no CREATE privilege on the schema, so the ledger bootstrap was skipped. " +
+        "That is expected under a least-privilege role; the table must already exist.",
+    );
+  }
   const bridged = new Set<number>((await db.query("SELECT garmin_activity_id FROM strava_bridge_uploads")).rows.map((r: any) => Number(r.garmin_activity_id)));
   const extRows = await db.query("SELECT raw_json->>'external_id' AS e FROM strava_raw_data WHERE jsonb_typeof(raw_json)='object' AND raw_json->>'external_id' IS NOT NULL");
   const externalIdsJoined = extRows.rows.map((r: any) => r.e).filter(Boolean).join(" ");
