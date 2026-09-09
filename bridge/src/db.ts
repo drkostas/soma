@@ -63,6 +63,9 @@ export function openDb(url: string): Db {
   }
   if (host.startsWith("pg.")) return httpDb(url);
   const pool = new Pool({ connectionString: url });
+  // An idle client emitting error with no listener takes the process down, and idle clients emit
+  // on any backend restart. The bridge is short-lived, but it runs unattended.
+  pool.on("error", (err) => console.error("[bridge] idle client error:", err.message));
   return {
     // pg types rowCount as nullable; the callers here only ever read rows, so normalise it.
     query: async (text, params) => {

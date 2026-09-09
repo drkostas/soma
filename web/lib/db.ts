@@ -17,7 +17,9 @@ function isNeon(url: string): boolean {
   try {
     return new URL(url).hostname.endsWith(".neon.tech");
   } catch {
-    return false;
+    // A DATABASE_URL that will not parse is a configuration mistake, not a hint to try the other
+    // driver: falling through to pg turns a typo into a confusing connection error much later.
+    throw new Error("DATABASE_URL is not a valid connection string");
   }
 }
 
@@ -31,7 +33,14 @@ let pool: Pool | null = null;
  * tell the difference and no query text changes.
  */
 function localDb(url: string): QueryFn {
-  pool ??= new Pool({ connectionString: url, max: 8, idleTimeoutMillis: 30_000 });
+  if (!pool) {
+    pool = new Pool({ connectionString: url, max: 8, idleTimeoutMillis: 30_000 });
+    // ⛔ AN IDLE CLIENT EMITTING error WITH NO LISTENER TAKES THE PROCESS DOWN. pg is explicit
+    // about this, and idle clients emit on any backend restart, so one `brew services restart
+    // postgresql` would kill the pinned host. This never mattered against Neon because the HTTP
+    // driver holds no pool; `next start` is long-lived and does.
+    pool.on("error", (err) => console.error("[db] idle client error:", err.message));
+  }
   const tagged = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     let text = "";
     strings.forEach((s, i) => {
@@ -58,15 +67,30 @@ function localDb(url: string): QueryFn {
  * empty array. This lets ISR create placeholder pages during `next build`;
  * the first real request after deploy triggers regeneration with real data.
  */
+/**
+ * True while `next build` is prerendering, when there is legitimately no database.
+ * Anywhere else a missing DATABASE_URL is a fault, not a reason to render empty pages.
+ */
+function isBuildPhase(): boolean {
+  return process.env.NEXT_PHASE === "phase-production-build" || process.env.npm_lifecycle_event === "build";
+}
+
 export function getDb(): QueryFn {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    return (_strings, ..._values) => Promise.resolve([]);
+    // ⚠️ THE STUB USED TO APPLY AT RUNTIME TOO, so an unset variable in production rendered every
+    // page as "no data" and looked like a quiet day rather than a broken deployment. That is
+    // exactly how a missing key on the portfolio went unnoticed through three builds.
+    if (isBuildPhase()) {
+      return (_strings, ..._values) => Promise.resolve([]);
+    }
+    throw new Error("DATABASE_URL is not set");
   }
   return isNeon(url) ? (neon(url) as QueryFn) : localDb(url);
 }
 
-/** Retry once on Neon cold-start "fetch failed" errors (free tier goes idle). */
+/** Retry once on a transport hiccup: a Neon cold start, or the gateway between a request
+ * and a Postgres that is restarting underneath it. */
 export async function withDbRetry<T>(fn: () => Promise<T>, retries = 1): Promise<T> {
   try {
     return await fn();
