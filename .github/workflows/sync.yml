@@ -17,22 +17,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-    steps:
-      # This repository runs the pipeline on its own machine instead, as a launchd job, because
-      # that is where its database lives. Two schedulers running the same sync would duplicate
-      # every step and notify twice.
-      #
-      # ⭐ THE SCHEDULE STAYS IN THE FILE ON PURPOSE. A fork is meant to deploy on Vercel with a
-      # hosted database and rely on exactly this workflow, so removing the cron would quietly
-      # break the path this project documents. The skip is a repository variable that only this
-      # instance sets; a fork has no such variable and runs normally.
-      - name: Skip when this instance runs the pipeline elsewhere
-        if: github.event_name == 'schedule' && vars.PIPELINE_RUNS_LOCALLY == 'true'
-        run: |
-          echo "PIPELINE_RUNS_LOCALLY is set: this instance syncs from its own machine."
-          echo "Nothing to do here. A fork without this variable runs the pipeline normally."
-          exit 0
+    # This repository runs the pipeline on its own machine instead, as a launchd job, because that
+    # is where its database lives. Two schedulers running the same sync would duplicate every step
+    # and notify twice.
+    #
+    # ⭐ THE SCHEDULE STAYS IN THE FILE ON PURPOSE. A fork is meant to deploy on Vercel with a
+    # hosted database and rely on exactly this workflow, so removing the cron would quietly break
+    # the path this project documents. The skip is a repository variable that only this instance
+    # sets; a fork has no such variable and runs normally. Manual and API triggers always run,
+    # here as well, because those are someone asking for it deliberately.
+    #
+    # ⛔ THIS GUARD BELONGS ON THE JOB, NOT ON A STEP. It was first written as a step that echoed
+    # and called `exit 0`, which ends that STEP successfully and does nothing to the ones after it
+    # — checkout, install and the pipeline itself all still ran, so the skip skipped nothing and
+    # both schedulers would have synced the same database. A step cannot end its job.
+    if: >-
+      !(github.event_name == 'schedule' && vars.PIPELINE_RUNS_LOCALLY == 'true')
 
+    steps:
       - name: Additive backoff — skip if too soon after a failure
         if: github.event_name == 'schedule'
         env:
