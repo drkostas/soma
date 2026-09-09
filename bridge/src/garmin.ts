@@ -4,7 +4,8 @@
  * The FIT is what gets forwarded to facterino.
  */
 import AdmZip from "adm-zip";
-import { GarminAuth, DBTokenStore, type GarminClient } from "garmin-auth";
+import { GarminAuth, type GarminClient } from "garmin-auth";
+import { GatewayTokenStore } from "./token-store";
 
 const CONNECTAPI = "https://connectapi.garmin.com";
 const NATIVE_UA = "GCM-Android-5.23";
@@ -14,7 +15,7 @@ export interface GarminActivity { activityId: number; activityName?: string; sta
 
 /** Authenticated main-account Garmin client (DI token from the DB). */
 export async function mainGarminClient(databaseUrl: string): Promise<GarminClient> {
-  return new GarminAuth({ store: new DBTokenStore(databaseUrl) }).client();
+  return new GarminAuth({ store: new GatewayTokenStore(databaseUrl) }).client();
 }
 
 /** Recent activities in [start, end] (YYYY-MM-DD). */
