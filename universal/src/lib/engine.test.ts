@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { readinessFactorCalc, fatigueFactorCalc, DEFAULT_BASE_PACE } from "./training-engine";
-import { getHMPrediction, getBasePace, getHRZone } from "./vdot-pace-zones";
+import { getHMPrediction, getBasePace, getHRZone } from "banister";
 import { vdotFromHmSeconds } from "./vdot-utils";
-import { projectVdotSeries, projectVdotAt, DEFAULT_BANISTER, type DailyLoad } from "./banister-projection";
+import { projectVdotSeries, projectVdotAt, DEFAULT_BANISTER, type DatedLoad } from "banister";
 import { ALL_MUSCLE_GROUPS, MUSCLE_COLORS, MUSCLE_TO_SLUGS, SLUG_TO_MUSCLE, hexToRgba } from "./muscle-groups";
 
 /**
@@ -69,7 +69,7 @@ describe("VDOT pace + HM prediction (golden)", () => {
 
 describe("banister projection (properties)", () => {
   // Valid sequential ISO dates across month boundaries (naive DD padding overflows).
-  const days = (n: number, load: number): DailyLoad[] =>
+  const days = (n: number, load: number): DatedLoad[] =>
     Array.from({ length: n }, (_, i) => ({
       date: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10),
       load,
