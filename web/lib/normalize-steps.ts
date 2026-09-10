@@ -1,4 +1,4 @@
-import { HR_ZONES } from "./vdot-pace-zones";
+import { HR_ZONES } from "banister";
 
 /**
  * Adapts Python backend workout step field names to TypeScript frontend names.

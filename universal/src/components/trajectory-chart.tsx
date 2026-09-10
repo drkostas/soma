@@ -4,7 +4,7 @@ import { Text, Card, SegmentedControl } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, chartDateLabel, type LineChartProps } from "./line-chart";
 import { todayKey } from "../lib/freshness";
 import { trajectoryAnnotations } from "../lib/trajectory-annotations";
-import { getHMPrediction } from "../lib/vdot-pace-zones";
+import { getHMPrediction } from "banister";
 import type { ForwardSim, TrajectoryData } from "../lib/api";
 
 /** Seconds → H:MM:SS (half-marathon finish time). */

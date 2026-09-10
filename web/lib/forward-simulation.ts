@@ -12,8 +12,8 @@ import {
   fatigueFactorCalc,
   DEFAULT_BASE_PACE,
 } from "./training-engine";
-import { getBasePace, getHRZone } from "./vdot-pace-zones";
-import { projectVdotSeries, DEFAULT_BANISTER, type BanisterParams, type DailyLoad } from "./banister-projection";
+import { getBasePace, getHRZone } from "banister";
+import { projectVdotSeries, DEFAULT_BANISTER, type BanisterParams, type DatedLoad } from "banister";
 import { estimateHMSeconds } from "./vdot-utils";
 
 // ── Types ────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
   const warmStartLoad = denominator > 0.001 ? vdotGap / denominator : 0;
 
   // Build warm-start loads
-  const warmStartLoads: DailyLoad[] = [];
+  const warmStartLoads: DatedLoad[] = [];
   if (planDays.length > 0 && warmStartLoad > 0) {
     const startMs = new Date(planDays[0].dayDate + "T00:00:00").getTime();
     for (let i = WARMUP_DAYS; i >= 1; i--) {
@@ -198,11 +198,11 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
   }
 
   // First pass: estimate EPOC-scaled loads for Banister (run only — gym doesn't affect VDOT)
-  const planLoads: DailyLoad[] = planDays.map(day => ({
+  const planLoads: DatedLoad[] = planDays.map(day => ({
     date: day.dayDate,
     load: estimateDayLoad(day, sliderMultiplier).runLoad * epocScale,
   }));
-  const dailyLoads: DailyLoad[] = [...warmStartLoads, ...planLoads];
+  const dailyLoads: DatedLoad[] = [...warmStartLoads, ...planLoads];
 
   // Project VDOT for every day using full Banister model
   const allVdots = projectVdotSeries(dailyLoads, banisterParams);

@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db";
 import { getLivePlan, getTrailingLoad, type LivePlan } from "@/lib/live-plan";
 import { Target } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
-import { projectVdotSeries, DEFAULT_BANISTER, type DailyLoad } from "@/lib/banister-projection";
+import { projectVdotSeries, DEFAULT_BANISTER, type DatedLoad } from "banister";
 import { vdotFromHmSeconds } from "@/lib/vdot-utils";
 
 export const metadata: Metadata = { title: "Training" };
@@ -242,14 +242,14 @@ async function getTrajectoryData(
     if (raw > 0) planLoadMap.set((d as any).day_date, raw * loadScaleFactor);
   }
 
-  // Build one DailyLoad entry per day from (trajectory_start - lookback) to race date.
+  // Build one DatedLoad entry per day from (trajectory_start - lookback) to race date.
   // Lookback = 5 × max(tau1, tau2) to capture full model memory.
   const lookbackDays = Math.ceil(5 * Math.max(banisterParams.tau1, banisterParams.tau2));
   const trajectoryStartMs = start.getTime();
   const seriesStartMs = trajectoryStartMs - lookbackDays * 86400000;
   const endMs = end.getTime();
 
-  const allLoads: DailyLoad[] = [];
+  const allLoads: DatedLoad[] = [];
   for (let ms = seriesStartMs; ms <= endMs; ms += 86400000) {
     const dateStr = new Date(ms).toISOString().split("T")[0];
     const load = historicalLoadMap.get(dateStr) ?? planLoadMap.get(dateStr) ?? 0;

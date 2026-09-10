@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getLivePlan } from "@/lib/live-plan";
-import { projectVdotSeries, DEFAULT_BANISTER, type DailyLoad } from "@/lib/banister-projection";
+import { projectVdotSeries, DEFAULT_BANISTER, type DatedLoad } from "banister";
 import { vdotFromHmSeconds } from "@/lib/vdot-utils";
 
 /**
@@ -84,7 +84,7 @@ export async function GET() {
   const seriesStartMs = start.getTime() - lookbackDays * 86400000;
   const endMs = end.getTime();
 
-  const allLoads: DailyLoad[] = [];
+  const allLoads: DatedLoad[] = [];
   for (let ms = seriesStartMs; ms <= endMs; ms += 86400000) {
     const dateStr = new Date(ms).toISOString().split("T")[0];
     allLoads.push({ date: dateStr, load: historicalLoadMap.get(dateStr) ?? planLoadMap.get(dateStr) ?? 0 });

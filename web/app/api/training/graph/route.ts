@@ -12,7 +12,7 @@ import {
   getTooltip,
   computeAdjustedPace,
 } from "@/lib/training-engine";
-import { getBasePace } from "@/lib/vdot-pace-zones";
+import { getBasePace } from "banister";
 import { estimateHMSeconds } from "@/lib/vdot-utils";
 
 
