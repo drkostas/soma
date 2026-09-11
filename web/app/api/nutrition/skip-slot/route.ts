@@ -36,15 +36,23 @@ export async function POST(req: NextRequest) {
       WHERE date = ${date}
     `;
   } else {
-    // Skip: add slot to array AND delete any meals logged for that slot
+    // Skip means "I did not eat this slot". A slot with logged meals is the opposite claim, and
+    // the old behaviour here deleted those meals to make the two agree (one tap on the app removed
+    // a 650 kcal lunch with no confirmation, soma#866). Refuse instead: deleting a meal stays an
+    // explicit action on the meal itself.
+    const logged = await sql`
+      SELECT count(*)::int AS n FROM meal_log WHERE date = ${date} AND meal_slot = ${slot}
+    `;
+    if ((logged[0]?.n ?? 0) > 0) {
+      return NextResponse.json(
+        { error: "This slot has logged meals. Delete them before skipping it.", slot, meals: logged[0].n },
+        { status: 409 },
+      );
+    }
     await sql`
       UPDATE nutrition_day
       SET skipped_slots = array_append(skipped_slots, ${slot})
       WHERE date = ${date}
-    `;
-    await sql`
-      DELETE FROM meal_log
-      WHERE date = ${date} AND meal_slot = ${slot}
     `;
   }
 

@@ -76,9 +76,17 @@ function redistributeRemaining(
 
 export async function GET(req: NextRequest) {
   const sql = getDb();
-  const date =
-    req.nextUrl.searchParams.get("date") ??
-    new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const date = req.nextUrl.searchParams.get("date") ?? todayStr;
+
+  // Nothing else creates the day's row before something is logged, so the first view of a new
+  // day had no plan on either client and the web told the user to run a generator that does not
+  // exist (soma#867). Today and future days get their row on first read; the targets are then
+  // computed below and written back. Past days stay as they are: a day that was never opened
+  // cannot be planned after the fact.
+  if (date >= todayStr) {
+    await sql`INSERT INTO nutrition_day (date) VALUES (${date}) ON CONFLICT (date) DO NOTHING`;
+  }
 
   const [planRows, mealRows, drinkRows] = await Promise.all([
     sql`SELECT * FROM nutrition_day WHERE date = ${date}`,
@@ -454,7 +462,6 @@ export async function GET(req: NextRequest) {
 
     // ── Write-back: sync computed values to DB so stored matches dynamic ──
     // Only for current day, non-manual days, when values differ
-    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
     if (date === todayStr && !manualOverride && breakdown) {
       const computedTarget = dayTargets.calories;
       const storedTarget = Number(plan.target_calories) || 0;
