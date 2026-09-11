@@ -84,6 +84,8 @@ interface Meal {
   source: string | null;
   preset_meal_id: string | null;
   preset_name: string | null;
+  /** Logged on a future date: a plan, not a record (soma#873). */
+  planned?: boolean;
   portion_multiplier: number;
   items: any;
   calories: number;
@@ -544,6 +546,9 @@ export function MealCard({
                   <div className="min-w-0">
                     <div className="font-medium truncate">
                       {meal.preset_name || autoMealName(meal.items)}
+                      {meal.planned && (
+                        <span className="ml-1.5 align-middle text-[9px] px-1.5 py-0.5 rounded-full bg-white/10 text-muted-foreground font-normal" data-testid="planned-pill">planned</span>
+                      )}
                       {meal.portion_multiplier !== 1 && (
                         <span className="text-muted-foreground ml-1">
                           ({meal.portion_multiplier}x)
