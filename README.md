@@ -241,7 +241,7 @@ everything alive across Mac sleep/wake/reboot:
 
 | Plist | Purpose |
 |---|---|
-| `dev.gkos.soma.web.plist` | Runs `npm run dev` from `web/` on :3456, KeepAlive on crash |
+| `dev.gkos.soma.web.plist` | The verification server: `npm run dev` from `web/` on 127.0.0.1:3457 with `DATABASE_URL` set in the plist environment to `verify_soma`, so Maestro and Playwright runs never write into the live data (refresh the copy with `scripts/verify-db-refresh.sh`). KeepAlive on crash |
 | `dev.gkos.soma.tunnel.plist` | Runs the cloudflared named tunnel (`tunnel run --token <connector>`), KeepAlive |
 
 Logs land in `~/Library/Logs/soma/`. Manage with

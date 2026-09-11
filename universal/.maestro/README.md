@@ -61,6 +61,14 @@ App id: `dev.gkos.soma` (both iOS bundle id and Android package).
    `EXPO_PUBLIC_API_URL` at a running soma instance if you want the screens to
    populate with real data.
 
+   For a walkthrough with real data on this machine, point it at the verification
+   server, not the dev server: `EXPO_PUBLIC_API_URL=http://10.0.2.2:3457` from the
+   Android emulator (`10.0.2.2` is the host). Port 3457 is the launchd
+   `dev.gkos.soma.web` server and reads `verify_soma`, a snapshot of the live
+   database, so a day of logging meals in a flow never lands in the real data.
+   Refresh the snapshot with `scripts/verify-db-refresh.sh` before a run when you
+   want today's data in it. The dev server on 3456 reads the live database.
+
 ## Running
 
 From the `universal/` directory:
