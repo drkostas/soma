@@ -462,7 +462,9 @@ export async function GET(req: NextRequest) {
 
     // ── Write-back: sync computed values to DB so stored matches dynamic ──
     // Only for current day, non-manual days, when values differ
-    if (date === todayStr && !manualOverride && breakdown) {
+    // Today and future days: the row now exists from the first read, so write the computed targets
+    // back for them too (a future day's row otherwise sat with null targets). Past days are history.
+    if (date >= todayStr && !manualOverride && breakdown) {
       const computedTarget = dayTargets.calories;
       const storedTarget = Number(plan.target_calories) || 0;
       if (Math.abs(computedTarget - storedTarget) > 10 || !plan.target_calories) {
