@@ -104,7 +104,8 @@ export async function POST(req: NextRequest) {
       actual_fat      = ${actual.fat},
       actual_fiber    = ${actual.fiber},
       plan            = ${JSON.stringify(reconciledPlan)},
-      status          = 'closed'
+      status          = 'closed',
+      closed_by       = 'user'
     WHERE date = ${date}
   `;
 
