@@ -16,6 +16,10 @@ The verification server is the launchd job `dev.gkos.soma.web`. Its plist sets
 does not override with `web/.env.local`, so the same working tree serves the live
 database on 3456 and the snapshot on 3457.
 
+The 3457 job runs with `SOMA_DEV_SESSION=1`, so pages render there without a GitHub
+session. The flag only works for loopback hosts in non-production builds; Vercel and the
+live host on 3456 never see it.
+
 Refresh the snapshot with `scripts/verify-db-refresh.sh` (about 40 seconds for
 the current database). It drops and recreates only `verify_soma`, restores from a
 fresh dump of `soma`, runs `ANALYZE`, and fails loudly if the table or row counts
