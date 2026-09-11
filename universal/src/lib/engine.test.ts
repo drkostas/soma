@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readinessFactorCalc, fatigueFactorCalc, DEFAULT_BASE_PACE } from "./training-engine";
+import { readinessFactorCalc, fatigueFactorCalc, DEFAULT_BASE_PACE } from "banister";
 import { getHMPrediction, getBasePace, getHRZone } from "banister";
 import { vdotFromHmSeconds } from "banister";
 import { projectVdotSeries, projectVdotAt, DEFAULT_BANISTER, type DatedLoad } from "banister";

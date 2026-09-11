@@ -14,8 +14,8 @@ import {
   ReferenceDot,
   Customized,
 } from "recharts";
-import type { ProjectedDay } from "@/lib/forward-simulation";
-import { estimateHMSeconds } from "@/lib/vdot-utils";
+import type { ProjectedDay } from "banister";
+import { hmSecondsFromVdot } from "banister";
 
 interface TrajectoryEntry {
   date: string;
@@ -53,7 +53,7 @@ function formatSeconds(sec: number): string {
 }
 
 function vdotToHmPace(vdot: number): string {
-  const hmSeconds = estimateHMSeconds(vdot);
+  const hmSeconds = hmSecondsFromVdot(vdot);
   const secPerKm = Math.round(hmSeconds / 21.0975); // round total sec/km first
   const min = Math.floor(secPerKm / 60);
   const sec = secPerKm % 60;
@@ -68,7 +68,7 @@ function formatPace(secPerKm: number): string {
 }
 
 function formatHmTime(vdot: number): string {
-  return formatSeconds(estimateHMSeconds(vdot));
+  return formatSeconds(hmSecondsFromVdot(vdot));
 }
 
 function formatTimeDelta(seconds: number): string {
@@ -187,7 +187,7 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null, goalVdot?: num
     const hmPaceSecKm: number | null = data.hmPace;
     // Total HM time from the plotted pace
     const hmTimeSec = hmPaceSecKm != null ? hmPaceSecKm * 21.0975 : null;
-    const goalHmSec = goalVdot ? estimateHMSeconds(goalVdot) : null;
+    const goalHmSec = goalVdot ? hmSecondsFromVdot(goalVdot) : null;
     const hmGapSec = hmTimeSec != null && goalHmSec != null ? hmTimeSec - goalHmSec : null;
 
     return (
@@ -478,7 +478,7 @@ export function TrajectoryChart({
   const chartData = data.map((d) => {
     let hmPace: number | null = null;
     if (d.optimal > 0) {
-      hmPace = Math.round(estimateHMSeconds(d.optimal) / 21.0975);
+      hmPace = Math.round(hmSecondsFromVdot(d.optimal) / 21.0975);
     }
     return {
       date: d.date,

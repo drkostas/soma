@@ -16,7 +16,7 @@ import { InteractiveThisWeek } from "@/components/interactive-this-week";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
-import { freshness, staleHeadline, todayKey, RECOVERY_MAX_AGE_DAYS } from "@/lib/freshness";
+import { freshness, staleHeadline, todayKey, RECOVERY_MAX_AGE_DAYS } from "banister";
 import { readinessScore, trafficLightText } from "@/lib/readiness";
 import {
   Footprints,

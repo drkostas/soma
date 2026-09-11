@@ -14,7 +14,7 @@ import { ActivitySidePanel } from "@/components/activity-side-panel";
 import { normalizeSteps } from "@/lib/normalize-steps";
 import type { NormalizedStep } from "@/lib/normalize-steps";
 import type { DeltaWorkout } from "@/lib/training-engine";
-import type { ProjectedDay } from "@/lib/forward-simulation";
+import type { ProjectedDay } from "banister";
 
 interface TrainingDay {
   id: number;

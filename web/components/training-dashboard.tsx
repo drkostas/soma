@@ -22,9 +22,9 @@ import {
   adjustStepTargets,
   colorForNode,
 } from "@/lib/training-engine";
-import { estimateHMSeconds } from "@/lib/vdot-utils";
+import { hmSecondsFromVdot } from "banister";
 import { normalizeSteps } from "@/lib/normalize-steps";
-import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type ComparisonData } from "@/lib/forward-simulation";
+import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type ComparisonData } from "banister";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -101,7 +101,7 @@ function buildReferenceMetrics(
     if (d.race_prediction_seconds != null) {
       racePredSparkline.push(Number(d.race_prediction_seconds));
     } else if (d.vdot_adjusted != null && Number(d.vdot_adjusted) > 0) {
-      racePredSparkline.push(estimateHMSeconds(Number(d.vdot_adjusted)));
+      racePredSparkline.push(hmSecondsFromVdot(Number(d.vdot_adjusted)));
     }
   }
 
@@ -112,11 +112,11 @@ function buildReferenceMetrics(
   // vs the stale 57.7 \u2192 1:20:50. Keep the stale values only as a fallback.
   let latestRacePrediction: string = "\u2014";
   if (currentVdot && currentVdot > 0) {
-    latestRacePrediction = formatRaceTime(estimateHMSeconds(currentVdot));
+    latestRacePrediction = formatRaceTime(hmSecondsFromVdot(currentVdot));
   } else if (latestFitness?.race_prediction_seconds != null) {
     latestRacePrediction = formatRaceTime(Number(latestFitness.race_prediction_seconds));
   } else if (latestFitness?.vdot_adjusted != null && Number(latestFitness.vdot_adjusted) > 0) {
-    latestRacePrediction = formatRaceTime(estimateHMSeconds(Number(latestFitness.vdot_adjusted)));
+    latestRacePrediction = formatRaceTime(hmSecondsFromVdot(Number(latestFitness.vdot_adjusted)));
   }
 
   return [
