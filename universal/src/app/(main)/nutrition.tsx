@@ -404,17 +404,25 @@ export default function NutritionScreen() {
         <Card variant="glow" className="gap-4">
           <SegmentedControl options={["Day", "Trend"] as const} value={tab} onChange={setTab} />
           <View className="items-center gap-1">
-            {plan ? (
-              <>
-                <Text variant="display">{loading ? "…" : (remaining?.calories ?? 0).toLocaleString()}</Text>
-                <Text variant="caption" className="text-text-muted">
-                  kcal left · {(consumed?.calories ?? 0).toLocaleString()} of {targetCal.toLocaleString()} eaten
-                </Text>
-              </>
-            ) : (
+            {plan ? (() => {
+              const left = remaining?.calories ?? 0;
+              const over = left < 0;
+              return (
+                <>
+                  <Text variant="display" style={over ? { color: "#e06060" } : undefined}>
+                    {loading ? "…" : over ? `+${Math.abs(Math.round(left)).toLocaleString()}` : Math.round(left).toLocaleString()}
+                  </Text>
+                  <Text variant="caption" className="text-text-muted">
+                    {over ? "over goal" : "kcal left"} · {(consumed?.calories ?? 0).toLocaleString()} of {targetCal.toLocaleString()} eaten
+                  </Text>
+                </>
+              );
+            })() : (
               <>
                 <Text variant="display">{loading ? "…" : (consumed?.calories ?? 0).toLocaleString()}</Text>
-                <Text variant="caption" className="text-text-muted">kcal eaten today</Text>
+                <Text variant="caption" className="text-text-muted">
+                  {loading ? "" : "No plan for this day. Targets exist from the first time today or a future day is opened; a past day that was never opened stays without one."}
+                </Text>
               </>
             )}
           </View>
@@ -476,14 +484,16 @@ export default function NutritionScreen() {
             );
           })() : null}
 
-          <View className="gap-2.5">
-            {renderMacroBars()}
-            <Text variant="micro" className="text-text-muted">
-              {(bd?.weightKg ?? 0) > 0
-                ? "Protein & fat ticks are g/kg tiers · green = optimal · red = ceiling"
-                : "green = optimal target · red = ceiling"}
-            </Text>
-          </View>
+          {plan ? (
+            <View className="gap-2.5">
+              {renderMacroBars()}
+              <Text variant="micro" className="text-text-muted">
+                {(bd?.weightKg ?? 0) > 0
+                  ? "Protein & fat ticks are g/kg tiers · green = optimal · red = ceiling"
+                  : "green = optimal target · red = ceiling"}
+              </Text>
+            </View>
+          ) : null}
         </Card>
 
         {tab === "Day" && isToday ? <NutritionContextStrip /> : null}
@@ -530,8 +540,9 @@ export default function NutritionScreen() {
                     <View key={i}>
                       {burnRow(
                         `🏋 ${g.title}`,
-                        g.actual ?? g.calories ?? g.predicted,
-                        { note: g.actual == null && g.predicted != null ? `~${Math.round(g.predicted)} kcal predicted` : undefined },
+                        // `actual` is a flag, not a number: a predicted workout used to render as 0 kcal (soma#861)
+                        g.calories ?? g.predicted ?? 0,
+                        { note: !g.actual && g.predicted != null ? `~${Math.round(g.predicted)} kcal predicted` : undefined },
                       )}
                     </View>
                   ))
@@ -613,7 +624,8 @@ export default function NutritionScreen() {
               const budget = data?.slotBudgets?.[s]?.calories ?? 0;
               const eatenInSlot = slotMeals.reduce((sum, m) => sum + (m.calories ?? 0), 0);
               const isSkipped = skippedSlots.includes(s);
-              if (budget <= 0 && slotMeals.length === 0 && !isSkipped) return null;
+              // Every slot stays on screen: hiding a slot with no budget left meant its meal could not be
+              // logged on the phone at all (soma#877). The web shows a zero budget instead.
               return (
                 <Card key={s} className="gap-2">
                   <View className="flex-row items-center justify-between">
@@ -633,7 +645,7 @@ export default function NutritionScreen() {
                       <Badge label="Skipped" tone="neutral" />
                     ) : (
                       <Text variant="caption" className="tabular-nums text-text-muted">
-                        {Math.round(eatenInSlot)}{budget > 0 ? ` / ${Math.round(budget)}` : ""} kcal
+                        {budget > 0 ? `${Math.round(eatenInSlot)} / ${Math.round(budget)} kcal` : `${Math.round(eatenInSlot)} kcal · no budget left`}
                       </Text>
                     )}
                   </View>
@@ -656,6 +668,9 @@ export default function NutritionScreen() {
                           <Text variant="body" className="text-text-muted">›</Text>
                         </Pressable>
                       ))}
+                      {!dayClosed && slotMeals.length === 0 ? (
+                        <Text variant="micro" className="text-center" style={{ color: "#60a5fa" }}>Drink 500ml water 30 min before eating</Text>
+                      ) : null}
                       {!dayClosed ? (
                         <View className="flex-row gap-2 self-start">
                           <Button label={`+ Log ${slotLabel(s)}`} variant="secondary" size="sm" onPress={() => openLog(s)} />

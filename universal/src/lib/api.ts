@@ -121,7 +121,7 @@ export interface SomaBreakdown {
   totalBurn?: number; bmr?: number;
   stepCalories?: number; stepCaloriesPredicted?: number; expectedSteps?: number; actualSteps?: number;
   runCalories?: number; runActual?: number; runPredicted?: number; runEnabled?: boolean; runActualDistKm?: number; runDistanceKm?: number;
-  gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: number }[];
+  gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: boolean }[];
   drinkCalories?: number; deficit?: number; manualOverride?: boolean;
   weightKg?: number;
   // Dynamically recomputed targets for the day (run/gym/drink/macro-floor adjusted).
