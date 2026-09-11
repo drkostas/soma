@@ -3,7 +3,7 @@ import Svg, { Polyline } from "react-native-svg";
 import { Text, Card } from "soma-style";
 import type { ComparisonPoint } from "../lib/api";
 import { pacesForVdot, timeStr } from "banister";
-import { readinessScore } from "../lib/readiness";
+import { readinessScore } from "banister";
 
 /** Two lines on a SHARED y-scale (so the comparison is honest), scaled to width. */
 function DualLine({

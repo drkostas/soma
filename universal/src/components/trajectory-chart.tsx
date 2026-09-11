@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card, SegmentedControl } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, chartDateLabel, type LineChartProps } from "./line-chart";
-import { todayKey } from "../lib/freshness";
+import { todayKey } from "banister";
 import { trajectoryAnnotations } from "../lib/trajectory-annotations";
 import { getHMPrediction, timeStr } from "banister";
 import type { ForwardSim, TrajectoryData } from "../lib/api";

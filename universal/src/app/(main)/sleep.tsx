@@ -8,7 +8,7 @@ import { TrendArrow } from "../../components/trend-arrow";
 import { LineChart, ChartLegend, ExpandableChart } from "../../components/line-chart";
 import { InfoHint, STAT_INFO, TREND_7D, TREND_7D_LOWER } from "../../components/info-hint";
 import { fetchJson, usePullRefresh, useSleepSummary, useRecoverySummary, useRespiratory, useSleepSchedule, useWeekdayWeekend } from "../../lib/api";
-import { freshness, staleShort, todayKey } from "../../lib/freshness";
+import { freshness, staleShort, todayKey } from "banister";
 import { SleepDashboard } from "../../components/sleep-dashboard";
 import { RecoveryVitals } from "../../components/recovery-vitals";
 import { SleepRespiratory } from "../../components/sleep-respiratory";
