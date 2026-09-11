@@ -3,7 +3,7 @@ import { ScrollView, View, RefreshControl, TextInput, Pressable } from "react-na
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
 import {
   useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, deleteDrink, closeDay,
-  reopenDay, copyDay, setManualOverride, rebalanceMeals, presetItems, presetBaseMacros, useOnboard,
+  reopenDay, copyDay, rebalanceMeals, presetItems, presetBaseMacros, useOnboard,
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
 import { NutritionOnboarding } from "../../components/nutrition-onboarding";
@@ -116,7 +116,6 @@ export default function NutritionScreen() {
   const [skipBusy, setSkipBusy] = useState<string | null>(null);
   const [reopenBusy, setReopenBusy] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
-  const [unlockBusy, setUnlockBusy] = useState(false);
   const [delDrinkId, setDelDrinkId] = useState<number | null>(null);
   const [detailMeal, setDetailMeal] = useState<SomaMeal | null>(null);
   const [editMeal, setEditMeal] = useState<{ id: number; grams: Record<string, number> } | null>(null);
@@ -142,7 +141,6 @@ export default function NutritionScreen() {
   const skippedSlots = data?.skippedSlots ?? [];
   const loggedDrinks = data?.drinks ?? [];
   const dayClosed = closeStatus === "closed" || plan?.status === "closed";
-  const manualOverride = (bd?.manualOverride ?? false) && !dayClosed;
   const caloriesTrend = useCaloriesTrend();
   const targetCal = bd?.adjustedTargets?.calories ?? (Number(plan?.target_calories) || 0);
 
@@ -251,12 +249,6 @@ export default function NutritionScreen() {
     setCopyBusy(true);
     const ok = await copyDay(shiftDate(DATE, -1), DATE);
     setCopyBusy(false);
-    if (ok) refetch();
-  }
-  async function onUnlock() {
-    setUnlockBusy(true);
-    const ok = await setManualOverride(DATE, false);
-    setUnlockBusy(false);
     if (ok) refetch();
   }
   async function onLogDrink(key: string) {
@@ -376,11 +368,10 @@ export default function NutritionScreen() {
           <View className="flex-row items-center gap-2">
             <Text variant="title">{isToday ? "Today" : niceDate(DATE)}</Text>
             {dayClosed ? <Badge label="Closed" tone="success" /> : <Badge label="Nutrition" tone="teal" />}
-            {manualOverride ? <Badge label="Offset Plan" tone="warm" /> : null}
           </View>
           <Button label="›" variant="ghost" size="sm" disabled={isToday} onPress={() => setDATE((d) => shiftDate(d, 1))} />
         </View>
-        {(!isToday || dayClosed || manualOverride || (meals.length === 0 && !dayClosed)) ? (
+        {(!isToday || dayClosed || (meals.length === 0 && !dayClosed)) ? (
           <View className="flex-row flex-wrap items-center justify-center gap-2">
             {!isToday ? (
               <Button label="Jump to today" variant="ghost" size="sm" onPress={() => setDATE(todayLocal())} />
@@ -390,9 +381,6 @@ export default function NutritionScreen() {
             ) : null}
             {meals.length === 0 && !dayClosed ? (
               <Button label={copyBusy ? "…" : "Copy yesterday"} variant="ghost" size="sm" disabled={copyBusy} onPress={onCopyYesterday} />
-            ) : null}
-            {manualOverride ? (
-              <Button label={unlockBusy ? "…" : "✕ Unlock plan"} variant="ghost" size="sm" disabled={unlockBusy} onPress={onUnlock} />
             ) : null}
           </View>
         ) : null}

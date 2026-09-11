@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
     /** Ad-hoc planned run distance in km. NULL clears the override and falls back
      *  to training_plan_day.target_distance_km in the plan API read path. */
     planned_run_km?: number | null;
-    manual_override?: boolean;
   };
   const { date, run_enabled, selected_workouts, expected_steps, planned_run_km } = body;
 
@@ -26,17 +25,6 @@ export async function POST(req: NextRequest) {
     VALUES (${date})
     ON CONFLICT (date) DO NOTHING
   `;
-
-  // Handle manual_override toggle
-  if (body.manual_override !== undefined) {
-    await sql`UPDATE nutrition_day SET manual_override = ${body.manual_override} WHERE date = ${date}`;
-    // When unlocking, reset stale offset values so the plan API recomputes correctly
-    if (body.manual_override === false) {
-      const profRows = await sql`SELECT daily_deficit FROM nutrition_profile WHERE id = 1`;
-      const defaultDeficit = profRows[0]?.daily_deficit != null ? Number(profRows[0].daily_deficit) : 800;
-      await sql`UPDATE nutrition_day SET target_calories = NULL, deficit_used = ${defaultDeficit} WHERE date = ${date}`;
-    }
-  }
 
   // Handle activity selection updates (only if fields provided)
   if (run_enabled !== undefined && selected_workouts !== undefined) {
