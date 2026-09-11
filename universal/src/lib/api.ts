@@ -122,7 +122,7 @@ export interface SomaBreakdown {
   stepCalories?: number; stepCaloriesPredicted?: number; expectedSteps?: number; actualSteps?: number;
   runCalories?: number; runActual?: number; runPredicted?: number; runEnabled?: boolean; runActualDistKm?: number; runDistanceKm?: number;
   gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: boolean }[];
-  drinkCalories?: number; deficit?: number; manualOverride?: boolean;
+  drinkCalories?: number; deficit?: number;
   weightKg?: number;
   // Dynamically recomputed targets for the day (run/gym/drink/macro-floor adjusted).
   // Web reads these; the app must too, or it shows stale stored plan.target_* goals.
@@ -1317,15 +1317,6 @@ export async function copyDay(fromDate: string, toDate: string): Promise<boolean
   return res.ok;
 }
 
-/** Toggle the manual activity-plan override (unlock an Offset Plan). */
-export async function setManualOverride(date: string, on: boolean): Promise<boolean> {
-  const res = await fetch(`${API_BASE}/api/nutrition/activity-select`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
-    body: JSON.stringify({ date, manual_override: on }),
-  });
-  return res.ok;
-}
 
 /** Update the day's activity plan (drives the burn calc): run on/off + which
  *  gym workouts count + expected steps + ad-hoc planned-run km. */
