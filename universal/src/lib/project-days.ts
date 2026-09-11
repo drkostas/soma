@@ -37,12 +37,6 @@ export function projectDays(
   }
 }
 
-/** sec/km → "M:SS". */
-export function paceStr(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
 
 export const TRAFFIC_COLOR: Record<string, string> = {
   green: "#6ad4a0",

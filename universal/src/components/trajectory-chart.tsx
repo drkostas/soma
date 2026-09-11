@@ -4,15 +4,9 @@ import { Text, Card, SegmentedControl } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, chartDateLabel, type LineChartProps } from "./line-chart";
 import { todayKey } from "../lib/freshness";
 import { trajectoryAnnotations } from "../lib/trajectory-annotations";
-import { getHMPrediction } from "banister";
+import { getHMPrediction, timeStr } from "banister";
 import type { ForwardSim, TrajectoryData } from "../lib/api";
 
-/** Seconds → H:MM:SS (half-marathon finish time). */
-function timeStr(sec: number): string {
-  const t = Math.round(sec);
-  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
 function raceDateLabel(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   return isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });

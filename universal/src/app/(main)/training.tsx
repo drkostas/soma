@@ -27,7 +27,7 @@ import { TrajectoryChart } from "../../components/trajectory-chart";
 import { StepEditorSheet } from "../../components/step-editor-sheet";
 import { ReferencePanel, type RefMetric } from "../../components/reference-panel";
 import { PaceComputation } from "../../components/pace-computation";
-import { estimateHMSeconds } from "../../lib/vdot-utils";
+import { hmSecondsFromVdot } from "banister";
 
 /** VO2max trend (last year, chronological) from the shared stats endpoint. */
 function useVo2Trend() {
@@ -125,8 +125,8 @@ export default function TrainingScreen() {
     };
     // Web: the HM time from the current VDOT (Daniels), else the day's stored prediction; the
     // sparkline takes each day's stored seconds, else the estimate from that day's VDOT.
-    const rpSpark = hist.map((h) => (h.race_prediction_seconds != null && Number(h.race_prediction_seconds) > 0 ? Number(h.race_prediction_seconds) : Number(h.vdot_adjusted) > 0 ? estimateHMSeconds(Number(h.vdot_adjusted)) : NaN)).filter((v) => isFinite(v) && v > 0);
-    const rp = vdot != null && Number(vdot) > 0 ? estimateHMSeconds(Number(vdot)) : fit?.race_prediction_seconds != null ? Number(fit.race_prediction_seconds) : last(rpSpark);
+    const rpSpark = hist.map((h) => (h.race_prediction_seconds != null && Number(h.race_prediction_seconds) > 0 ? Number(h.race_prediction_seconds) : Number(h.vdot_adjusted) > 0 ? hmSecondsFromVdot(Number(h.vdot_adjusted)) : NaN)).filter((v) => isFinite(v) && v > 0);
+    const rp = vdot != null && Number(vdot) > 0 ? hmSecondsFromVdot(Number(vdot)) : fit?.race_prediction_seconds != null ? Number(fit.race_prediction_seconds) : last(rpSpark);
     if (rp > 0) m.push({ label: "Race prediction", value: hms(rp), spark: rpSpark, color: "#6ad4a0", note: "HM from current VDOT" });
     const dec = (fit as { decoupling_pct?: number | null } | undefined)?.decoupling_pct;
     if (dec != null) {

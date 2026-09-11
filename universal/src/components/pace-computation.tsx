@@ -3,7 +3,7 @@ import { View, Pressable } from "react-native";
 import Svg, { Polyline, Circle } from "react-native-svg";
 import { Text, Card, Modal } from "soma-style";
 import type { GraphNode, GraphEdge } from "../lib/api";
-import { paceStr } from "../lib/vdot";
+import { paceStr } from "banister";
 
 const READINESS_INPUTS = [
   { id: "hrv_z", label: "HRV" },

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
 import { requestGarminPush, type ActivityMatch, type PlanDay, type WorkoutStep } from "../lib/api";
-import { getBasePace, getHRZone } from "banister";
+import { getBasePace, getHRZone, paceStr } from "banister";
 import { TRAFFIC_COLOR, type ProjectedDay } from "../lib/project-days";
 import { MatchedActivityPanel } from "./matched-activity-panel";
 
@@ -44,12 +44,6 @@ function stepLine(s: WorkoutStep): string {
   return parts.join(" · ");
 }
 
-/** Seconds/km → "M:SS". */
-function paceStr(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
 const scoreColor = (s: number) => (s >= 80 ? "#6ad4a0" : s >= 60 ? "#e0c458" : "#e06060");
 
 function DayRow({
