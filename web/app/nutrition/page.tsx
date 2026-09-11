@@ -4,6 +4,7 @@ import { getLivePlan } from "@/lib/live-plan";
 import { NutritionDashboard } from "@/components/nutrition-dashboard";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
 import { BodyCompChart } from "@/components/body-comp-chart";
+import { todayAthlete } from "@/lib/athlete-tz";
 
 export const metadata: Metadata = { title: "Nutrition" };
 export const revalidate = 60;
@@ -227,7 +228,7 @@ async function getSleepDetail(date: string) {
 
 export default async function NutritionPage({ searchParams }: { searchParams: Promise<{ date?: string; view?: string }> }) {
   const params = await searchParams;
-  const today = params.date || new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const today = params.date || todayAthlete();
   const view = params.view || "day";
 
   // Check if onboarding is needed (no nutrition_profile)

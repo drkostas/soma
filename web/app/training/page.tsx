@@ -7,6 +7,7 @@ import { Target } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
 import { projectVdotSeries, DEFAULT_BANISTER, type DatedLoad } from "banister";
 import { vdotFromHmSeconds } from "banister";
+import { todayAthlete } from "@/lib/athlete-tz";
 
 export const metadata: Metadata = { title: "Training" };
 export const revalidate = 300;
@@ -51,7 +52,7 @@ async function getReadiness() {
   const sql = getDb();
   // Today's row only: readiness is about last night, so an older row is not a
   // fallback — with no row the card says "No readiness data" (#647).
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const today = todayAthlete();
   const rows = await safeQuery(
     () => sql`
       SELECT r.composite_score, r.traffic_light,
@@ -351,7 +352,7 @@ async function getTrajectoryData(
 }
 
 export default async function TrainingPage() {
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const today = todayAthlete();
   const [planForPage, readiness, pmcLatest, fitnessLatest, referenceData, banisterParams, trailingLoad] = await Promise.all([
     getPlanForPage(),
     getReadiness(),

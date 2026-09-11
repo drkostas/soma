@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { todayAthlete } from "@/lib/athlete-tz";
 
 
 /**
@@ -255,7 +256,7 @@ export async function POST(req: NextRequest) {
   `;
 
   // Generate today's plan immediately
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const today = todayAthlete();
   try {
     const baseUrl = process.env.SOMA_WEB_URL || process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
