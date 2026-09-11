@@ -26,5 +26,8 @@ jobs:
         run: npm ci || npm install
       - name: Typecheck
         run: npm run typecheck
+      - name: Lint
+        working-directory: universal
+        run: npx eslint . --max-warnings 86
       - name: Unit tests
         run: npm test
