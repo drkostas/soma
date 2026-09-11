@@ -6,7 +6,7 @@ import { getLivePlan, getTrailingLoad, type LivePlan } from "@/lib/live-plan";
 import { Target } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
 import { projectVdotSeries, DEFAULT_BANISTER, type DatedLoad } from "banister";
-import { vdotFromHmSeconds } from "@/lib/vdot-utils";
+import { vdotFromHmSeconds } from "banister";
 
 export const metadata: Metadata = { title: "Training" };
 export const revalidate = 300;

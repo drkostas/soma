@@ -13,7 +13,7 @@ import {
   computeAdjustedPace,
 } from "@/lib/training-engine";
 import { getBasePace } from "banister";
-import { estimateHMSeconds } from "@/lib/vdot-utils";
+import { hmSecondsFromVdot } from "banister";
 
 
 /**
@@ -156,7 +156,7 @@ export async function GET(request: Request) {
   const basePace = getBasePace(currentVdot, runType);
 
   // Base HM pace from VDOT (Daniels equation)
-  const baseHmPace = Math.round(estimateHMSeconds(currentVdot) / 21.0975);
+  const baseHmPace = Math.round(hmSecondsFromVdot(currentVdot) / 21.0975);
 
   // Compute factors
   const rf = readinessFactorCalc(compositeScore);

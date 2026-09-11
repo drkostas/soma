@@ -1,4 +1,4 @@
-import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type PlanDay as FsPlanDay } from "./forward-simulation";
+import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type SimulationPlanDay as FsPlanDay } from "banister";
 import type { ForwardSim } from "./api";
 
 export type { ProjectedDay };

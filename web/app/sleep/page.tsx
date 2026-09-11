@@ -17,7 +17,7 @@ import { RespirationChart } from "@/components/respiration-chart";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
-import { freshness, staleHeadline, todayKey, RECOVERY_MAX_AGE_DAYS } from "@/lib/freshness";
+import { freshness, staleHeadline, todayKey, RECOVERY_MAX_AGE_DAYS } from "banister";
 import {
   Moon,
   Sunrise,

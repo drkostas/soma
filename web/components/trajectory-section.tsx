@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { TrajectoryChart } from "@/components/trajectory-chart";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { Target } from "lucide-react";
-import type { ProjectedDay } from "@/lib/forward-simulation";
+import type { ProjectedDay } from "banister";
 
 interface TrajectoryEntry {
   date: string;

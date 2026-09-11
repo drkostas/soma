@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { freshness, staleShort, todayKey, RECOVERY_MAX_AGE_DAYS } from "./freshness";
+import { freshness, staleShort, todayKey, RECOVERY_MAX_AGE_DAYS } from "banister";
 
 const T = "2026-09-06";
 describe("freshness (app twin, #731)", () => {

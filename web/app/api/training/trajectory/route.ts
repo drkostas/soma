@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getLivePlan } from "@/lib/live-plan";
 import { projectVdotSeries, DEFAULT_BANISTER, type DatedLoad } from "banister";
-import { vdotFromHmSeconds } from "@/lib/vdot-utils";
+import { vdotFromHmSeconds } from "banister";
 
 /**
  * Optimal-vs-actual VDOT trajectory for the mobile app. Ports the training

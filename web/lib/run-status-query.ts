@@ -1,6 +1,6 @@
 import type { QueryFn } from "@/lib/db";
 import { runStatus, type RunStatus } from "@/lib/run-status";
-import { todayKey } from "@/lib/freshness";
+import { todayKey } from "banister";
 
 /** soma's own running load (training_load, source garmin_running), last 35 days → RunStatus. */
 export async function loadRunStatus(sql: QueryFn, today: string = todayKey()): Promise<RunStatus> {

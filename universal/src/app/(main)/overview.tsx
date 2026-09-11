@@ -25,8 +25,8 @@ import {
   todayLocal,
   type ActivityRow,
 } from "../../lib/api";
-import { readinessScore } from "../../lib/readiness";
-import { freshness, staleShort, todayKey } from "../../lib/freshness";
+import { readinessScore } from "banister";
+import { freshness, staleShort, todayKey } from "banister";
 
 interface OverviewTrends {
   steps: number[];

@@ -2,7 +2,7 @@
 
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
-import { estimateHMSeconds } from "@/lib/vdot-utils";
+import { hmSecondsFromVdot } from "banister";
 // Shared with the home Recovery card + the app, so a given z reads the same everywhere.
 import { readinessScore as zToPercentile } from "@/lib/readiness";
 
@@ -73,7 +73,7 @@ export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonC
         subtitle="Daniels vs Garmin HM prediction"
         data={data.racePrediction.map(r => ({
           ...r,
-          ourSeconds: r.ourVdot ? estimateHMSeconds(r.ourVdot) : null,
+          ourSeconds: r.ourVdot ? hmSecondsFromVdot(r.ourVdot) : null,
         }))}
         ourKey="ourSeconds"
         garminKey="garminSeconds"
