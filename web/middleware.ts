@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { tailnetIdentityOk } from "@/lib/chat-transport";
+import { devSessionAllowed } from "@/lib/dev-session";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -88,8 +89,9 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // Require session for everything else
-  if (!req.auth) {
+  // Require session for everything else. The local verification server may stand in for one
+  // (soma#854): SOMA_DEV_SESSION=1, loopback host, non-production build, all three.
+  if (!req.auth && !devSessionAllowed(req)) {
     const loginUrl = new URL("/login", req.url);
     return NextResponse.redirect(loginUrl);
   }
