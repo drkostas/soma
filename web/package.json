@@ -25,7 +25,7 @@
     "hevy2garmin": "^0.6.0",
     "lucide-react": "^0.575.0",
     "macro-engine-core": "^0.2.0",
-    "maplibre-gl": "^5.19.0",
+    "maplibre-gl": "^6.9.0",
     "motion": "^12.34.3",
     "nanoid": "^5.1.6",
     "next": "16.1.6",
