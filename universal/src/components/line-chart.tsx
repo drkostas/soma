@@ -24,6 +24,8 @@ export interface ChartSeries {
   stack?: string;
   /** Per-index fill opacity for bars (web fades days outside the current window, soma#782). */
   opacities?: (number | null)[];
+  /** dots mode: ring instead of disc, for a value that is an estimate (soma#891). */
+  hollow?: boolean;
 }
 
 export interface LineChartProps {
@@ -267,7 +269,7 @@ export function LineChart(props: LineChartProps) {
               if (s.mode === "dots") {
                 return s.values.map((v, i) =>
                   v == null || !isFinite(v) ? null : (
-                    <Circle key={`${si}-${i}`} cx={xAt(i)} cy={yOf(s, v)} r={s.sizes?.[i] != null ? Math.max(1.4, Number(s.sizes[i])) : 2.6} fill={s.color} fillOpacity={s.sizes ? 0.55 : 1} />
+                    <Circle key={`${si}-${i}`} cx={xAt(i)} cy={yOf(s, v)} r={s.sizes?.[i] != null ? Math.max(1.4, Number(s.sizes[i])) : 2.6} fill={s.hollow ? "#0c1519" : s.color} stroke={s.hollow ? s.color : undefined} strokeWidth={s.hollow ? 1.4 : 0} fillOpacity={s.hollow ? 1 : s.sizes ? 0.55 : 1} />
                   ),
                 );
               }

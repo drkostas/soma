@@ -207,6 +207,12 @@ export function BodyCompChart({ visible }: { visible: boolean }) {
   const cLabels = cAxis.map(shortLabel);
   const cumulative = alignBy(cAxis, dailyDeficits.filter((d) => d.cumulative != null), "cumulative");
   const countedDays = profile.window?.countedDays ?? counted.length;
+  // Points estimated from the scale (soma#891) are drawn hollow over the line.
+  const srcByDate = new Map(dailyDeficits.map((d) => [d.date, d.source]));
+  const estimated = cAxis.map((d, i) => {
+    const src = srcByDate.get(d);
+    return cumulative[i] != null && (src === "extrapolated" || src === "partial") ? cumulative[i] : null;
+  });
   const cumulativeChart: LineChartProps = {
     labels: cLabels,
     xTicks: 4,
@@ -214,6 +220,7 @@ export function BodyCompChart({ visible }: { visible: boolean }) {
     series: [
       { values: goalPace, color: C.pace, dashed: true, width: 1.5, label: "Goal pace" },
       { values: cumulative, color: C.deficit, width: 2.2, label: "Actual" },
+      { values: estimated, color: C.deficit, mode: "dots", hollow: true, sizes: estimated.map(() => 3) },
     ],
   };
 

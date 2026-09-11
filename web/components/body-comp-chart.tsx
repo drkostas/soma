@@ -46,6 +46,8 @@ interface BodyCompData {
     gymCal: number; gymTitle: string; totalBurn: number; consumed: number;
     deficit: number; cumulative: number | null; goalPace: number | null; closed: boolean; isToday: boolean;
     coverage?: number | null; counted?: boolean; inWindow?: boolean;
+    /** observed | partial | extrapolated | unknown (soma#891) and the weigh-in interval an estimate came from. */
+    source?: string; intervalStart?: string | null; intervalEnd?: string | null;
   }[];
   goalDeficit: number;
 }
@@ -442,7 +444,7 @@ export function BodyCompChart() {
                         }}>
                           <div style={{ fontWeight: "bold", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
                             <span>{dayLabel}</span>
-                            <span style={{ fontSize: 10, opacity: 0.5 }}>{day.isToday ? "IN PROGRESS" : day.closed ? "CLOSED" : "OPEN"}</span>
+                            <span style={{ fontSize: 10, opacity: 0.5 }}>{day.source === "extrapolated" ? "ESTIMATED" : day.source === "partial" ? "PARTLY LOGGED" : day.isToday ? "IN PROGRESS" : day.closed ? "CLOSED" : "OPEN"}</span>
                           </div>
                           <div style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: 4, marginBottom: 4 }}>
                             <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -510,7 +512,9 @@ export function BodyCompChart() {
                     if (payload.eatenDot == null || payload.eatenDot === 0) return <></>;
                     const deficit = payload.deficit;
                     const fill = deficit <= -goalDeficit ? "#22c55e" : deficit < 0 ? "#f59e0b" : "#ef4444";
-                    return <circle cx={cx} cy={cy} r={5} fill={fill} stroke="rgba(0,0,0,0.5)" strokeWidth={1.5} />;
+                    // An estimated day (soma#891) is a hollow dot: the value is the scale's, not a log.
+                    const est = payload.source === "extrapolated" || payload.source === "partial";
+                    return <circle cx={cx} cy={cy} r={5} fill={est ? "none" : fill} stroke={est ? fill : "rgba(0,0,0,0.5)"} strokeWidth={1.5} />;
                   }} connectNulls={false} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -542,10 +546,10 @@ export function BodyCompChart() {
                 <ComposedChart data={(() => {
                   // Build cumulative data matching weight chart X-axis range
                   const totalDeficitNeeded = -Math.round((profile.fatToLose || 5.5) * 7700);
-                  const deficitData: { date: string; cumulative: number | null; goalPace: number | null }[] = [];
+                  const deficitData: { date: string; cumulative: number | null; goalPace: number | null; source?: string }[] = [];
                   // Add actual deficit data points
                   for (const d of dailyDeficits) {
-                    deficitData.push({ date: d.date, cumulative: d.cumulative, goalPace: null });
+                    deficitData.push({ date: d.date, cumulative: d.cumulative, goalPace: null, source: d.source });
                   }
                   // Add goal pace line: daily samples so it renders as a smooth straight line
                   // Goal pace runs over the current window only: from its first counted
@@ -608,7 +612,13 @@ export function BodyCompChart() {
                   />
                   <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
                   <Line type="linear" dataKey="goalPace" stroke="#f97316" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} connectNulls={false} />
+                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={(props: any) => {
+                    const { cx, cy, payload, key } = props;
+                    if (payload.cumulative == null) return <g key={key} />;
+                    // Hollow where the day was estimated from the scale (soma#891).
+                    const est = payload.source === "extrapolated" || payload.source === "partial";
+                    return <circle key={key} cx={cx} cy={cy} r={3} fill={est ? "#0b1220" : "#3b82f6"} stroke="#3b82f6" strokeWidth={1.5} />;
+                  }} connectNulls={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

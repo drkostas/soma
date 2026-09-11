@@ -130,7 +130,13 @@ export interface SomaBreakdown {
   adjustedTargets?: { calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number };
 }
 /** One 7-day trend row. `counted` = closed AND over the coverage floor (#699); only those feed totals or earn a colour. */
-export interface TrendDay { date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean; coverage?: number | null; counted?: boolean }
+export type DaySource = "observed" | "partial" | "extrapolated" | "unknown";
+/** `source` (soma#891): observed = logged or closed by hand; partial/extrapolated = filled from the scale
+ *  between `intervalStart` and `intervalEnd`; unknown = nothing to say. `counted` = not unknown. */
+export interface TrendDay {
+  date: string; ate: number; burn: number; deficit: number; closed: boolean; isToday: boolean; coverage?: number | null; counted?: boolean;
+  source?: DaySource; intervalStart?: string | null; intervalEnd?: string | null;
+}
 export interface LoggedDrink {
   id: number; name: string; drink_type: string; quantity: number;
   calories: number; carbs?: number; alcohol_grams?: number; fat_oxidation_pause_hours?: number;
@@ -152,6 +158,8 @@ export interface SomaPlan {
     days?: TrendDay[];
     totalDeficit?: number; goalDeficit?: number; closedDays?: number;
   };
+  /** Today's own estimate: logged so far plus the unlogged share at the current interval's rate (soma#891). */
+  deficitEstimate?: { ate: number; burn: number; deficit: number; source: DaySource; intervalStart: string | null; intervalEnd: string | null } | null;
   /** Is nutrition in use this week (#698/#714). Gate the log-derived numbers on state === "complete". */
   engagement?: { state: "absent" | "partial" | "complete"; coverage: number; basis: string; weekFloorDays?: number };
   /** The scale: OLS over 14 days, null slope until 3 weigh-ins. Leads when weightTrendPrimary. */
@@ -1266,6 +1274,7 @@ export interface BodyComp {
     date: string; deficit: number; cumulative: number | null; goalPace: number | null; closed: boolean; isToday: boolean;
     bmr?: number; dailyActivity?: number; runCal?: number; gymCal?: number; totalBurn?: number; consumed?: number;
     coverage?: number | null; counted?: boolean; inWindow?: boolean;
+    source?: DaySource; intervalStart?: string | null; intervalEnd?: string | null;
   }[];
   goalDeficit: number;
 }
