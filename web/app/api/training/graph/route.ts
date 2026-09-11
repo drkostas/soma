@@ -14,6 +14,7 @@ import {
 } from "@/lib/training-engine";
 import { getBasePace } from "banister";
 import { hmSecondsFromVdot } from "banister";
+import { todayAthlete } from "@/lib/athlete-tz";
 
 
 /**
@@ -27,7 +28,7 @@ import { hmSecondsFromVdot } from "banister";
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const date = searchParams.get("date") ?? new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const date = searchParams.get("date") ?? todayAthlete();
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: "Invalid date format. Use YYYY-MM-DD." }, { status: 400 });
@@ -148,7 +149,7 @@ export async function GET(request: Request) {
   // Today's prescribed run type, but only from a LIVE plan. A dormant plan's
   // day (if one even coincides) is not today's prescription (#701). With no
   // live plan the pace node defaults to "easy", which is the honest neutral.
-  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const todayStr = todayAthlete();
   const livePlan = await getLivePlan(sql, todayStr);
   const todayPlanDay = livePlan.days.find((d) => d.day_date === todayStr);
   const runType = todayPlanDay?.run_type || "easy";

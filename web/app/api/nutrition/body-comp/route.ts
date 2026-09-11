@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { deficitWindow, countsForDeficit, windowLabel } from "@/lib/deficit-window";
+import { todayAthlete } from "@/lib/athlete-tz";
 
 
 export async function GET() {
@@ -73,7 +74,7 @@ export async function GET() {
   const targetWeight = Math.round((ffm / (1 - targetBf / 100)) * 10) / 10;
   const fatToLose = Math.max(0, currentFat - (targetWeight * targetBf / 100));
   const totalDeficitNeeded = fatToLose * 7700;
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const today = todayAthlete();
   // Use T12:00 to avoid timezone-related off-by-one when parsing date strings
   const daysRemaining = Math.max(1, Math.round((new Date(targetDate + "T12:00").getTime() - new Date(today + "T12:00").getTime()) / 86400000));
   const weeksRemaining = Math.max(1, daysRemaining / 7);
@@ -194,7 +195,7 @@ export async function GET() {
     ORDER BY n.date
   `;
 
-  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const todayStr = todayAthlete();
   const todayMealRows = await sql`
     SELECT COALESCE(SUM(calories), 0) AS total FROM meal_log WHERE date = ${todayStr}
   `;

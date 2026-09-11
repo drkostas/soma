@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import { athleteTz } from "@/lib/athlete-tz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,7 +100,7 @@ export async function GET(request: Request) {
     // Monthly volume by muscle group (6 groups via ILIKE CASE)
     sql`
       WITH exercise_muscles AS (
-        SELECT TO_CHAR((raw_json->>'start_time')::timestamptz AT TIME ZONE 'America/New_York', 'YYYY-MM') as month,
+        SELECT TO_CHAR((raw_json->>'start_time')::timestamptz AT TIME ZONE ${athleteTz()}, 'YYYY-MM') as month,
           CASE
             WHEN e->>'title' ILIKE '%bench%' OR e->>'title' ILIKE '%chest%' OR e->>'title' ILIKE '%dip%' THEN 'Chest'
             WHEN e->>'title' ILIKE '%row%' OR e->>'title' ILIKE '%pull up%' OR e->>'title' ILIKE '%lat %' OR e->>'title' ILIKE '%deadlift%' OR e->>'title' ILIKE '%back extension%' THEN 'Back'
@@ -116,7 +117,7 @@ export async function GET(request: Request) {
           jsonb_array_elements(raw_json->'exercises') as e,
           jsonb_array_elements(e->'sets') as s
         WHERE endpoint_name = 'workout'
-          AND (raw_json->>'start_time')::timestamptz AT TIME ZONE 'America/New_York' >= ${cutoff}::date
+          AND (raw_json->>'start_time')::timestamptz AT TIME ZONE ${athleteTz()} >= ${cutoff}::date
           AND s->>'type' = 'normal' AND (s->>'weight_kg')::float > 0 AND (s->>'reps')::int > 0
       )
       SELECT month, muscle_group, ROUND(SUM(volume)::numeric) as volume
@@ -125,7 +126,7 @@ export async function GET(request: Request) {
     `,
     // Training calendar — all workout days (all-time; drives heatmap + frequency + span)
     sql`
-      SELECT ((raw_json->>'start_time')::timestamptz AT TIME ZONE 'America/New_York')::date as day,
+      SELECT ((raw_json->>'start_time')::timestamptz AT TIME ZONE ${athleteTz()})::date as day,
         raw_json->>'title' as program
       FROM hevy_raw_data WHERE endpoint_name = 'workout' ORDER BY day ASC
     `,

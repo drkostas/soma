@@ -15,13 +15,14 @@ import { banisterPredict, fitBanister, DEFAULT_PARAMS, type BanisterParams, type
 import type { QueryFn } from "./db";
 import { vdotFromRace } from "./vdot";
 import { crossModalScale } from "./pmc-stream";
+import { dateInAthleteTz } from "./athlete-tz";
 
 export type { BanisterParams };
 export { banisterPredict, DEFAULT_PARAMS };
 
-/** Today (YYYY-MM-DD) in America/New_York — mirrors config.today_nyc. */
+/** Today (YYYY-MM-DD) in the athlete's timezone (soma#872). */
 function todayNyc(now: Date = new Date()): string {
-  return now.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  return dateInAthleteTz(now);
 }
 
 function daysBetween(a: string, b: string): number {

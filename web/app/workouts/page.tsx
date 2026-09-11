@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { athleteTz } from "@/lib/athlete-tz";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { getDb } from "@/lib/db";
@@ -422,7 +423,7 @@ async function getMonthlyMuscleVolume(cutoff: string) {
   const rows = await sql`
     WITH exercise_muscles AS (
       SELECT
-        TO_CHAR((raw_json->>'start_time')::timestamptz AT TIME ZONE 'America/New_York', 'YYYY-MM') as month,
+        TO_CHAR((raw_json->>'start_time')::timestamptz AT TIME ZONE ${athleteTz()}, 'YYYY-MM') as month,
         CASE
           WHEN e->>'title' ILIKE '%bench%' OR e->>'title' ILIKE '%chest%' OR e->>'title' ILIKE '%dip%' THEN 'Chest'
           WHEN e->>'title' ILIKE '%row%' OR e->>'title' ILIKE '%pull up%' OR e->>'title' ILIKE '%lat %' OR e->>'title' ILIKE '%deadlift%' OR e->>'title' ILIKE '%back extension%' THEN 'Back'
@@ -439,7 +440,7 @@ async function getMonthlyMuscleVolume(cutoff: string) {
         jsonb_array_elements(raw_json->'exercises') as e,
         jsonb_array_elements(e->'sets') as s
       WHERE endpoint_name = 'workout'
-        AND (raw_json->>'start_time')::timestamptz AT TIME ZONE 'America/New_York' >= ${cutoff}::date
+        AND (raw_json->>'start_time')::timestamptz AT TIME ZONE ${athleteTz()} >= ${cutoff}::date
         AND s->>'type' = 'normal'
         AND (s->>'weight_kg')::float > 0
         AND (s->>'reps')::int > 0
@@ -461,7 +462,7 @@ async function getTrainingCalendar() {
   // Fetch all workout dates (no cutoff) so the calendar can navigate to any period
   const rows = await sql`
     SELECT
-      ((raw_json->>'start_time')::timestamptz AT TIME ZONE 'America/New_York')::date as day,
+      ((raw_json->>'start_time')::timestamptz AT TIME ZONE ${athleteTz()})::date as day,
       raw_json->>'title' as program,
       raw_json->>'id' as hevy_id
     FROM hevy_raw_data

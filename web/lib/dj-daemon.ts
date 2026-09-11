@@ -6,6 +6,7 @@
  * and Neon. Stage: sync cutover (#187).
  */
 import { writeFileSync, renameSync, readFileSync, unlinkSync } from "fs";
+import { todayAthlete } from "./athlete-tz";
 import { ensureDjPaths } from "./dj-paths";
 import { GarminAuth, DBTokenStore } from "garmin-auth";
 import { healGarminTokenRow } from "./garmin-token-heal";
@@ -181,7 +182,7 @@ export async function runDaemon(opts: DaemonOpts): Promise<void> {
 
   writeStatus(statusFile, { state: "starting", hr: null, target_bpm: null });
 
-  const todayNyc = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const todayNyc = () => todayAthlete();
 
   while (!stop) {
     try {

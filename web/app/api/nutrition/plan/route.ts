@@ -10,6 +10,7 @@ import { nutritionEngagement, WEEK_ENGAGEMENT_FLOOR_DAYS } from "@/lib/engagemen
 import { getWeightTrend } from "@/lib/weight-trend";
 import { trendAte } from "@/lib/trend-ate";
 import { computeAlcoholDisplacement } from "macro-engine-core";
+import { todayAthlete } from "@/lib/athlete-tz";
 
 
 const VALID_MODES: readonly Mode[] = [
@@ -76,7 +77,7 @@ function redistributeRemaining(
 
 export async function GET(req: NextRequest) {
   const sql = getDb();
-  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const todayStr = todayAthlete();
   const date = req.nextUrl.searchParams.get("date") ?? todayStr;
 
   // Nothing else creates the day's row before something is logged, so the first view of a new
@@ -260,7 +261,7 @@ export async function GET(req: NextRequest) {
     // Recompute step calories from scratch using weight-based formula
     const calPerStep = 0.000423 * weightKg; // conservative: ~-50 kcal/day vs Garmin
     const isClosed = plan?.status === "closed";
-    const isPast = date < new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const isPast = date < todayAthlete();
     const stepsForCalc = (isClosed || isPast) && actualSteps !== null ? actualSteps : expectedSteps;
     const rawStepCalories = Math.round(stepsForCalc * calPerStep);
 
