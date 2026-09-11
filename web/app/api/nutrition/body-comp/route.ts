@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { deficitWindow, countsForDeficit, windowLabel } from "@/lib/deficit-window";
+import { deficitWindow, windowLabel } from "@/lib/deficit-window";
 import { todayAthlete } from "@/lib/athlete-tz";
+import { isObservedDay } from "@/lib/observed-day";
+import { reconcile, type DayIn, type DaySource } from "@/lib/energy-reconcile";
 
 
 export async function GET() {
@@ -164,9 +166,16 @@ export async function GET() {
     trendTargetDate = trendPrediction.find(p => p.weight <= targetWeight)?.date || null;
   }
 
-  // Burn breakdown per day — stacked bar data
+  // Burn breakdown per day — stacked bar data. Since soma#891 every day from
+  // the first weigh-in on is returned: an observed day (closed by a person, or
+  // every slot logged or skipped) carries what was logged; any other day is
+  // reconciled against the scale (lib/energy-reconcile), so an auto-closed
+  // empty day is an estimate between two weigh-ins, not a zero and not a gap.
+  // lib/adaptive-tdee stays on observed days only: an extrapolated day is
+  // derived from the scale, and feeding it back into a TDEE fit would be circular.
+  const firstWeighIn = weightRows.length ? String((weightRows[0] as Record<string, unknown>).date) : "9999-12-31";
   const deficitRows = await sql`
-    SELECT n.date::text AS date, n.target_calories, n.actual_calories, n.deficit_used, n.status,
+    SELECT n.date::text AS date, n.target_calories, n.actual_calories, n.deficit_used, n.status, n.closed_by,
            h.total_kilocalories AS garmin_burn, h.bmr_kilocalories AS bmr, h.total_steps,
            (
              SELECT COUNT(DISTINCT s)::float / 4
@@ -189,9 +198,14 @@ export async function GET() {
            (SELECT raw_json->>'activityName' FROM garmin_activity_raw
              WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'strength_training'
              AND (raw_json->>'startTimeLocal')::date = n.date LIMIT 1) AS gym_title
+,
+           (
+             SELECT COALESCE((SELECT SUM(m.calories) FROM meal_log m WHERE m.date = n.date), 0)
+                  + COALESCE((SELECT SUM(d.calories) FROM drink_log d WHERE d.date = n.date), 0)
+           ) AS logged_calories
     FROM nutrition_day n
     LEFT JOIN daily_health_summary h ON h.date = n.date
-    WHERE n.actual_calories > 0 OR n.status = 'active'
+    WHERE n.actual_calories > 0 OR n.status = 'active' OR n.date >= ${firstWeighIn}::date
     ORDER BY n.date
   `;
 
@@ -205,28 +219,36 @@ export async function GET() {
   const todayConsumed = Number(todayMealRows[0]?.total || 0) + Number(todayDrinkRows[0]?.total || 0);
 
   // Per-day rows first; the cumulative/goal-pace series is filled afterwards
-  // over the CURRENT window only (#728): a day counts when it is closed and its
-  // coverage clears the floor, and a window breaks at a gap of more than seven
-  // days. Days outside the window are still returned for the charts, with
+  // over the CURRENT window only (#728): a day counts when it is observed or
+  // reconciled, and a window breaks at a gap of more than seven days. Days
+  // outside the window are still returned for the charts, with
   // cumulative/goalPace null, so they render as context, never as a sum.
   const dailyDeficits: {
     date: string; bmr: number; dailyActivity: number; runCal: number; runDistKm: number;
     gymCal: number; gymTitle: string; totalBurn: number; consumed: number;
     deficit: number; cumulative: number | null; goalPace: number | null; closed: boolean; isToday: boolean;
     coverage: number | null; counted: boolean; inWindow: boolean;
+    /** observed | partial | extrapolated | unknown, and the weigh-in interval an estimate came from. */
+    source: DaySource; intervalStart: string | null; intervalEnd: string | null;
   }[] = [];
 
+  const prepared: {
+    date: string; bmr: number; dailyActivity: number; runCal: number; runDistKm: number; gymCal: number;
+    gymTitle: string; totalBurn: number; closed: boolean; isToday: boolean; coverage: number | null;
+  }[] = [];
+  const dayIns: DayIn[] = [];
   for (let i = 0; i < deficitRows.length; i++) {
     const r = deficitRows[i] as Record<string, unknown>;
     const dateStr = String(r.date).slice(0, 10);
     const isClosed = r.status === "closed";
     const isToday = dateStr === todayStr;
+    if (dateStr > todayStr) continue; // a planned-ahead day is not history
     const storedTarget = Number(r.target_calories) || 0;
 
-    if (storedTarget === 0 && !isToday && !isClosed) continue;
-
-    // Burn breakdown
+    // Burn breakdown. A day with no plan and no watch reading has no burn,
+    // and without a burn there is nothing to reconcile.
     const garminTotal = Number(r.garmin_burn) || 0;
+    if (storedTarget === 0 && garminTotal <= 1500 && !isToday) continue;
     const defUsed = Number(r.deficit_used) || goalDeficit;
     const totalBurn = garminTotal > 1500 ? garminTotal : storedTarget + defUsed;
     const bmr = Number(r.bmr) || 0;
@@ -236,44 +258,41 @@ export async function GET() {
     const runDistKm = Math.round((Number(r.run_dist) || 0) / 1000 * 10) / 10;
     const gymTitle = String(r.gym_title || "");
 
-    // Consumed
-    let consumed: number;
-    if (isClosed) {
-      consumed = Number(r.actual_calories) || 0;
-    } else if (isToday) {
-      consumed = todayConsumed;
-    } else {
-      const pastMeals = await sql`SELECT COALESCE(SUM(calories), 0) AS total FROM meal_log WHERE date = ${dateStr}`;
-      const pastDrinks = await sql`SELECT COALESCE(SUM(calories), 0) AS total FROM drink_log WHERE date = ${dateStr}`;
-      consumed = Number(pastMeals[0]?.total || 0) + Number(pastDrinks[0]?.total || 0);
-      if (consumed === 0) continue;
-    }
-
-    const deficit = consumed - totalBurn; // negative = deficit (good)
     const coverage = typeof r.coverage === "number" ? r.coverage : r.coverage != null ? Number(r.coverage) : null;
+    const observed = isObservedDay({
+      status: (r.status as string | null) ?? null,
+      closedBy: (r.closed_by as "user" | "auto" | null) ?? null,
+      coverage,
+    });
+    // Logged intake: an observed closed day keeps actual_calories (close-day
+    // reconciled it); today reads its live logs; anything else its raw logs.
+    const loggedKcal = isClosed && observed
+      ? Number(r.actual_calories) || 0
+      : isToday ? todayConsumed : Number(r.logged_calories) || 0;
 
+    prepared.push({ date: dateStr, bmr: Math.round(bmr), dailyActivity, runCal, runDistKm, gymCal, gymTitle, totalBurn: Math.round(totalBurn), closed: isClosed, isToday, coverage });
+    dayIns.push({ date: dateStr, observed, loggedKcal, loggedShare: observed ? 1 : Math.min(1, coverage ?? 0), burn: Math.round(totalBurn) });
+  }
+  const weighIns = weightRows.map((w: Record<string, unknown>) => ({ date: String(w.date).slice(0, 10), weightKg: Number(w.weight_kg) }));
+  const reconciled = reconcile(weighIns, dayIns);
+  for (let i = 0; i < prepared.length; i++) {
+    const p = prepared[i];
+    const o = reconciled[i];
     dailyDeficits.push({
-      date: dateStr,
-      bmr: Math.round(bmr),
-      dailyActivity,
-      runCal,
-      runDistKm,
-      gymCal,
-      gymTitle,
-      totalBurn: Math.round(totalBurn),
-      consumed: Math.round(consumed),
-      deficit: Math.round(deficit),
+      ...p,
+      consumed: Math.round(o.ate),
+      deficit: Math.round(o.deficit), // negative = deficit (good)
       cumulative: null,
       goalPace: null,
-      closed: isClosed,
-      isToday,
-      coverage,
-      counted: countsForDeficit({ date: dateStr, closed: isClosed, coverage, deficit }),
+      counted: o.source !== "unknown",
       inWindow: false,
+      source: o.source,
+      intervalStart: o.intervalStart,
+      intervalEnd: o.intervalEnd,
     });
   }
   // The current window: cumulative and goal pace run over its counted days only.
-  const win = deficitWindow(dailyDeficits.map(d => ({ date: d.date, closed: d.closed, coverage: d.coverage, deficit: d.deficit })), todayStr);
+  const win = deficitWindow(dailyDeficits.map(d => ({ date: d.date, closed: d.closed, coverage: d.coverage, deficit: d.deficit, counted: d.counted })), todayStr);
   let cumulativeDeficit = 0;
   let windowIndex = 0;
   for (const d of dailyDeficits) {
