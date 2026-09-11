@@ -14,7 +14,7 @@ import {
 } from "./training-engine";
 import { getBasePace, getHRZone } from "banister";
 import { projectVdotSeries, DEFAULT_BANISTER, type BanisterParams, type DatedLoad } from "banister";
-import { estimateHMSeconds } from "./vdot-utils";
+import { hmSecondsFromVdot } from "banister";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -236,7 +236,7 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
       // Use per-day Banister VDOT (varies over time) instead of static current VDOT
       const pastVdot = vdotSeries[dayIndex] ?? fitness.vdotAdjusted;
       const pastBasePace = getBasePace(pastVdot, day.runType);
-      const pastHmBase = isRest ? null : Math.round(estimateHMSeconds(pastVdot) / 21.0975);
+      const pastHmBase = isRest ? null : Math.round(hmSecondsFromVdot(pastVdot) / 21.0975);
 
       results.push({
         dayDate: day.dayDate,
@@ -338,7 +338,7 @@ export function runForwardSimulation(seeds: SimulationSeeds): ProjectedDay[] {
 
       // Predicted HM pace: base HM pace from VDOT × merge factors
       const dayVdot = vdotSeries[dayIndex] ?? fitness.vdotAdjusted;
-      const baseHmPace = estimateHMSeconds(dayVdot) / 21.0975;
+      const baseHmPace = hmSecondsFromVdot(dayVdot) / 21.0975;
       predictedHmPace = Math.round(baseHmPace * sliderAdjusted);
     }
 

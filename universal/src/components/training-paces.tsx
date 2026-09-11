@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { Text, Card } from "soma-style";
-import { pacesForVdot, paceStr, timeStr, hmPace } from "../lib/vdot";
+import { pacesForVdot, paceStr, timeStr, hmPace } from "banister";
 
 /** VDOT → training paces + A/B/C half-marathon goals, matching the web card. */
 export function TrainingPaces({ vdot }: { vdot: number | null | undefined }) {
