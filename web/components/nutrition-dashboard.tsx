@@ -651,7 +651,8 @@ export function NutritionDashboard({
               {/* Burn-based bar with goal marker */}
               {dataReady && breakdown && (() => {
                 const totalBurn = breakdown.totalBurn || 0;
-                const goalIntake = breakdown.targetIntake || 0;
+                // A closed day's breakdown carries no target, which read as "0 goal" (soma#869).
+                const goalIntake = breakdown.targetIntake || Number(plan?.target_calories) || 0;
                 const deficit = breakdown.deficit || 0;
                 const eatPct = totalBurn > 0 ? Math.min(100, (consumedCal / totalBurn) * 100) : 0;
                 const goalPct = totalBurn > 0 ? Math.min(100, (goalIntake / totalBurn) * 100) : 0;
@@ -1065,8 +1066,8 @@ export function NutritionDashboard({
         ) : (
           <Card>
             <CardContent className="pt-4 text-center text-sm text-muted-foreground">
-              No nutrition plan generated for today. Run the daily plan generator
-              to get started.
+              No plan for this day. Targets are computed the first time today or a future day is
+              opened, so a past day that was never opened stays without one.
             </CardContent>
           </Card>
         )}

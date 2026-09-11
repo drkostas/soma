@@ -529,7 +529,7 @@ export function MealCard({
         <CardContent className="pt-0 space-y-2">
           {/* Logged meals */}
           {meals.map((meal) => {
-            const itemsList: { ingredient_id?: string; grams?: number; cooked_grams?: number }[] =
+            const itemsList: { ingredient_id?: string; grams?: number; cooked_grams?: number; name?: string }[] =
               Array.isArray(meal.items) ? meal.items : (meal.items?.items ?? []);
             const ingLookup = new Map(
               ((ingredients ?? []) as Ingredient[]).map((i) => [i.id, i]),
@@ -582,8 +582,11 @@ export function MealCard({
                       });
                       return sortedItems.map((item, idx) => {
                         const ing = ingLookup.get(item.ingredient_id ?? "");
-                        const name = ing?.name ?? item.ingredient_id ?? "?";
+                        // A quick-add item has no catalog entry: its name lives on the item and it
+                        // carries no weight, so show the name and no "0g" (soma#868).
+                        const name = ing?.name ?? item.name ?? item.ingredient_id ?? "?";
                         const rawG = item.grams ?? 0;
+                        const weightless = !ing && !(rawG > 0);
                         const ratio = ing?.raw_to_cooked_ratio;
                         const isRaw = ing?.is_raw && ratio && ratio > 0 && ratio !== 1;
                         const cookedG = item.cooked_grams ?? (isRaw ? Math.round(rawG * (ratio as number)) : 0);
@@ -596,9 +599,11 @@ export function MealCard({
                               )}
                             </span>
                             <span className="tabular-nums">
-                              {isRaw
-                                ? `${cookedG}g cooked (${rawG}g raw)`
-                                : `${rawG}g`}
+                              {weightless
+                                ? ""
+                                : isRaw
+                                  ? `${cookedG}g cooked (${rawG}g raw)`
+                                  : `${rawG}g`}
                             </span>
                           </div>
                         );
