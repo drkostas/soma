@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { toPath, todayNyc, getStaleDates } from "./garmin-ingest";
-import { buildRequest, DAILY_ENDPOINTS } from "./garmin-endpoints";
+import { buildRequest, DAILY_ENDPOINTS } from "garmin-auth/endpoints";
 import type { QueryFn } from "./db";
 
 describe("toPath — connectapi query serialization", () => {

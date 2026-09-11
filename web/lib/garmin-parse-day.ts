@@ -9,7 +9,7 @@ import type { QueryFn } from "./db";
 import {
   parseDailyHealth, parseWeightEntries, parseSleep, parseHrv, parseTrainingReadiness,
   type DailyHealth,
-} from "./garmin-health-parsers";
+} from "garmin-auth/health-parsers";
 
 /** Upsert the merged daily-health row. Base fields overwrite; merged fields
  * (hrv/readiness/race) use COALESCE so a later run without them doesn't clobber. */

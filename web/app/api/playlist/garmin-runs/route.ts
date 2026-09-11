@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { parseStructuredLaps, parseUnstructuredLaps } from "@/lib/garmin-lap-parser";
+import { parseStructuredLaps, parseUnstructuredLaps } from "garmin-auth/lap-parser";
 
 export const runtime = "nodejs";
 

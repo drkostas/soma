@@ -14,7 +14,7 @@ import type { QueryFn } from "./db";
 import {
   DAILY_ENDPOINTS, RANGE_ENDPOINTS, DISCOVERY_ENDPOINTS, ACTIVITY_DETAIL_ENDPOINTS,
   buildRequest, type GarminRequest,
-} from "./garmin-endpoints";
+} from "garmin-auth/endpoints";
 import { processDay } from "./garmin-parse-day";
 import { updateFitnessTrajectory } from "./fitness-stream";
 import { computeDailyReadiness } from "./readiness-stream";
