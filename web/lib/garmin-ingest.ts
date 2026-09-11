@@ -20,6 +20,7 @@ import { updateFitnessTrajectory } from "./fitness-stream";
 import { computeDailyReadiness } from "./readiness-stream";
 import { updateBodyComp } from "./body-comp-stream";
 import { extractKiteJumpsForActivity } from "./kite-jumps";
+import { dateInAthleteTz } from "./athlete-tz";
 
 const MIN_COMPLETE_HR_POINTS = 650;
 // DI-token API profile path (returns displayName). garth's web API uses
@@ -27,9 +28,9 @@ const MIN_COMPLETE_HR_POINTS = 650;
 // is the DI-compatible path (same one garmin-auth's own refresh() uses).
 const PROFILE_URL = "/userprofile-service/socialProfile";
 
-/** Today's date (YYYY-MM-DD) in America/New_York — mirrors config.today_nyc. */
+/** Today's date (YYYY-MM-DD) in the athlete's timezone (soma#872). */
 export function todayNyc(now: Date = new Date()): string {
-  return now.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  return dateInAthleteTz(now);
 }
 
 /** Serialize a GarminRequest into a connectapi path with an inline query string. */

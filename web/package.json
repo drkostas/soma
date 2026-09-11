@@ -22,7 +22,7 @@
     "date-fns": "^4.1.0",
     "fflate": "^0.8.3",
     "garmin-auth": "^0.6.0",
-    "hevy2garmin": "^0.5.0",
+    "hevy2garmin": "^0.6.0",
     "lucide-react": "^0.575.0",
     "macro-engine-core": "^0.2.0",
     "maplibre-gl": "^5.19.0",

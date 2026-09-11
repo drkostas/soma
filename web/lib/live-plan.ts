@@ -13,6 +13,7 @@
  * back to what Garmin actually observed instead of a phantom script.
  */
 import type { QueryFn } from "@/lib/db";
+import { todayAthlete } from "./athlete-tz";
 import { trainingEngagement, type PlanInput, type TrainingEngagement } from "@/lib/engagement";
 
 export interface PlanRow {
@@ -52,7 +53,7 @@ export interface LivePlan {
 
 /** Today in the athlete's timezone as YYYY-MM-DD; matches graph/route.ts. */
 export function todayLocal(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  return todayAthlete();
 }
 
 /**

@@ -4,6 +4,6 @@ import { getDb } from "@/lib/db";
 export async function POST(req: NextRequest) {
   const { date } = await req.json();
   const sql = getDb();
-  await sql`UPDATE nutrition_day SET status = 'active' WHERE date = ${date}`;
+  await sql`UPDATE nutrition_day SET status = 'active', closed_by = NULL WHERE date = ${date}`;
   return NextResponse.json({ ok: true });
 }

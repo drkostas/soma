@@ -14,9 +14,9 @@ describe("toPath — connectapi query serialization", () => {
 });
 
 describe("todayNyc", () => {
-  it("returns YYYY-MM-DD in America/New_York", () => {
-    // 2026-07-13 03:30 UTC is still 2026-07-12 in New York (EDT, -4).
-    expect(todayNyc(new Date("2026-07-13T03:30:00Z"))).toBe("2026-07-12");
+  it("returns YYYY-MM-DD in the athlete's timezone, Athens by default (soma#872)", () => {
+    // 2026-07-12 21:30 UTC is already 2026-07-13 in Athens (EEST, +3); New York would still say the 12th.
+    expect(todayNyc(new Date("2026-07-12T21:30:00Z"))).toBe("2026-07-13");
     expect(todayNyc(new Date("2026-07-13T12:00:00Z"))).toBe("2026-07-13");
   });
 });

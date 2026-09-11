@@ -28,6 +28,8 @@ export interface UploadCandidate {
   hrSamples: number[];
   hrSource: string;
   workoutDate: string | null;
+  /** training_load.details.raw_load for this workout, when computed (hevy2garmin#523). */
+  strengthLoad?: { load_value: number } | null;
 }
 
 /**
@@ -72,7 +74,9 @@ export async function logActivitySync(
  */
 export async function getWorkoutsToUpload(sql: QueryFn): Promise<UploadCandidate[]> {
   const rows = await sql`
-    SELECT we.hevy_id, we.hevy_title, h.raw_json, we.hr_samples, we.hr_source, we.workout_date
+    SELECT we.hevy_id, we.hevy_title, h.raw_json, we.hr_samples, we.hr_source, we.workout_date,
+           (SELECT (tl.details->>'raw_load')::float FROM training_load tl
+             WHERE tl.hevy_id = we.hevy_id AND tl.source = 'hevy' ORDER BY tl.computed_at DESC LIMIT 1) AS raw_load
     FROM workout_enrichment we
     JOIN hevy_raw_data h ON h.hevy_id = we.hevy_id AND h.endpoint_name = 'workout'
     WHERE we.status = 'enriched'
@@ -88,7 +92,21 @@ export async function getWorkoutsToUpload(sql: QueryFn): Promise<UploadCandidate
     hrSamples: typeof r.hr_samples === "string" ? JSON.parse(r.hr_samples) : (r.hr_samples ?? []),
     hrSource: r.hr_source ?? "unknown",
     workoutDate: r.workout_date ? String(r.workout_date) : null,
+    strengthLoad: r.raw_load != null ? { load_value: Number(r.raw_load) } : null,
   }));
+}
+
+/** The load written into the FIT session (hevy2garmin#523). banister's computeStrengthLoad already
+ *  produces a session load for every gym session (training_load.details.raw_load); Garmin shows it
+ *  as Training Load. Off unless HEVY2GARMIN_WRITE_TRAINING_LOAD=1, because it feeds Garmin's
+ *  acute load and training status. */
+export function trainingLoadForUpload(
+  load: { load_value: number } | null | undefined,
+  env: Record<string, string | undefined> = process.env,
+): number | undefined {
+  if (env.HEVY2GARMIN_WRITE_TRAINING_LOAD !== "1") return undefined;
+  const v = Number(load?.load_value);
+  return v > 0 ? v : undefined;
 }
 
 export interface UploadOutcome { hevyId: string; status: "uploaded" | "error"; activityId?: number | null; error?: string; }
@@ -100,6 +118,7 @@ export async function processWorkout(client: GarminClient, c: UploadCandidate): 
     // the FIT so Garmin forwards the correct local time to Strava. Empty = raw UTC.
     const { fit } = generateFit(c.workout, c.hrSamples.length ? c.hrSamples : null, {
       profile: { timezone: process.env.HEVY2GARMIN_TIMEZONE ?? "" },
+      trainingLoad: trainingLoadForUpload(c.strengthLoad),
     });
     const start = c.workout?.start_time;
     const { activityId } = await uploadFit(client, fit, start);

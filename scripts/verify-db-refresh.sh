@@ -44,3 +44,4 @@ if [ "$ST" != "$DT" ] || [ "$SR" != "$DR" ]; then
   echo "MISMATCH: source $ST tables/$SR rows, copy $DT tables/$DR rows" >&2; exit 1
 fi
 echo "ok      $DST matches $SRC"
+"$(dirname "$0")/report-to-drlab.sh" verify_db_age_hours 0
