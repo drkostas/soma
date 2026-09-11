@@ -2,9 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { spotifyFetch } from "@/lib/spotify-client";
-import { fetchAudioFeatures } from "@/lib/reccobeats-client";
+import { fetchAudioFeatures } from "run-dj/reccobeats";
 import { getArtistTopTags } from "@/lib/lastfm-client";
-import { toMacroGenres } from "@/lib/genre-mapper";
+import { toMacroGenres } from "run-dj/genre";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 min on Vercel (was 60)
