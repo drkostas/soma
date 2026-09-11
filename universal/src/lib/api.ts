@@ -1374,7 +1374,9 @@ export async function logPresetMeal(
       meal_slot: slot,
       preset_meal_id: preset.id,
       portion_multiplier: portion,
-      items: [],
+      // The web sends the preset's items too; without them the row cannot be named and the prep
+      // list cannot count its raw ingredients (soma#857).
+      items: presetItems(preset),
       preset_macros: {
         calories: preset.total_calories,
         protein: preset.total_protein,

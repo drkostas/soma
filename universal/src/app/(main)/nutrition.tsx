@@ -43,9 +43,12 @@ const SLOT_ICONS: Record<string, string> = {
   breakfast: "☀️", lunch: "🌤️", dinner: "🌙", pre_sleep: "🌙", during_workout: "🏃",
 };
 
-function mealName(m: SomaMeal): string {
+function mealName(m: SomaMeal, presets: Preset[] = []): string {
   const names = (m.items ?? []).map((i) => i.name).filter(Boolean) as string[];
   if (names.length) return names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "");
+  // Rows logged before soma#857 carry no items; the preset they came from still has the name.
+  const preset = m.preset_meal_id ? presets.find((p) => p.id === m.preset_meal_id) : undefined;
+  if (preset?.name) return preset.name;
   return m.source ? slotLabel(m.source) : "Meal";
 }
 
@@ -173,6 +176,9 @@ export default function NutritionScreen() {
     setEditMeal(null); setSelectedPreset(null); setPresetSeed(null); setComposePreview(null); setPresetMult(1);
   }
   function closeLog() { setLogOpen(false); resetLogState(); }
+  // Open the log modal for a slot from a clean Presets tab. Without this the modal reopened in
+  // whatever mode the last log used, with the previous compose still in it (soma#858).
+  function openLog(s: string) { resetLogState(); setLogMode("preset"); setSlot(s); setLogOpen(true); }
   // Switch log mode from the tab buttons — clears any in-flight preview/preset.
   function setMode(m: "preset" | "quick" | "compose") { resetLogState(); setLogMode(m); }
 
@@ -640,7 +646,7 @@ export default function NutritionScreen() {
                         <Pressable key={m.id} onPress={() => setDetailMeal(m)} className="flex-row items-center gap-2 border-b border-border-subtle py-1.5">
                           <View className="flex-1">
                             <View className="flex-row items-center gap-1.5">
-                              <Text variant="body" className="text-text" numberOfLines={1} style={{ flexShrink: 1 }}>{mealName(m)}</Text>
+                              <Text variant="body" className="text-text" numberOfLines={1} style={{ flexShrink: 1 }}>{mealName(m, presets)}</Text>
                               <ProteinQualityPill grams={m.protein} weightKg={bd?.weightKg} />
                             </View>
                             <Text variant="micro" className="tabular-nums">
@@ -652,8 +658,10 @@ export default function NutritionScreen() {
                       ))}
                       {!dayClosed ? (
                         <View className="flex-row gap-2 self-start">
-                          <Button label={`+ Log ${slotLabel(s)}`} variant="secondary" size="sm" onPress={() => { setSlot(s); setLogOpen(true); }} />
-                          <Button label={skipBusy === s ? "…" : "Skip"} variant="ghost" size="sm" disabled={skipBusy != null} onPress={() => onSkip(s)} />
+                          <Button label={`+ Log ${slotLabel(s)}`} variant="secondary" size="sm" onPress={() => openLog(s)} />
+                          {slotMeals.length === 0 ? (
+                            <Button label={skipBusy === s ? "…" : "Skip"} variant="ghost" size="sm" disabled={skipBusy != null} onPress={() => onSkip(s)} />
+                          ) : null}
                         </View>
                       ) : null}
                     </>
@@ -867,7 +875,7 @@ export default function NutritionScreen() {
       {/* Logged-meal detail — tap a meal to see macros + ingredients, edit or delete */}
       <MealDetailModal
         meal={detailMeal}
-        name={detailMeal ? mealName(detailMeal) : ""}
+        name={detailMeal ? mealName(detailMeal, presets) : ""}
         slotLabel={slotLabel}
         deleting={delId != null}
         onClose={() => setDetailMeal(null)}
