@@ -9,7 +9,6 @@ import { Text } from "soma-style";
 export type PerMealProteinLevel = "red" | "amber" | "yellow" | "green" | "plenty";
 const MPS_G_PER_KG = 0.4;
 const PLENTY_G_PER_KG = 0.55;
-const FALLBACK_MPS_G = 30;
 
 function proteinThresholds(weightKg: number | null | undefined) {
   if (!weightKg || weightKg <= 0) return { red: 15, amber: 25, yellow: 30, plenty: 55 };
@@ -109,7 +108,6 @@ export function MacroGoalBar({
 
   const displayRef = useMulti ? (softCeiling?.value ?? hardCeiling?.value ?? highest) : target;
   const floorPct = !useMulti && target > 0 ? Math.min(100, (target / maxVal) * 100) : null;
-  const underFloor = current < (useMulti ? (markers!.find((m) => m.optimal)?.value ?? 0) : target);
 
   const valueTone = pastHard ? "text-danger" : pastSoft ? "text-warm" : "text-text-muted";
 

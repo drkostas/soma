@@ -19,8 +19,6 @@ import { SleepScheduleChart } from "../../components/sleep-schedule-chart";
 /** Value series from a StatSeries.current, dropping nulls (for sparklines). */
 const seriesVals = (pts?: { value: number | null }[]) =>
   (pts ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v));
-const series2Vals = (pts?: { value2?: number | null }[]) =>
-  (pts ?? []).map((p) => Number(p.value2)).filter((v) => isFinite(v));
 const chartLabel = (iso: string) => {
   const [, m, d] = iso.slice(0, 10).split("-").map(Number);
   return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(m ?? 1) - 1]} ${d}`;
@@ -56,13 +54,15 @@ function useSleepRecovery(range: string) {
   const [stress, setStress] = useState<StatSeries | null>(null);
   const [battery, setBattery] = useState<StatSeries | null>(null);
   const [recovery, setRecovery] = useState<StatSeries | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  // Loading is derived from a request key (react-hooks/set-state-in-effect).
+  const key = `${range}|${reload}`;
+  const [settled, setSettled] = useState<string | null>(null);
+  const loading = settled !== key;
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     const get = (m: string) => fetchJson<StatSeries>(`/api/stats/${m}?range=${range}`);
 
     Promise.all([
@@ -82,12 +82,12 @@ function useSleepRecovery(range: string) {
         setError(null);
       })
       .catch((e) => alive && setError(String(e.message ?? e)))
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettled(key));
 
     return () => {
       alive = false;
     };
-  }, [range, reload]);
+  }, [range, key]);
 
   return { sleep, rhr, stress, battery, recovery, loading, error, refetch: () => setReload((n) => n + 1) };
 }

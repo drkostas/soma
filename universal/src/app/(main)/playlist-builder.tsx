@@ -27,6 +27,11 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /* ---- run selector (Past Runs / Saved Plans / History / Manual — mirrors web) ---- */
 type SelTab = "past" | "plans" | "history" | "manual";
+
+/** One selector tab; declared once so it keeps its identity across renders. */
+function TabPill({ id, label, n, tab, onSelect }: { id: SelTab; label: string; n?: number; tab: SelTab; onSelect: (t: SelTab) => void }) {
+  return <Pill label={n != null ? `${label} (${n})` : label} active={tab === id} onPress={() => onSelect(id)} />;
+}
 interface SessionMeta { id: number; workout_name: string | null; garmin_activity_id: string | null; spotify_playlist_url: string | null; song_assignments: Record<string, unknown[]> | null; created_at: string }
 const sessTrackCount = (a: Record<string, unknown[]> | null) => a ? Object.values(a).reduce((s, v) => s + (Array.isArray(v) ? v.length : 0), 0) : 0;
 
@@ -77,17 +82,14 @@ function RunSelector({ onPick }: { onPick: (name: string, garminId: string | nul
     return [...g.values()].sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
   })();
 
-  const TabPill = ({ id, label, n }: { id: SelTab; label: string; n?: number }) => (
-    <Pill label={n != null ? `${label} (${n})` : label} active={tab === id} onPress={() => setTab(id)} />
-  );
 
   return (
     <View className="gap-3">
       <View className="flex-row flex-wrap gap-2">
-        <TabPill id="past" label="Past Runs" />
-        <TabPill id="plans" label="Saved Plans" n={plans?.length} />
-        <TabPill id="history" label="History" n={historyRows.length || undefined} />
-        <TabPill id="manual" label="Manual" />
+        <TabPill id="past" label="Past Runs" tab={tab} onSelect={setTab} />
+        <TabPill id="plans" label="Saved Plans" n={plans?.length} tab={tab} onSelect={setTab} />
+        <TabPill id="history" label="History" n={historyRows.length || undefined} tab={tab} onSelect={setTab} />
+        <TabPill id="manual" label="Manual" tab={tab} onSelect={setTab} />
       </View>
       {tab === "past" ? (
         <>
@@ -339,9 +341,12 @@ function SourcesModal({ visible, onClose, selected, onChange }: { visible: boole
 
 /* Pump-up Bank modal (mirrors web pump-up-modal.tsx). */
 function BankModal({ visible, onClose, refreshKey }: { visible: boolean; onClose: () => void; refreshKey: number }) {
-  const [songs, setSongs] = useState<PumpUpSong[] | null>(null);
-  useEffect(() => { if (!visible) return; setSongs(null); fetchPumpUp().then(setSongs).catch(() => setSongs([])); }, [visible, refreshKey]);
-  async function remove(id: string) { setSongs((p) => (p ? p.filter((s) => s.track_id !== id) : p)); await removePumpUp(id); }
+  // The list is tagged with the open and refresh it answers; a fresh open reads as loading (null).
+  const key = `${visible}|${refreshKey}`;
+  const [fetched, setFetched] = useState<{ key: string; songs: PumpUpSong[] } | null>(null);
+  const songs = fetched?.key === key ? fetched.songs : null;
+  useEffect(() => { if (!visible) return; fetchPumpUp().then((s) => setFetched({ key, songs: s })).catch(() => setFetched({ key, songs: [] })); }, [visible, key]);
+  async function remove(id: string) { setFetched((p) => (p ? { ...p, songs: p.songs.filter((s) => s.track_id !== id) } : p)); await removePumpUp(id); }
   return (
     <Modal visible={visible} onClose={onClose} title="⚡ Pump-up Bank">
       <Text variant="micro" className="mb-2 text-text-muted tabular-nums">{songs?.length ?? 0}/10 songs</Text>

@@ -70,7 +70,7 @@ export function CredentialsDialog({ platform, onClose, onSaved }: { platform: st
         ) : (
           <>
             <Text variant="body" className="text-text-secondary">
-              {LABEL[platform] ?? platform} uses a {platform === "strava" ? "one-tap OAuth" : "browser-based"} sign-in that's handled on the soma web dashboard.
+              {LABEL[platform] ?? platform} uses a {platform === "strava" ? "one-tap OAuth" : "browser-based"} sign-in that&apos;s handled on the soma web dashboard.
             </Text>
             <Text variant="micro" className="text-text-muted">Open soma on the web to connect {LABEL[platform] ?? platform}, then pull-to-refresh here.</Text>
           </>

@@ -25,8 +25,7 @@ import {
   todayLocal,
   type ActivityRow,
 } from "../../lib/api";
-import { readinessScore } from "banister";
-import { freshness, staleShort, todayKey } from "banister";
+import { readinessScore, freshness, staleShort, todayKey } from "banister";
 
 interface OverviewTrends {
   steps: number[];
@@ -444,7 +443,7 @@ export default function OverviewScreen() {
         ) : null}
 
         {/* Today's health KPIs */}
-        <Text variant="eyebrow" className="text-text-muted mt-1">Today's metrics</Text>
+        <Text variant="eyebrow" className="text-text-muted mt-1">Today&apos;s metrics</Text>
         <View className="flex-row flex-wrap gap-3">
           {stats.map((s) => (
             <Pressable key={s.label} className="min-w-[46%] flex-1" onPress={() => setStatDetail(s)}>

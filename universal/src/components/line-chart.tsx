@@ -236,14 +236,18 @@ export function LineChart(props: LineChartProps) {
               const labelled = [...(refLine ? [refLine] : []), ...(refLines ?? [])]
                 .filter((r) => r.label && r.y >= loL && r.y <= hiL)
                 .sort((a, b) => yAtL(a.y) - yAtL(b.y));
+              const placed: { r: (typeof labelled)[number]; ly: number; atRight: boolean }[] = [];
               let lastY = -100; let lastRight = rightS.length !== 0;
-              return labelled.map((r, ri) => {
-              const ly = yAtL(r.y);
+              for (const r of labelled) {
+                const ly = yAtL(r.y);
+                let atRight = rightS.length === 0;
+                if (Math.abs(ly - lastY) < 11) atRight = !lastRight;
+                lastY = ly; lastRight = atRight;
+                placed.push({ r, ly, atRight });
+              }
+              return placed.map(({ r, ly, atRight }, ri) => {
               const ty = ly < 14 ? ly + 10 : ly - 3;
               const tw = r.label!.length * 4.4 + 4;
-              let atRight = rightS.length === 0;
-              if (Math.abs(ly - lastY) < 11) atRight = !lastRight;
-              lastY = ly; lastRight = atRight;
               return (
                 <Fragment key={`rt-${ri}`}>
                   <Rect x={atRight ? VBW - 2 - tw : 2} y={ty - 8} width={tw} height={10} rx={2} fill="#0c1519" fillOpacity={0.8} />
@@ -261,7 +265,7 @@ export function LineChart(props: LineChartProps) {
                 if (s.stack) for (let k = 0; k < si; k++) { const o = series[k]; if (o.mode === "bars" && o.stack === s.stack) o.values.forEach((v, i) => { base[i] = (base[i] ?? 0) + (v != null && isFinite(v) ? v : 0); }); }
                 return s.values.map((v, i) => {
                   if (v == null || !isFinite(v) || v <= 0) return null;
-                  const b = base[i] ?? 0; const y0 = yOf(s, b + (s.stack ? 0 : 0)); const yTop = yOf(s, b + v);
+                  const b = base[i] ?? 0; const yTop = yOf(s, b + v);
                   const bottom = s.stack ? yOf(s, b) : floorY;
                   return <Rect key={`${si}-${i}`} x={xAt(i) - bw / 2} y={Math.min(yTop, bottom)} width={bw} height={Math.max(0.5, Math.abs(bottom - yTop))} fill={s.color} fillOpacity={s.opacities?.[i] ?? 0.85} rx={s.stack ? 0 : 1} />;
                 });

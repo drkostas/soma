@@ -55,8 +55,10 @@ export default function LiveDjScreen() {
   const [busy, setBusy] = useState(false);
   const [ctrlErr, setCtrlErr] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionStartRef = useRef<number | null>(null);
-  const [, setTick] = useState(0);
+  // The session start and "now" are state, so render reads no ref and calls no clock:
+  // the 1 s ticker below advances `now` while live.
+  const [sessionStart, setSessionStart] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const isRunning = status.state === "running";
   const isLive = status.state !== "stopped";
@@ -65,8 +67,8 @@ export default function LiveDjScreen() {
     try {
       const s = await fetchDjStatus();
       setStatus(s);
-      if (s.state === "running" || s.state === "starting") { if (sessionStartRef.current === null) sessionStartRef.current = Date.now(); }
-      else sessionStartRef.current = null;
+      if (s.state === "running" || s.state === "starting") setSessionStart((prev) => prev ?? Date.now());
+      else setSessionStart(null);
       if (s.state === "stopped" && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     } catch { /* keep last */ }
   }, []);
@@ -85,7 +87,7 @@ export default function LiveDjScreen() {
   // 1s ticker while live — animates "Session:", "polled Ns ago", and the countdown.
   useEffect(() => {
     if (!isLive) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [isLive]);
 
@@ -108,7 +110,7 @@ export default function LiveDjScreen() {
     const r = await stopDj();
     setBusy(false);
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-    sessionStartRef.current = null;
+    setSessionStart(null);
     if (r.ok || r.status === 403) setStatus({ state: "stopped" });
     else setCtrlErr(r.error || `Couldn't stop the DJ (${r.status}).`);
   }
@@ -120,7 +122,7 @@ export default function LiveDjScreen() {
   const hrs = (status.hr_history ?? []).map((p) => p.hr).filter((h) => h > 0);
   const hrLo = hrs.length ? Math.min(...hrs) : null;
   const hrHi = hrs.length ? Math.max(...hrs) : null;
-  const polledAgo = status.ts ? Math.max(0, Math.floor(Date.now() / 1000 - status.ts)) : null;
+  const polledAgo = status.ts ? Math.max(0, Math.floor(now / 1000 - status.ts)) : null;
 
   const dotColor = status.state === "error" ? "#e06060" : status.state === "starting" ? "#e0c458" : "#6ad4a0";
   const stateLabel = status.state === "error" ? "ERROR" : status.state === "starting" ? "STARTING…" : "LIVE";
@@ -225,7 +227,7 @@ export default function LiveDjScreen() {
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor }} />
               <Text variant="caption" className="font-semibold" style={{ color: dotColor }}>{stateLabel}</Text>
               <View className="ml-auto flex-row items-center gap-2">
-                {sessionStartRef.current !== null ? <Text variant="micro" className="text-text-muted">Session: {formatElapsed(Date.now() - sessionStartRef.current)}</Text> : null}
+                {sessionStart !== null ? <Text variant="micro" className="text-text-muted">Session: {formatElapsed(now - sessionStart)}</Text> : null}
                 {polledAgo != null ? <Text variant="micro" className="text-text-muted">polled {polledAgo < 60 ? `${polledAgo}s ago` : `${Math.floor(polledAgo / 60)}m ago`}</Text> : null}
               </View>
             </View>

@@ -28,6 +28,6 @@ jobs:
         run: npm run typecheck
       - name: Lint
         working-directory: universal
-        run: npx eslint . --max-warnings 86
+        run: npx eslint . --max-warnings 0
       - name: Unit tests
         run: npm test

@@ -40,12 +40,13 @@ interface PlaylistData {
 /** Fetches the three GET surfaces the playlist page reads from soma (:3456). */
 function usePlaylist() {
   const [data, setData] = useState<PlaylistData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Loading until the one request settles (react-hooks/set-state-in-effect).
+  const [settled, setSettled] = useState(false);
+  const loading = !settled;
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
 
     const json = (path: string) => fetchJson<unknown>(path);
 
@@ -64,7 +65,7 @@ function usePlaylist() {
         setError(null);
       })
       .catch((e) => alive && setError(String(e.message ?? e)))
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettled(true));
 
     return () => {
       alive = false;
