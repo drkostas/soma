@@ -7,11 +7,11 @@ import { ChatProvider, useChat } from "../../components/ChatContext";
 import { ChatSheet } from "../../components/ChatSheet";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
-const tabIcon =
-  (name: IconName) =>
-  ({ color, size }: { color: ColorValue; size: number }) => (
-    <Ionicons name={name} size={size} color={color as string} />
-  );
+function tabIcon(name: IconName) {
+  return function TabIcon({ color, size }: { color: ColorValue; size: number }) {
+    return <Ionicons name={name} size={size} color={color as string} />;
+  };
+}
 
 /** Center ⊕ — opens the Claude chat as a quick log/ask action (not a route).
     Uses the shared soma-style CenterTabButton, wired to the chat context. */

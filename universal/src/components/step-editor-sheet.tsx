@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { View, Pressable, TextInput, ScrollView } from "react-native";
 import { Text, Modal, Button } from "soma-style";
 import type { PlanDay, WorkoutStep } from "../lib/api";
@@ -21,10 +21,12 @@ function clone(steps: WorkoutStep[] | null | undefined): WorkoutStep[] {
  * does that on its own schedule, as on web) (soma#794).
  */
 export function StepEditorSheet({ day, onClose, onSave }: { day: PlanDay | null; onClose: () => void; onSave: (dayId: number, steps: WorkoutStep[]) => Promise<boolean> }) {
-  const [steps, setSteps] = useState<WorkoutStep[]>([]);
+  const [steps, setSteps] = useState<WorkoutStep[]>(() => clone(day?.workoutSteps));
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<"idle" | "saved" | "error">("idle");
-  useEffect(() => { setSteps(clone(day?.workoutSteps)); setResult("idle"); }, [day]);
+  // A different day resets the editor: adjusted during render, not in an effect.
+  const [editing, setEditing] = useState(day);
+  if (editing !== day) { setEditing(day); setSteps(clone(day?.workoutSteps)); setResult("idle"); }
   if (!day) return null;
 
   const update = (i: number, patch: Partial<WorkoutStep>) => setSteps((prev) => prev.map((s, k) => (k === i ? { ...s, ...patch } : s)));

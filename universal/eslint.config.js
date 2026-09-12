@@ -13,7 +13,7 @@ const baseline = {
   "react-hooks/refs": "warn",
   "react/display-name": "warn",
   "react/no-unescaped-entities": "warn",
-  "@typescript-eslint/no-unused-vars": "warn",
+  "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true }],
   "@typescript-eslint/array-type": "warn",
   "import/no-duplicates": "warn",
 };

@@ -91,7 +91,7 @@ export function WhatIfSlider({ planDays, onApply, onPreview }: { planDays: PlanD
         label={state === "saving" ? "Saving…" : state === "saved" ? "Saved" : state === "error" ? "Retry" : `Apply changes (${upcoming.length} workouts)`}
         onPress={apply}
       />
-      {state === "error" ? <Text variant="micro" className="text-danger">Couldn't save — the plan adjust flow may be web-only.</Text> : null}
+      {state === "error" ? <Text variant="micro" className="text-danger">Couldn&apos;t save — the plan adjust flow may be web-only.</Text> : null}
     </Card>
   );
 }

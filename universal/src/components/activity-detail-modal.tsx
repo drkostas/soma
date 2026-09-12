@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, ScrollView, Image, Pressable, Platform, Share } from "react-native";
+import { View, ScrollView, Image, Platform, Share } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { Text, Modal, Badge, Button, Sparkline } from "soma-style";
@@ -218,25 +218,32 @@ function ShareTab({ activityId, title, stravaId }: { activityId: string; title: 
  * tab. Falls back to the passed-in row's fields for the header while loading.
  */
 export function ActivityDetailModal({ activity, onClose }: { activity: ActivityRow | null; onClose: () => void }) {
-  const [data, setData] = useState<ActivityDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  // The fetched detail is tagged with the activity it answers: a newly opened
+  // activity reads as loading with no data until its own answer lands, and a
+  // closed modal shows nothing. No setState inside the effect body.
+  const [fetched, setFetched] = useState<{ id: string; detail: ActivityDetail | null } | null>(null);
   const [tab, setTab] = useState<string>("Overview");
+  const activityId = activity?.activity_id ?? null;
+  // The tab resets when another activity opens: adjusted during render, not in an effect.
+  const [tabFor, setTabFor] = useState<string | null>(activityId);
+  if (tabFor !== activityId) { setTabFor(activityId); setTab("Overview"); }
+  const data = activityId != null && fetched?.id === activityId ? fetched.detail : null;
+  const loading = activityId != null && fetched?.id !== activityId;
 
   useEffect(() => {
-    if (!activity) { setData(null); return; }
-    let alive = true; setLoading(true); setTab("Overview");
-    fetchJson<ActivityDetail>(`/api/activity/${activity.activity_id}`)
+    if (!activityId) return;
+    let alive = true;
+    fetchJson<ActivityDetail>(`/api/activity/${activityId}`)
       .then((d) => {
         if (!alive) return;
-        setData(d);
+        setFetched({ id: activityId, detail: d });
         // Web opens on the Map tab when there's a GPS route (defaultValue).
         const rp = (d?.gps_route ?? []).filter((p) => p != null && p.lat != null && p.lng != null);
         if (rp.length > 10) setTab("Map");
       })
-      .catch(() => alive && setData(null))
-      .finally(() => alive && setLoading(false));
+      .catch(() => alive && setFetched({ id: activityId, detail: null }));
     return () => { alive = false; };
-  }, [activity]);
+  }, [activityId]);
 
   if (!activity) return null;
   const s = data?.summary ?? null;

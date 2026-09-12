@@ -34,17 +34,17 @@ function shortDate(iso: string | null): string {
  * /api/workouts/exercise?name= on open. Weight unit follows the screen toggle.
  */
 export function ExerciseDetailModal({ name, unit, onClose }: { name: string | null; unit: "kg" | "lb"; onClose: () => void }) {
-  const [data, setData] = useState<ExerciseDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  // The fetched detail is tagged with the exercise it answers (no setState in the effect body).
+  const [fetched, setFetched] = useState<{ name: string; detail: ExerciseDetail | null } | null>(null);
   const [metric, setMetric] = useState<ProgMetric>("Weight");
+  const data = name && fetched?.name === name ? fetched.detail : null;
+  const loading = !!name && fetched?.name !== name;
   useEffect(() => {
-    if (!name) { setData(null); return; }
+    if (!name) return;
     let alive = true;
-    setLoading(true);
     fetchJson<ExerciseDetail>(`/api/workouts/exercise?name=${encodeURIComponent(name)}`)
-      .then((d) => alive && setData(d))
-      .catch(() => alive && setData(null))
-      .finally(() => alive && setLoading(false));
+      .then((d) => alive && setFetched({ name, detail: d }))
+      .catch(() => alive && setFetched({ name, detail: null }));
     return () => { alive = false; };
   }, [name]);
 

@@ -83,7 +83,7 @@ function groupBlocks(sets: ExerciseSet[], totalSec: number, timeline: { elapsed_
 }
 
 function HrTab({ g, title }: { g: NonNullable<WorkoutDetail["garmin"]>; title: string }) {
-  const tl = g.hr_timeline ?? [];
+  const tl = useMemo(() => g.hr_timeline ?? [], [g.hr_timeline]);
   const [selected, setSelected] = useState<number | null>(null);
   const total = tl.length ? tl[tl.length - 1].elapsed_sec : 0;
   const blocks = useMemo(() => groupBlocks(g.exercise_sets ?? [], total, tl), [g.exercise_sets, total, tl]);
@@ -181,24 +181,27 @@ function HrTab({ g, title }: { g: NonNullable<WorkoutDetail["garmin"]>; title: s
  * tabs. Fetches /api/workout/[id] on open. Weight unit follows the screen toggle.
  */
 export function WorkoutDetailModal({ id, title, unit, onClose }: { id: string | null; title?: string; unit: "kg" | "lb"; onClose: () => void }) {
-  const [data, setData] = useState<WorkoutDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  // The fetched detail is tagged with the workout it answers (no setState in the effect body).
+  const [fetched, setFetched] = useState<{ id: string; detail: WorkoutDetail | null } | null>(null);
   const [tab, setTab] = useState<string>("Exercises");
   const [imgState, setImgState] = useState<"loading" | "ready" | "error">("loading");
   const [saving, setSaving] = useState(false);
+  // Tab and image state reset when another workout opens: adjusted during render, not in an effect.
+  const [openedFor, setOpenedFor] = useState<string | null>(id);
+  if (openedFor !== id) { setOpenedFor(id); setTab("Exercises"); setImgState("loading"); }
+  const data = id && fetched?.id === id ? fetched.detail : null;
+  const loading = !!id && fetched?.id !== id;
   useEffect(() => {
-    if (!id) { setData(null); return; }
+    if (!id) return;
     let alive = true;
-    setLoading(true); setTab("Exercises"); setImgState("loading");
     fetchJson<WorkoutDetail>(`/api/workout/${encodeURIComponent(id)}`)
-      .then((d) => alive && setData(d))
-      .catch(() => alive && setData(null))
-      .finally(() => alive && setLoading(false));
+      .then((d) => alive && setFetched({ id, detail: d }))
+      .catch(() => alive && setFetched({ id, detail: null }));
     return () => { alive = false; };
   }, [id]);
 
   // Hooks stay above the early return (a hook after it changes the hook count when `id` flips).
-  const exercises = data?.exercises ?? [];
+  const exercises = useMemo(() => data?.exercises ?? [], [data]);
   const muscles = useMemo(() => aggregateWorkoutMuscles(exercises), [exercises]);
   if (!id) return null;
   const w = (kg: number | null | undefined) => (kg == null ? "—" : `${Math.round((unit === "lb" ? kg * KG_TO_LB : kg) * 10) / 10}`);

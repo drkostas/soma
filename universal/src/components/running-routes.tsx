@@ -3,7 +3,7 @@ import { View, Pressable } from "react-native";
 import { Text, Card } from "soma-style";
 import { RouteThumb } from "./route-thumb";
 import { ActivityDetailModal } from "./activity-detail-modal";
-import type { RouteItem, RoutePoint, ActivityRow } from "../lib/api";
+import type { RouteItem, ActivityRow } from "../lib/api";
 
 /** Web's gallery caption pace (mm:ss /km from distance + duration). */
 function formatPace(distanceKm: number | null, durationS: number | null): string {

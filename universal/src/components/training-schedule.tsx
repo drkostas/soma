@@ -282,7 +282,7 @@ export function TrainingSchedule({
   const toggleWeek = (w: number) =>
     setExpanded((prev) => {
       const next = new Set(prev);
-      next.has(w) ? next.delete(w) : next.add(w);
+      if (next.has(w)) next.delete(w); else next.add(w);
       return next;
     });
 

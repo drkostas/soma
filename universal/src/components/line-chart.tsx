@@ -261,7 +261,7 @@ export function LineChart(props: LineChartProps) {
                 if (s.stack) for (let k = 0; k < si; k++) { const o = series[k]; if (o.mode === "bars" && o.stack === s.stack) o.values.forEach((v, i) => { base[i] = (base[i] ?? 0) + (v != null && isFinite(v) ? v : 0); }); }
                 return s.values.map((v, i) => {
                   if (v == null || !isFinite(v) || v <= 0) return null;
-                  const b = base[i] ?? 0; const y0 = yOf(s, b + (s.stack ? 0 : 0)); const yTop = yOf(s, b + v);
+                  const b = base[i] ?? 0; const yTop = yOf(s, b + v);
                   const bottom = s.stack ? yOf(s, b) : floorY;
                   return <Rect key={`${si}-${i}`} x={xAt(i) - bw / 2} y={Math.min(yTop, bottom)} width={bw} height={Math.max(0.5, Math.abs(bottom - yTop))} fill={s.color} fillOpacity={s.opacities?.[i] ?? 0.85} rx={s.stack ? 0 : 1} />;
                 });
