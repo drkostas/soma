@@ -84,6 +84,11 @@ function shiftDate(iso: string, days: number): string {
 export default function NutritionScreen() {
   const [DATE, setDATE] = useState(todayLocal());
   const isToday = DATE === todayLocal();
+  // Plan ahead one day, not seven: decided 2026-09-11 (#873). Tomorrow's meals are
+  // plans (meal_log.planned) until the day comes.
+  const MAX_AHEAD_DAYS = 1;
+  const isFuture = DATE > todayLocal();
+  const isTomorrow = DATE === shiftDate(todayLocal(), 1);
   const { data, loading, error, refetch } = useSomaPlan(DATE);
   // Reset per-day transient UI when the viewed day changes, and load that
   // day's locked slots from storage (guarded — no-ops on native).
@@ -232,7 +237,8 @@ export default function NutritionScreen() {
     });
     setQBusy(false);
     if (ok) {
-      setLogMode("preset");
+      // The preset and compose paths close the modal on success; quick add now does too (#859).
+      closeLog();
       setQName(""); setQCal(""); setQP(""); setQC(""); setQF("");
       refetch();
       doRebalance(slot);
@@ -253,6 +259,12 @@ export default function NutritionScreen() {
   async function onCopyYesterday() {
     setCopyBusy(true);
     const ok = await copyDay(shiftDate(DATE, -1), DATE);
+    setCopyBusy(false);
+    if (ok) refetch();
+  }
+  async function onCopyToday() {
+    setCopyBusy(true);
+    const ok = await copyDay(todayLocal(), DATE);
     setCopyBusy(false);
     if (ok) refetch();
   }
@@ -371,10 +383,10 @@ export default function NutritionScreen() {
         <View className="w-full flex-row items-center justify-between">
           <Button label="‹" variant="ghost" size="sm" onPress={() => setDATE((d) => shiftDate(d, -1))} />
           <View className="flex-row items-center gap-2">
-            <Text variant="title">{isToday ? "Today" : niceDate(DATE)}</Text>
+            <Text variant="title">{isToday ? "Today" : isTomorrow ? "Tomorrow" : niceDate(DATE)}</Text>
             {dayClosed ? <Badge label="Closed" tone="success" /> : <Badge label="Nutrition" tone="teal" />}
           </View>
-          <Button label="›" variant="ghost" size="sm" disabled={isToday} onPress={() => setDATE((d) => shiftDate(d, 1))} />
+          <Button label="›" variant="ghost" size="sm" disabled={DATE >= shiftDate(todayLocal(), MAX_AHEAD_DAYS)} onPress={() => setDATE((d) => shiftDate(d, 1))} testID="day-next" />
         </View>
         {(!isToday || dayClosed || (meals.length === 0 && !dayClosed)) ? (
           <View className="flex-row flex-wrap items-center justify-center gap-2">
@@ -384,8 +396,11 @@ export default function NutritionScreen() {
             {dayClosed ? (
               <Button label={reopenBusy ? "…" : "Reopen day"} variant="ghost" size="sm" disabled={reopenBusy} onPress={onReopen} />
             ) : null}
-            {meals.length === 0 && !dayClosed ? (
+            {meals.length === 0 && !dayClosed && !isFuture ? (
               <Button label={copyBusy ? "…" : "Copy yesterday"} variant="ghost" size="sm" disabled={copyBusy} onPress={onCopyYesterday} />
+            ) : null}
+            {isFuture && !dayClosed ? (
+              <Button label={copyBusy ? "…" : "Copy today"} variant="ghost" size="sm" disabled={copyBusy} onPress={onCopyToday} testID="copy-today" />
             ) : null}
           </View>
         ) : null}
@@ -669,6 +684,7 @@ export default function NutritionScreen() {
                           <View className="flex-1">
                             <View className="flex-row items-center gap-1.5">
                               <Text variant="body" className="text-text" numberOfLines={1} style={{ flexShrink: 1 }}>{mealName(m, presets)}</Text>
+                              {m.planned ? <Badge label="planned" tone="neutral" /> : null}
                               <ProteinQualityPill grams={m.protein} weightKg={bd?.weightKg} />
                             </View>
                             <Text variant="micro" className="tabular-nums">

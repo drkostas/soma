@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { isPlannedDate } from "@/lib/planned-meal";
 
 
 interface MealItem {
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
   const source = preset_meal_id ? "preset" : null;
 
   const result = await sql`
-    INSERT INTO meal_log (date, meal_slot, source, preset_meal_id, portion_multiplier, items, calories, protein, carbs, fat, fiber)
+    INSERT INTO meal_log (date, meal_slot, source, preset_meal_id, portion_multiplier, items, calories, protein, carbs, fat, fiber, planned)
     VALUES (
       ${date},
       ${meal_slot},
@@ -86,7 +87,8 @@ export async function POST(req: NextRequest) {
       ${Math.round(protein)},
       ${Math.round(carbs)},
       ${Math.round(fat)},
-      ${Math.round(fiber)}
+      ${Math.round(fiber)},
+      ${isPlannedDate(date)}
     )
     RETURNING id
   `;

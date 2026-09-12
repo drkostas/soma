@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { isPlannedDate } from "@/lib/planned-meal";
 
 
 export async function POST(req: NextRequest) {
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
   for (const m of sourceMeals) {
     await sql`
       INSERT INTO meal_log (date, meal_slot, source, preset_meal_id, portion_multiplier,
-                            items, calories, protein, carbs, fat, fiber, notes)
+                            items, calories, protein, carbs, fat, fiber, notes, planned)
       VALUES (
         ${to_date},
         ${m.meal_slot},
@@ -56,7 +57,8 @@ export async function POST(req: NextRequest) {
         ${m.carbs},
         ${m.fat},
         ${m.fiber},
-        ${m.notes}
+        ${m.notes},
+        ${isPlannedDate(to_date)}
       )
     `;
     copied++;

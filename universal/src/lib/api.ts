@@ -111,6 +111,8 @@ export interface SomaMealItem { name?: string; grams?: number; ingredient_id?: s
 export interface SomaMeal {
   id: number;
   meal_slot: string;
+  /** Logged on a future date: a plan, not a record (soma#873). */
+  planned?: boolean;
   source?: string | null;
   preset_meal_id?: string | null;
   calories: number; protein: number; carbs: number; fat: number; fiber: number;
