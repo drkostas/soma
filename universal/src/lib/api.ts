@@ -372,18 +372,20 @@ export interface ForwardSim {
 /** The full forward-simulation payload: schedule + PMC + readiness + fitness + comparison. */
 export function useForwardSim(date: string) {
   const [data, setData] = useState<ForwardSim | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  // Loading is derived from a request key (react-hooks/set-state-in-effect).
+  const key = `${date}|${reload}`;
+  const [settled, setSettled] = useState<string | null>(null);
+  const loading = settled !== key;
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     fetchJson<ForwardSim>(`/api/training/forward-sim?date=${date}`)
       .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)))
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettled(key));
     return () => { alive = false; };
-  }, [date, reload]);
+  }, [date, key]);
   return { data, loading, error, refetch: () => setReload((n) => n + 1) };
 }
 
@@ -508,11 +510,12 @@ export interface DuplicateSide { id: number; name: string; type: string; startTi
 export interface DuplicatePairs { pairs: { a: DuplicateSide; b: DuplicateSide }[]; count: number; error?: string }
 export function useDuplicates(enabled: boolean) {
   const [data, setData] = useState<DuplicatePairs | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Loading while enabled and nothing has arrived (the catch stores an error result).
+  const loading = enabled && data == null;
   useEffect(() => {
     if (!enabled || data) return;
-    let alive = true; setLoading(true);
-    fetchJson<DuplicatePairs>("/api/duplicates").then((d) => alive && setData(d)).catch(() => alive && setData({ pairs: [], count: 0, error: "unavailable" })).finally(() => alive && setLoading(false));
+    let alive = true;
+    fetchJson<DuplicatePairs>("/api/duplicates").then((d) => alive && setData(d)).catch(() => alive && setData({ pairs: [], count: 0, error: "unavailable" }));
     return () => { alive = false; };
   }, [enabled, data]);
   return { data, loading };
@@ -992,18 +995,20 @@ export function useTrainingGraph(date: string) {
 
 export function useSomaPlan(date: string) {
   const [data, setData] = useState<SomaPlan | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  // Loading is derived from a request key (react-hooks/set-state-in-effect).
+  const key = `${date}|${reload}`;
+  const [settled, setSettled] = useState<string | null>(null);
+  const loading = settled !== key;
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     fetchJson<SomaPlan>(`/api/nutrition/plan?date=${date}`)
       .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)))
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettled(key));
     return () => { alive = false; };
-  }, [date, reload]);
+  }, [date, key]);
   return { data, loading, error, refetch: () => setReload((n) => n + 1) };
 }
 
@@ -1282,15 +1287,16 @@ export interface BodyComp {
 }
 export function useBodyComp(enabled: boolean) {
   const [data, setData] = useState<BodyComp | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Loading while enabled and the one request has neither answered nor failed.
+  const [settled, setSettled] = useState(false);
+  const loading = enabled && data == null && !settled;
   useEffect(() => {
     if (!enabled || data) return;
     let alive = true;
-    setLoading(true);
     fetchJson<BodyComp>("/api/nutrition/body-comp")
       .then((d) => alive && setData(d))
       .catch(() => {})
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettled(true));
     return () => { alive = false; };
   }, [enabled, data]);
   return { data, loading };

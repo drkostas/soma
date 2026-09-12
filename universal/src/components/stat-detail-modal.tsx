@@ -58,18 +58,21 @@ const RANGES: readonly Range[] = ["7d", "30d", "90d", "1y"] as const;
  *  avg/min/max + Δ-vs-previous; otherwise shows the card's sparkline trend. */
 export function StatDetailModal({ stat, onClose }: { stat: StatDetail | null; onClose: () => void }) {
   const [range, setRange] = useState<Range>("30d");
-  const [data, setData] = useState<StatSeries | null>(null);
-  const [loading, setLoading] = useState(false);
+  // The series is tagged with the metric and range it answers (no setState in the effect body).
+  const [fetched, setFetched] = useState<{ key: string; series: StatSeries | null } | null>(null);
+  const key = stat?.metric ? `${stat.metric}|${range}` : null;
+  const metric = stat?.metric ?? null;
+  const data = key != null && fetched?.key === key ? fetched.series : null;
+  const loading = key != null && fetched?.key !== key;
 
   useEffect(() => {
-    if (!stat?.metric) { setData(null); return; }
-    let alive = true; setLoading(true);
-    fetchJson<StatSeries>(`/api/stats/${stat.metric}?range=${range}`)
-      .then((d) => alive && setData(d))
-      .catch(() => alive && setData(null))
-      .finally(() => alive && setLoading(false));
+    if (!key || !metric) return;
+    let alive = true;
+    fetchJson<StatSeries>(`/api/stats/${metric}?range=${range}`)
+      .then((d) => alive && setFetched({ key, series: d }))
+      .catch(() => alive && setFetched({ key, series: null }));
     return () => { alive = false; };
-  }, [stat?.metric, range]);
+  }, [key, metric, range]);
 
   if (!stat) return null;
   const unit = stat.unit ? ` ${stat.unit}` : "";

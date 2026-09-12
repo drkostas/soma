@@ -54,13 +54,15 @@ function useSleepRecovery(range: string) {
   const [stress, setStress] = useState<StatSeries | null>(null);
   const [battery, setBattery] = useState<StatSeries | null>(null);
   const [recovery, setRecovery] = useState<StatSeries | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  // Loading is derived from a request key (react-hooks/set-state-in-effect).
+  const key = `${range}|${reload}`;
+  const [settled, setSettled] = useState<string | null>(null);
+  const loading = settled !== key;
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     const get = (m: string) => fetchJson<StatSeries>(`/api/stats/${m}?range=${range}`);
 
     Promise.all([
@@ -80,12 +82,12 @@ function useSleepRecovery(range: string) {
         setError(null);
       })
       .catch((e) => alive && setError(String(e.message ?? e)))
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettled(key));
 
     return () => {
       alive = false;
     };
-  }, [range, reload]);
+  }, [range, key]);
 
   return { sleep, rhr, stress, battery, recovery, loading, error, refetch: () => setReload((n) => n + 1) };
 }

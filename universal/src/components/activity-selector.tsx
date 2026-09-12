@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 import { Text, Card, Button } from "soma-style";
 import { setActivity, useWorkoutCalories } from "../lib/api";
@@ -46,12 +46,17 @@ export function ActivitySelector({
   const [selected, setSelected] = useState<string[]>(selectedWorkouts);
   const [saving, setSaving] = useState(false);
 
-  // Re-sync from the plan whenever it reloads (after a save/refetch).
-  useEffect(() => { setRun(runEnabled); }, [runEnabled]);
-  useEffect(() => { setKm(plannedRunKm); }, [plannedRunKm]);
-  useEffect(() => { setSteps(expectedSteps); }, [expectedSteps]);
+  // Re-sync from the plan whenever it reloads (after a save/refetch): each local
+  // copy follows the prop it came from, adjusted during render rather than in effects.
   const selKey = selectedWorkouts.join(",");
-  useEffect(() => { setSelected(selectedWorkouts); }, [selKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [seen, setSeen] = useState({ runEnabled, plannedRunKm, expectedSteps, selKey });
+  if (seen.runEnabled !== runEnabled || seen.plannedRunKm !== plannedRunKm || seen.expectedSteps !== expectedSteps || seen.selKey !== selKey) {
+    if (seen.runEnabled !== runEnabled) setRun(runEnabled);
+    if (seen.plannedRunKm !== plannedRunKm) setKm(plannedRunKm);
+    if (seen.expectedSteps !== expectedSteps) setSteps(expectedSteps);
+    if (seen.selKey !== selKey) setSelected(selectedWorkouts);
+    setSeen({ runEnabled, plannedRunKm, expectedSteps, selKey });
+  }
 
   async function save(opts: { run_enabled?: boolean; selected_workouts?: string[]; expected_steps?: number; planned_run_km?: number | null }) {
     setSaving(true);

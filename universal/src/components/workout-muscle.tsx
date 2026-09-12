@@ -18,7 +18,7 @@ function monthLabel(m: string): string { const [, mm] = m.split("-").map(Number)
  * monthly-volume-by-muscle chart. Fed by /api/workouts/insights.monthlyMuscle.
  */
 export function WorkoutMuscle({ insights }: { insights: WorkoutInsights | null | undefined }) {
-  const rows = insights?.monthlyMuscle ?? [];
+  const rows = useMemo(() => insights?.monthlyMuscle ?? [], [insights]);
   const { totals, grandTotal, months } = useMemo(() => {
     const t: Record<string, number> = {};
     const monthMap = new Map<string, Record<string, number>>();

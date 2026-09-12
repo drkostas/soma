@@ -339,9 +339,12 @@ function SourcesModal({ visible, onClose, selected, onChange }: { visible: boole
 
 /* Pump-up Bank modal (mirrors web pump-up-modal.tsx). */
 function BankModal({ visible, onClose, refreshKey }: { visible: boolean; onClose: () => void; refreshKey: number }) {
-  const [songs, setSongs] = useState<PumpUpSong[] | null>(null);
-  useEffect(() => { if (!visible) return; setSongs(null); fetchPumpUp().then(setSongs).catch(() => setSongs([])); }, [visible, refreshKey]);
-  async function remove(id: string) { setSongs((p) => (p ? p.filter((s) => s.track_id !== id) : p)); await removePumpUp(id); }
+  // The list is tagged with the open and refresh it answers; a fresh open reads as loading (null).
+  const key = `${visible}|${refreshKey}`;
+  const [fetched, setFetched] = useState<{ key: string; songs: PumpUpSong[] } | null>(null);
+  const songs = fetched?.key === key ? fetched.songs : null;
+  useEffect(() => { if (!visible) return; fetchPumpUp().then((s) => setFetched({ key, songs: s })).catch(() => setFetched({ key, songs: [] })); }, [visible, key]);
+  async function remove(id: string) { setFetched((p) => (p ? { ...p, songs: p.songs.filter((s) => s.track_id !== id) } : p)); await removePumpUp(id); }
   return (
     <Modal visible={visible} onClose={onClose} title="⚡ Pump-up Bank">
       <Text variant="micro" className="mb-2 text-text-muted tabular-nums">{songs?.length ?? 0}/10 songs</Text>

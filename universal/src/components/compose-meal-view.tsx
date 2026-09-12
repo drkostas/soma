@@ -71,7 +71,9 @@ export function ComposeMealView({
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const initKey = initialGrams ? Object.entries(initialGrams).map(([k, v]) => `${k}:${v}`).join(",") : "";
-  useEffect(() => { if (initialGrams) setGrams(initialGrams); }, [initKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A new initial set replaces the grams: adjusted during render, not in an effect.
+  const [seenInit, setSeenInit] = useState(initKey);
+  if (seenInit !== initKey) { setSeenInit(initKey); if (initialGrams) setGrams(initialGrams); }
 
   const byId = useMemo(() => new Map(ingredients.map((i) => [i.id, i])), [ingredients]);
   const selectedIds = Object.keys(grams).filter((id) => (grams[id] ?? 0) > 0 && byId.has(id));
@@ -126,13 +128,17 @@ export function ComposeMealView({
   const toggleCooked = toggleSet(setCookedMode);
   const toggleGramMode = toggleSet(setGramMode);
 
-  // Clamp whole-egg grams to the yolk cap when the max changes (mirrors web).
-  useEffect(() => {
+  // Clamp whole-egg grams to the yolk cap when the max changes (mirrors web):
+  // adjusted during render, not in an effect.
+  const [seenMax, setSeenMax] = useState(maxYolks);
+  if (seenMax !== maxYolks) {
+    setSeenMax(maxYolks);
     const ing = byId.get("eggs_whole");
-    if (!ing || !(grams["eggs_whole"] > 0)) return;
-    const maxGrams = (Number(ing.grams_per_unit) || 50) * maxYolks;
-    if (grams["eggs_whole"] > maxGrams) setG("eggs_whole", maxGrams);
-  }, [maxYolks]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (ing && grams["eggs_whole"] > 0) {
+      const maxGrams = (Number(ing.grams_per_unit) || 50) * maxYolks;
+      if (grams["eggs_whole"] > maxGrams) setG("eggs_whole", maxGrams);
+    }
+  }
 
   function buildItems(): ComposeItem[] {
     return selectedIds.map((id) => {

@@ -72,20 +72,23 @@ interface ActivitiesSummary {
  */
 function useActivities(range: string) {
   const [data, setData] = useState<ActivitiesSummary | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  // Loading is "the latest request has not settled": derived from a request key
+  // rather than set inside the effect (react-hooks/set-state-in-effect).
+  const key = `${range}|${reload}`;
+  const [settled, setSettled] = useState<string | null>(null);
+  const loading = settled !== key;
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     fetchJson<ActivitiesSummary>(`/api/activities/summary?range=${range}`)
       .then((d) => alive && (setData(d), setError(null)))
       .catch((e) => alive && setError(String(e.message ?? e)))
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettled(key));
     return () => {
       alive = false;
     };
-  }, [range, reload]);
+  }, [range, key]);
   return { data, loading, error, refetch: () => setReload((n) => n + 1) };
 }
 

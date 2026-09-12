@@ -43,17 +43,19 @@ function toneFor(status: string): BadgeTone {
 export default function SystemScreen() {
   const [sync, setSync] = useState<SyncStatusResponse | null>(null);
   const [conn, setConn] = useState<ConnectionsResponse | null>(null);
-  const [health, setHealth] = useState<"checking" | "ok" | "rejected" | "unreachable">("checking");
+  // The health reading is tagged with the reload it answers; a newer reload reads
+  // as "checking" until its own answer lands (react-hooks/set-state-in-effect).
+  const [healthFor, setHealthFor] = useState<{ reload: number; value: "ok" | "rejected" | "unreachable" } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const health: "checking" | "ok" | "rejected" | "unreachable" = healthFor?.reload === reload ? healthFor.value : "checking";
   const { refreshing, onRefresh } = usePullRefresh(() => setReload((n) => n + 1));
 
   useEffect(() => {
     let alive = true;
-    setHealth("checking");
     fetch(`${API_BASE}/api/health/today`, { headers: { ...AUTH_HEADERS } })
-      .then((r) => { if (!alive) return; setHealth(r.ok && (r.headers.get("content-type") ?? "").includes("json") ? "ok" : "rejected"); })
-      .catch(() => alive && setHealth("unreachable"));
+      .then((r) => { if (!alive) return; setHealthFor({ reload, value: r.ok && (r.headers.get("content-type") ?? "").includes("json") ? "ok" : "rejected" }); })
+      .catch(() => alive && setHealthFor({ reload, value: "unreachable" }));
     fetchJson<SyncStatusResponse>("/api/sync/status").then((d) => alive && setSync(d)).catch((e) => alive && setError(String(e?.message ?? e)));
     fetchJson<ConnectionsResponse>("/api/connections").then((d) => alive && setConn(d)).catch(() => {});
     return () => { alive = false; };

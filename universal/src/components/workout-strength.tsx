@@ -19,15 +19,16 @@ function StrengthProgression({ names, unit }: { names: string[]; unit: "kg" | "l
   const [tracked, setTracked] = useState<string[]>(names.slice(0, 3));
   const [picking, setPicking] = useState(false);
   const [sel, setSel] = useState<string | null>(names[0] ?? null);
-  const [prog, setProg] = useState<ProgResp["progression"]>([]);
-  const [loading, setLoading] = useState(false);
+  // The progression is tagged with the exercise it answers (no setState in the effect body).
+  const [fetched, setFetched] = useState<{ name: string; prog: ProgResp["progression"] } | null>(null);
+  const prog = sel && fetched?.name === sel ? fetched.prog : [];
+  const loading = !!sel && fetched?.name !== sel;
   useEffect(() => {
     if (!sel) return;
-    let alive = true; setLoading(true);
+    let alive = true;
     fetchJson<ProgResp>(`/api/workouts/exercise?name=${encodeURIComponent(sel)}`)
-      .then((d) => alive && setProg(d.progression ?? []))
-      .catch(() => alive && setProg([]))
-      .finally(() => alive && setLoading(false));
+      .then((d) => alive && setFetched({ name: sel, prog: d.progression ?? [] }))
+      .catch(() => alive && setFetched({ name: sel, prog: [] }));
     return () => { alive = false; };
   }, [sel]);
   if (!names.length) return null;

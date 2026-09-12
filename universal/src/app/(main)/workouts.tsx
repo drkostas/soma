@@ -80,7 +80,7 @@ export default function WorkoutsScreen() {
     return { count: cal.length, years: days / 365, months, first: cal[0].day, last: cal[cal.length - 1].day };
   })();
 
-  const recent = data?.recent ?? [];
+  const recent = useMemo(() => data?.recent ?? [], [data]);
   // Web's Recent Workouts rows carry Garmin calories and avg HR; the sync list has the kcal and
   // the insights HR trend has the HR, both keyed by local day + title (soma#784).
   const enrich = useMemo(() => {
