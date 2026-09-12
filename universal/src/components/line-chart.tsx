@@ -236,14 +236,18 @@ export function LineChart(props: LineChartProps) {
               const labelled = [...(refLine ? [refLine] : []), ...(refLines ?? [])]
                 .filter((r) => r.label && r.y >= loL && r.y <= hiL)
                 .sort((a, b) => yAtL(a.y) - yAtL(b.y));
+              const placed: { r: (typeof labelled)[number]; ly: number; atRight: boolean }[] = [];
               let lastY = -100; let lastRight = rightS.length !== 0;
-              return labelled.map((r, ri) => {
-              const ly = yAtL(r.y);
+              for (const r of labelled) {
+                const ly = yAtL(r.y);
+                let atRight = rightS.length === 0;
+                if (Math.abs(ly - lastY) < 11) atRight = !lastRight;
+                lastY = ly; lastRight = atRight;
+                placed.push({ r, ly, atRight });
+              }
+              return placed.map(({ r, ly, atRight }, ri) => {
               const ty = ly < 14 ? ly + 10 : ly - 3;
               const tw = r.label!.length * 4.4 + 4;
-              let atRight = rightS.length === 0;
-              if (Math.abs(ly - lastY) < 11) atRight = !lastRight;
-              lastY = ly; lastRight = atRight;
               return (
                 <Fragment key={`rt-${ri}`}>
                   <Rect x={atRight ? VBW - 2 - tw : 2} y={ty - 8} width={tw} height={10} rx={2} fill="#0c1519" fillOpacity={0.8} />

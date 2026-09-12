@@ -57,6 +57,13 @@ function shortMD(iso: string | null | undefined): string {
   const [y, mo, d] = iso.split("-").map(Number);
   return new Date(y, (mo ?? 1) - 1, d ?? 1).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+/** A day's locked slots from storage (guarded: no-ops on native). */
+function readLockedSlots(date: string): string[] {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(`locked-slots-${date}`) : null;
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch { return []; }
+}
 function niceDate(iso: string): string {
   const [y, mo, d] = iso.split("-").map(Number);
   const dt = new Date(y, (mo ?? 1) - 1, d ?? 1);
@@ -90,18 +97,6 @@ export default function NutritionScreen() {
   const isFuture = DATE > todayLocal();
   const isTomorrow = DATE === shiftDate(todayLocal(), 1);
   const { data, loading, error, refetch } = useSomaPlan(DATE);
-  // Reset per-day transient UI when the viewed day changes, and load that
-  // day's locked slots from storage (guarded — no-ops on native).
-  useEffect(() => {
-    setCloseStatus(null); setLogMode("preset"); setLogOpen(false); setEditMeal(null); setDetailMeal(null); setRebalanceToast(null);
-    setSelectedPreset(null); setPresetSeed(null); setComposePreview(null); setPresetMult(1);
-    let stored: string[] = [];
-    try {
-      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(`locked-slots-${DATE}`) : null;
-      if (raw) stored = JSON.parse(raw);
-    } catch { /* native / unavailable */ }
-    setLockedSlots(new Set(stored));
-  }, [DATE]);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
   const { presets, ingredients, reload: reloadPresets } = usePresets();
   const { drinks } = useDrinks();
@@ -137,8 +132,18 @@ export default function NutritionScreen() {
   const [composePreview, setComposePreview] = useState<{ calories: number; protein: number; carbs: number; fat: number; fiber: number } | null>(null);
   // Slots the user has locked (won't be rebalanced). Persisted per-date via
   // guarded localStorage (works on Expo web; in-memory fallback on native).
-  const [lockedSlots, setLockedSlots] = useState<Set<string>>(new Set());
+  const [lockedSlots, setLockedSlots] = useState<Set<string>>(() => new Set(readLockedSlots(DATE)));
   const [rebalanceToast, setRebalanceToast] = useState<string | null>(null);
+  // Reset per-day transient UI when the viewed day changes, and load that day's
+  // locked slots from storage: adjusted during render (after every setter it
+  // touches is declared), not in an effect.
+  const [dayShown, setDayShown] = useState(DATE);
+  if (dayShown !== DATE) {
+    setDayShown(DATE);
+    setCloseStatus(null); setLogMode("preset"); setLogOpen(false); setEditMeal(null); setDetailMeal(null); setRebalanceToast(null);
+    setSelectedPreset(null); setPresetSeed(null); setComposePreview(null); setPresetMult(1);
+    setLockedSlots(new Set(readLockedSlots(DATE)));
+  }
 
   const plan = data?.plan;
   const consumed = data?.consumed;

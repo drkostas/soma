@@ -27,6 +27,11 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /* ---- run selector (Past Runs / Saved Plans / History / Manual — mirrors web) ---- */
 type SelTab = "past" | "plans" | "history" | "manual";
+
+/** One selector tab; declared once so it keeps its identity across renders. */
+function TabPill({ id, label, n, tab, onSelect }: { id: SelTab; label: string; n?: number; tab: SelTab; onSelect: (t: SelTab) => void }) {
+  return <Pill label={n != null ? `${label} (${n})` : label} active={tab === id} onPress={() => onSelect(id)} />;
+}
 interface SessionMeta { id: number; workout_name: string | null; garmin_activity_id: string | null; spotify_playlist_url: string | null; song_assignments: Record<string, unknown[]> | null; created_at: string }
 const sessTrackCount = (a: Record<string, unknown[]> | null) => a ? Object.values(a).reduce((s, v) => s + (Array.isArray(v) ? v.length : 0), 0) : 0;
 
@@ -77,17 +82,14 @@ function RunSelector({ onPick }: { onPick: (name: string, garminId: string | nul
     return [...g.values()].sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
   })();
 
-  const TabPill = ({ id, label, n }: { id: SelTab; label: string; n?: number }) => (
-    <Pill label={n != null ? `${label} (${n})` : label} active={tab === id} onPress={() => setTab(id)} />
-  );
 
   return (
     <View className="gap-3">
       <View className="flex-row flex-wrap gap-2">
-        <TabPill id="past" label="Past Runs" />
-        <TabPill id="plans" label="Saved Plans" n={plans?.length} />
-        <TabPill id="history" label="History" n={historyRows.length || undefined} />
-        <TabPill id="manual" label="Manual" />
+        <TabPill id="past" label="Past Runs" tab={tab} onSelect={setTab} />
+        <TabPill id="plans" label="Saved Plans" n={plans?.length} tab={tab} onSelect={setTab} />
+        <TabPill id="history" label="History" n={historyRows.length || undefined} tab={tab} onSelect={setTab} />
+        <TabPill id="manual" label="Manual" tab={tab} onSelect={setTab} />
       </View>
       {tab === "past" ? (
         <>
