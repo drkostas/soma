@@ -8,7 +8,10 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 
+// The mock above must be declared before the modules it replaces are imported.
+// eslint-disable-next-line import/first
 import AsyncStorage from "@react-native-async-storage/async-storage";
+// eslint-disable-next-line import/first
 import {
   RANGES, rangeToDays, rangeLabel, isRangeKey, getRangePref, setRangePref, hydrateRangePref,
   isRangeHydrated, __resetRangePrefForTests, DEFAULT_RANGE,

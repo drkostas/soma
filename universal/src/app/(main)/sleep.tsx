@@ -19,8 +19,6 @@ import { SleepScheduleChart } from "../../components/sleep-schedule-chart";
 /** Value series from a StatSeries.current, dropping nulls (for sparklines). */
 const seriesVals = (pts?: { value: number | null }[]) =>
   (pts ?? []).map((p) => Number(p.value)).filter((v) => isFinite(v));
-const series2Vals = (pts?: { value2?: number | null }[]) =>
-  (pts ?? []).map((p) => Number(p.value2)).filter((v) => isFinite(v));
 const chartLabel = (iso: string) => {
   const [, m, d] = iso.slice(0, 10).split("-").map(Number);
   return `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(m ?? 1) - 1]} ${d}`;

@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { Text, Card } from "soma-style";
-import type { RunningSplits } from "../lib/api";
+import type { RunningSplits as RunningSplitsData } from "../lib/api";
 
 /** Decimal minutes → "M:SS". */
 function pace(mins: number | null | undefined): string {
@@ -17,7 +17,7 @@ function shortDate(iso: string): string {
 const MEDAL = ["#e0c458", "#c0c0c8", "#b17850"]; // gold / silver / bronze
 
 /** Per-km pace bars + fastest single-km splits, fed by /api/running/splits. */
-export function RunningSplits({ data }: { data: RunningSplits | null | undefined }) {
+export function RunningSplits({ data }: { data: RunningSplitsData | null | undefined }) {
   if (!data) return null;
   const perKm = data.perKm.filter((k) => k.avg_pace != null);
   const paces = perKm.map((k) => Number(k.avg_pace));

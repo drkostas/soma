@@ -122,7 +122,7 @@ export function ComposeMealView({
   const setG = (id: string, v: number) => setGrams((g) => ({ ...g, [id]: Math.max(0, Math.round(v)) }));
   const remove = (id: string) => setGrams((g) => { const n = { ...g }; delete n[id]; return n; });
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (id: string) =>
-    setter((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setter((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleCooked = toggleSet(setCookedMode);
   const toggleGramMode = toggleSet(setGramMode);
 

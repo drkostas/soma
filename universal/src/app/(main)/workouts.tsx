@@ -58,18 +58,6 @@ function localDayOf(iso: string): string {
 }
 export { localDayOf };
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "2-digit" }),
-  });
-}
-
 export default function WorkoutsScreen() {
   const { data, error, refetch } = useWorkouts();
   const [range, setRange] = useRangePref();
@@ -112,12 +100,6 @@ export default function WorkoutsScreen() {
     if (withKcal.length === 0) return null;
     return Math.round(withKcal.reduce((s, w) => s + w.kcal, 0) / withKcal.length);
   })();
-  const avgExercises = (() => {
-    const withEx = recent.filter((w) => w.exercises > 0);
-    if (withEx.length === 0) return null;
-    return Math.round(withEx.reduce((s, w) => s + w.exercises, 0) / withEx.length);
-  })();
-
   // Per-session calories, oldest→newest, for the Avg-Calories trend sparkline.
   const kcalTrend = recent
     .map((w) => w.kcal)
