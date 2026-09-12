@@ -1,4 +1,3 @@
-import { View } from "react-native";
 import { Text, Card } from "soma-style";
 import { LineChart, ChartLegend, ExpandableChart, type LineChartProps } from "./line-chart";
 import type { SchedulePoint } from "../lib/api";

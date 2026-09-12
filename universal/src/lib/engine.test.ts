@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { readinessFactorCalc, fatigueFactorCalc, DEFAULT_BASE_PACE } from "banister";
-import { getHMPrediction, getBasePace, getHRZone } from "banister";
-import { vdotFromHmSeconds } from "banister";
-import { projectVdotSeries, projectVdotAt, DEFAULT_BANISTER, type DatedLoad } from "banister";
+import {
+  readinessFactorCalc, fatigueFactorCalc, DEFAULT_BASE_PACE, getHMPrediction, getBasePace, getHRZone,
+  vdotFromHmSeconds, projectVdotSeries, projectVdotAt, DEFAULT_BANISTER, type DatedLoad,
+} from "banister";
 import { ALL_MUSCLE_GROUPS, MUSCLE_COLORS, MUSCLE_TO_SLUGS, SLUG_TO_MUSCLE, hexToRgba } from "./muscle-groups";
 
 /**

@@ -165,14 +165,14 @@ function useChatStream() {
       }
     };
 
-    const onUser = (m: { content?: Array<{ type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }> }) => {
+    const onUser = (m: { content?: { type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }[] }) => {
       if (!Array.isArray(m.content)) return;
       for (const item of m.content) {
         if (item.type !== "tool_result" || !item.tool_use_id) continue;
         let raw2 = "";
         if (typeof item.content === "string") raw2 = item.content;
         else if (Array.isArray(item.content))
-          raw2 = (item.content as Array<{ type?: string; text?: string }>)
+          raw2 = (item.content as { type?: string; text?: string }[])
             .filter((c) => c.type === "text" && typeof c.text === "string")
             .map((c) => c.text as string)
             .join("\n");

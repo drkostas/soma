@@ -28,7 +28,7 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function Bar({ label, plan, actual, unit, invert }: { label: string; plan: number; actual: number; unit: string; invert?: boolean }) {
+function Bar({ label, plan, actual, unit }: { label: string; plan: number; actual: number; unit: string; invert?: boolean }) {
   const ratio = plan > 0 ? actual / plan : 0;
   // compliance: 1.0 = on target; color by closeness
   const off = Math.abs(1 - ratio);

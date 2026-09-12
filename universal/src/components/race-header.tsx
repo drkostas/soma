@@ -1,5 +1,5 @@
 import { View } from "react-native";
-import { Text, Badge } from "soma-style";
+import { Badge } from "soma-style";
 import type { PlanDay } from "../lib/api";
 
 function daysBetween(a: string, b: string): number {

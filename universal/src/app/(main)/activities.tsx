@@ -102,18 +102,6 @@ const CAT_COLOR: Record<string, string> = {
   Other: "#b17bd4",
 };
 
-function fmtDuration(mins: number): string {
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
-}
-
 export default function ActivitiesScreen() {
   const [range, setRange] = useRangePref();
   const { data, loading, error, refetch } = useActivities(range);

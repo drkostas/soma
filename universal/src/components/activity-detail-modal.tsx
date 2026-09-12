@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, ScrollView, Image, Pressable, Platform, Share } from "react-native";
+import { View, ScrollView, Image, Platform, Share } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { Text, Modal, Badge, Button, Sparkline } from "soma-style";
