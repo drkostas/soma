@@ -335,6 +335,9 @@ export function NutritionDashboard({
   const [budgetExpanded, setBudgetExpanded] = useState(false);
   const [breakdown, setBreakdown] = useState<any>(null);
   const [trend7d, setTrend7d] = useState<any>(null);
+  // Today's estimate from the scale when the day is not fully logged (soma#891).
+  const [deficitEstimate, setDeficitEstimate] = useState<any>(null);
+  const fmtShort = (d: string | null | undefined) => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "?";
   const [adaptive, setAdaptive] = useState<any>(null);
   // Engagement-aware rendering (#698): is nutrition actually in use this
   // week, and what does the scale say regardless of logging.
@@ -366,6 +369,7 @@ export function NutritionDashboard({
         if (data.slotBudgets) setSlotBudgets(data.slotBudgets);
         if (data.breakdown) setBreakdown(data.breakdown);
         if (data.trend7d) setTrend7d(data.trend7d);
+        setDeficitEstimate(data.deficitEstimate ?? null);
         setAdaptive(data.adaptive ?? null);
         setEngagement(data.engagement ?? null);
         setWeightTrend(data.weightTrend ?? null);
@@ -677,11 +681,26 @@ export function NutritionDashboard({
                         Below the coverage floor, say what is true instead. */}
                     {(() => {
                       const loggedSlotCount = 4 - unloggedSlots.length;
-                      const todayObserved = isClosed || loggedSlotCount >= 3;
+                      // Observed = closed by hand or every slot logged or skipped (soma#891);
+                      // the route says which. Without it, the older three-slot floor.
+                      const todayObserved = isClosed || (deficitEstimate ? deficitEstimate.source === "observed" : loggedSlotCount >= 3);
                       if (todayObserved) {
                         return (
                           <div className="text-xs text-center" data-testid="hero-deficit">
                             <span className={currentDeficit < 0 ? "text-green-500" : "text-rose-500"}>{currentDeficit > 0 ? "+" : ""}{Math.round(currentDeficit)} current deficit</span>
+                          </div>
+                        );
+                      }
+                      // Not observed, but the scale knows the rate: say the estimate,
+                      // marked as one, and between which weigh-ins it comes from (soma#891).
+                      const est = deficitEstimate && (deficitEstimate.source === "partial" || deficitEstimate.source === "extrapolated") ? deficitEstimate : null;
+                      if (est) {
+                        return (
+                          <div className="text-xs text-center text-muted-foreground" data-testid="hero-deficit-estimate">
+                            <span className={est.deficit <= 0 ? "text-green-500/80" : "text-rose-500/80"}>~{est.deficit > 0 ? "+" : ""}{est.deficit} estimated deficit</span>
+                            <span className="block text-[10px] text-muted-foreground/70">
+                              {loggedSlotCount === 0 ? "nothing logged yet" : `${loggedSlotCount} of 4 meals logged`} · rest extrapolated between {fmtShort(est.intervalStart)} and {fmtShort(est.intervalEnd)}
+                            </span>
                           </div>
                         );
                       }
@@ -869,42 +888,42 @@ export function NutritionDashboard({
                             // closed: its ate is the running log (#717), so it reads
                             // parenthesised and muted, never as a settled deficit.
                             const isInProgress = !d.closed;
-                            // A day with nothing logged has no deficit to show, in
-                            // progress or not: "(−2363)" for an unlogged today is the
-                            // same fabrication the hero no longer makes (#703).
-                            const unobserved = (d.coverage ?? 0) === 0 && !(d.ate > 0);
-                            // Colour is a verdict; only a counted day earns one (#699).
-                            const tone = d.counted ? deficitColor : "text-muted-foreground";
+                            // Since soma#891 a day that was not fully logged is estimated from
+                            // the scale: "~" marks it and the row is greyed. Only a day nothing
+                            // can be said about (no plan, or no scale) shows a dash.
+                            const src: string = d.source ?? (d.counted ? "observed" : "unknown");
+                            const est = src === "extrapolated" || src === "partial";
+                            const unobserved = src === "unknown" && (d.coverage ?? 0) === 0 && !(d.ate > 0);
+                            // Colour is a verdict; only an observed, counted day earns one (#699).
+                            const tone = est ? "text-muted-foreground" : d.counted ? deficitColor : "text-muted-foreground";
+                            const sign = d.deficit > 0 ? "+" : "";
+                            const ateText = unobserved ? "\u2013" : est ? `~${d.ate}` : isInProgress ? `(${d.ate})` : d.ate || "\u2013";
+                            const defText = unobserved ? "\u2013" : est ? `~${sign}${d.deficit}` : isInProgress ? `(${sign}${d.deficit})` : d.ate > 0 ? `${sign}${d.deficit}` : "\u2013";
                             return (
                               <React.Fragment key={d.date}>
-                                <span>
+                                <span className={est ? "text-muted-foreground" : ""}>
                                   {dayLabel}
                                   <span className="block sm:hidden text-[9px] text-muted-foreground/60">
-                                    ate {unobserved ? "–" : isInProgress ? `(${d.ate})` : d.ate} · burn {d.burn}
+                                    ate {ateText} · burn {d.burn}
                                   </span>
                                 </span>
-                                <span className={`tabular-nums text-right hidden sm:block ${isInProgress ? "text-muted-foreground" : ""}`} data-testid={`trend-ate-${d.date}`}>
-                                  {unobserved ? "\u2013" : isInProgress ? `(${d.ate})` : d.ate || "\u2013"} / {d.burn || "\u2013"}
+                                <span className={`tabular-nums text-right hidden sm:block ${isInProgress || est ? "text-muted-foreground" : ""}`} data-testid={`trend-ate-${d.date}`}>
+                                  {ateText} / {d.burn || "\u2013"}
                                 </span>
-                                <span className={`tabular-nums text-right font-medium ${tone}`} data-testid={`trend-deficit-${d.date}`} data-counted={d.counted ? "1" : "0"}>
-                                  {unobserved
-                                    ? "\u2013"
-                                    : isInProgress
-                                      ? `(${d.deficit > 0 ? "+" : ""}${d.deficit})`
-                                      : d.ate > 0 ? `${d.deficit > 0 ? "+" : ""}${d.deficit}` : "\u2013"
-                                  } / &minus;{trend7d.goalDeficit}
+                                <span className={`tabular-nums text-right font-medium ${tone}`} data-testid={`trend-deficit-${d.date}`} data-counted={d.counted ? "1" : "0"} data-source={src}>
+                                  {defText} / &minus;{trend7d.goalDeficit}
                                 </span>
                               </React.Fragment>
                             );
                           })}
                           {/* Total — only over a fully engaged week. A total over
                               two closed days is not a week's deficit (#699, #703). */}
-                          {trend7d.closedDays > 0 && engagement?.state === "complete" && (() => {
+                          {trend7d.closedDays > 0 && (engagement?.state === "complete" || trend7d.days.every((d: any) => d.counted)) && (() => {
                             const total = trend7d.totalDeficit; // negative = deficit
                             const goal = -(trend7d.closedDays * trend7d.goalDeficit); // negative target
                             return (
                               <React.Fragment key="trend-total">
-                                <span className="font-medium border-t pt-1">Total ({trend7d.closedDays}d)</span>
+                                <span className="font-medium border-t pt-1">Total ({trend7d.closedDays}d{trend7d.days.some((d: any) => d.source === "extrapolated" || d.source === "partial") ? " ~" : ""})</span>
                                 <span className="border-t pt-1 hidden sm:block" />
                                 <span className={`tabular-nums text-right font-bold border-t pt-1 ${total <= goal ? "text-green-500" : "text-amber-500"}`}>
                                   {total > 0 ? "+" : ""}{Math.round(total)} / {goal}
@@ -913,7 +932,7 @@ export function NutritionDashboard({
                             );
                           })()}
                         </div>
-                        {trend7d.adherence && engagement?.state === "complete" && (() => {
+                        {trend7d.adherence && (engagement?.state === "complete" || trend7d.days.every((d: any) => d.counted)) && (() => {
                           const a = trend7d.adherence;
                           const label = a.status === "on_track" ? "on track" : a.status === "under" ? "under goal" : "over goal";
                           const color = a.status === "on_track" ? "text-green-500" : "text-amber-400";
@@ -923,6 +942,12 @@ export function NutritionDashboard({
                               <span className={`${color} tabular-nums`}>{label} · {Math.round(a.ratio * 100)}%</span>
                             </div>
                           );
+                        })()}
+                        {(() => {
+                          const e = trend7d.days.find((d: any) => d.source === "extrapolated" || d.source === "partial");
+                          return e ? (
+                            <div className="text-[9px] text-muted-foreground/60" data-testid="trend-estimate-note">~ estimated from the scale between {fmtShort(e.intervalStart)} and {fmtShort(e.intervalEnd)}</div>
+                          ) : null;
                         })()}
                         {trend7d.days.some((d: any) => d.manual) && (
                           <div className="text-[9px] text-muted-foreground/60">* offset target in parentheses · +/− vs {trend7d.goalDeficit}/day goal</div>

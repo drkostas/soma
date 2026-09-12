@@ -174,7 +174,20 @@ export async function GET() {
   // lib/adaptive-tdee stays on observed days only: an extrapolated day is
   // derived from the scale, and feeding it back into a TDEE fit would be circular.
   const firstWeighIn = weightRows.length ? String((weightRows[0] as Record<string, unknown>).date) : "9999-12-31";
+  // Activity per day is aggregated once (a CTE), not four correlated scans of
+  // garmin_activity_raw per row: with every day since the first weigh-in in
+  // the result that was the whole cost of this route.
   const deficitRows = await sql`
+    WITH act AS (
+      SELECT (raw_json->>'startTimeLocal')::date AS d,
+             SUM((raw_json->>'calories')::float) FILTER (WHERE raw_json->'activityType'->>'typeKey' = 'running') AS run_cal,
+             SUM((raw_json->>'distance')::float) FILTER (WHERE raw_json->'activityType'->>'typeKey' = 'running') AS run_dist,
+             SUM((raw_json->>'calories')::float) FILTER (WHERE raw_json->'activityType'->>'typeKey' = 'strength_training') AS gym_cal,
+             MIN(raw_json->>'activityName') FILTER (WHERE raw_json->'activityType'->>'typeKey' = 'strength_training') AS gym_title
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+      GROUP BY 1
+    )
     SELECT n.date::text AS date, n.target_calories, n.actual_calories, n.deficit_used, n.status, n.closed_by,
            h.total_kilocalories AS garmin_burn, h.bmr_kilocalories AS bmr, h.total_steps,
            (
@@ -186,18 +199,8 @@ export async function GET() {
              ) u
              WHERE u.s IN ('breakfast', 'lunch', 'dinner', 'pre_sleep')
            ) AS coverage,
-           COALESCE((SELECT SUM((raw_json->>'calories')::float) FROM garmin_activity_raw
-             WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'running'
-             AND (raw_json->>'startTimeLocal')::date = n.date), 0) AS run_cal,
-           COALESCE((SELECT SUM((raw_json->>'distance')::float) FROM garmin_activity_raw
-             WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'running'
-             AND (raw_json->>'startTimeLocal')::date = n.date), 0) AS run_dist,
-           COALESCE((SELECT SUM((raw_json->>'calories')::float) FROM garmin_activity_raw
-             WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'strength_training'
-             AND (raw_json->>'startTimeLocal')::date = n.date), 0) AS gym_cal,
-           (SELECT raw_json->>'activityName' FROM garmin_activity_raw
-             WHERE endpoint_name = 'summary' AND raw_json->'activityType'->>'typeKey' = 'strength_training'
-             AND (raw_json->>'startTimeLocal')::date = n.date LIMIT 1) AS gym_title
+           COALESCE(a.run_cal, 0) AS run_cal, COALESCE(a.run_dist, 0) AS run_dist,
+           COALESCE(a.gym_cal, 0) AS gym_cal, a.gym_title
 ,
            (
              SELECT COALESCE((SELECT SUM(m.calories) FROM meal_log m WHERE m.date = n.date), 0)
@@ -205,6 +208,7 @@ export async function GET() {
            ) AS logged_calories
     FROM nutrition_day n
     LEFT JOIN daily_health_summary h ON h.date = n.date
+    LEFT JOIN act a ON a.d = n.date
     WHERE n.actual_calories > 0 OR n.status = 'active' OR n.date >= ${firstWeighIn}::date
     ORDER BY n.date
   `;

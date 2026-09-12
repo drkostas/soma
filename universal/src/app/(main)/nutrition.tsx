@@ -52,6 +52,11 @@ function mealName(m: SomaMeal, presets: Preset[] = []): string {
   return m.source ? slotLabel(m.source) : "Meal";
 }
 
+function shortMD(iso: string | null | undefined): string {
+  if (!iso) return "?";
+  const [y, mo, d] = iso.split("-").map(Number);
+  return new Date(y, (mo ?? 1) - 1, d ?? 1).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 function niceDate(iso: string): string {
   const [y, mo, d] = iso.split("-").map(Number);
   const dt = new Date(y, (mo ?? 1) - 1, d ?? 1);
@@ -444,7 +449,9 @@ export default function NutritionScreen() {
                   const loggedSlotCount = ["breakfast", "lunch", "dinner", "pre_sleep"].filter(
                     (s) => logged.has(s) || skippedSlots.includes(s),
                   ).length;
-                  const todayObserved = dayClosed || loggedSlotCount >= 3;
+                  // Observed = closed by hand or every slot logged or skipped (soma#891);
+                  // the route says which. Without it, the older three-slot floor.
+                  const todayObserved = dayClosed || (data?.deficitEstimate ? data.deficitEstimate.source === "observed" : loggedSlotCount >= 3);
                   if (todayObserved) {
                     return (
                       <Text variant="micro" style={{ color: currentDeficit <= 0 ? "#6ad4a0" : "#f2868c" }} testID="hero-deficit">
@@ -452,6 +459,21 @@ export default function NutritionScreen() {
                           ? `${Math.abs(Math.round(currentDeficit)).toLocaleString()} kcal current deficit`
                           : `+${Math.round(currentDeficit).toLocaleString()} kcal surplus`}
                       </Text>
+                    );
+                  }
+                  // Not observed, but the scale knows the rate: say the estimate, marked
+                  // as one, and between which weigh-ins it comes from (soma#891).
+                  const est = data?.deficitEstimate && (data.deficitEstimate.source === "partial" || data.deficitEstimate.source === "extrapolated") ? data.deficitEstimate : null;
+                  if (est) {
+                    return (
+                      <View testID="hero-deficit-estimate">
+                        <Text variant="micro" style={{ color: est.deficit <= 0 ? "#6ad4a0cc" : "#f2868ccc" }}>
+                          ~{Math.abs(Math.round(est.deficit)).toLocaleString()} kcal estimated {est.deficit <= 0 ? "deficit" : "surplus"}
+                        </Text>
+                        <Text variant="micro" className="text-text-muted">
+                          {loggedSlotCount === 0 ? "nothing logged yet" : `${loggedSlotCount} of 4 meals logged`} · rest extrapolated between {shortMD(est.intervalStart)} and {shortMD(est.intervalEnd)}
+                        </Text>
+                      </View>
                     );
                   }
                   return (
@@ -732,14 +754,20 @@ export default function NutritionScreen() {
                     // Same three readings as the web table (#703/#717/#721): a day with
                     // nothing logged shows "–"; an open day (today or never closed) shows
                     // its running log in parentheses; only a counted day earns a colour.
-                    const unobserved = (d.coverage ?? 0) === 0 && !(d.ate > 0);
+                    // Since soma#891 a day that was not fully logged is estimated from the
+                    // scale: "~" marks it and the row is greyed; only a day nothing can be
+                    // said about shows a dash.
+                    const src = d.source ?? (d.counted ? "observed" : "unknown");
+                    const est = src === "extrapolated" || src === "partial";
+                    const unobserved = src === "unknown" && (d.coverage ?? 0) === 0 && !(d.ate > 0);
                     const open = !d.closed;
-                    const counted = d.counted === true;
-                    const ateText = unobserved ? "–" : open ? `(${Math.round(d.ate)})` : String(Math.round(d.ate));
-                    const defText = unobserved ? "–" : `${open ? "(" : ""}${d.deficit > 0 ? "+" : ""}${Math.round(d.deficit)}${open ? ")" : ""}`;
+                    const counted = d.counted === true && !est;
+                    const sign = d.deficit > 0 ? "+" : "";
+                    const ateText = unobserved ? "–" : est ? `~${Math.round(d.ate)}` : open ? `(${Math.round(d.ate)})` : String(Math.round(d.ate));
+                    const defText = unobserved ? "–" : est ? `~${sign}${Math.round(d.deficit)}` : `${open ? "(" : ""}${sign}${Math.round(d.deficit)}${open ? ")" : ""}`;
                     return (
                       <View key={d.date} className="flex-row items-center justify-between border-b border-border-subtle py-1.5" testID={`trend-row-${d.date}`}>
-                        <Text variant="caption" className={d.isToday ? "font-semibold text-teal" : "text-text-secondary"}>
+                        <Text variant="caption" className={d.isToday ? "font-semibold text-teal" : est ? "text-text-muted" : "text-text-secondary"}>
                           {niceDate(d.date).replace(/,.*/, "").slice(0, 3)} {d.date.slice(8)}
                         </Text>
                         <Text variant="caption" className="tabular-nums text-text-muted">{ateText} / {Math.round(d.burn)}</Text>
@@ -750,9 +778,9 @@ export default function NutritionScreen() {
                     );
                   })}
                   {/* A total over a partly logged week is not a week's deficit (#699/#703). */}
-                  {data?.engagement?.state === "complete" && (data?.trend7d?.closedDays ?? 0) > 0 ? (
+                  {(data?.engagement?.state === "complete" || days.every((d) => d.counted)) && (data?.trend7d?.closedDays ?? 0) > 0 ? (
                     <View className="flex-row items-center justify-between pt-1.5">
-                      <Text variant="caption" className="font-semibold text-text">Total ({data?.trend7d?.closedDays}d)</Text>
+                      <Text variant="caption" className="font-semibold text-text">Total ({data?.trend7d?.closedDays}d{days.some((d) => d.source === "extrapolated" || d.source === "partial") ? " ~" : ""})</Text>
                       <Text variant="caption" className="tabular-nums text-text-muted">{Math.round(sumAte)} / {Math.round(sumBurn)}</Text>
                       <Text variant="caption" className="w-16 text-right font-semibold tabular-nums" style={{ color: deficitTone(totalActual, goalTotal) }}>
                         {totalActual > 0 ? "+" : ""}{Math.round(totalActual)}
@@ -763,6 +791,14 @@ export default function NutritionScreen() {
                       Weekly total shows after {data?.engagement?.weekFloorDays ?? 3} full days.
                     </Text>
                   )}
+                  {(() => {
+                    const e = days.find((d) => d.source === "extrapolated" || d.source === "partial");
+                    return e ? (
+                      <Text variant="micro" className="pt-1 text-text-muted" testID="trend-estimate-note">
+                        ~ estimated from the scale between {shortMD(e.intervalStart)} and {shortMD(e.intervalEnd)}
+                      </Text>
+                    ) : null;
+                  })()}
                 </Card>
               );
             })() : (
