@@ -35,7 +35,9 @@ export function reconcile(weighIns: { date: string; weightKg: number }[], days: 
   const unknown = (d: DayIn): DayOut => ({
     date: d.date, ate: d.loggedKcal, burn: d.burn, deficit: d.loggedKcal - d.burn, source: "unknown", intervalStart: null, intervalEnd: null,
   });
-  if (w.length < 2) return days.map(unknown);
+  // With fewer than two weigh-ins nothing can be extrapolated, but an observed
+  // day is still observed: its intake was logged, no scale needed.
+  if (w.length < 2) return days.map((d) => (d.observed ? { ...unknown(d), source: "observed" as const } : unknown(d)));
 
   const out = new Map<string, DayOut>();
   const rates: { start: string; end: string; A: number }[] = [];

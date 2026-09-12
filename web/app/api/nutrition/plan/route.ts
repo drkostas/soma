@@ -5,7 +5,8 @@ import type { Mode } from "@/lib/mode-engine";
 import type { SlotBudgets } from "@/lib/nutrition-types";
 import { computeAdaptiveContext } from "@/lib/adaptive-tdee";
 import { computeWeeklyAdherence } from "@/lib/adherence";
-import { meetsCoverageFloor } from "@/lib/coverage";
+import { isObservedDay } from "@/lib/observed-day";
+import { reconcile, type DayIn } from "@/lib/energy-reconcile";
 import { nutritionEngagement, WEEK_ENGAGEMENT_FLOOR_DAYS } from "@/lib/engagement";
 import { getWeightTrend } from "@/lib/weight-trend";
 import { trendAte } from "@/lib/trend-ate";
@@ -487,14 +488,39 @@ export async function GET(req: NextRequest) {
 
   // ── 7-day rolling trend ──
   // `coverage` = (distinct slots with logged kcal ∪ explicitly skipped) / 4,
-  // the same definition lib/adaptive-tdee uses, so a closed-but-empty day is
-  // treated identically everywhere (#699).
-  const trendRows = await sql`
+  // the same definition lib/adaptive-tdee uses (#699). Since soma#891 a day is
+  // OBSERVED when a person closed it or every slot was logged or skipped; any
+  // other day is reconciled against the scale: the weight change between two
+  // weigh-ins, at 7700 kcal/kg, is spread over the unobserved share of the
+  // days between them (lib/energy-reconcile). For that the query spans back to
+  // the last weigh-in before the window, not just seven days. lib/adaptive-tdee
+  // stays on observed days only: an extrapolated day is derived from the scale,
+  // and feeding it back into a TDEE fit would be circular.
+  const shiftDate = (d: string, n: number) => {
+    const t = new Date(`${d}T00:00:00Z`);
+    t.setUTCDate(t.getUTCDate() + n);
+    return t.toISOString().slice(0, 10);
+  };
+  const weighIns = (
+    await sql`
+      SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
+      FROM weight_log WHERE weight_grams IS NOT NULL AND date <= ${date}::date ORDER BY date
+    `
+  ).map((w: Record<string, unknown>) => ({ date: String(w.date), weightKg: Number(w.weight_kg) }));
+  const windowStart = shiftDate(date, -6);
+  // The span starts at the beginning of the last complete weigh-in interval
+  // before the window: the rate that fills the window's unlogged days is that
+  // interval's, and it needs every day of the interval to be computed.
+  const before = weighIns.filter((w: { date: string }) => w.date <= windowStart);
+  const intervalStart = before.length >= 2 ? before[before.length - 2] : before[0] ?? weighIns[0];
+  const spanStart = intervalStart && intervalStart.date < windowStart ? intervalStart.date : windowStart;
+  const spanRows = await sql`
     SELECT
       n.date::text AS date,
       n.target_calories,
       n.actual_calories,
       n.status,
+      n.closed_by,
       n.manual_override,
       n.deficit_used,
       (
@@ -514,10 +540,12 @@ export async function GET(req: NextRequest) {
              + COALESCE((SELECT SUM(d.calories) FROM drink_log d WHERE d.date = n.date), 0)
       ) AS logged_calories
     FROM nutrition_day n
-    WHERE n.date >= ${date}::date - interval '6 days'
+    WHERE n.date >= ${spanStart}::date
       AND n.date <= ${date}::date
     ORDER BY n.date
   `;
+  // The seven days the trend shows; the rows before them only feed the reconciliation.
+  const trendRows = spanRows.filter((r: Record<string, unknown>) => String(r.date) >= windowStart);
 
   // Goal deficit from profile (the user's real target, e.g. 800/day)
   let goalDeficit = 800;
@@ -535,59 +563,102 @@ export async function GET(req: NextRequest) {
     return target + defUsed;
   };
 
-  // A day feeds the cumulative deficit and weekly adherence only when it is
-  // closed AND its logging coverage clears the floor. A closed day with one
-  // meal logged is absent data, not a 600-kcal day; counting it is how the
-  // week reads as a huge deficit the user never had (#699).
-  const counts = (r: Record<string, unknown>) =>
-    r.status === "closed" && meetsCoverageFloor(r.coverage as number | null);
-  const counted = trendRows.filter(counts);
+  const coverageOf = (r: Record<string, unknown>) =>
+    typeof r.coverage === "number" ? r.coverage : r.coverage != null ? Number(r.coverage) : null;
+  // A day with no plan has no burn (target 0 + deficit is not one), and
+  // without a burn there is nothing to reconcile: it stays unknown.
+  const hasBurn = (r: Record<string, unknown>) => String(r.date) === date || Number(r.target_calories) > 0;
+  const spanDays: DayIn[] = spanRows.filter(hasBurn).map((r: Record<string, unknown>) => {
+    const d = String(r.date);
+    const isCurrentDay = d === date;
+    const coverage = coverageOf(r);
+    const observed = isObservedDay({
+      status: (r.status as string | null) ?? null,
+      closedBy: (r.closed_by as "user" | "auto" | null) ?? null,
+      coverage,
+    });
+    // An observed closed day keeps actual_calories (close-day reconciled it);
+    // an auto-closed day is read from its raw logs like an open one.
+    const loggedKcal = trendAte({
+      isToday: isCurrentDay,
+      closed: observed && r.status === "closed",
+      actualCalories: r.actual_calories as number | null,
+      loggedCalories: r.logged_calories as number | null,
+      todayConsumed: consumed.calories,
+    });
+    return {
+      date: d,
+      observed,
+      loggedKcal,
+      // The share of the day that was logged or skipped; the rest is estimated.
+      loggedShare: observed ? 1 : Math.min(1, coverage ?? 0),
+      burn: Math.round(computeBurn(r, isCurrentDay)),
+    };
+  });
+  const reconciled = new Map(reconcile(weighIns, spanDays).map((o) => [o.date, o]));
+  const windowOut = trendRows.map((r: Record<string, unknown>) => {
+    const o = reconciled.get(String(r.date));
+    if (o) return o;
+    // Unknown day: the legacy numbers, for display only, never summed.
+    const isCurrentDay = String(r.date) === date;
+    const ate = trendAte({
+      isToday: isCurrentDay,
+      closed: r.status === "closed",
+      actualCalories: r.actual_calories as number | null,
+      loggedCalories: r.logged_calories as number | null,
+      todayConsumed: consumed.calories,
+    });
+    const burn = Math.round(computeBurn(r, isCurrentDay));
+    return { date: String(r.date), ate, burn, deficit: ate - burn, source: "unknown" as const, intervalStart: null, intervalEnd: null };
+  });
+  // A day feeds the cumulative deficit and weekly adherence when it is observed
+  // or reconciled; only a day nothing can say anything about is left out.
+  const counted = windowOut.filter((o) => o.source !== "unknown");
 
   const trend7d = {
     goalDeficit,
-    days: trendRows.map((r: Record<string, unknown>) => {
-      const isCurrentDay = String(r.date) === date;
-      const ate = trendAte({
-        isToday: isCurrentDay,
-        closed: r.status === "closed",
-        actualCalories: r.actual_calories as number | null,
-        loggedCalories: r.logged_calories as number | null,
-        todayConsumed: consumed.calories,
-      });
-      const burn = Math.round(computeBurn(r, isCurrentDay));
-      const deficit = ate - burn; // negative = deficit (good), positive = surplus (bad)
+    days: trendRows.map((r: Record<string, unknown>, i: number) => {
+      const o = windowOut[i];
       return {
         date: r.date,
-        ate,
-        burn,
-        deficit,
+        ate: Math.round(o.ate),
+        burn: o.burn,
+        deficit: Math.round(o.deficit), // negative = deficit (good), positive = surplus (bad)
         closed: r.status === "closed",
-        // Surfaced so the UI can distinguish "closed and complete" from
-        // "closed but barely logged" instead of painting both the same.
-        coverage: typeof r.coverage === "number" ? r.coverage : null,
-        counted: counts(r),
-        isToday: isCurrentDay,
+        coverage: coverageOf(r),
+        counted: o.source !== "unknown",
+        isToday: String(r.date) === date,
+        // observed | partial | extrapolated | unknown, and the weigh-in interval
+        // the estimate came from, so the UI can say "~" and between which dates.
+        source: o.source,
+        intervalStart: o.intervalStart,
+        intervalEnd: o.intervalEnd,
       };
     }),
-    // Cumulative deficit: sum of (ate - burn) over counted days only
-    totalDeficit: counted.reduce((sum: number, r: Record<string, unknown>) => {
-      const ate = Number(r.actual_calories) || 0;
-      const burn = Math.round(computeBurn(r, false));
-      return sum + (ate - burn);
-    }, 0),
+    // Cumulative deficit: sum of (ate - burn) over counted days
+    totalDeficit: Math.round(counted.reduce((sum, o) => sum + o.deficit, 0)),
     closedDays: counted.length,
     goalExpectedDeficit: counted.length * goalDeficit,
     // Weekly adherence (±10% band). Achieved deficit = burn − ate, summed over
     // counted days (positive = in deficit); goal = counted days × goal/day.
-    adherence: (() => {
-      const weeklyActual = counted.reduce((s: number, r: Record<string, unknown>) => {
-        const ate = Number(r.actual_calories) || 0;
-        const burn = Math.round(computeBurn(r, false));
-        return s + (burn - ate);
-      }, 0);
-      return computeWeeklyAdherence(weeklyActual, counted.length * goalDeficit);
-    })(),
+    adherence: computeWeeklyAdherence(
+      Math.round(counted.reduce((s, o) => s + (o.burn - o.ate), 0)),
+      counted.length * goalDeficit,
+    ),
   };
+  // Today's own estimate for the hero: what the day will have come to once the
+  // unlogged share is filled at the current interval's rate.
+  const todayOut = reconciled.get(date);
+  const deficitEstimate = todayOut
+    ? {
+        ate: Math.round(todayOut.ate),
+        burn: todayOut.burn,
+        deficit: Math.round(todayOut.deficit),
+        source: todayOut.source,
+        intervalStart: todayOut.intervalStart,
+        intervalEnd: todayOut.intervalEnd,
+      }
+    : null;
 
   // Adaptive TDEE + deficit-duration (display-only — never changes targets).
   const adaptive = await computeAdaptiveContext(sql).catch(() => null);
@@ -622,6 +693,7 @@ export async function GET(req: NextRequest) {
     gymCalories,
     breakdown,
     trend7d,
+    deficitEstimate,
     // Only meaningful when the week is engaged; the UI hides it otherwise
     // rather than showing a drift computed from nothing.
     adaptive: engagement.state === "complete" ? adaptive : null,

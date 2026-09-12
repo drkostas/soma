@@ -17,6 +17,9 @@ export interface WindowDay {
   coverage: number | null;
   /** consumed − burn for the day; negative is a deficit. */
   deficit: number;
+  /** When set, decides whether the day counts (soma#891: a reconciled day counts
+   *  whether or not it was closed). Absent, the #699 rule applies. */
+  counted?: boolean;
 }
 
 export interface DeficitWindow {
@@ -36,6 +39,7 @@ export interface DeficitWindow {
 }
 
 export function countsForDeficit(d: WindowDay): boolean {
+  if (typeof d.counted === "boolean") return d.counted;
   return d.closed && meetsCoverageFloor(d.coverage);
 }
 

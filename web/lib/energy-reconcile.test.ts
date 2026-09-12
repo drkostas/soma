@@ -32,9 +32,13 @@ describe("reconcile", () => {
     );
     expect(out[2].source).toBe("extrapolated"); expect(out[2].ate).toBeCloseTo(2400, 0); expect(out[2].intervalEnd).toBe("2026-09-03");
   });
-  it("leaves every day unknown with fewer than two weigh-ins", () => {
-    const out = reconcile([{ date: "2026-09-01", weightKg: 75 }], [day("2026-09-01"), day("2026-09-02")]);
-    expect(out.every((d) => d.source === "unknown")).toBe(true);
+  it("leaves unobserved days unknown with fewer than two weigh-ins, observed ones observed", () => {
+    const out = reconcile(
+      [{ date: "2026-09-01", weightKg: 75 }],
+      [day("2026-09-01"), day("2026-09-02", { observed: true, loggedKcal: 2000, loggedShare: 1 })],
+    );
+    expect(out.map((d) => d.source)).toEqual(["unknown", "observed"]);
+    expect(out[1].deficit).toBe(2000 - 2400);
   });
   it("keeps observed days untouched when every day is observed", () => {
     const out = reconcile(
