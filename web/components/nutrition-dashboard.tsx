@@ -491,23 +491,6 @@ export function NutritionDashboard({
     ? [...MEAL_SLOTS, "during_workout" as const]
     : [...MEAL_SLOTS];
 
-  // Unlock manual override handler
-  const handleUnlock = async () => {
-    try {
-      const res = await fetch("/api/nutrition/activity-select", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, manual_override: false }),
-      });
-      if (!res.ok) {
-        console.error("Unlock failed:", res.status);
-        return;
-      }
-      await refreshData();
-    } catch (err) {
-      console.error("Unlock error:", err);
-    }
-  };
 
   // Slots that are neither logged with calories nor explicitly skipped. These
   // are ABSENT, not zero: closing over them silently would turn a
@@ -612,15 +595,6 @@ export function NutritionDashboard({
               >
                 reopen
               </button>
-            )}
-            {breakdown?.manualOverride && !isClosed && (
-              <Badge variant="secondary" className="gap-1 text-amber-500 border-amber-500/30">
-                <Lock className="h-3 w-3" />
-                Offset Plan
-                <button onClick={handleUnlock} className="ml-1 hover:text-foreground">
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
             )}
           </div>
           <a href={`/nutrition?date=${(() => { const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })()}`}>
@@ -1157,13 +1131,9 @@ export function NutritionDashboard({
           disabled={(() => {
             const isPast = date < new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
             const hasActuals = breakdown?.runActual || breakdown?.gymBreakdown?.some((w: any) => w.actual);
-            return breakdown?.manualOverride || (isPast && hasActuals) || isClosed;
+            return (isPast && hasActuals) || isClosed;
           })()}
-          disabledReason={
-            breakdown?.manualOverride ? "Target locked — offset plan"
-            : isClosed ? "Day is closed"
-            : "Activities finalized"
-          }
+          disabledReason={isClosed ? "Day is closed" : "Activities finalized"}
         />
 
         <div className="hidden lg:block">
