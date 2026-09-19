@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "nutrition": {
+      "command": "npx",
+      "args": ["-y", "tsx", "mcp/nutrition-tools/server.mts"]
+    }
+  }
+}
