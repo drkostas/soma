@@ -29,7 +29,7 @@
 
 Daily steps, resting heart rate, stress trend, body composition, recovery status, weekly training load, activity streaks — your full health picture on one page.
 
-<img src="screenshots/overview.png" width="100%" alt="Daily steps · Resting heart rate · Stress trend" />
+<img src="screenshots/overview.png" width="100%" alt="Overview — daily steps, resting heart rate, VO2max, sleep and this week's training" />
 
 ---
 
@@ -37,7 +37,7 @@ Daily steps, resting heart rate, stress trend, body composition, recovery status
 
 Pace progression across every run, monthly mileage history, VO2max trend, training zones, HR vs pace scatter, split analysis, shoe mileage tracking.
 
-<img src="screenshots/running.png" width="100%" alt="Running — 2926 km across 456 runs · Pace progression · Monthly mileage" />
+<img src="screenshots/running.png" width="100%" alt="Running — distance, pace, heart rate and VO2max, with pace progression and monthly mileage" />
 
 ---
 
@@ -45,7 +45,7 @@ Pace progression across every run, monthly mileage history, VO2max trend, traini
 
 Muscle activation map (front & back) with volume by muscle group across all sessions. Exercise progression, personal records, gym frequency heatmap.
 
-<img src="screenshots/workouts.png" width="100%" alt="Muscle activation map · Volume by muscle group across 266 sessions" />
+<img src="screenshots/workouts.png" width="100%" alt="Workouts — muscle activation map, front and back, with volume by muscle group" />
 
 ---
 
@@ -53,7 +53,7 @@ Muscle activation map (front & back) with volume by muscle group across all sess
 
 Sleep stages over time (deep, light, REM, awake), score trend, sleep schedule, HRV, blood oxygen, respiration rate, body battery, training readiness.
 
-<img src="screenshots/sleep.png" width="100%" alt="Sleep stages · Score trend across 1538 nights" />
+<img src="screenshots/sleep.png" width="100%" alt="Sleep and recovery — duration, score, deep and REM share, with sleep stages and score trend" />
 
 ---
 
@@ -61,7 +61,7 @@ Sleep stages over time (deep, light, REM, awake), score trend, sleep schedule, H
 
 See exactly what synced, configure push rules (e.g. Hevy strength → Strava), and monitor the live data pipeline.
 
-<img src="screenshots/connections.png" width="100%" alt="Sync hub — Garmin and Hevy ingest, push to Strava · Telegram · Garmin" />
+<img src="screenshots/connections.png" width="100%" alt="Sync hub — Garmin and Hevy ingest into Soma, with push rules out to Strava, Garmin and Telegram" />
 
 ---
 
