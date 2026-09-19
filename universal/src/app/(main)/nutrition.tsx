@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollView, View, RefreshControl, TextInput, Pressable } from "react-native";
 import { Text, Card, Badge, SegmentedControl, ProgressBar, Button, Modal, Pill, PillGroup, Sparkline } from "soma-style";
+import { useLocalSearchParams } from "expo-router";
 import {
   useSomaPlan, usePresets, logPresetMeal, deleteMeal, quickAddMeal, skipSlot, useDrinks, logDrink, deleteDrink, closeDay,
   reopenDay, copyDay, rebalanceMeals, presetItems, presetBaseMacros, useOnboard,
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
+import { MealCaptureInput } from "../../components/MealCaptureInput";
+import { slotForHour } from "../../lib/meal-capture";
 import { NutritionOnboarding } from "../../components/nutrition-onboarding";
 import { BodyCompChart } from "../../components/body-comp-chart";
 import { ActivitySelector } from "../../components/activity-selector";
@@ -98,6 +101,18 @@ export default function NutritionScreen() {
   const isTomorrow = DATE === shiftDate(todayLocal(), 1);
   const { data, loading, error, refetch } = useSomaPlan(DATE);
   const { refreshing, onRefresh } = usePullRefresh(refetch);
+
+  // Arriving from the widget: ?capture=1 focuses the box so the keyboard, and therefore its
+  // microphone, is already up. A home-screen widget cannot take text or voice itself, so this
+  // deep link is the whole of "say what you ate from the widget".
+  const captureRef = useRef<TextInput>(null);
+  const { capture } = useLocalSearchParams<{ capture?: string }>();
+  useEffect(() => {
+    if (capture === "1") {
+      const t = setTimeout(() => captureRef.current?.focus(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [capture]);
   const { presets, ingredients, reload: reloadPresets } = usePresets();
   const { drinks } = useDrinks();
   const onboard = useOnboard();
@@ -385,6 +400,9 @@ export default function NutritionScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#77c8d1" colors={["#77c8d1"]} />}
     >
       <View className="w-full max-w-2xl gap-4">
+        {/* Say what you ate. First thing on the screen, and the target of the widget's deep link. */}
+        <MealCaptureInput ref={captureRef} slot={slotForHour(new Date().getHours())} onCaptured={() => { void onRefresh(); }} />
+
         <View className="w-full flex-row items-center justify-between">
           <Button label="‹" variant="ghost" size="sm" onPress={() => setDATE((d) => shiftDate(d, -1))} />
           <View className="flex-row items-center gap-2">
