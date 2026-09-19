@@ -13,6 +13,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Quantity } from "./meal-quantity";
+import { resolveClaudeCmd } from "./claude-cmd";
 
 export const SLOTS = ["breakfast", "lunch", "dinner", "pre_sleep", "during_workout"] as const;
 export type Slot = (typeof SLOTS)[number];
@@ -164,7 +165,7 @@ export function parseProposal(v: unknown): MealProposal | null {
 
 interface ResultEnvelope { is_error?: boolean; result?: string; structured_output?: unknown }
 
-function claudeCmd(): string { return process.env.CLAUDE_CMD || "claude"; }
+
 
 /** Where a capture's photo lives. The agent gets --add-dir for this and nothing else. */
 export function uploadsDir(): string {
@@ -234,7 +235,7 @@ export function runMealAgent(
     const done = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };
     // The agent's cwd is a scratch directory so it has no repo. The tool server is reached by
     // the absolute path in the generated config, and runs with the repo as ITS cwd.
-    const child = spawn(claudeCmd(), args, {
+    const child = spawn(resolveClaudeCmd(), args, {
       cwd: neutralCwd(), env: { ...process.env }, stdio: ["pipe", "pipe", "pipe"],
     });
     const timer = setTimeout(() => {
