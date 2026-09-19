@@ -19,6 +19,9 @@ export async function POST(req: NextRequest) {
   const {
     date,
     meal_slot,
+    source: bodySource,
+    notes,
+    weigh_method,
     preset_meal_id,
     portion_multiplier = 1.0,
     items,
@@ -27,11 +30,12 @@ export async function POST(req: NextRequest) {
     date: string;
     meal_slot: string;
     source?: string;
+    notes?: string;
+    weigh_method?: string;
     preset_meal_id?: string;
     portion_multiplier?: number;
     items: MealItem[];
     preset_macros?: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
-    notes?: string;
   };
 
   if (!date || !meal_slot) {
@@ -72,10 +76,14 @@ export async function POST(req: NextRequest) {
     ON CONFLICT (date) DO NOTHING
   `;
 
-  const source = preset_meal_id ? "preset" : null;
+  // A preset is always a preset; otherwise keep what the caller said it was. This used to be
+  // `: null`, which discarded every source the widget and quick-add ever sent, leaving 175 of
+  // 199 rows with no idea where they came from. `notes` was dropped the same way, and
+  // `weigh_method` has never been written by anything but the planner.
+  const source = preset_meal_id ? "preset" : (bodySource ?? null);
 
   const result = await sql`
-    INSERT INTO meal_log (date, meal_slot, source, preset_meal_id, portion_multiplier, items, calories, protein, carbs, fat, fiber, planned)
+    INSERT INTO meal_log (date, meal_slot, source, preset_meal_id, portion_multiplier, items, calories, protein, carbs, fat, fiber, planned, notes, weigh_method)
     VALUES (
       ${date},
       ${meal_slot},
@@ -88,7 +96,9 @@ export async function POST(req: NextRequest) {
       ${Math.round(carbs)},
       ${Math.round(fat)},
       ${Math.round(fiber)},
-      ${isPlannedDate(date)}
+      ${isPlannedDate(date)},
+      ${notes ?? null},
+      ${weigh_method ?? null}
     )
     RETURNING id
   `;
