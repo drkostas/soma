@@ -1,4 +1,5 @@
 {
+  "_comment": "Reference only. lib/nutrition-agent.ts writes the config it actually uses into a scratch directory with ABSOLUTE paths, because the agent runs with no repo in its cwd and a relative server path would silently never resolve.",
   "mcpServers": {
     "nutrition": {
       "command": "npx",

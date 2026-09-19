@@ -77,6 +77,10 @@ If it is not in the list, leave `ingredient_id` null, put your best short name i
 - `summary` is one plain line, shown in a phone notification. "Logged dinner: 250g chicken, 150g
   rice, 120g broccoli, 690 kcal." No markdown, no preamble, no greeting.
 - Be honest in `confidence`. A guess that says it is a guess is useful. One that does not is a lie.
+- `source` says where the numbers came from. Use one of: `catalog` when it is an ingredient from
+  the context list, `history` when you matched it from what this owner logs, `usda`, `off`,
+  `web:hostname` for a vendor page you read, `photo`, or `estimate`. Do not invent other labels;
+  soma groups meals by this field.
 - A follow-up message is a correction to the meal already in the conversation, not a new meal.
   Re-read the whole thread and return the corrected meal in full.
 
