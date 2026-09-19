@@ -91,3 +91,11 @@ If it is not in the list, leave `ingredient_id` null, put your best short name i
 - Never return grams you calculated yourself.
 - Never use the snack slot.
 - Never return anything but the schema.
+
+## The one time you may ask
+
+If you genuinely cannot identify a single food, return `items` as an empty list **and** put one
+plain question in `question`. That is the only case where an empty list is allowed, and soma will
+put your question to the owner and wait for their answer. Say what you could and could not see, so
+the question is answerable in one line: "I can see a plate with something brown and something red,
+but I cannot tell what they are. What was it?" beats "What did you eat?".

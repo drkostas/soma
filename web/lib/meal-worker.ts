@@ -43,11 +43,14 @@ export function ingredientIdFor(name: string): string | null {
 }
 
 export function notificationFor(
-  status: "logged" | "ready" | "failed", meal: LandedMeal,
+  status: "logged" | "ready" | "failed" | "asked", meal: LandedMeal,
 ): { title: string; body: string; url: string } {
   const url = `/nutrition?capture=${meal.captureId}`;
   if (status === "logged") return { title: `Logged ${meal.slot}`, body: meal.summary, url };
   if (status === "ready") return { title: `${meal.slot} ready to check`, body: meal.summary, url };
+  // The one question the instructions allow. It carries the question itself, because a
+  // notification saying only "soma has a question" makes the owner go and find out what it is.
+  if (status === "asked") return { title: "One question about that meal", body: meal.summary, url };
   return {
     title: "Could not work that meal out",
     body: "Your words are still there. Open it to try again or fix it by hand.",
@@ -119,7 +122,9 @@ async function writeMeal(
   return Number(rows[0].id);
 }
 
-async function notify(sql: QueryFn, status: "logged" | "ready" | "failed", meal: LandedMeal): Promise<void> {
+async function notify(
+  sql: QueryFn, status: "logged" | "ready" | "failed" | "asked", meal: LandedMeal,
+): Promise<void> {
   const n = notificationFor(status, meal);
   // A notification is never worth failing a meal over.
   try { await sendPush(sql, { ...n, eventType: "meal_ready" }); } catch { /* ignored */ }
@@ -156,6 +161,20 @@ export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<voi
       resolvedSlot = run.proposal.slot;
       summary = run.proposal.summary;
       totalGrams = run.proposal.total_grams;
+
+      // It could identify nothing and asked. Put the question in the thread and wait: the owner
+      // answers with a follow-up, which re-runs this with the whole conversation. NOT a failure,
+      // and the sentence stays exactly where it was.
+      if (!run.proposal.items.length && run.proposal.question) {
+        await finishCapture(sql, {
+          id: cap.id, status: "ready", proposal,
+          message: { role: "agent", text: run.proposal.question, image: null, at: new Date().toISOString() },
+        });
+        await notify(sql, "asked", {
+          slot: resolvedSlot, summary: run.proposal.question, captureId: cap.id, mealLogId: null,
+        });
+        return;
+      }
       const resolvable: ResolvableItem[] = [];
       for (const it of run.proposal.items) {
         const id = await ensureIngredient(sql, it);

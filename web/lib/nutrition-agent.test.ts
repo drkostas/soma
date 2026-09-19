@@ -86,10 +86,25 @@ describe("parseProposal", () => {
     expect(parseProposal({ ...GOOD, items: [{ ...GOOD.items[0], confidence: -2 }] })!.items[0].confidence).toBe(0);
   });
 
+  it("accepts an empty list WHEN it comes with a question, which is the one honest empty answer", () => {
+    // The instructions allow exactly one question: when the sentence names no recognisable food.
+    // Rejecting this stranded the owner's words, which is the opposite of the point.
+    const p = parseProposal({
+      ...GOOD, items: [], question: "I can see a plate but I cannot tell what is on it. What did you have?",
+    })!;
+    expect(p.items).toEqual([]);
+    expect(p.question).toContain("What did you have");
+  });
+
+  it("still refuses an empty list with nothing to say about it", () => {
+    expect(parseProposal({ ...GOOD, items: [], question: null })).toBeNull();
+    expect(parseProposal({ ...GOOD, items: [], question: "" })).toBeNull();
+  });
+
   it("refuses rubbish", () => {
     expect(parseProposal(null)).toBeNull();
     expect(parseProposal("hello")).toBeNull();
-    expect(parseProposal({ ...GOOD, items: [] })).toBeNull();
+    expect(parseProposal({ ...GOOD, items: [], question: null })).toBeNull();
     expect(parseProposal({ ...GOOD, items: "not an array" })).toBeNull();
   });
 

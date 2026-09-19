@@ -128,7 +128,16 @@ export function parseProposal(v: unknown): MealProposal | null {
   const tense = String(o.tense) === "planning" ? "planning" : "eaten";
   const totalGrams = o.total_grams == null ? null : num(o.total_grams);
 
-  if (!Array.isArray(o.items) || !o.items.length) return null;
+  const question = typeof o.question === "string" && o.question.trim() ? o.question.trim().slice(0, 500) : null;
+  if (!Array.isArray(o.items)) return null;
+  // An empty list is legitimate in exactly one case: the agent could identify nothing and says so.
+  // The instructions allow that one question, so rejecting it here stranded the owner's sentence,
+  // which is the opposite of the point. Found by sending a photo it could not read.
+  if (!o.items.length) return question ? {
+    slot: String(o.slot) as Slot, tense, total_grams: totalGrams,
+    preset_name: typeof o.preset_name === "string" && o.preset_name ? o.preset_name : null,
+    items: [], summary: String(o.summary ?? "").slice(0, 500), question,
+  } : null;
 
   const items: ProposalItem[] = [];
   for (const raw of o.items) {
@@ -159,7 +168,7 @@ export function parseProposal(v: unknown): MealProposal | null {
     preset_name: typeof o.preset_name === "string" && o.preset_name ? o.preset_name : null,
     items,
     summary: String(o.summary ?? "").slice(0, 500),
-    question: typeof o.question === "string" && o.question ? o.question.slice(0, 500) : null,
+    question,
   };
 }
 
