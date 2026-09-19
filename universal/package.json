@@ -64,7 +64,9 @@
     "test": "vitest run",
     "e2e:mobile": "maestro test .maestro",
     "typecheck": "tsc --noEmit",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "verify:widget": "node scripts/verify-widget-apk.mjs",
+    "build:android": "expo prebuild --platform android && (cd android && ./gradlew assembleRelease) && npm run verify:widget"
   },
   "private": true
 }
