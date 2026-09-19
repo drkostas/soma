@@ -4,6 +4,8 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { MACRO_COLORS } from "soma-style/colors";
 import { Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { MealCaptureInput } from "@/components/meal-capture-input";
+import { slotForHour } from "@/lib/meal-capture";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MealCard } from "@/components/meal-card";
@@ -565,6 +567,14 @@ export function NutritionDashboard({
           also invisible → ~495px was unreachable). Flow it normally so page scroll
           reaches everything. */}
       <div className="space-y-4 lg:self-start">
+        {/* Say what you ate. First thing on the page, because the old flow's friction is what
+            stopped the logging, and this is the shortest path from a sentence to a meal. */}
+        <MealCaptureInput
+          slot={slotForHour(new Date().getHours())}
+          defaultMode="log"
+          onCaptured={() => { void refreshData(); }}
+        />
+
         {/* Date header with navigation */}
         <div className="flex items-center justify-between">
           <a href={`/nutrition?date=${(() => { const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })()}`}>
