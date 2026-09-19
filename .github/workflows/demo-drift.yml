@@ -1,0 +1,82 @@
+name: Demo drift
+
+# The public demo is ONE consistent dataset that slides forward, never a fresh
+# random seed. A reseed would break continuity between runs; this keeps every
+# streak, trend and relationship intact and only advances the calendar under it.
+#
+# It exists because the demo silently froze once already. Its data stopped on
+# 2026-02-25 and nobody noticed until September, by which time soma-demo.gkos.dev
+# was showing "Total Activities 0" and "No HRV reading since 2026-02-25" to
+# anyone following the link in the README.
+#
+# scripts/demo-drift.sql is self-correcting, so this schedule is a convenience
+# rather than a contract: a missed Monday is caught up on the next run, and a
+# double run is a no-op.
+
+on:
+  schedule:
+    - cron: "40 5 * * 1"   # Mondays 05:40 UTC, before anyone is likely to look
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Actually move the dates (false only reports the gap)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install a matching psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          psql --version
+
+      - name: Where the demo stands
+        env:
+          PGURL: ${{ secrets.SOMA_DEMO_DATABASE_URL }}
+        run: |
+          if [ -z "$PGURL" ]; then echo "SOMA_DEMO_DATABASE_URL is not set"; exit 1; fi
+          psql "$PGURL" -Atc "
+            SELECT 'newest reading ' || max(date)
+                || ', target ' || (CURRENT_DATE - 3)
+                || ', behind by ' || floor((((CURRENT_DATE - 3) - max(date))::numeric)/7) || ' week(s)'
+            FROM daily_health_summary;"
+
+      - name: Move it
+        if: github.event_name == 'schedule' || inputs.apply
+        env:
+          PGURL: ${{ secrets.SOMA_DEMO_DATABASE_URL }}
+        run: psql "$PGURL" -v ON_ERROR_STOP=1 -f scripts/demo-drift.sql
+
+      - name: Confirm by query, not by exit code
+        if: github.event_name == 'schedule' || inputs.apply
+        env:
+          PGURL: ${{ secrets.SOMA_DEMO_DATABASE_URL }}
+        run: |
+          # The demo must end up current and must never be pushed into the
+          # future. Both halves are checked: the Garmin columns and the dates
+          # nested inside raw_json, which different pages read.
+          psql "$PGURL" -Atc "
+            SELECT 'columns ' || max(date) FROM daily_health_summary;"
+          psql "$PGURL" -Atc "
+            SELECT 'raw_json ' || max((raw_json->>'startTimeLocal')::timestamp)::date
+            FROM garmin_activity_raw
+            WHERE jsonb_typeof(raw_json)='object' AND raw_json ? 'startTimeLocal';"
+          BAD=$(psql "$PGURL" -Atc "
+            SELECT count(*) FROM daily_health_summary WHERE date > CURRENT_DATE;")
+          if [ "$BAD" != "0" ]; then echo "drifted into the future on $BAD row(s)"; exit 1; fi
+          LAG=$(psql "$PGURL" -Atc "
+            SELECT (CURRENT_DATE - max(date)) FROM daily_health_summary;")
+          echo "newest reading is $LAG day(s) back"
+          if [ "$LAG" -gt 10 ]; then echo "still stale after the run"; exit 1; fi
+
+      - name: Dry run note
+        if: github.event_name == 'workflow_dispatch' && !inputs.apply
+        run: echo "reported only; re-run with apply=true to move the dates"
