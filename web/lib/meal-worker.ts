@@ -180,8 +180,11 @@ export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<voi
     if (cap.mode === "log") mealLogId = await writeMeal(sql, cap, resolvedSlot, resolved, weighMethod);
 
     const status: CaptureStatus = cap.mode === "log" ? "logged" : "ready";
+    // Store how the grams were arrived at alongside them. A calibrate capture is a proposal the
+    // builder will open, and "these came from a portion word" is part of the proposal, not just a
+    // column on a meal that may never be written.
     await finishCapture(sql, {
-      id: cap.id, status, proposal, resolved, mealLogId,
+      id: cap.id, status, proposal, resolved: { items: resolved, weighMethod }, mealLogId,
       message: { role: "agent", text: summary, image: null, at: new Date().toISOString() },
     });
     await notify(sql, status, { slot: resolvedSlot, summary, captureId: cap.id, mealLogId });
