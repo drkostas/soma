@@ -63,3 +63,15 @@ describe("notificationFor", () => {
     expect(n.body).toContain("still there");
   });
 });
+
+describe("notificationFor, when it has to ask", () => {
+  it("puts the question in the notification rather than a summary", () => {
+    const n = notificationFor("asked", {
+      slot: "dinner", summary: "I can see a plate but cannot tell what is on it. What did you have?",
+      captureId: 30, mealLogId: null,
+    });
+    expect(n.title).toMatch(/question|ask|\?/i);
+    expect(n.body).toContain("What did you have");
+    expect(n.url).toContain("30");
+  });
+});
