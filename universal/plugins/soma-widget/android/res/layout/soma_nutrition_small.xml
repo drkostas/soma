@@ -31,6 +31,23 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+
+    <!-- Say what you ate. A home-screen widget cannot take text or voice, so this opens the app
+         on the nutrition screen with the keyboard, and therefore its microphone, already up. -->
+    <TextView
+        android:id="@+id/say_what_you_ate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/soma_preset_bg"
+        android:paddingLeft="9dp"
+        android:paddingRight="9dp"
+        android:paddingTop="7dp"
+        android:paddingBottom="7dp"
+        android:layout_marginBottom="6dp"
+        android:text="+  Say what you ate"
+        android:textColor="#77c8d1"
+        android:textSize="12sp"
+        android:textStyle="bold" />
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

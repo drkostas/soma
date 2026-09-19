@@ -176,6 +176,25 @@ private struct PresetButton: View {
     }
 }
 
+/// Say what you ate.
+///
+/// A widget cannot accept text or voice, so this opens the app on the nutrition screen with the
+/// capture box focused, and its keyboard microphone is the dictation this feature relies on.
+private struct CaptureButton: View {
+    var compact: Bool = false
+    var body: some View {
+        Link(destination: URL(string: "universal://nutrition?capture=1")!) {
+            HStack(spacing: 6) {
+                Image(systemName: "mic.circle.fill").font(.system(size: compact ? 13 : 15)).foregroundStyle(TEAL)
+                Text("Say what you ate").font(.system(size: compact ? 11 : 12, weight: .semibold)).foregroundStyle(.white)
+                Spacer(minLength: 4)
+            }
+            .padding(.horizontal, 9).padding(.vertical, compact ? 6 : 7)
+            .background(SURFACE).clipShape(RoundedRectangle(cornerRadius: 9))
+        }
+    }
+}
+
 struct NutritionWidgetView: View {
     var entry: NutritionEntry
     @Environment(\.widgetFamily) var family
@@ -204,7 +223,7 @@ struct NutritionWidgetView: View {
         case .systemSmall:
             VStack(alignment: .leading, spacing: 6) {
                 header; headline; Spacer(minLength: 0)
-                if let p = entry.presets.first { PresetButton(preset: p, slot: entry.slot, compact: true) }
+                CaptureButton(compact: true)
             }.padding(12).containerBackground(BASE, for: .widget)
         case .systemLarge:
             VStack(alignment: .leading, spacing: 8) {
@@ -212,6 +231,7 @@ struct NutritionWidgetView: View {
                 HStack(spacing: 14) {
                     macro("P", entry.protein, WARM); macro("C", entry.carbs, INDIGO); macro("F", entry.fat, LIME)
                 }
+                CaptureButton()
                 Text("QUICK-LOG \(slotLabel(entry.slot))").font(.system(size: 9, weight: .bold)).foregroundStyle(MUTED).padding(.top, 2)
                 VStack(spacing: 6) { ForEach(entry.presets.prefix(5)) { PresetButton(preset: $0, slot: entry.slot) } }
                 Spacer(minLength: 0)
@@ -219,7 +239,8 @@ struct NutritionWidgetView: View {
         default: // medium
             VStack(alignment: .leading, spacing: 7) {
                 header; headline
-                VStack(spacing: 6) { ForEach(entry.presets.prefix(3)) { PresetButton(preset: $0, slot: entry.slot) } }
+                CaptureButton()
+                VStack(spacing: 6) { ForEach(entry.presets.prefix(2)) { PresetButton(preset: $0, slot: entry.slot) } }
                 Spacer(minLength: 0)
             }.padding(13).containerBackground(BASE, for: .widget)
         }

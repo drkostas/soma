@@ -13,6 +13,7 @@ import { runGarminIngest } from "../lib/garmin-ingest";
 import { getHevyApiKey, syncAllWorkouts } from "../lib/hevy-ingest";
 import { enrichNewWorkouts } from "../lib/hevy-enrich-run";
 import { computeHevyLoads } from "../lib/training-load";
+import { drainCaptures, reviveStalled } from "../lib/meal-worker";
 import { backfillLoadFromHistory, computeAndStorePmc } from "../lib/pmc-stream";
 import { fitFromDb } from "../lib/banister";
 import { pushPlanToGarmin } from "../lib/garmin-workout-builder";
@@ -102,6 +103,16 @@ await step("hevy", async () => {
 // is under-determined, so feeding a personal tau into the daily curve would make it drift for
 // reasons that are not training. computeAndStorePmc keeps the classic 42/7 constants.
 await step("banister-fit", () => fitFromDb(sql));
+
+// 2b. Meal captures. The capture route starts the worker without awaiting it, so a restart
+// mid-flight would otherwise stand a row in `running` for ever and nothing would look at it
+// again. This is also the only thing that picks up a sentence captured while the web process
+// was down, which matters because the sentence is the one thing that cannot be recomputed.
+await step("meal-captures", async () => {
+  const revived = await reviveStalled(sql);
+  const drained = await drainCaptures(sql, 10);
+  return { revived, drained };
+});
 
 // 3+4. Garmin client for the external-write steps (plan push + run enrichment).
 let garminClient: Awaited<ReturnType<GarminAuth["client"]>> | null = null;

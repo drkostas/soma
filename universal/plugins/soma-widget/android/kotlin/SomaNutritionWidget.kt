@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.SizeF
 import android.view.View
@@ -200,6 +201,7 @@ class SomaNutritionWidget : AppWidgetProvider() {
                 rv.setOnClickPendingIntent(rows[i], logIntent(context, i, p, e.slot))
             }
         }
+        openCapture(context)?.let { rv.setOnClickPendingIntent(R.id.say_what_you_ate, it) }
         openApp(context)?.let { rv.setOnClickPendingIntent(R.id.root, it) }
         return rv
     }
@@ -217,6 +219,24 @@ class SomaNutritionWidget : AppWidgetProvider() {
         }
         return PendingIntent.getBroadcast(
             context, 100 + index, i,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
+    /**
+     * Open the app on the nutrition screen with the capture box focused.
+     *
+     * A widget renders RemoteViews and fires PendingIntents; it cannot accept text or voice at
+     * all. So this deep link IS "say what you ate from the widget": one tap from the home screen
+     * to a focused keyboard, whose microphone is the dictation this feature relies on.
+     */
+    private fun openCapture(context: Context): PendingIntent? {
+        val i = Intent(Intent.ACTION_VIEW, Uri.parse("universal://nutrition?capture=1")).apply {
+            setPackage(context.packageName)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context, 9001, i,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
     }
