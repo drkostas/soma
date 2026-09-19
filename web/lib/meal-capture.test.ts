@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { appendMessage, nextStatus, MAX_ATTEMPTS, type CaptureMessage } from "./meal-capture";
+import { appendMessage, nextStatus, slotForHour, MAX_ATTEMPTS, type CaptureMessage } from "./meal-capture";
 
 describe("appendMessage", () => {
   it("adds to the thread without losing what is there", () => {
@@ -28,5 +28,21 @@ describe("nextStatus", () => {
     expect(nextStatus("logged", "follow_up")).toBe("captured");
     expect(nextStatus("failed", "follow_up")).toBe("captured");
     expect(nextStatus("ready", "follow_up")).toBe("captured");
+  });
+});
+
+describe("slotForHour", () => {
+  it("uses the same boundaries as the widgets", () => {
+    expect(slotForHour(7)).toBe("breakfast");
+    expect(slotForHour(10)).toBe("breakfast");
+    expect(slotForHour(11)).toBe("lunch");
+    expect(slotForHour(15)).toBe("lunch");
+    expect(slotForHour(16)).toBe("dinner");
+    expect(slotForHour(20)).toBe("dinner");
+    expect(slotForHour(21)).toBe("pre_sleep");
+    expect(slotForHour(23)).toBe("pre_sleep");
+  });
+  it("never returns the snack slot, which soma does not have", () => {
+    for (let h = 0; h < 24; h++) expect(slotForHour(h)).not.toBe("snack");
   });
 });

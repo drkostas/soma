@@ -9,19 +9,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { todayAthlete } from "@/lib/athlete-tz";
-import { createCapture, getCapture, type CaptureMode } from "@/lib/meal-capture";
+import { createCapture, getCapture, slotForHour, type CaptureMode } from "@/lib/meal-capture";
 import { drainCaptures } from "@/lib/meal-worker";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
-
-/** The same boundaries the widget already uses, so every surface agrees on the slot. */
-export function slotForHour(h: number): string {
-  if (h < 11) return "breakfast";
-  if (h < 16) return "lunch";
-  if (h < 21) return "dinner";
-  return "pre_sleep";
-}
 
 export async function POST(req: NextRequest) {
   const sql = getDb();
