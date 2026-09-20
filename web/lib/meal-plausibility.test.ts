@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   amountsWereStated, dayCeiling, enforcePlausibility, FALLBACK_DAY_KCAL, FALLBACK_SLOT_KCAL,
-  slotCeiling, type HistoryStats,
+  MIN_SHARE_OF_SLOT, slotCeiling, type HistoryStats,
 } from "./meal-plausibility";
 import type { ResolvedItem } from "./meal-quantity";
 
@@ -95,11 +95,15 @@ describe("enforcePlausibility", () => {
   });
 
   it("honours what the day already holds, which is what he asked for", () => {
-    // 2,900 eaten already, so the day's own ceiling of 3,014 leaves barely a hundred.
-    const items = [item({ calories: 900, grams: 300 })];
+    // 2,900 eaten already, so the day's own ceiling of 3,014 leaves barely a hundred. The day
+    // therefore tightens the dinner ceiling of 1,245 a long way, but only as far as the floor,
+    // because a day already near its limit is not a reason to erase the dinner he ate.
+    const items = [item({ calories: 1500, grams: 500 })];
     const r = enforcePlausibility({ items, weighMethod: "budget_fit", slot: "dinner", consumedToday: 2900, stats: REAL });
-    expect(r.after).toBeLessThanOrEqual(120);
-    expect(r.note).toContain("the day");
+    const bySlot = slotCeiling(REAL, "dinner");
+    expect(r.after).toBeLessThan(Math.round(bySlot));
+    expect(r.after).toBeGreaterThanOrEqual(Math.floor(bySlot * MIN_SHARE_OF_SLOT) - 1);
+    expect(r.note).toContain("day");
   });
 
   it("names the slot when the slot is what limits it", () => {
@@ -118,5 +122,44 @@ describe("enforcePlausibility", () => {
     const r = enforcePlausibility({ items: [], weighMethod: "budget_fit", slot: "lunch", consumedToday: 0, stats: REAL });
     expect(r.note).toBeNull();
     expect(r.after).toBe(0);
+  });
+});
+
+describe("a day that is already over its ceiling", () => {
+  /**
+   * The bug this module caused on the day it was written. Repairing the 4,129 kcal breakfast
+   * re-ran the capture while that meal was still in the day, so the day headroom was 3014 - 4129
+   * = -1115, the ceiling came out at 0, and every item was scaled to one gram and nought
+   * calories. Silently deleting food is worse than exaggerating it.
+   *
+   * My own earlier test used 2,900 eaten against a 3,014 ceiling and never crossed the line,
+   * which is exactly why it passed while the real thing broke.
+   */
+  it("never scales a meal to nothing, however far over the day already is", () => {
+    const items = [item({ calories: 600, grams: 200 }), item({ calories: 400, grams: 150 })];
+    const r = enforcePlausibility({
+      items, weighMethod: "budget_fit", slot: "breakfast", consumedToday: 9999, stats: REAL,
+    });
+    expect(r.after).toBeGreaterThan(0);
+    for (const i of r.items) expect(i.calories + i.grams).toBeGreaterThan(2);
+  });
+
+  it("stops at half the slot's own ceiling, and no lower", () => {
+    const items = [item({ calories: 5000, grams: 1500 })];
+    const r = enforcePlausibility({
+      items, weighMethod: "budget_fit", slot: "breakfast", consumedToday: 9999, stats: REAL,
+    });
+    // breakfast ceiling is 1167, so the floor is 583.
+    const floor = slotCeiling(REAL, "breakfast") * MIN_SHARE_OF_SLOT;
+    expect(r.after).toBeGreaterThanOrEqual(Math.floor(floor) - 1);
+  });
+
+  it("is unaffected by the day when the day has room", () => {
+    const items = [item({ calories: 5000, grams: 1500 })];
+    const r = enforcePlausibility({
+      items, weighMethod: "budget_fit", slot: "breakfast", consumedToday: 0, stats: REAL,
+    });
+    expect(r.after).toBeLessThanOrEqual(Math.round(slotCeiling(REAL, "breakfast")));
+    expect(r.after).toBeGreaterThan(1000);
   });
 });
