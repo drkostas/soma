@@ -4,6 +4,9 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { MACRO_COLORS } from "soma-style/colors";
 import { Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { MealCaptureInput } from "@/components/meal-capture-input";
+import { MealCaptureStatus } from "@/components/meal-capture-status";
+import { slotForHour } from "@/lib/meal-capture";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MealCard } from "@/components/meal-card";
@@ -318,6 +321,9 @@ export function NutritionDashboard({
   training,
   health,
   sleep }: NutritionDashboardProps) {
+  // Bumped on every send, so the status strip refetches at once rather than waiting for its
+  // own poll. A counter rather than a boolean, because two sends in a row must both show.
+  const [captureVersion, setCaptureVersion] = useState(0);
   const [plan, setPlan] = useState(initialPlan);
   const [meals, setMeals] = useState<Meal[]>(initialMeals);
   const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
@@ -565,6 +571,17 @@ export function NutritionDashboard({
           also invisible → ~495px was unreachable). Flow it normally so page scroll
           reaches everything. */}
       <div className="space-y-4 lg:self-start">
+        {/* Say what you ate. First thing on the page, because the old flow's friction is what
+            stopped the logging, and this is the shortest path from a sentence to a meal. */}
+        <MealCaptureInput
+          slot={slotForHour(new Date().getHours())}
+          defaultMode="log"
+          onCaptured={() => { setCaptureVersion((v) => v + 1); void refreshData(); }}
+        />
+        {/* Where those sentences got to. Directly under the box, because the question it is
+            answering is "did that go anywhere", and that is asked of the box. */}
+        <MealCaptureStatus date={date} version={captureVersion} />
+
         {/* Date header with navigation */}
         <div className="flex items-center justify-between">
           <a href={`/nutrition?date=${(() => { const d = new Date(date + "T12:00:00"); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })()}`}>

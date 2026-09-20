@@ -10,6 +10,7 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CATEGORIES, ESTIMATE_SOURCE, num, sanityFlags, type Proposal } from "macro-engine-core/ingredient-research";
+import { resolveClaudeCmd } from "./claude-cmd";
 
 export const ESTIMATE_CONFIDENCE_CAP = 0.6;
 export const DEFAULT_ESTIMATE_MODEL = "sonnet";
@@ -44,7 +45,7 @@ export interface EstimateRun { output: EstimateOutput; model: string; durationMs
 /** The envelope `claude -p --output-format json` prints: the fields this module reads. */
 interface ResultEnvelope { is_error?: boolean; result?: string; structured_output?: unknown }
 
-function claudeCmd(): string { return process.env.CLAUDE_CMD || "claude"; }
+
 function estimateModel(): string { return process.env.SOMA_ESTIMATE_MODEL || DEFAULT_ESTIMATE_MODEL; }
 function neutralCwd(): string {
   const dir = join(tmpdir(), "soma-estimate");
@@ -64,7 +65,7 @@ export function runClaudeEstimate(query: string, notes: string | undefined, opts
   return new Promise<EstimateRun>((resolve, reject) => {
     let settled = false;
     const done = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };
-    const child = spawn(claudeCmd(), args, { cwd: neutralCwd(), env: { ...process.env }, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(resolveClaudeCmd(), args, { cwd: neutralCwd(), env: { ...process.env }, stdio: ["pipe", "pipe", "pipe"] });
     const timer = setTimeout(() => { child.kill("SIGKILL"); done(() => reject(new Error(`estimate timed out after ${Math.round(timeoutMs / 1000)} s`))); }, timeoutMs);
     let out = ""; let err = "";
     child.stdout.on("data", (c: Buffer) => { out += c.toString("utf8"); });

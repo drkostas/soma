@@ -60,6 +60,11 @@ function gramsFor(
     case "grams":
       return Math.max(0, Math.round(q.value));
     case "count":
+      // ⛔ `countToGrams` is `count * (grams_per_unit || 100)`, so a food with no unit weight
+      // silently becomes 100 g each. Every food the agent invents is that food, which is how
+      // 8 loukoumades became 800 g and 3,040 kcal. A count we cannot convert is an amount nobody
+      // has stated in grams, so it goes to the deferred items and is bounded like one.
+      if (!isCountBased(ing)) return null;
       return Math.max(0, Math.round(countToGrams(ing, q.value)));
     case "portion": {
       const b = bandFor(bands, ing.id, ing.category);
@@ -118,7 +123,13 @@ export function resolveQuantities(input: ResolveInput): ResolveResult {
       const byId = new Map(portions.map((p) => [p.ingredient_id, p.grams]));
       for (const i of deferred) {
         const ing = ingredients.get(items[i].ingredient_id)!;
-        known.set(i, Math.round(byId.get(ing.id) ?? bandFor(bands, ing.id, ing.category).usual));
+        const band = bandFor(bands, ing.id, ing.category);
+        const fitted = Math.round(byId.get(ing.id) ?? band.usual);
+        // ⛔ The solver fits to the budget, and the budget knows nothing about how much of THIS
+        // food he has ever eaten. "Some nuts" came back as 113 g, which is 720 kcal of nuts. His
+        // own largest portion is the ceiling: an unstated amount is a guess, and a guess should
+        // not exceed anything he has actually done.
+        known.set(i, Math.min(fitted, band.large));
       }
     } else {
       // The stated foods already fill the meal. The rest get the owner's usual amount.

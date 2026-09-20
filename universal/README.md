@@ -25,6 +25,30 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Building the app
+
+`EXPO_PUBLIC_*` variables are inlined into the JS bundle at build time, so a release built without
+them silently falls back to development defaults. `src/lib/api.ts` defaults `API_BASE` to
+`http://localhost:3456`, which on a phone means the phone itself, and every request then fails with
+`ConnectException: Failed to connect to localhost/127.0.0.1:3456`.
+
+| variable | what it sets | without it |
+|---|---|---|
+| `EXPO_PUBLIC_API_URL` | the API the app reads and writes | `http://localhost:3456` |
+| `EXPO_PUBLIC_API_TOKEN` | bearer for `/api/*` on a session-gated deployment | the app shows the sign-in screen |
+| `EXPO_PUBLIC_DAEMON_URL` | host for daemon routes (Live DJ, chat) | the API host |
+
+```bash
+npm run build:android          # prebuild, gradle, then the widget check
+```
+
+Two traps worth knowing. **Gradle cannot see that an `EXPO_PUBLIC_*` value changed**, so it skips
+the bundle task and hands back the previous APK with exit code 0. Delete
+`android/app/build/generated/assets/react/release` to force a rebuild. And **editing
+`plugins/soma-widget/` changes nothing until `expo prebuild` runs**, because the config plugin
+copies those files into the generated `android/` project at prebuild time. `npm run verify:widget`
+reads the built APK and fails when the widget's own markers are absent.
+
 ## Get a fresh project
 
 When you're ready, run:

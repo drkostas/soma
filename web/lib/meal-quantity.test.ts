@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveQuantities, BITE_FRACTION, BITE_DEFAULT_G, type ResolvableItem } from "./meal-quantity";
-import type { PortionBand } from "./portion-history";
+import { GENERIC_BANDS, type PortionBand } from "./portion-history";
 import type { Ingredient } from "./portion-solver";
 
 const ing = (over: Partial<Ingredient> & { id: string }): Ingredient => ({
@@ -131,5 +131,84 @@ describe("resolveQuantities", () => {
     const r = run([item({ ingredient_id: "white_rice_raw", quantity: { kind: "share_of_total", value: 0.5 } })],
       { totalGrams: null, slotBudgetKcal: 400 });
     expect(r.items[0].grams).toBeGreaterThan(0);
+  });
+});
+
+describe("a count for a food with no unit weight", () => {
+  /**
+   * The real case, from 2026-09-20. `countToGrams` is `count * (grams_per_unit || 100)`, so the
+   * loukoumades row the agent had just created turned 8 into 800 g and 3,040 kcal, which is more
+   * than the owner's largest recorded DAY. Every food the agent invents has no unit weight, so
+   * this is the common path, not an edge case.
+   */
+  const loukoumades: Ingredient = {
+    id: "loukoumades", name: "loukoumades", category: "carbs",
+    calories_per_100g: 380, protein_per_100g: 5, carbs_per_100g: 48, fat_per_100g: 19, fiber_per_100g: 1,
+    is_raw: false, unit: "g", grams_per_unit: null,
+  } as unknown as Ingredient;
+
+  const egg: Ingredient = {
+    id: "eggs_whole", name: "Whole Egg", category: "protein",
+    calories_per_100g: 143, protein_per_100g: 12.6, carbs_per_100g: 0.7, fat_per_100g: 9.5, fiber_per_100g: 0,
+    is_raw: false, unit: "egg", grams_per_unit: 50,
+  } as unknown as Ingredient;
+
+  it("does NOT become 100 g each", () => {
+    const r = resolveQuantities({
+      items: [{ query: "loukoumades", ingredient_id: "loukoumades", quantity: { kind: "count", value: 8 },
+                note: null, source: "estimate", confidence: 0.5 }],
+      totalGrams: null, slotBudgetKcal: 400,
+      ingredients: new Map([["loukoumades", loukoumades]]),
+      bands: new Map(),
+    });
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].grams).not.toBe(800);
+    // The generic carbs band's large is the ceiling for a guess.
+    expect(r.items[0].grams).toBeLessThanOrEqual(GENERIC_BANDS.carbs.large);
+    expect(r.items[0].calories).toBeLessThan(500);
+  });
+
+  it("still converts a count for a food that genuinely has a unit weight", () => {
+    const r = resolveQuantities({
+      items: [{ query: "eggs", ingredient_id: "eggs_whole", quantity: { kind: "count", value: 2 },
+                note: null, source: "catalog", confidence: 0.9 }],
+      totalGrams: null, slotBudgetKcal: 400,
+      ingredients: new Map([["eggs_whole", egg]]),
+      bands: new Map(),
+    });
+    expect(r.items[0].grams).toBe(100);
+    expect(r.weighMethod).toBe("counted");
+  });
+});
+
+describe("an unstated amount is capped at his own large portion", () => {
+  const nuts: Ingredient = {
+    id: "mixed_nuts", name: "mixed nuts", category: "fat",
+    calories_per_100g: 637, protein_per_100g: 20, carbs_per_100g: 11, fat_per_100g: 57, fiber_per_100g: 7,
+    is_raw: false, unit: "g", grams_per_unit: null,
+  } as unknown as Ingredient;
+
+  it("never fits more of a food than he has ever eaten of it", () => {
+    const bands = new Map([["mixed_nuts", { small: 10, usual: 20, large: 30, n: 12 }]]);
+    const r = resolveQuantities({
+      items: [{ query: "some nuts", ingredient_id: "mixed_nuts", quantity: { kind: "unknown" },
+                note: null, source: "off", confidence: 0.45 }],
+      // A generous budget is exactly the condition that produced 113 g of nuts.
+      totalGrams: null, slotBudgetKcal: 1500,
+      ingredients: new Map([["mixed_nuts", nuts]]),
+      bands,
+    });
+    expect(r.items[0].grams).toBeLessThanOrEqual(30);
+  });
+
+  it("falls back to the category band when he has no history for that food", () => {
+    const r = resolveQuantities({
+      items: [{ query: "some nuts", ingredient_id: "mixed_nuts", quantity: { kind: "unknown" },
+                note: null, source: "off", confidence: 0.45 }],
+      totalGrams: null, slotBudgetKcal: 1500,
+      ingredients: new Map([["mixed_nuts", nuts]]),
+      bands: new Map(),
+    });
+    expect(r.items[0].grams).toBeLessThanOrEqual(GENERIC_BANDS.fat.large);
   });
 });

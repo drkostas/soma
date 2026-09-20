@@ -13,6 +13,7 @@ import { buildAgentContext, renderContext } from "./nutrition-agent-context";
 import { runMealAgent, type ProposalItem } from "./nutrition-agent";
 import { getPortionBands } from "./portion-history";
 import { resolveQuantities, type ResolvableItem, type ResolvedItem } from "./meal-quantity";
+import { enforcePlausibility, getHistoryStats } from "./meal-plausibility";
 import type { Ingredient } from "./portion-solver";
 import { sendPush } from "./notify-push";
 
@@ -43,11 +44,14 @@ export function ingredientIdFor(name: string): string | null {
 }
 
 export function notificationFor(
-  status: "logged" | "ready" | "failed", meal: LandedMeal,
+  status: "logged" | "ready" | "failed" | "asked", meal: LandedMeal,
 ): { title: string; body: string; url: string } {
   const url = `/nutrition?capture=${meal.captureId}`;
   if (status === "logged") return { title: `Logged ${meal.slot}`, body: meal.summary, url };
   if (status === "ready") return { title: `${meal.slot} ready to check`, body: meal.summary, url };
+  // The one question the instructions allow. It carries the question itself, because a
+  // notification saying only "soma has a question" makes the owner go and find out what it is.
+  if (status === "asked") return { title: "One question about that meal", body: meal.summary, url };
   return {
     title: "Could not work that meal out",
     body: "Your words are still there. Open it to try again or fix it by hand.",
@@ -62,11 +66,19 @@ async function ensureIngredient(sql: QueryFn, item: ProposalItem): Promise<strin
   const id = ingredientIdFor(item.query);
   if (!id) return null;
   const m = item.macros_per_100g;
+  // ⛔ The category was hardcoded to 'restaurant', and it is not decoration: it picks the solver's
+  // gram bounds AND which portion band applies. That is why "some nuts" came out at 113 g, the
+  // restaurant band's usual, rather than the 15 g a fat belongs at. The unit weight matters just
+  // as much: without it a count cannot be converted and the old fallback was 100 g each.
+  const category = item.category ?? "restaurant";
+  const unit = item.grams_per_unit ? (item.unit_name ?? "piece") : "g";
   await sql`
     INSERT INTO ingredients (id, name, calories_per_100g, protein_per_100g, carbs_per_100g,
-                             fat_per_100g, fiber_per_100g, category, status, source, confidence)
+                             fat_per_100g, fiber_per_100g, category, status, source, confidence,
+                             unit, grams_per_unit)
     VALUES (${id}, ${item.query.slice(0, 120)}, ${m.calories}, ${m.protein}, ${m.carbs},
-            ${m.fat}, ${m.fiber}, 'restaurant', 'confirmed', ${item.source}, ${item.confidence})
+            ${m.fat}, ${m.fiber}, ${category}, 'confirmed', ${item.source}, ${item.confidence},
+            ${unit}, ${item.grams_per_unit})
     ON CONFLICT (id) DO NOTHING`;
   return id;
 }
@@ -83,18 +95,25 @@ async function loadIngredients(sql: QueryFn, ids: string[]): Promise<Map<string,
 }
 
 async function budgetForDay(
-  sql: QueryFn, date: string, slot: string,
-): Promise<{ slotKcal: number; dayLeft: number }> {
+  sql: QueryFn, date: string, slot: string, excludeMealId: number | null = null,
+): Promise<{ slotKcal: number; dayLeft: number; consumed: number }> {
   const dayRows = (await sql`
     SELECT COALESCE(target_calories, 0)::float AS target
     FROM nutrition_day WHERE date = ${date}`) as Array<{ target: number }>;
   const eatenRows = (await sql`
-    SELECT COALESCE(sum(calories), 0)::float AS eaten FROM meal_log WHERE date = ${date}`) as Array<{ eaten: number }>;
+    SELECT COALESCE(sum(calories), 0)::float AS eaten FROM meal_log
+    WHERE date = ${date} AND (${excludeMealId}::int IS NULL OR id <> ${excludeMealId}::int)`) as Array<{ eaten: number }>;
   const dayTarget = Number(dayRows[0]?.target ?? 0);
   const consumed = Number(eatenRows[0]?.eaten ?? 0);
+  // `excludeMealId` is the capture's own previous meal when it is being corrected. Counting it
+  // would have the meal compete with the version of itself it is replacing, which on 2026-09-20
+  // drove the day headroom negative and scaled the replacement to nothing.
   return {
     slotKcal: slotBudget({ dayTarget, consumed, slotsLeft: slotsRemaining(slot) }),
     dayLeft: Math.max(0, dayTarget - consumed),
+    // What the day already holds, so "based on the day so far" is a real input rather than a
+    // figure of speech. Unlike dayLeft this does not depend on a plan existing.
+    consumed,
   };
 }
 
@@ -109,6 +128,12 @@ async function writeMeal(
   const source = cap.messages.some((m) => m.image) ? "photo" : "chat";
 
   await sql`INSERT INTO nutrition_day (date) VALUES (${cap.date}) ON CONFLICT (date) DO NOTHING`;
+  // ⛔ A capture owns at most ONE meal. A follow-up re-runs the whole conversation, which is
+  // right, and this used to INSERT a second row while the capture's meal_log_id moved on, so the
+  // meal being corrected stayed in the day's total. Correcting a mistake made the day grow.
+  if (cap.meal_log_id != null) {
+    await sql`DELETE FROM meal_log WHERE id = ${cap.meal_log_id}`;
+  }
   const rows = (await sql`
     INSERT INTO meal_log (date, meal_slot, source, portion_multiplier, items,
                           calories, protein, carbs, fat, fiber, notes, weigh_method)
@@ -119,7 +144,9 @@ async function writeMeal(
   return Number(rows[0].id);
 }
 
-async function notify(sql: QueryFn, status: "logged" | "ready" | "failed", meal: LandedMeal): Promise<void> {
+async function notify(
+  sql: QueryFn, status: "logged" | "ready" | "failed" | "asked", meal: LandedMeal,
+): Promise<void> {
   const n = notificationFor(status, meal);
   // A notification is never worth failing a meal over.
   try { await sendPush(sql, { ...n, eventType: "meal_ready" }); } catch { /* ignored */ }
@@ -128,7 +155,7 @@ async function notify(sql: QueryFn, status: "logged" | "ready" | "failed", meal:
 export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<void> {
   const slot = cap.meal_slot ?? "lunch";
   try {
-    const { slotKcal, dayLeft } = await budgetForDay(sql, cap.date, slot);
+    const { slotKcal, dayLeft, consumed: dayConsumed } = await budgetForDay(sql, cap.date, slot, cap.meal_log_id);
     const catalog = (await sql`
       SELECT id, name FROM ingredients WHERE status = 'confirmed'`) as CatalogEntry[];
 
@@ -156,6 +183,20 @@ export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<voi
       resolvedSlot = run.proposal.slot;
       summary = run.proposal.summary;
       totalGrams = run.proposal.total_grams;
+
+      // It could identify nothing and asked. Put the question in the thread and wait: the owner
+      // answers with a follow-up, which re-runs this with the whole conversation. NOT a failure,
+      // and the sentence stays exactly where it was.
+      if (!run.proposal.items.length && run.proposal.question) {
+        await finishCapture(sql, {
+          id: cap.id, status: "ready", proposal,
+          message: { role: "agent", text: run.proposal.question, image: null, at: new Date().toISOString() },
+        });
+        await notify(sql, "asked", {
+          slot: resolvedSlot, summary: run.proposal.question, captureId: cap.id, mealLogId: null,
+        });
+        return;
+      }
       const resolvable: ResolvableItem[] = [];
       for (const it of run.proposal.items) {
         const id = await ensureIngredient(sql, it);
@@ -171,17 +212,29 @@ export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<voi
 
     const bands = await getPortionBands(sql);
     const ingredients = await loadIngredients(sql, items.map((i) => i.ingredient_id));
-    const { items: resolved, weighMethod } = resolveQuantities({
+    const { items: raw, weighMethod } = resolveQuantities({
       items, totalGrams, slotBudgetKcal: slotKcal, ingredients, bands,
     });
-    if (!resolved.length) throw new Error("nothing left after resolving quantities");
+    if (!raw.length) throw new Error("nothing left after resolving quantities");
+
+    // The backstop. Amounts he stated are never touched; amounts we guessed are pulled back when
+    // the meal is nothing like anything in his log. It says so when it does, so the strip shows it.
+    const stats = await getHistoryStats(sql);
+    const check = enforcePlausibility({
+      items: raw, weighMethod, slot: resolvedSlot, consumedToday: dayConsumed, stats,
+    });
+    const resolved = check.items;
+    if (check.note) summary = `${summary} ${check.note}`;
 
     let mealLogId: number | null = null;
     if (cap.mode === "log") mealLogId = await writeMeal(sql, cap, resolvedSlot, resolved, weighMethod);
 
     const status: CaptureStatus = cap.mode === "log" ? "logged" : "ready";
+    // Store how the grams were arrived at alongside them. A calibrate capture is a proposal the
+    // builder will open, and "these came from a portion word" is part of the proposal, not just a
+    // column on a meal that may never be written.
     await finishCapture(sql, {
-      id: cap.id, status, proposal, resolved, mealLogId,
+      id: cap.id, status, proposal, resolved: { items: resolved, weighMethod }, mealLogId,
       message: { role: "agent", text: summary, image: null, at: new Date().toISOString() },
     });
     await notify(sql, status, { slot: resolvedSlot, summary, captureId: cap.id, mealLogId });
@@ -209,8 +262,18 @@ export async function reviveStalled(sql: QueryFn, olderThanMinutes = 10): Promis
   return rows.length;
 }
 
-/** Drain the queue. Called after a capture and on a sweep, so a restart strands nothing. */
+/** Whether the meal agent can actually be spawned in this process. The app posts to
+ *  soma.gkos.dev, so most captures arrive on Vercel, which has no `claude` binary. Claiming one
+ *  there spends an attempt on a run that cannot succeed, and two of those mark the capture
+ *  `failed` before the Mac's sweep ever sees it. Same test chat-transport.ts uses. */
+export function agentRunsHere(): boolean {
+  return !process.env.VERCEL;
+}
+
+/** Drain the queue. Called after a capture and on a sweep, so a restart strands nothing.
+ *  A no-op where the agent cannot run, so the row waits for the sweep with its attempts intact. */
 export async function drainCaptures(sql: QueryFn, max = 5): Promise<number> {
+  if (!agentRunsHere()) return 0;
   let done = 0;
   for (let i = 0; i < max; i++) {
     const cap = await claimNextCapture(sql);
