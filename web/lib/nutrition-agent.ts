@@ -98,10 +98,43 @@ export const MEAL_PROPOSAL_SCHEMA = {
   required: ["slot", "tense", "items", "summary"],
 } as const;
 
+/**
+ * A number, or null.
+ *
+ * ⛔ `Number("")` is 0, not NaN, so a blank string used to come back as zero: a blank `calories`
+ * became 0 kcal and a blank amount became 0 grams, both silently. A blank means nobody said, which
+ * is null.
+ */
 const num = (v: unknown): number | null => {
+  if (typeof v === "string" && !v.trim()) return null;
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
   return Number.isFinite(n) ? n : null;
 };
+
+/**
+ * The vague counts people use, because they are counts.
+ *
+ * "a few bites of a mpiskotogluko" is how the owner writes, and the agent answered
+ * `{"kind":"bites","value":"a few"}`, which `num()` could not read, so the whole meal was
+ * discarded over one word. These are the readings anyone would give.
+ */
+export const VAGUE_COUNTS: Readonly<Record<string, number>> = {
+  a: 1, an: 1, one: 1, single: 1,
+  half: 0.5, "a half": 0.5,
+  couple: 2, "a couple": 2, "a couple of": 2, two: 2, pair: 2, "a pair": 2,
+  few: 3, "a few": 3, three: 3, "a handful": 3, handful: 3,
+  four: 4, several: 4, "a several": 4,
+  five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+};
+
+/** A number, or a word that plainly means one. Null when it means nothing countable. */
+export function readCount(v: unknown): number | null {
+  const n = num(v);
+  if (n != null) return n;
+  if (typeof v !== "string") return null;
+  const key = v.trim().toLowerCase().replace(/\s+/g, " ").replace(/\s+of$/, "");
+  return VAGUE_COUNTS[key] ?? VAGUE_COUNTS[key.replace(/^a /, "")] ?? null;
+}
 
 function parseQuantity(v: unknown): Quantity | null {
   if (!v || typeof v !== "object") return null;
@@ -113,8 +146,12 @@ function parseQuantity(v: unknown): Quantity | null {
     return (PORTION_VALUES as readonly string[]).includes(s)
       ? { kind: "portion", value: s as "small" | "moderate" | "large" } : null;
   }
-  const n = num(o.value);
-  if (n == null || n < 0) return null;
+  // ⛔ AN AMOUNT THAT CANNOT BE READ IS AN UNKNOWN AMOUNT, NOT AN INVALID MEAL. The food is
+  // identified and its id resolved; only the quantity is unreadable, and `unknown` is exactly the
+  // kind for that, which soma then fits. Returning null here discarded the whole reading because
+  // one word was not a digit.
+  const n = readCount(o.value);
+  if (n == null || n < 0) return { kind: "unknown" };
   if (kind === "grams") return { kind: "grams", value: n };
   if (kind === "count") return { kind: "count", value: n };
   if (kind === "bites") return { kind: "bites", value: n };
