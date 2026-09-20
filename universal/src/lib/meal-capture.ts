@@ -7,8 +7,12 @@
  * lands in a different slot depending on where it was typed.
  */
 import { API_BASE, AUTH_HEADERS } from "./api";
+import type { CaptureCard } from "./capture-status";
 
 export type CaptureMode = "log" | "calibrate";
+/** The five states a capture moves through, mirroring `web/lib/meal-capture.ts`. */
+export type CaptureStatus = "captured" | "running" | "ready" | "logged" | "failed";
+export interface CaptureMessage { role: "user" | "agent"; text: string; image: string | null; at: string }
 
 export function slotForHour(h: number): string {
   if (h < 11) return "breakfast";
@@ -69,5 +73,18 @@ export async function uploadCapturePhoto(uri: string): Promise<string | null> {
     return ((await res.json()) as { path: string }).path;
   } catch {
     return null;
+  }
+}
+
+/** Today's captures and where each has got to, for the status strip. */
+export async function fetchRecentCaptures(date?: string): Promise<CaptureCard[]> {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : "";
+  try {
+    const res = await fetch(`${API_BASE}/api/nutrition/capture/recent${qs}`, { headers: AUTH_HEADERS });
+    if (!res.ok) return [];
+    return ((await res.json()) as { captures?: CaptureCard[] }).captures ?? [];
+  } catch {
+    // A strip that cannot load says nothing, rather than claiming the captures are gone.
+    return [];
   }
 }
