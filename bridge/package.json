@@ -10,7 +10,7 @@
     "bridge": "node dist/main.js"
   },
   "dependencies": {
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "garmin-auth": "^0.7.1",
     "oauth-1.0a": "^2.2.6",
     "pg": "^8.11.0",
