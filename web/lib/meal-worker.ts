@@ -124,6 +124,12 @@ async function writeMeal(
   const source = cap.messages.some((m) => m.image) ? "photo" : "chat";
 
   await sql`INSERT INTO nutrition_day (date) VALUES (${cap.date}) ON CONFLICT (date) DO NOTHING`;
+  // ⛔ A capture owns at most ONE meal. A follow-up re-runs the whole conversation, which is
+  // right, and this used to INSERT a second row while the capture's meal_log_id moved on, so the
+  // meal being corrected stayed in the day's total. Correcting a mistake made the day grow.
+  if (cap.meal_log_id != null) {
+    await sql`DELETE FROM meal_log WHERE id = ${cap.meal_log_id}`;
+  }
   const rows = (await sql`
     INSERT INTO meal_log (date, meal_slot, source, portion_multiplier, items,
                           calories, protein, carbs, fat, fiber, notes, weigh_method)
