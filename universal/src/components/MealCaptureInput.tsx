@@ -88,8 +88,8 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
     setError(null);
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 });
     if (res.canceled || !res.assets[0]) return;
-    const path = await uploadCapturePhoto(res.assets[0].uri);
-    if (path) setImage(path); else setError("That photo would not upload.");
+    const up = await uploadCapturePhoto(res.assets[0].uri);
+    if ("ref" in up) setImage(up.ref); else setError(up.error);
   };
 
   const toggle = () => {
@@ -132,6 +132,9 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
           <Text variant="caption" className="text-text-secondary">photo attached — tap to remove</Text>
         </Pressable>
       ) : null}
+      {error ? (
+        <Text variant="caption" style={{ color: "#e06060" }} className="mt-1">{error}</Text>
+      ) : null}
       <View className="flex-row items-center gap-3 mt-2">
         {canDictate(true, permitted) ? (
           <Pressable onPress={dictate} testID="meal-capture-speak">
@@ -148,7 +151,6 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
         </Pressable>
         <View className="flex-1" />
         {ack ? <Text variant="caption" className="text-text-secondary">{ack}</Text> : null}
-        {error ? <Text variant="caption" className="text-danger">{error}</Text> : null}
         <Button
           label={sending ? "…" : "Send"}
           size="sm"

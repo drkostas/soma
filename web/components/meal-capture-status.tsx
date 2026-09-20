@@ -50,6 +50,7 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
   const [reply, setReply] = useState("");
   const [replyImage, setReplyImage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
   const [bump, setBump] = useState(0);
 
   const load = useCallback(async (): Promise<CaptureCard[]> => {
@@ -76,10 +77,17 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
   }, [load, version, bump]);
 
   const attachToReply = async (file: File) => {
+    setReplyError(null);
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch("/api/nutrition/capture/upload", { method: "POST", body: form });
-    if (res.ok) setReplyImage(((await res.json()) as { path: string }).path);
+    try {
+      const res = await fetch("/api/nutrition/capture/upload", { method: "POST", body: form });
+      const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
+      if (res.ok && body.path) setReplyImage(body.path);
+      else setReplyError(body.error ?? `The upload failed (${res.status}).`);
+    } catch (e) {
+      setReplyError(`soma could not reach the server (${(e as Error).message ?? "no connection"}).`);
+    }
   };
 
   const submitReply = async (id: number) => {
@@ -116,7 +124,9 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
             {detail && <div className="mt-0.5 text-muted-foreground">{detail}</div>}
 
             {replyTo === c.id ? (
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex flex-col gap-1">
+              {replyError && <div className="text-destructive">{replyError}</div>}
+              <div className="flex items-center gap-2">
                 <input
                   autoFocus
                   value={reply}
@@ -137,8 +147,9 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
                   <Send className="h-3.5 w-3.5" />
                 </button>
               </div>
+              </div>
             ) : (
-              <button type="button" onClick={() => { setReplyTo(c.id); setReply(""); setReplyImage(null); }}
+              <button type="button" onClick={() => { setReplyTo(c.id); setReply(""); setReplyImage(null); setReplyError(null); }}
                 className="mt-1 text-muted-foreground underline underline-offset-2 hover:text-foreground">
                 {replyHint(c)}
               </button>
