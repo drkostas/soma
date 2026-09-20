@@ -30,6 +30,20 @@ export const FALLBACK_SLOT_KCAL = 1200;
 export const FALLBACK_DAY_KCAL = 3000;
 
 /**
+ * ⛔ THE DAY BEING OVER ALREADY IS NOT A REASON TO ERASE A MEAL HE ATE.
+ *
+ * The day headroom can be zero or negative, and on 2026-09-20 it was: the day already held the
+ * 4,129 kcal meal being replaced, so the headroom came out at -1,115, the ceiling at 0, and every
+ * item was scaled to one gram and nought calories. That is worse than the bug it was added to
+ * fix, because it silently deletes food rather than exaggerating it.
+ *
+ * So the day can only ever pull a meal down to this fraction of its own slot ceiling, never past
+ * it. Below that the day's total is somebody else's problem to look at, not this function's to
+ * solve by making the food disappear.
+ */
+export const MIN_SHARE_OF_SLOT = 0.5;
+
+/**
  * How far above the mean a meal may sit before the guessed part is pulled back.
  * Three at the slot level, because one meal is allowed to be an outlier. Two at the day level,
  * because a day of outliers is not a day he has ever had.
@@ -94,8 +108,10 @@ export function enforcePlausibility(input: PlausibilityInput): PlausibilityResul
   if (amountsWereStated(weighMethod)) return { items, note: null, before, after: before };
 
   const bySlot = slotCeiling(stats, slot);
-  const byDay = dayCeiling(stats) - Math.max(0, consumedToday);
-  const ceiling = Math.max(0, Math.min(bySlot, byDay));
+  const headroom = dayCeiling(stats) - Math.max(0, consumedToday);
+  // The day may tighten the slot's ceiling, but never below half of it. See MIN_SHARE_OF_SLOT.
+  const floor = bySlot * MIN_SHARE_OF_SLOT;
+  const ceiling = Math.max(floor, Math.min(bySlot, headroom));
   if (before <= ceiling || before <= 0) return { items, note: null, before, after: before };
 
   // Scale every item by the same factor: the proportions came from the agent reading the plate,
@@ -111,7 +127,7 @@ export function enforcePlausibility(input: PlausibilityInput): PlausibilityResul
     fiber: Math.round(i.fiber * factor * 10) / 10,
   }));
   const after = Math.round(kcal(scaled));
-  const limiter = byDay < bySlot ? "the day" : slot.replace(/_/g, " ");
+  const limiter = ceiling < bySlot ? "day" : slot.replace(/_/g, " ");
   return {
     items: scaled,
     note: `I had to guess the amounts, and my first guess came to ${before} kcal, which is more than you ever eat. Brought it down to ${after} to fit your usual ${limiter}. Say the weights if that is wrong.`,

@@ -95,15 +95,19 @@ async function loadIngredients(sql: QueryFn, ids: string[]): Promise<Map<string,
 }
 
 async function budgetForDay(
-  sql: QueryFn, date: string, slot: string,
+  sql: QueryFn, date: string, slot: string, excludeMealId: number | null = null,
 ): Promise<{ slotKcal: number; dayLeft: number; consumed: number }> {
   const dayRows = (await sql`
     SELECT COALESCE(target_calories, 0)::float AS target
     FROM nutrition_day WHERE date = ${date}`) as Array<{ target: number }>;
   const eatenRows = (await sql`
-    SELECT COALESCE(sum(calories), 0)::float AS eaten FROM meal_log WHERE date = ${date}`) as Array<{ eaten: number }>;
+    SELECT COALESCE(sum(calories), 0)::float AS eaten FROM meal_log
+    WHERE date = ${date} AND (${excludeMealId}::int IS NULL OR id <> ${excludeMealId}::int)`) as Array<{ eaten: number }>;
   const dayTarget = Number(dayRows[0]?.target ?? 0);
   const consumed = Number(eatenRows[0]?.eaten ?? 0);
+  // `excludeMealId` is the capture's own previous meal when it is being corrected. Counting it
+  // would have the meal compete with the version of itself it is replacing, which on 2026-09-20
+  // drove the day headroom negative and scaled the replacement to nothing.
   return {
     slotKcal: slotBudget({ dayTarget, consumed, slotsLeft: slotsRemaining(slot) }),
     dayLeft: Math.max(0, dayTarget - consumed),
@@ -151,7 +155,7 @@ async function notify(
 export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<void> {
   const slot = cap.meal_slot ?? "lunch";
   try {
-    const { slotKcal, dayLeft, consumed: dayConsumed } = await budgetForDay(sql, cap.date, slot);
+    const { slotKcal, dayLeft, consumed: dayConsumed } = await budgetForDay(sql, cap.date, slot, cap.meal_log_id);
     const catalog = (await sql`
       SELECT id, name FROM ingredients WHERE status = 'confirmed'`) as CatalogEntry[];
 
