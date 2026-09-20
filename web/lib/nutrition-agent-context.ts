@@ -37,6 +37,19 @@ export interface AgentContext {
   ingredients: ContextIngredient[];
 }
 
+/**
+ * When the meal was eaten, as far as anything knows: what he said, or failing that when the row
+ * was written. Never an empty string for a row that has a time, because a blank reads as unknown.
+ */
+export function eatenAt(saidAt: string | null, loggedAt: string | null): string {
+  for (const v of [saidAt, loggedAt]) {
+    if (!v) continue;
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) return hhmm(d);
+  }
+  return "";
+}
+
 /** One clock for both the logged times and "now", so "soon after" is a real comparison. */
 export function hhmm(d: Date): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -96,18 +109,23 @@ export async function buildAgentContext(
   // project, so it would have sat quiet until the first logged meal of a day. Worse, the database
   // session is on America/New_York while the owner and this process are on Athens, so a time
   // formatted by Postgres would have been seven hours out and "soon after" would be nonsense.
+  // ⛔ `logged_at` is when the ROW was written, which is when the drain ran, not when he ate. On a
+  // repaired meal it is the repair time, and his day read 13:32 for a breakfast he had said at
+  // 10:47. The capture's first message carries the real time, so prefer it and fall back.
   const loggedRows = (await sql`
-    SELECT meal_slot, calories, logged_at,
+    SELECT m.meal_slot, m.calories, m.logged_at,
+           (SELECT c.messages->0->>'at' FROM meal_capture c
+            WHERE c.meal_log_id = m.id ORDER BY c.id LIMIT 1) AS said_at,
            (SELECT string_agg(i->>'name', ', ' ORDER BY (i->>'calories')::float DESC)
-            FROM jsonb_array_elements(items) i) AS what
-    FROM meal_log WHERE date = ${date} ORDER BY logged_at`) as Array<Record<string, unknown>>;
+            FROM jsonb_array_elements(m.items) i) AS what
+    FROM meal_log m WHERE m.date = ${date} ORDER BY m.logged_at`) as Array<Record<string, unknown>>;
 
   return {
     date, slot, slotBudgetKcal, dayRemainingKcal,
     now: hhmm(new Date()),
     logged: loggedRows.map((r) => ({
       slot: String(r.meal_slot ?? ""),
-      at: r.logged_at ? hhmm(new Date(r.logged_at as string)) : "",
+      at: eatenAt(r.said_at as string | null, r.logged_at as string | null),
       calories: Math.round(Number(r.calories ?? 0)),
       what: String(r.what ?? "").slice(0, 200),
     })),
@@ -152,6 +170,8 @@ export function renderContext(ctx: AgentContext): string {
   const empty = emptySlots(ctx.logged);
   lines.push(`slots still empty: ${empty.length ? empty.join(", ") : "none"}`);
   lines.push(`where a NEW meal belongs: ${nextMealSlot(ctx.logged, ctx.slot)}`);
+  const last = ctx.logged[ctx.logged.length - 1];
+  lines.push(`the last meal logged: ${last ? `${last.slot} at ${last.at}` : "none yet"}`);
 
   lines.push("", "## Saved meals, by name");
   if (!ctx.presets.length) lines.push("(none saved)");
