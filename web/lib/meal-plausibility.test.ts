@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   amountsWereStated, dayCeiling, enforcePlausibility, FALLBACK_DAY_KCAL, FALLBACK_SLOT_KCAL,
-  MIN_SHARE_OF_SLOT, slotCeiling, type HistoryStats,
+  MIN_OVERSHOOT_KCAL, MIN_SHARE_OF_SLOT, slotCeiling, type HistoryStats,
 } from "./meal-plausibility";
 import type { ResolvedItem } from "./meal-quantity";
 
@@ -19,7 +19,8 @@ const REAL: HistoryStats = {
 
 const item = (o: Partial<ResolvedItem>): ResolvedItem => ({
   ingredient_id: "x", name: "x", grams: 100, calories: 100,
-  protein: 5, carbs: 10, fat: 5, fiber: 1, source: "estimate", confidence: 0.5, note: null, ...o,
+  protein: 5, carbs: 10, fat: 5, fiber: 1, source: "estimate", confidence: 0.5, note: null,
+  stated: false, ...o,
 });
 
 describe("slotCeiling", () => {
@@ -161,5 +162,97 @@ describe("a day that is already over its ceiling", () => {
     });
     expect(r.after).toBeLessThanOrEqual(Math.round(slotCeiling(REAL, "breakfast")));
     expect(r.after).toBeGreaterThan(1000);
+  });
+});
+
+describe("only the guesses are scaled", () => {
+  /**
+   * The flaw in my own first version. `weighMethod` is one value for the whole meal, and `mixed`
+   * means some amounts were given and some were not, which is most meals. Scaling everything by
+   * one factor took a weighed 200 g of chicken down to 81 g because a guess about nuts was wrong.
+   * An amount he gave is a fact about his morning. A fitted amount is this program's opinion.
+   */
+  it("leaves a weighed amount exactly as he gave it", () => {
+    const items = [
+      item({ ingredient_id: "chicken", grams: 200, calories: 330, stated: true }),
+      item({ ingredient_id: "nuts", grams: 400, calories: 2548, stated: false }),
+    ];
+    const r = enforcePlausibility({ items, weighMethod: "mixed", slot: "breakfast", consumedToday: 0, stats: REAL });
+    expect(r.items[0].grams).toBe(200);
+    expect(r.items[0].calories).toBe(330);
+    expect(r.items[1].grams).toBeLessThan(400);
+    expect(r.after).toBeLessThanOrEqual(Math.round(slotCeiling(REAL, "breakfast")));
+  });
+
+  it("does nothing at all when the whole meal was stated, even far over the ceiling", () => {
+    const items = [item({ grams: 900, calories: 3000, stated: true })];
+    const r = enforcePlausibility({ items, weighMethod: "mixed", slot: "breakfast", consumedToday: 0, stats: REAL });
+    expect(r.note).toBeNull();
+    expect(r.items[0].calories).toBe(3000);
+  });
+
+  it("does nothing when what he stated already fills the meal, since the rest is his too", () => {
+    const items = [
+      item({ grams: 700, calories: 1150, stated: true }),
+      item({ grams: 20, calories: 30, stated: false }),
+    ];
+    const r = enforcePlausibility({ items, weighMethod: "mixed", slot: "breakfast", consumedToday: 0, stats: REAL });
+    // 1180 is 13 over the 1167 ceiling, which is not worth touching or mentioning.
+    expect(r.note).toBeNull();
+    expect(r.items[0].calories).toBe(1150);
+    expect(r.items[1].calories).toBe(30);
+  });
+
+  it("still fixes the real breakfast, where every bad amount was a guess", () => {
+    const items = [
+      item({ ingredient_id: "eggs_whole", grams: 100, calories: 143, stated: true }),
+      item({ ingredient_id: "dark_rye_bread", grams: 50, calories: 108, stated: true }),
+      item({ ingredient_id: "sheep_milk_yogurt", grams: 113, calories: 118, stated: false }),
+      item({ ingredient_id: "mixed_nuts", grams: 113, calories: 720, stated: false }),
+      item({ ingredient_id: "loukoumades", grams: 800, calories: 3040, stated: false }),
+    ];
+    const r = enforcePlausibility({ items, weighMethod: "mixed", slot: "breakfast", consumedToday: 0, stats: REAL });
+    expect(r.before).toBe(4129);
+    expect(r.after).toBeLessThanOrEqual(1167);
+    // The two he stated are untouched.
+    expect(r.items[0].calories).toBe(143);
+    expect(r.items[1].calories).toBe(108);
+  });
+});
+
+describe("MIN_OVERSHOOT_KCAL", () => {
+  it("stays quiet just over the ceiling, where a correction would be noise", () => {
+    const items = [item({ grams: 400, calories: Math.round(slotCeiling(REAL, "breakfast")) + MIN_OVERSHOOT_KCAL - 20 })];
+    const r = enforcePlausibility({ items, weighMethod: "budget_fit", slot: "breakfast", consumedToday: 0, stats: REAL });
+    expect(r.note).toBeNull();
+    expect(r.after).toBe(r.before);
+  });
+
+  it("speaks up once the overshoot is real", () => {
+    const items = [item({ grams: 400, calories: Math.round(slotCeiling(REAL, "breakfast")) + MIN_OVERSHOOT_KCAL + 50 })];
+    const r = enforcePlausibility({ items, weighMethod: "budget_fit", slot: "breakfast", consumedToday: 0, stats: REAL });
+    expect(r.note).not.toBeNull();
+    expect(r.after).toBeLessThan(r.before);
+  });
+
+  it("is a round, explainable number rather than a tuned one", () => {
+    expect(MIN_OVERSHOOT_KCAL).toBe(120);
+  });
+});
+
+describe("the note says whose amounts were guessed", () => {
+  it("says some of the amounts when he gave any of them", () => {
+    const items = [
+      item({ grams: 100, calories: 200, stated: true }),
+      item({ grams: 800, calories: 3000, stated: false }),
+    ];
+    const r = enforcePlausibility({ items, weighMethod: "mixed", slot: "breakfast", consumedToday: 0, stats: REAL });
+    expect(r.note).toContain("some of the amounts");
+  });
+  it("says the amounts when none of them came from him", () => {
+    const items = [item({ grams: 800, calories: 3000, stated: false })];
+    const r = enforcePlausibility({ items, weighMethod: "budget_fit", slot: "breakfast", consumedToday: 0, stats: REAL });
+    expect(r.note).toContain("guess the amounts");
+    expect(r.note).not.toContain("some of the amounts");
   });
 });

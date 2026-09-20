@@ -30,6 +30,15 @@ export interface ResolvedItem {
   ingredient_id: string; name: string; grams: number;
   calories: number; protein: number; carbs: number; fat: number; fiber: number;
   source: string; confidence: number; note: string | null;
+  /**
+   * Whether the owner gave this amount, rather than it being fitted to the budget.
+   *
+   * ⛔ THIS IS THE ONLY THING THAT MAKES THE PLAUSIBILITY GUARD HONEST. It used to decide from
+   * `weighMethod`, which is one value for the whole meal, so in a `mixed` meal a weighed 200 g of
+   * chicken was scaled down to 81 g because a guess about nuts was wrong. A guess is what may be
+   * corrected; a weight he took is not.
+   */
+  stated: boolean;
 }
 
 export type WeighMethod =
@@ -140,6 +149,9 @@ export function resolveQuantities(input: ResolveInput): ResolveResult {
     }
   }
 
+  // The indices the resolver had to guess at, which is exactly what `stated` is the negation of.
+  const guessed = new Set(deferred);
+
   const out: ResolvedItem[] = [];
   const kinds = new Set<Quantity["kind"]>();
   items.forEach((it, i) => {
@@ -154,6 +166,7 @@ export function resolveQuantities(input: ResolveInput): ResolveResult {
       carbs: Math.round(m.carbs * 10) / 10, fat: Math.round(m.fat * 10) / 10,
       fiber: Math.round(m.fiber * 10) / 10,
       source: it.source, confidence: it.confidence, note: it.note,
+      stated: !guessed.has(i),
     });
   });
 
