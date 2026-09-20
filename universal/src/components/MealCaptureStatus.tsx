@@ -21,6 +21,7 @@ import {
 import { TONE, toneColor } from "../lib/capture-tone";
 import { canDictate, dictateLabel, mergeTranscript } from "../lib/dictation";
 import { fetchRecentCaptures, replyToCapture, uploadCapturePhoto } from "../lib/meal-capture";
+import { shrinkPhoto } from "../lib/shrink-photo";
 
 /** The agent takes tens of seconds, so four is live enough and costs nothing. */
 const POLL_MS = 4000;
@@ -62,7 +63,9 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
   const attach = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 });
     if (res.canceled || !res.assets[0]) return;
-    const up = await uploadCapturePhoto(res.assets[0].uri);
+    const a = res.assets[0];
+    const small = await shrinkPhoto(a.uri, a.width, a.height);
+    const up = await uploadCapturePhoto(small);
     if ("ref" in up) { setReplyImage(up.ref); setReplyError(null); } else setReplyError(up.error);
   };
 

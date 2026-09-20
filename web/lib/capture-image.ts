@@ -16,7 +16,15 @@ import { join } from "node:path";
 import type { QueryFn } from "./db";
 
 export const DB_PREFIX = "db:";
-export const MAX_BYTES = 10 * 1024 * 1024;
+/**
+ * ⛔ THIS IS BOUNDED BY THE DB GATEWAY, NOT BY TASTE. The bytes are inserted as a bytea parameter
+ * and the Neon HTTP driver sends a Buffer as a hex string, so the request is a little over twice
+ * the photo. The gateway allows 8 MB, so a photo much over 3.5 MB cannot reach the database at
+ * all. Refusing it here with a number is better than a 413 from two services away.
+ *
+ * The phone resizes to 1280 on the long side first, so a real photo is a few hundred kilobytes.
+ */
+export const MAX_BYTES = 3 * 1024 * 1024;
 export const ALLOWED_MIME: ReadonlySet<string> = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
 
 /** The file extension for a stored image, so the agent's copy is named honestly. */
