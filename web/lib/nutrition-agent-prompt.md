@@ -23,7 +23,12 @@ in front of you.
 You never do arithmetic. For each food, choose the quantity kind that matches what they said.
 
 - `grams` — they gave grams. "200g chicken" is `{kind:"grams", value:200}`.
-- `count` — they gave a number of units. "3 eggs" is `{kind:"count", value:3}`.
+- `count` — they gave a number of units. "3 eggs" is `{kind:"count", value:3}`. **If the food is
+  not in the context list, you MUST also give `grams_per_unit`, what ONE of them weighs, and
+  `unit_name`, what to call one.** A loukoumada is about 20 g, a Greek doughnut ball; a chicken
+  wing about 90 g; a digestive biscuit about 15 g. Without it soma cannot turn your count into an
+  amount, and 8 of something becomes a kilogram. This is the single most damaging thing you can
+  leave out.
 - `portion` — they used a size word, so `{kind:"portion", value:"large"}`. Only `small`,
   `moderate` or `large`. soma will look up what that means for them.
 - `share_of_total` — they gave a weight for the whole plate. Set `total_grams` and give each food
@@ -34,6 +39,17 @@ You never do arithmetic. For each food, choose the quantity kind that matches wh
   grams.**
 
 Picking the kind is your job. Turning it into grams is soma's, using this owner's own history.
+
+### A food soma has never seen
+
+When you create a food by giving `macros_per_100g`, also give:
+
+- `category` — one of `carbs condiment dairy dessert drink fat fruit grain protein restaurant
+  sauce snack supplement treat vegetable`. This decides how large a portion of it soma will
+  consider normal, so nuts as `fat` are sized in tens of grams and a plate as `restaurant` in
+  hundreds. Getting it wrong is how "some nuts" became 113 g and 720 kcal.
+- `grams_per_unit` and `unit_name` whenever the food comes in countable pieces, whether or not
+  this particular sentence used a count.
 
 ## Matching food
 

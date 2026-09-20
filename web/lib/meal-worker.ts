@@ -13,6 +13,7 @@ import { buildAgentContext, renderContext } from "./nutrition-agent-context";
 import { runMealAgent, type ProposalItem } from "./nutrition-agent";
 import { getPortionBands } from "./portion-history";
 import { resolveQuantities, type ResolvableItem, type ResolvedItem } from "./meal-quantity";
+import { enforcePlausibility, getHistoryStats } from "./meal-plausibility";
 import type { Ingredient } from "./portion-solver";
 import { sendPush } from "./notify-push";
 
@@ -65,11 +66,19 @@ async function ensureIngredient(sql: QueryFn, item: ProposalItem): Promise<strin
   const id = ingredientIdFor(item.query);
   if (!id) return null;
   const m = item.macros_per_100g;
+  // ⛔ The category was hardcoded to 'restaurant', and it is not decoration: it picks the solver's
+  // gram bounds AND which portion band applies. That is why "some nuts" came out at 113 g, the
+  // restaurant band's usual, rather than the 15 g a fat belongs at. The unit weight matters just
+  // as much: without it a count cannot be converted and the old fallback was 100 g each.
+  const category = item.category ?? "restaurant";
+  const unit = item.grams_per_unit ? (item.unit_name ?? "piece") : "g";
   await sql`
     INSERT INTO ingredients (id, name, calories_per_100g, protein_per_100g, carbs_per_100g,
-                             fat_per_100g, fiber_per_100g, category, status, source, confidence)
+                             fat_per_100g, fiber_per_100g, category, status, source, confidence,
+                             unit, grams_per_unit)
     VALUES (${id}, ${item.query.slice(0, 120)}, ${m.calories}, ${m.protein}, ${m.carbs},
-            ${m.fat}, ${m.fiber}, 'restaurant', 'confirmed', ${item.source}, ${item.confidence})
+            ${m.fat}, ${m.fiber}, ${category}, 'confirmed', ${item.source}, ${item.confidence},
+            ${unit}, ${item.grams_per_unit})
     ON CONFLICT (id) DO NOTHING`;
   return id;
 }
@@ -87,7 +96,7 @@ async function loadIngredients(sql: QueryFn, ids: string[]): Promise<Map<string,
 
 async function budgetForDay(
   sql: QueryFn, date: string, slot: string,
-): Promise<{ slotKcal: number; dayLeft: number }> {
+): Promise<{ slotKcal: number; dayLeft: number; consumed: number }> {
   const dayRows = (await sql`
     SELECT COALESCE(target_calories, 0)::float AS target
     FROM nutrition_day WHERE date = ${date}`) as Array<{ target: number }>;
@@ -98,6 +107,9 @@ async function budgetForDay(
   return {
     slotKcal: slotBudget({ dayTarget, consumed, slotsLeft: slotsRemaining(slot) }),
     dayLeft: Math.max(0, dayTarget - consumed),
+    // What the day already holds, so "based on the day so far" is a real input rather than a
+    // figure of speech. Unlike dayLeft this does not depend on a plan existing.
+    consumed,
   };
 }
 
@@ -133,7 +145,7 @@ async function notify(
 export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<void> {
   const slot = cap.meal_slot ?? "lunch";
   try {
-    const { slotKcal, dayLeft } = await budgetForDay(sql, cap.date, slot);
+    const { slotKcal, dayLeft, consumed: dayConsumed } = await budgetForDay(sql, cap.date, slot);
     const catalog = (await sql`
       SELECT id, name FROM ingredients WHERE status = 'confirmed'`) as CatalogEntry[];
 
@@ -190,10 +202,19 @@ export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<voi
 
     const bands = await getPortionBands(sql);
     const ingredients = await loadIngredients(sql, items.map((i) => i.ingredient_id));
-    const { items: resolved, weighMethod } = resolveQuantities({
+    const { items: raw, weighMethod } = resolveQuantities({
       items, totalGrams, slotBudgetKcal: slotKcal, ingredients, bands,
     });
-    if (!resolved.length) throw new Error("nothing left after resolving quantities");
+    if (!raw.length) throw new Error("nothing left after resolving quantities");
+
+    // The backstop. Amounts he stated are never touched; amounts we guessed are pulled back when
+    // the meal is nothing like anything in his log. It says so when it does, so the strip shows it.
+    const stats = await getHistoryStats(sql);
+    const check = enforcePlausibility({
+      items: raw, weighMethod, slot: resolvedSlot, consumedToday: dayConsumed, stats,
+    });
+    const resolved = check.items;
+    if (check.note) summary = `${summary} ${check.note}`;
 
     let mealLogId: number | null = null;
     if (cap.mode === "log") mealLogId = await writeMeal(sql, cap, resolvedSlot, resolved, weighMethod);

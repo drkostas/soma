@@ -9,6 +9,7 @@
  * bypass. It reads, it looks up, it proposes. soma validates and writes.
  */
 import { spawn } from "node:child_process";
+import { CATEGORIES } from "macro-engine-core/ingredient-research";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,6 +29,16 @@ export interface ProposalItem {
   quantity: Quantity;
   note: string | null;
   macros_per_100g: Macros | null;
+  /** What ONE of them weighs, when the amount is a count of a food not already in the catalog.
+   *  Without it a count cannot be converted, and the old fallback of 100 g each turned 8
+   *  loukoumades into 800 g. The agent knows a loukoumada is about 20 g; it was never asked. */
+  grams_per_unit: number | null;
+  /** What to call one of them: "donut", "slice", "egg". Only meaningful beside a unit weight. */
+  unit_name: string | null;
+  /** The food's category, which is what selects both the solver's bounds and his portion band.
+   *  `ensureIngredient` used to hardcode "restaurant", which is why nuts were sized like a
+   *  restaurant dish at 113 g. */
+  category: string | null;
   source: string;
   confidence: number;
 }
@@ -76,6 +87,9 @@ export const MEAL_PROPOSAL_SCHEMA = {
               fat: { type: "number" }, fiber: { type: "number" },
             },
           },
+          grams_per_unit: { type: ["number", "null"] },
+          unit_name: { type: ["string", "null"] },
+          category: { type: ["string", "null"] },
         },
         required: ["query", "ingredient_id", "quantity", "source", "confidence"],
       },
@@ -152,12 +166,17 @@ export function parseProposal(v: unknown): MealProposal | null {
     // An unmatched food has to bring its own numbers or there is nothing to compute from.
     if (!ingredientId && !macros) return null;
     const conf = num(i.confidence);
+    const gpu = num(i.grams_per_unit);
     items.push({
       query: String(i.query ?? "").slice(0, 200),
       ingredient_id: ingredientId,
       quantity,
       note: typeof i.note === "string" && i.note ? i.note.slice(0, 300) : null,
       macros_per_100g: macros,
+      // A unit weight has to be a real, positive, human-sized number. 2 kg is not one of them.
+      grams_per_unit: gpu != null && gpu > 0 && gpu <= 2000 ? Math.round(gpu) : null,
+      unit_name: typeof i.unit_name === "string" && i.unit_name ? i.unit_name.slice(0, 30) : null,
+      category: typeof i.category === "string" && (CATEGORIES as readonly string[]).includes(i.category) ? i.category : null,
       source: String(i.source ?? "unknown").slice(0, 60),
       confidence: conf == null ? 0.5 : Math.min(1, Math.max(0, conf)),
     });
