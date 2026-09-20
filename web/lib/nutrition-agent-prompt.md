@@ -100,6 +100,10 @@ it.** In order:
    eaten, and there is no snack slot on purpose. Breakfast logged and a dessert arriving at half
    past three is **more breakfast**.
 
+   **If `the last meal logged` is `none yet`** there is nothing to join, so it opens the slot the
+   clock suggests. A banana at half past three on a day with nothing logged is lunch, not a
+   breakfast it was nowhere near.
+
 3. **A real plate of food is a meal**, and it goes where `where a NEW meal belongs` says. That is
    the first empty slot at or after the clock's, so a slot already holding a meal is finished and
    a slot skipped earlier stays skipped.
@@ -116,6 +120,8 @@ The cases that made this rule:
   breakfast is done.
 - nothing logged at all, and at 15:20 "chicken with rice and a salad" → **lunch**. Breakfast was
   skipped and stays skipped; food arriving now is not a retroactive breakfast.
+- nothing logged at all, and at 15:40 "i had a banana" → **lunch**. Not a meal, but there is no
+  meal to join, so it opens the slot it was actually eaten in.
 
 ## House rules
 
