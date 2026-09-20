@@ -103,7 +103,11 @@ export async function claimNextCapture(sql: QueryFn): Promise<CaptureRow | null>
 export async function finishCapture(
   sql: QueryFn,
   o: { id: number; status: CaptureStatus; proposal?: unknown; resolved?: unknown;
-       mealLogId?: number | null; error?: string | null; message?: CaptureMessage },
+       mealLogId?: number | null; error?: string | null; message?: CaptureMessage;
+       /** Where the food actually went. The capture is created with the clock's guess, and
+        *  without this it keeps that guess for ever, so the strip said "Logged lunch" above a
+        *  summary reading "Logged breakfast". It is also what a re-run starts from. */
+       slot?: string | null },
 ): Promise<void> {
   const proposalJson = o.proposal == null ? null : JSON.stringify(o.proposal);
   const resolvedJson = o.resolved == null ? null : JSON.stringify(o.resolved);
@@ -111,6 +115,7 @@ export async function finishCapture(
   await sql`
     UPDATE meal_capture SET
       status      = ${o.status},
+      meal_slot   = COALESCE(${o.slot ?? null}, meal_slot),
       proposal    = COALESCE(${proposalJson}::jsonb, proposal),
       resolved    = COALESCE(${resolvedJson}::jsonb, resolved),
       meal_log_id = COALESCE(${o.mealLogId ?? null}, meal_log_id),
