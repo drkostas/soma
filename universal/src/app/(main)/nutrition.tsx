@@ -8,6 +8,7 @@ import {
   fetchJson, usePullRefresh, todayLocal, type Preset, type SomaMeal,
 } from "../../lib/api";
 import { MealCaptureInput } from "../../components/MealCaptureInput";
+import { MealCaptureStatus } from "../../components/MealCaptureStatus";
 import { slotForHour } from "../../lib/meal-capture";
 import { NutritionOnboarding } from "../../components/nutrition-onboarding";
 import { BodyCompChart } from "../../components/body-comp-chart";
@@ -106,6 +107,9 @@ export default function NutritionScreen() {
   // microphone, is already up. A home-screen widget cannot take text or voice itself, so this
   // deep link is the whole of "say what you ate from the widget".
   const captureRef = useRef<TextInput>(null);
+  // Bumped on every send so the status strip refetches at once. A counter, not a boolean,
+  // because two sends in a row must both appear.
+  const [captureVersion, setCaptureVersion] = useState(0);
   const { capture } = useLocalSearchParams<{ capture?: string }>();
   useEffect(() => {
     if (capture === "1") {
@@ -401,7 +405,10 @@ export default function NutritionScreen() {
     >
       <View className="w-full max-w-2xl gap-4">
         {/* Say what you ate. First thing on the screen, and the target of the widget's deep link. */}
-        <MealCaptureInput ref={captureRef} slot={slotForHour(new Date().getHours())} onCaptured={() => { void onRefresh(); }} />
+        <MealCaptureInput ref={captureRef} slot={slotForHour(new Date().getHours())} onCaptured={() => { setCaptureVersion((v) => v + 1); void onRefresh(); }} />
+        {/* Where those sentences got to. It matters more here than on the website, because a
+            capture from the phone is processed later by the Mac rather than in the request. */}
+        <MealCaptureStatus date={DATE} version={captureVersion} />
 
         <View className="w-full flex-row items-center justify-between">
           <Button label="‹" variant="ghost" size="sm" onPress={() => setDATE((d) => shiftDate(d, -1))} />

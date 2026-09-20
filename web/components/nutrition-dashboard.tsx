@@ -5,6 +5,7 @@ import { MACRO_COLORS } from "soma-style/colors";
 import { Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { MealCaptureInput } from "@/components/meal-capture-input";
+import { MealCaptureStatus } from "@/components/meal-capture-status";
 import { slotForHour } from "@/lib/meal-capture";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -320,6 +321,9 @@ export function NutritionDashboard({
   training,
   health,
   sleep }: NutritionDashboardProps) {
+  // Bumped on every send, so the status strip refetches at once rather than waiting for its
+  // own poll. A counter rather than a boolean, because two sends in a row must both show.
+  const [captureVersion, setCaptureVersion] = useState(0);
   const [plan, setPlan] = useState(initialPlan);
   const [meals, setMeals] = useState<Meal[]>(initialMeals);
   const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
@@ -572,8 +576,11 @@ export function NutritionDashboard({
         <MealCaptureInput
           slot={slotForHour(new Date().getHours())}
           defaultMode="log"
-          onCaptured={() => { void refreshData(); }}
+          onCaptured={() => { setCaptureVersion((v) => v + 1); void refreshData(); }}
         />
+        {/* Where those sentences got to. Directly under the box, because the question it is
+            answering is "did that go anywhere", and that is asked of the box. */}
+        <MealCaptureStatus date={date} version={captureVersion} />
 
         {/* Date header with navigation */}
         <div className="flex items-center justify-between">

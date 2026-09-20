@@ -95,7 +95,7 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
         </Pressable>
         <View className="flex-1" />
         {ack ? <Text variant="caption" className="text-text-secondary">{ack}</Text> : null}
-        {error ? <Text variant="caption" className="text-red-400">{error}</Text> : null}
+        {error ? <Text variant="caption" className="text-danger">{error}</Text> : null}
         <Button
           label={sending ? "…" : "Send"}
           size="sm"
