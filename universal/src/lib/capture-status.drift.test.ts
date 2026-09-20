@@ -1,83 +1,53 @@
 /**
- * The app's copy of the status vocabulary must say exactly what the website says.
+ * The app's copy of the status vocabulary must be the website's, character for character.
  *
  * `capture-status.ts` exists twice because the app cannot import from the web package, and a
- * second copy of anything the owner reads is a promise to keep them identical. Neither file has a
- * runtime import, so both can be loaded here and compared answer by answer. A change to one alone
- * fails this, which is the whole point.
+ * second copy of anything the owner reads is a promise to keep the two identical.
+ *
+ * ⛔ THIS COMPARES THE FILES AS TEXT RATHER THAN IMPORTING BOTH MODULES, and that is not
+ * squeamishness. Importing `../../../web/lib/capture-status` works at runtime, because neither
+ * file has a runtime import, but it drags the web file into this package's tsc program, and from
+ * there `web/lib/meal-capture.ts` pulls in `web/lib/db.ts`, which needs `pg` and
+ * `@neondatabase/serverless`. Those are not installed here, so `npm run typecheck` passed on my
+ * machine (where the sibling node_modules happened to resolve) and failed in CI, which installs
+ * this package alone. Text is also the stronger check: identical bodies cannot behave differently.
+ *
+ * Only the leading block comment is allowed to differ, because each copy says where it sits.
  */
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
-import * as app from "./capture-status";
-import * as web from "../../../web/lib/capture-status";
-import type { CaptureCard } from "./capture-status";
 
-const card = (o: Partial<CaptureCard>): CaptureCard => ({
-  id: 1, slot: "breakfast", mode: "log", status: "captured", said: "two eggs",
-  summary: null, question: null, mealLogId: null, error: null, attempts: 0,
-  createdAt: "2026-09-20T07:00:00.000Z", updatedAt: "2026-09-20T07:00:00.000Z", ...o,
-});
+const here = dirname(fileURLToPath(import.meta.url));
+const APP = resolve(here, "capture-status.ts");
+const WEB = resolve(here, "../../../web/lib/capture-status.ts");
 
-/** Every shape a capture can be in when a strip renders it. */
-const CASES: CaptureCard[] = [
-  card({ status: "captured" }),
-  card({ status: "captured", attempts: 1, error: "timed out" }),
-  card({ status: "running" }),
-  card({ status: "ready", question: "What did you eat?" }),
-  card({ status: "ready", mode: "calibrate", summary: "Logged breakfast: two eggs" }),
-  card({ status: "ready", summary: "Ready" }),
-  card({ status: "logged", mealLogId: 277, summary: "Logged breakfast: two eggs" }),
-  card({ status: "failed", error: "no food in that sentence could be resolved" }),
-];
+/** Everything from the first import onwards, which is the part that has to match. */
+function body(path: string): string {
+  const s = readFileSync(path, "utf8");
+  const i = s.indexOf("import type");
+  if (i < 0) throw new Error(`${path} has no import to anchor on, so the copies cannot be compared`);
+  return s.slice(i);
+}
 
-describe("the app and the web say the same thing", () => {
-  it("agrees on every headline", () => {
-    for (const c of CASES) {
-      expect(app.captureHeadline(c), `headline for ${c.status}/${c.question ? "asked" : c.mode}`)
-        .toBe(web.captureHeadline(c));
-    }
+describe("the app's capture-status is the website's", () => {
+  it("has both copies on disk, because one missing is the failure this guards", () => {
+    expect(existsSync(APP)).toBe(true);
+    expect(existsSync(WEB)).toBe(true);
   });
 
-  it("agrees on every detail line", () => {
-    for (const c of CASES) {
-      expect(app.captureDetail(c), `detail for ${c.status}`).toBe(web.captureDetail(c));
-    }
+  it("is identical from the first import onwards", () => {
+    // A failure here means one copy was changed alone. Copy the web file's body over the app's,
+    // keeping the app's header, which is what `capture-status.ts` says to do.
+    expect(body(APP)).toBe(body(WEB));
   });
 
-  it("agrees on what counts as still moving", () => {
-    for (const c of CASES) expect(app.isSettled(c)).toBe(web.isSettled(c));
-    expect(app.anyInFlight(CASES)).toBe(web.anyInFlight(CASES));
-  });
-
-  it("agrees on how long ago something was", () => {
-    const now = new Date("2026-09-20T08:00:00.000Z").getTime();
-    for (const iso of [
-      "2026-09-20T07:59:40.000Z", "2026-09-20T07:45:00.000Z",
-      "2026-09-20T02:00:00.000Z", "2026-09-17T08:00:00.000Z", "2026-09-20T08:10:00.000Z",
-    ]) {
-      expect(app.shortAgo(iso, now), iso).toBe(web.shortAgo(iso, now));
+  it("keeps a header on each, so neither pretends to be the original", () => {
+    for (const p of [APP, WEB]) {
+      expect(readFileSync(p, "utf8").startsWith("/**")).toBe(true);
     }
-  });
-
-  it("agrees on what it reads out of a thread and a proposal", () => {
-    const threads = [
-      null,
-      [],
-      [{ role: "user" as const, text: "two eggs", image: null, at: "x" }],
-      [{ role: "user" as const, text: "", image: "/p.jpg", at: "x" },
-       { role: "agent" as const, text: "Logged breakfast", image: null, at: "y" }],
-    ];
-    for (const t of threads) {
-      expect(app.saidOf(t)).toBe(web.saidOf(t));
-      expect(app.summaryOf(t)).toBe(web.summaryOf(t));
-    }
-    for (const p of [null, undefined, "nonsense", { items: [] }, { items: [], question: "Which bread?" },
-                     { items: [{ query: "eggs" }], question: "Which bread?" }]) {
-      expect(app.questionOf(p)).toBe(web.questionOf(p));
-    }
-  });
-
-  it("exports the same names, so a new function cannot be added to one side only", () => {
-    const names = (m: object) => Object.keys(m).filter((k) => typeof (m as Record<string, unknown>)[k] === "function").sort();
-    expect(names(app)).toEqual(names(web));
+    // And the app's header has to name the arrangement, or the next reader will not know.
+    expect(readFileSync(APP, "utf8")).toContain("SECOND COPY");
   });
 });
