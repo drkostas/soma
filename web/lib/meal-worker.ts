@@ -231,8 +231,18 @@ export async function reviveStalled(sql: QueryFn, olderThanMinutes = 10): Promis
   return rows.length;
 }
 
-/** Drain the queue. Called after a capture and on a sweep, so a restart strands nothing. */
+/** Whether the meal agent can actually be spawned in this process. The app posts to
+ *  soma.gkos.dev, so most captures arrive on Vercel, which has no `claude` binary. Claiming one
+ *  there spends an attempt on a run that cannot succeed, and two of those mark the capture
+ *  `failed` before the Mac's sweep ever sees it. Same test chat-transport.ts uses. */
+export function agentRunsHere(): boolean {
+  return !process.env.VERCEL;
+}
+
+/** Drain the queue. Called after a capture and on a sweep, so a restart strands nothing.
+ *  A no-op where the agent cannot run, so the row waits for the sweep with its attempts intact. */
 export async function drainCaptures(sql: QueryFn, max = 5): Promise<number> {
+  if (!agentRunsHere()) return 0;
   let done = 0;
   for (let i = 0; i < max; i++) {
     const cap = await claimNextCapture(sql);
