@@ -132,3 +132,13 @@ export function stripCards<T extends Pick<CaptureCard, "status" | "question">>(c
   }
   return out;
 }
+
+/**
+ * What a reply will do, said plainly, because replacing a logged meal is not obvious and the
+ * opposite behaviour would be alarming. Shared so the app and the website promise the same thing.
+ */
+export function replyHint(c: Pick<CaptureCard, "status" | "question" | "mealLogId">): string {
+  if (c.question) return "Answer it";
+  if (c.mealLogId != null) return "Add or correct, this replaces the meal";
+  return "Add or correct";
+}

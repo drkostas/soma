@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { anyInFlight, captureDetail, captureHeadline, isSettled, questionOf, saidOf, shortAgo, stripCards, summaryOf, SETTLED_SHOWN, type CaptureCard } from "./capture-status";
+import { anyInFlight, captureDetail, captureHeadline, isSettled, questionOf, replyHint, saidOf, shortAgo, stripCards, summaryOf, SETTLED_SHOWN, type CaptureCard } from "./capture-status";
 
 const card = (o: Partial<CaptureCard>): CaptureCard => ({
   id: 1, slot: "breakfast", mode: "log", status: "captured", said: "two eggs",
@@ -134,5 +134,21 @@ describe("stripCards", () => {
       card({ id: 3, status: "failed" }), card({ id: 4, status: "logged" }),
     ];
     expect(stripCards(cards).map((c) => c.id)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("replyHint", () => {
+  it("asks for the answer when the agent asked a question", () => {
+    expect(replyHint(card({ status: "ready", question: "Which bread?" }))).toBe("Answer it");
+  });
+  it("warns that a reply replaces a meal already logged, because that is not obvious", () => {
+    expect(replyHint(card({ status: "logged", mealLogId: 277 }))).toContain("replaces the meal");
+  });
+  it("says nothing about replacing when there is no meal yet", () => {
+    expect(replyHint(card({ status: "captured" }))).toBe("Add or correct");
+    expect(replyHint(card({ status: "ready", mode: "calibrate" }))).toBe("Add or correct");
+  });
+  it("puts the question first even on a capture that logged something earlier", () => {
+    expect(replyHint(card({ status: "ready", question: "Which bread?", mealLogId: 277 }))).toBe("Answer it");
   });
 });
