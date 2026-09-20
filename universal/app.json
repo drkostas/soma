@@ -37,7 +37,14 @@
       "./plugins/soma-widget/withSomaWidget",
       "./plugins/emulator-cleartext/withEmulatorCleartext",
       "expo-sharing",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "soma uses the microphone so you can say what you ate instead of typing it.",
+          "speechRecognitionPermission": "soma turns what you say about a meal into text on your device."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

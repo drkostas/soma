@@ -9,9 +9,34 @@
  * feature exists to remove.
  */
 
-import React, { useEffect, useState } from "react";
-import { Camera, Loader2, Send, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Camera, Loader2, Mic, Send, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { canDictate, mergeTranscript } from "@/lib/dictation";
+
+/**
+ * The browser's own speech recognition, which is the same on-device idea as the app's Speak
+ * button. Only the fields this box reads are declared, because the DOM lib does not ship these
+ * types and a full definition would be a lot of surface for three properties.
+ */
+interface WebSpeech {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+}
+type WebSpeechCtor = new () => WebSpeech;
+
+/** Chrome and Safari expose it under the prefix; Firefox does not have it at all. */
+function speechCtor(): WebSpeechCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { SpeechRecognition?: WebSpeechCtor; webkitSpeechRecognition?: WebSpeechCtor };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
 
 export type CaptureMode = "log" | "calibrate";
 
@@ -42,6 +67,43 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
   const [sending, setSending] = useState(false);
   const [ack, setAck] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  // Whether this browser has speech recognition at all. Resolved after mount, because the server
+  // render has no window and a button that appears and then vanishes is worse than one that waits.
+  const [speechReady, setSpeechReady] = useState(false);
+  const recognition = useRef<WebSpeech | null>(null);
+  // What was in the box when recording started: each result carries the whole utterance, so the
+  // text is rebuilt from this rather than appended to.
+  const dictationBase = useRef("");
+
+  useEffect(() => { setSpeechReady(speechCtor() !== null); }, []);
+
+  const dictate = () => {
+    if (recording) { recognition.current?.stop(); return; }
+    const Ctor = speechCtor();
+    if (!Ctor) return;
+    setError(null);
+    const r = new Ctor();
+    r.lang = "en-US";
+    r.continuous = false;
+    // Interim results are what make it feel live: the words appear as they are said.
+    r.interimResults = true;
+    r.onresult = (e) => {
+      const last = e.results[e.results.length - 1];
+      const said = last?.[0]?.transcript ?? "";
+      setText(mergeTranscript(dictationBase.current, said));
+    };
+    r.onend = () => setRecording(false);
+    r.onerror = (e) => {
+      setRecording(false);
+      // Someone pressing it and saying nothing is not worth a message.
+      if (e.error !== "no-speech" && e.error !== "aborted") setError("I could not hear that.");
+    };
+    recognition.current = r;
+    dictationBase.current = text;
+    setRecording(true);
+    r.start();
+  };
 
   // The remembered choice, fetched once. The prop is the fallback until it arrives, so the toggle
   // never sits in a state the owner did not pick.
@@ -123,6 +185,18 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
       )}
 
       <div className="flex items-center gap-3">
+        {canDictate(speechReady, true) && (
+          <button
+            type="button"
+            onClick={dictate}
+            title={recording ? "Stop listening" : "Say what you ate"}
+            aria-label={recording ? "Stop listening" : "Say what you ate"}
+            className={recording ? "text-destructive" : "text-muted-foreground hover:text-foreground"}
+          >
+            {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </button>
+        )}
+
         <label className="cursor-pointer text-muted-foreground hover:text-foreground" title="Attach a photo">
           <Camera className="h-4 w-4" />
           <input
