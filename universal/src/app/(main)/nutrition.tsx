@@ -447,8 +447,11 @@ export default function NutritionScreen() {
               const over = left < 0;
               return (
                 <>
+                  {/* ⛔ Only blank this when there is genuinely nothing to show. `loading` alone
+                      made the headline flash "…" on EVERY refresh, including the one that runs
+                      after each capture, above a subtitle still reading "1,327 of 1,563 eaten". */}
                   <Text variant="display" style={over ? { color: "#e06060" } : undefined}>
-                    {loading ? "…" : over ? `+${Math.abs(Math.round(left)).toLocaleString()}` : Math.round(left).toLocaleString()}
+                    {remaining == null ? "…" : over ? `+${Math.abs(Math.round(left)).toLocaleString()}` : Math.round(left).toLocaleString()}
                   </Text>
                   <Text variant="caption" className="text-text-muted">
                     {over ? "over goal" : "kcal left"} · {(consumed?.calories ?? 0).toLocaleString()} of {targetCal.toLocaleString()} eaten
@@ -457,7 +460,7 @@ export default function NutritionScreen() {
               );
             })() : (
               <>
-                <Text variant="display">{loading ? "…" : (consumed?.calories ?? 0).toLocaleString()}</Text>
+                <Text variant="display">{consumed == null ? "…" : (consumed.calories ?? 0).toLocaleString()}</Text>
                 <Text variant="caption" className="text-text-muted">
                   {loading ? "" : "No plan for this day. Targets exist from the first time today or a future day is opened; a past day that was never opened stays without one."}
                 </Text>
