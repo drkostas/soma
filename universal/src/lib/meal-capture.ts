@@ -88,3 +88,18 @@ export async function fetchRecentCaptures(date?: string): Promise<CaptureCard[]>
     return [];
   }
 }
+
+/** Reply to a capture: text, a photo, or both. The whole thread is re-run, and a meal already
+ *  logged is replaced rather than joined by a second one. */
+export async function replyToCapture(id: number, text: string, image: string | null): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/nutrition/capture`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+      body: JSON.stringify({ id, text: text.trim(), image }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
