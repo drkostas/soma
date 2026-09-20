@@ -7,7 +7,7 @@ import webpush from "web-push";
 import type { QueryFn } from "./db";
 import { num, rec } from "@/lib/json";
 
-export type PushEvent = "sync" | "sync_workout" | "sync_run" | "sync_error" | "milestone" | "playlist_ready";
+export type PushEvent = "sync" | "sync_workout" | "sync_run" | "sync_error" | "milestone" | "playlist_ready" | "meal_ready";
 
 const PREF_KEY: Partial<Record<PushEvent, string>> = {
   sync_workout: "on_sync_workout",

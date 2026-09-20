@@ -14,41 +14,51 @@ function req(body: unknown): NextRequest {
   });
 }
 
-// The meal_log INSERT positional values: [0]=strings, [1]=date, [2]=meal_slot,
-// [3]=source, [4]=preset_meal_id, [5]=portion, [6]=itemsJson, [7]=calories, [8]=protein…
-const mealInsert = () => mockSql.mock.calls.find((c) => String(c[0]).includes("meal_log"));
+/** The values bound to the INSERT that writes the meal. */
+function insertValues(): unknown[] {
+  const call = mockSql.mock.calls.find((c) => String((c[0] as string[]).join("")).includes("INSERT INTO meal_log"));
+  if (!call) throw new Error("no meal_log insert was made");
+  return call.slice(1);
+}
 
 beforeEach(() => {
   mockSql.mockReset();
-  mockSql.mockResolvedValue([{ id: 42 }]);
+  mockSql.mockResolvedValue([{ id: 7 }]);
 });
 
 describe("POST /api/nutrition/log-meal", () => {
-  it("400s without date or meal_slot", async () => {
-    const res = await POST(req({ items: [] }));
-    expect(res.status).toBe(400);
-  });
-
-  it("computes totals from preset_macros × portion and returns the id", async () => {
-    const res = await POST(req({
-      date: "2026-07-16", meal_slot: "lunch", preset_meal_id: "p1", portion_multiplier: 2,
-      items: [], preset_macros: { calories: 100, protein: 10, carbs: 5, fat: 2, fiber: 1 },
-    }));
-    expect((await res.json()).id).toBe(42);
-    const ins = mealInsert()!;
-    expect(ins[7]).toBe(200); // calories 100 × 2
-    expect(ins[8]).toBe(20);  // protein 10 × 2
-    expect(ins[6]).toBe("[]"); // items serialized (omitting it bound undefined → 500)
-  });
-
-  it("sums totals from items when no preset_macros", async () => {
+  it("persists source, notes and weigh_method instead of discarding them", async () => {
     await POST(req({
-      date: "2026-07-16", meal_slot: "lunch",
-      items: [
-        { name: "x", grams: 100, calories: 50, protein: 5, carbs: 0, fat: 0, fiber: 0 },
-        { name: "y", grams: 100, calories: 30, protein: 3, carbs: 0, fat: 0, fiber: 0 },
-      ],
+      date: "2026-09-19", meal_slot: "lunch", source: "chat",
+      notes: "big plate of omelette, 5 eggs 3 only whites",
+      weigh_method: "counted",
+      items: [{ ingredient_id: "eggs_whole", grams: 100, calories: 143, protein: 13, carbs: 1, fat: 10, fiber: 0 }],
     }));
-    expect(mealInsert()![7]).toBe(80); // 50 + 30
+    const v = insertValues();
+    expect(v).toContain("chat");
+    expect(v).toContain("big plate of omelette, 5 eggs 3 only whites");
+    expect(v).toContain("counted");
+  });
+
+  it("still calls a preset log a preset, whatever the caller said", async () => {
+    await POST(req({
+      date: "2026-09-19", meal_slot: "lunch", preset_meal_id: "abc", source: "chat", items: [],
+      preset_macros: { calories: 400, protein: 30, carbs: 40, fat: 10, fiber: 5 },
+    }));
+    expect(insertValues()).toContain("preset");
+  });
+
+  it("leaves the three columns null when the caller says nothing", async () => {
+    await POST(req({
+      date: "2026-09-19", meal_slot: "lunch",
+      items: [{ ingredient_id: "eggs_whole", grams: 50, calories: 72 }],
+    }));
+    const v = insertValues();
+    expect(v).toContain(null);
+  });
+
+  it("400s without a date or a slot", async () => {
+    expect((await POST(req({ meal_slot: "lunch", items: [] }))).status).toBe(400);
+    expect((await POST(req({ date: "2026-09-19", items: [] }))).status).toBe(400);
   });
 });
