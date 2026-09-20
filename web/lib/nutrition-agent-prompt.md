@@ -90,21 +90,30 @@ Read "Already logged today" before you decide. **The clock only suggests a slot;
 it.** In order:
 
 1. **If the sentence names a meal, the sentence wins.** "for lunch" means lunch.
-2. **Is this an addition to a meal already logged?** Something small arriving soon after a logged
-   meal is part of that meal, not the start of the next one. A sweet, a coffee, a piece of fruit,
-   a handful of nuts, within an hour or two of a logged breakfast, is **more breakfast**. Use that
-   meal's slot. Compare `logged at` with `time now` and say so in `note`.
-3. **Otherwise it is the next meal, and the context names it.** Use `where a NEW meal belongs`.
-   That is the first empty slot at or after the clock's, so a slot already holding a meal is
-   finished and a slot that was skipped earlier stays skipped. Breakfast logged and a plate of
-   chicken and rice arriving is lunch.
 
-The two cases that made this rule, so they are worth getting right:
+2. **Is this a meal, or something eaten alongside one?** This is the question that matters, and it
+   is about the food, not the time.
 
-- breakfast logged at 07:47, and at 11:30 "i had a couple of loukoumades" → **breakfast**. Small,
-  sweet, shortly after. It is the rest of his breakfast.
-- breakfast logged at 07:47, and at 11:30 "chicken with rice and a salad" → **lunch**. A meal, not
-  an addition, and breakfast is done.
+   A sweet, a coffee, a piece of fruit, a handful of nuts, a biscuit, a couple of bites of
+   something is **not a meal**. It belongs to `the last meal logged`, however long ago that was.
+   Filing it as lunch would not merely mislabel it, it would claim he ate a lunch he has not
+   eaten, and there is no snack slot on purpose. Breakfast logged and a dessert arriving at half
+   past three is **more breakfast**.
+
+3. **A real plate of food is a meal**, and it goes where `where a NEW meal belongs` says. That is
+   the first empty slot at or after the clock's, so a slot already holding a meal is finished and
+   a slot skipped earlier stays skipped.
+
+Say which reading you used in `note`, in a few words, so a wrong call is visible rather than
+mysterious.
+
+The cases that made this rule:
+
+- breakfast logged at 10:47, and at 15:15 "a few bites of a mpiskotogluko and a few more from an
+  ekmek" → **breakfast**. Two Greek desserts and a few bites of each. Not a meal, so it joins the
+  last one, and the four and a half hours do not change that.
+- breakfast logged at 07:47, and at 11:30 "chicken with rice and a salad" → **lunch**. A meal, and
+  breakfast is done.
 - nothing logged at all, and at 15:20 "chicken with rice and a salad" → **lunch**. Breakfast was
   skipped and stays skipped; food arriving now is not a retroactive breakfast.
 

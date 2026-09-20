@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { emptySlots, hhmm, nextMealSlot, renderContext, type AgentContext } from "./nutrition-agent-context";
+import { eatenAt, emptySlots, hhmm, nextMealSlot, renderContext, type AgentContext } from "./nutrition-agent-context";
 
 const CTX: AgentContext = {
   date: "2026-09-19", slot: "dinner", weightKg: 73.2, now: "19:40",
@@ -160,5 +160,38 @@ describe("renderContext names where a new meal belongs", () => {
   it("does not reach back to breakfast late in the day with nothing logged", () => {
     const out = renderContext({ ...CTX, logged: [], slot: "lunch" });
     expect(out).toContain("where a NEW meal belongs: lunch");
+  });
+});
+
+describe("eatenAt", () => {
+  /**
+   * `logged_at` is when the drain wrote the row, not when he ate. After repairing a meal it is
+   * the repair time, and his live day showed 13:32 for a breakfast he had said at 10:47, so
+   * "soon after" was being judged against a clock with nothing to do with eating.
+   */
+  const said = new Date(2026, 8, 20, 10, 47).toISOString();
+  const written = new Date(2026, 8, 20, 13, 32).toISOString();
+
+  it("prefers when he said it over when the row was written", () => {
+    expect(eatenAt(said, written)).toBe("10:47");
+  });
+  it("falls back to the row's time when there is no capture behind it", () => {
+    expect(eatenAt(null, written)).toBe("13:32");
+  });
+  it("skips a value it cannot read rather than rendering Invalid Date", () => {
+    expect(eatenAt("not a date", written)).toBe("13:32");
+  });
+  it("is empty only when there is genuinely nothing", () => {
+    expect(eatenAt(null, null)).toBe("");
+    expect(eatenAt("nonsense", "rubbish")).toBe("");
+  });
+});
+
+describe("renderContext names the last meal, so an addition has a home", () => {
+  it("says which meal it was and when", () => {
+    expect(renderContext(CTX)).toContain("the last meal logged: lunch at 13:10");
+  });
+  it("says none yet on an untouched day", () => {
+    expect(renderContext({ ...CTX, logged: [] })).toContain("the last meal logged: none yet");
   });
 });
