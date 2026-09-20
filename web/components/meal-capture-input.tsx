@@ -124,10 +124,12 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
     form.append("file", file);
     try {
       const res = await fetch("/api/nutrition/capture/upload", { method: "POST", body: form });
-      if (res.ok) setImage(((await res.json()) as { path: string }).path);
-      else setError("That photo would not upload.");
-    } catch {
-      setError("That photo would not upload.");
+      const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
+      // The reason, not a shrug. A 413, a 415 and a dead network used to read identically.
+      if (res.ok && body.path) setImage(body.path);
+      else setError(body.error ?? `The upload failed (${res.status}).`);
+    } catch (e) {
+      setError(`soma could not reach the server (${(e as Error).message ?? "no connection"}).`);
     }
   };
 
@@ -184,6 +186,10 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
         </div>
       )}
 
+      {/* ⛔ Its own line. Sharing the control row behind a flex-1 spacer pushed Send off the right
+          edge of the phone's screen the first time a message was long. */}
+      {error && <div className="text-xs text-destructive">{error}</div>}
+
       <div className="flex items-center gap-3">
         {canDictate(speechReady, true) && (
           <button
@@ -216,7 +222,6 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
         <span className="flex-1" />
 
         {ack && <span className="text-xs text-muted-foreground">{ack}</span>}
-        {error && <span className="text-xs text-destructive">{error}</span>}
 
         <Button size="sm" disabled={sending || (!text.trim() && !image)} onClick={() => void send()}>
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

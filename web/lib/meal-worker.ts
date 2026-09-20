@@ -10,10 +10,11 @@ import type { QueryFn } from "./db";
 import { claimNextCapture, finishCapture, MAX_ATTEMPTS, type CaptureRow, type CaptureStatus } from "./meal-capture";
 import { fastParse, type CatalogEntry } from "./meal-fast-path";
 import { buildAgentContext, renderContext } from "./nutrition-agent-context";
-import { runMealAgent, type ProposalItem } from "./nutrition-agent";
+import { runMealAgent, type ProposalItem, uploadsDir } from "./nutrition-agent";
 import { getPortionBands } from "./portion-history";
 import { resolveQuantities, type ResolvableItem, type ResolvedItem } from "./meal-quantity";
 import { enforcePlausibility, getHistoryStats } from "./meal-plausibility";
+import { materialise } from "./capture-image";
 import type { Ingredient } from "./portion-solver";
 import { sendPush } from "./notify-push";
 
@@ -176,9 +177,14 @@ export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<voi
       summary = `Logged ${slot}: ${lastUser!.text}`;
     } else {
       const ctx = renderContext(await buildAgentContext(sql, cap.date, slot, slotKcal, dayLeft));
-      const run = await runMealAgent(
-        ctx, cap.messages.map((m) => ({ role: m.role, text: m.text, image: m.image })),
-      );
+      // The agent opens a file, and a photo from the phone lives in the database, so write it out
+      // here. A reference that is already a path comes back untouched.
+      const thread: Array<{ role: "user" | "agent"; text: string; image: string | null }> = [];
+      for (const m of cap.messages) {
+        const image = m.image ? await materialise(sql, m.image, uploadsDir()) : null;
+        thread.push({ role: m.role, text: m.text, image });
+      }
+      const run = await runMealAgent(ctx, thread);
       proposal = run.proposal;
       resolvedSlot = run.proposal.slot;
       summary = run.proposal.summary;

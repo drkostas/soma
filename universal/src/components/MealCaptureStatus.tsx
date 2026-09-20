@@ -38,6 +38,7 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
   const [reply, setReply] = useState("");
   const [replyImage, setReplyImage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [bump, setBump] = useState(0);
   const dictationBase = useRef("");
@@ -61,8 +62,8 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
   const attach = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 });
     if (res.canceled || !res.assets[0]) return;
-    const path = await uploadCapturePhoto(res.assets[0].uri);
-    if (path) setReplyImage(path);
+    const up = await uploadCapturePhoto(res.assets[0].uri);
+    if ("ref" in up) { setReplyImage(up.ref); setReplyError(null); } else setReplyError(up.error);
   };
 
   const submitReply = async (id: number) => {
@@ -129,6 +130,9 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
                   style={{ color: "white", fontSize: 14, minHeight: 36 }}
                   testID={`capture-reply-${c.id}`}
                 />
+                {replyError ? (
+                  <Text variant="caption" style={{ color: TONE.danger }}>{replyError}</Text>
+                ) : null}
                 <View className="flex-row items-center gap-3">
                   {canDictate(true, null) ? (
                     <Pressable onPress={dictate} testID={`capture-reply-speak-${c.id}`}>

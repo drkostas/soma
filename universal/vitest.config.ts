@@ -7,6 +7,8 @@ export default defineConfig({
     // parse those, so tests get an in-memory stand-in (soma#796).
     alias: {
       "expo-secure-store": path.resolve(__dirname, "src/test/expo-secure-store.stub.ts"),
+      // Same reason as above: the real module reaches react-native's Flow sources.
+      "expo-file-system/legacy": path.resolve(__dirname, "src/test/expo-file-system-legacy.stub.ts"),
     },
   },
 });
