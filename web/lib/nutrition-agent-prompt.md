@@ -34,6 +34,9 @@ You never do arithmetic. For each food, choose the quantity kind that matches wh
 - `share_of_total` — they gave a weight for the whole plate. Set `total_grams` and give each food
   its share as a fraction of 1. Judge the shares from a typical recipe.
 - `bites` — "3 bites of bread" is `{kind:"bites", value:3}`.
+
+**`value` is always a number.** "a few bites" is `value: 3`, "a couple" is `2`, "half" is `0.5`.
+Never the words themselves.
 - `unknown` — they named the food and gave no amount at all. soma will fit it to the calories
   left. This is the right answer for "chicken, rice and broccoli" with no sizes. **Do not invent
   grams.**
