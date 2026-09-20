@@ -24,6 +24,7 @@ import { Text, Card, Button } from "soma-style";
 import {
   captureAck, captureMeal, getCaptureMode, setCaptureMode, uploadCapturePhoto, type CaptureMode,
 } from "../lib/meal-capture";
+import { shrinkPhoto } from "../lib/shrink-photo";
 import { canDictate, dictateLabel, mergeTranscript } from "../lib/dictation";
 
 interface Props {
@@ -88,7 +89,9 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
     setError(null);
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 });
     if (res.canceled || !res.assets[0]) return;
-    const up = await uploadCapturePhoto(res.assets[0].uri);
+    const a = res.assets[0];
+    const small = await shrinkPhoto(a.uri, a.width, a.height);
+    const up = await uploadCapturePhoto(small);
     if ("ref" in up) setImage(up.ref); else setError(up.error);
   };
 

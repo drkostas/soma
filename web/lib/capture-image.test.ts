@@ -47,9 +47,11 @@ describe("refuse", () => {
   });
 
   it("says how big the photo was and what the limit is", () => {
-    const why = refuse("image/jpeg", 15 * 1024 * 1024);
-    expect(why).toContain("15.0 MB");
-    expect(why).toContain("10 MB");
+    // Derived, not hardcoded: the limit is bounded by the db gateway and has moved once already.
+    const over = MAX_BYTES + 5 * 1024 * 1024;
+    const why = refuse("image/jpeg", over);
+    expect(why).toContain(`${(over / 1024 / 1024).toFixed(1)} MB`);
+    expect(why).toContain(`${MAX_BYTES / 1024 / 1024} MB`);
   });
 
   it("accepts a photo right on the limit and refuses one just over", () => {

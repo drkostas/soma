@@ -54,7 +54,21 @@ export async function POST(req: NextRequest) {
   const why = refuse(read.mime, read.bytes.length);
   if (why) return NextResponse.json({ error: why }, { status: 415 });
 
-  const path = await putImage(getDb(), read.mime, read.bytes);
+  // ⛔ NEVER 500 HERE. Storing the bytes crosses the db gateway, which refused a real photo with
+  // 413 "body too large" while its limit was 1 MB of SQL, and the phone showed "The upload failed
+  // (500)", which told nobody anything. Every other refusal on this route says what happened.
+  let path: string;
+  try {
+    path = await putImage(getDb(), read.mime, read.bytes);
+  } catch (e) {
+    const msg = (e as Error).message ?? "";
+    const tooLarge = /too large|413|payload/i.test(msg);
+    return NextResponse.json({
+      error: tooLarge
+        ? `soma could not store a photo that size (${(read.bytes.length / 1024 / 1024).toFixed(1)} MB). A smaller one works.`
+        : `soma could not store that photo (${msg.slice(0, 120)}).`,
+    }, { status: tooLarge ? 413 : 500 });
+  }
   // `path` is kept as the field name because the message shape has not changed: it is a reference
   // the worker resolves, and for the website's older uploads it genuinely was a path.
   return NextResponse.json({ path });

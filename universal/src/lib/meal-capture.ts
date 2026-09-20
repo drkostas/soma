@@ -67,7 +67,7 @@ export type PhotoUpload = { ref: string } | { error: string };
 
 /** The server is authoritative; this exists so the phone can say the same thing without sending
  *  ten megabytes to find out. Keep it equal to `MAX_BYTES` in `web/lib/capture-image.ts`. */
-export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+export const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 
 /**
  * Upload a photo picked on the phone.

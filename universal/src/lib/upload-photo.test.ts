@@ -87,7 +87,7 @@ describe("uploadCapturePhoto", () => {
     const fetchMock = vi.fn(async () => okJson({ path: "db:x" }));
     vi.stubGlobal("fetch", fetchMock);
     const r = await uploadCapturePhoto("file:///x/huge.jpg");
-    expect("error" in r && r.error).toContain("and the limit is 10 MB");
+    expect("error" in r && r.error).toContain(`and the limit is ${MAX_PHOTO_BYTES / 1024 / 1024} MB`);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -103,5 +103,14 @@ describe("uploadCapturePhoto", () => {
     vi.stubGlobal("fetch", vi.fn(async () => okJson({})));
     const r = await uploadCapturePhoto("file:///x/meal.jpg");
     expect("error" in r && r.error).toContain("without a reference");
+  });
+});
+
+describe("the two caps agree", () => {
+  it("is 3 MB, matching web/lib/capture-image.ts, which the db gateway bounds", () => {
+    // A photo much over this cannot reach the database: the bytes go in as a bytea parameter and
+    // the Neon HTTP driver sends a Buffer as a hex string, so the request is twice the photo, and
+    // the gateway allows 8 MB.
+    expect(MAX_PHOTO_BYTES).toBe(3 * 1024 * 1024);
   });
 });

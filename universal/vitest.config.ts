@@ -9,6 +9,7 @@ export default defineConfig({
       "expo-secure-store": path.resolve(__dirname, "src/test/expo-secure-store.stub.ts"),
       // Same reason as above: the real module reaches react-native's Flow sources.
       "expo-file-system/legacy": path.resolve(__dirname, "src/test/expo-file-system-legacy.stub.ts"),
+      "expo-image-manipulator": path.resolve(__dirname, "src/test/expo-image-manipulator.stub.ts"),
     },
   },
 });
