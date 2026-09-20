@@ -25,6 +25,7 @@ import {
   captureAck, captureMeal, getCaptureMode, setCaptureMode, uploadCapturePhoto, type CaptureMode,
 } from "../lib/meal-capture";
 import { shrinkPhoto } from "../lib/shrink-photo";
+import { TONE } from "../lib/capture-tone";
 import { canDictate, dictateLabel, mergeTranscript } from "../lib/dictation";
 
 interface Props {
@@ -135,13 +136,19 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
           <Text variant="caption" className="text-text-secondary">photo attached — tap to remove</Text>
         </Pressable>
       ) : null}
+      {/* ⛔ Messages go ABOVE the control row, never inside it. Anything in that row shares the
+          width with Send, and both times a message appeared there it pushed Send off the right
+          edge of the phone. The error was moved once and the acknowledgement was left behind. */}
       {error ? (
-        <Text variant="caption" style={{ color: "#e06060" }} className="mt-1">{error}</Text>
+        <Text variant="caption" style={{ color: TONE.danger }} className="mt-1">{error}</Text>
+      ) : null}
+      {ack && !error ? (
+        <Text variant="caption" className="text-text-secondary mt-1">{ack}</Text>
       ) : null}
       <View className="flex-row items-center gap-3 mt-2">
         {canDictate(true, permitted) ? (
           <Pressable onPress={dictate} testID="meal-capture-speak">
-            <Text variant="caption" style={{ color: recording ? "#e06060" : "#a0b4c0" }}>
+            <Text variant="caption" style={{ color: recording ? TONE.danger : TONE.quiet }}>
               {dictateLabel(recording)}
             </Text>
           </Pressable>
@@ -153,7 +160,6 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
           <Text variant="caption" className="text-text-secondary">{mode === "calibrate" ? "☑" : "☐"} Let me check it first</Text>
         </Pressable>
         <View className="flex-1" />
-        {ack ? <Text variant="caption" className="text-text-secondary">{ack}</Text> : null}
         <Button
           label={sending ? "…" : "Send"}
           size="sm"

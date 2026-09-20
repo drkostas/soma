@@ -186,9 +186,11 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
         </div>
       )}
 
-      {/* ⛔ Its own line. Sharing the control row behind a flex-1 spacer pushed Send off the right
-          edge of the phone's screen the first time a message was long. */}
+      {/* ⛔ Messages go ABOVE the control row, never inside it. Anything in that row shares the
+          width with Send, and on the phone both the error and then the acknowledgement pushed Send
+          off the right edge. Moving only one of them is how it happened twice. */}
       {error && <div className="text-xs text-destructive">{error}</div>}
+      {ack && !error && <div className="text-xs text-muted-foreground">{ack}</div>}
 
       <div className="flex items-center gap-3">
         {canDictate(speechReady, true) && (
@@ -220,8 +222,6 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
         </label>
 
         <span className="flex-1" />
-
-        {ack && <span className="text-xs text-muted-foreground">{ack}</span>}
 
         <Button size="sm" disabled={sending || (!text.trim() && !image)} onClick={() => void send()}>
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
