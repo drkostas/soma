@@ -40,7 +40,9 @@ export function isSettled(c: Pick<CaptureCard, "status" | "question">): boolean 
 }
 
 /** True while anything on screen is still moving, which is the only reason to poll. */
-export function anyInFlight(cards: Array<Pick<CaptureCard, "status" | "question">>): boolean {
+// `T[]` rather than `Array<T>`: the app package forbids `Array<T>`, and this file is copied
+// there byte for byte, so it has to satisfy the stricter of the two lint configs.
+export function anyInFlight(cards: Pick<CaptureCard, "status" | "question">[]): boolean {
   return cards.some((c) => !isSettled(c));
 }
 
