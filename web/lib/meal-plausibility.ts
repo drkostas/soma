@@ -44,6 +44,15 @@ export const FALLBACK_DAY_KCAL = 3000;
 export const MIN_SHARE_OF_SLOT = 0.5;
 
 /**
+ * How far over the ceiling a meal has to be before this does anything.
+ *
+ * Without it the guard trims a 30 kcal guess by 13 and announces that the meal was "more than you
+ * ever eat", which is both untrue at that scale and noise. It exists to catch the breakfast that
+ * came to 4,129, not to arbitrate the last biscuit.
+ */
+export const MIN_OVERSHOOT_KCAL = 120;
+
+/**
  * How far above the mean a meal may sit before the guessed part is pulled back.
  * Three at the slot level, because one meal is allowed to be an outlier. Two at the day level,
  * because a day of outliers is not a day he has ever had.
@@ -51,10 +60,16 @@ export const MIN_SHARE_OF_SLOT = 0.5;
 export const SLOT_SIGMA = 3;
 export const DAY_SIGMA = 2;
 
-/** The weigh methods that mean the owner actually gave the amount. */
+/** The weigh methods that mean every amount in the meal came from him. */
 const STATED: ReadonlySet<WeighMethod> = new Set<WeighMethod>(["weighed", "counted", "portion_words", "total_split", "bites"]);
 
-/** True when the amounts in this meal came from him rather than from a fit. */
+/**
+ * True when every amount in this meal came from him rather than from a fit.
+ *
+ * ⚠️ Kept because it is still the cheap early exit, but it is NOT what decides which items may be
+ * scaled. `mixed` means some amounts were given and some were not, and deciding per meal scaled a
+ * weighed 200 g of chicken down to 81 g because a guess about nuts was wrong. Per item, below.
+ */
 export function amountsWereStated(method: WeighMethod): boolean {
   return STATED.has(method);
 }
@@ -112,12 +127,24 @@ export function enforcePlausibility(input: PlausibilityInput): PlausibilityResul
   // The day may tighten the slot's ceiling, but never below half of it. See MIN_SHARE_OF_SLOT.
   const floor = bySlot * MIN_SHARE_OF_SLOT;
   const ceiling = Math.max(floor, Math.min(bySlot, headroom));
-  if (before <= ceiling || before <= 0) return { items, note: null, before, after: before };
+  // Over the ceiling, but not by enough to be worth touching or mentioning.
+  if (before <= ceiling + MIN_OVERSHOOT_KCAL || before <= 0) {
+    return { items, note: null, before, after: before };
+  }
 
-  // Scale every item by the same factor: the proportions came from the agent reading the plate,
-  // and only the overall size is in doubt.
-  const factor = ceiling / before;
-  const scaled = items.map((i) => ({
+  // ⛔ ONLY THE GUESSES MAY BE SCALED. An amount he gave is a fact about his morning; a fitted
+  // amount is this program's opinion, and an opinion is what gets corrected. Deciding per meal
+  // scaled a weighed 200 g of chicken to 81 g because a guess about nuts was wrong.
+  const statedKcal = items.filter((i) => i.stated).reduce((s, i) => s + i.calories, 0);
+  const guessedKcal = before - statedKcal;
+  // What the guesses are allowed to come to. Never negative: if what he stated already exceeds the
+  // ceiling then the meal is his, not ours, and there is nothing here to correct.
+  const roomForGuesses = ceiling - statedKcal;
+  if (guessedKcal <= 0 || roomForGuesses >= guessedKcal) {
+    return { items, note: null, before, after: before };
+  }
+  const factor = Math.max(0, roomForGuesses) / guessedKcal;
+  const scaled = items.map((i) => (i.stated ? i : {
     ...i,
     grams: Math.max(1, Math.round(i.grams * factor)),
     calories: Math.round(i.calories * factor),
@@ -128,9 +155,12 @@ export function enforcePlausibility(input: PlausibilityInput): PlausibilityResul
   }));
   const after = Math.round(kcal(scaled));
   const limiter = ceiling < bySlot ? "day" : slot.replace(/_/g, " ");
+  // "the amounts" would be a lie when he gave some of them, and the whole point of this change is
+  // that those are left alone.
+  const whose = statedKcal > 0 ? "some of the amounts" : "the amounts";
   return {
     items: scaled,
-    note: `I had to guess the amounts, and my first guess came to ${before} kcal, which is more than you ever eat. Brought it down to ${after} to fit your usual ${limiter}. Say the weights if that is wrong.`,
+    note: `I had to guess ${whose}, and my first guess came to ${before} kcal, which is more than you ever eat. Brought it down to ${after} to fit your usual ${limiter}. Say the weights if that is wrong.`,
     before,
     after,
   };
