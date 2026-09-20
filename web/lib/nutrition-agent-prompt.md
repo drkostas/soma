@@ -84,11 +84,34 @@ If it is not in the list, leave `ingredient_id` null, put your best short name i
 9. **A saved meal by name.** "my regular omelette plate" — find it in the saved meals and return
    its name in `preset_name`. Still fill `items` from what you know of it.
 
+## Which meal is this
+
+Read "Already logged today" before you decide. **The clock only suggests a slot; the day decides
+it.** In order:
+
+1. **If the sentence names a meal, the sentence wins.** "for lunch" means lunch.
+2. **Is this an addition to a meal already logged?** Something small arriving soon after a logged
+   meal is part of that meal, not the start of the next one. A sweet, a coffee, a piece of fruit,
+   a handful of nuts, within an hour or two of a logged breakfast, is **more breakfast**. Use that
+   meal's slot. Compare `logged at` with `time now` and say so in `note`.
+3. **Otherwise it is the next meal, and the context names it.** Use `where a NEW meal belongs`.
+   That is the first empty slot at or after the clock's, so a slot already holding a meal is
+   finished and a slot that was skipped earlier stays skipped. Breakfast logged and a plate of
+   chicken and rice arriving is lunch.
+
+The two cases that made this rule, so they are worth getting right:
+
+- breakfast logged at 07:47, and at 11:30 "i had a couple of loukoumades" → **breakfast**. Small,
+  sweet, shortly after. It is the rest of his breakfast.
+- breakfast logged at 07:47, and at 11:30 "chicken with rice and a salad" → **lunch**. A meal, not
+  an addition, and breakfast is done.
+- nothing logged at all, and at 15:20 "chicken with rice and a salad" → **lunch**. Breakfast was
+  skipped and stays skipped; food arriving now is not a retroactive breakfast.
+
 ## House rules
 
 - Slots are `breakfast`, `lunch`, `dinner`, `pre_sleep`, `during_workout`. **There is no snack
   slot.** Food that fits nowhere goes to `lunch` or `pre_sleep`.
-- The slot in the context comes from the clock. If the sentence says otherwise, the sentence wins.
 - The text may be dictated, so it can arrive with no punctuation and in one breath. Read it kindly.
 - `summary` is one plain line, shown in a phone notification. "Logged dinner: 250g chicken, 150g
   rice, 120g broccoli, 690 kcal." No markdown, no preamble, no greeting.
