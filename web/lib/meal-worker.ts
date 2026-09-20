@@ -195,7 +195,7 @@ export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<voi
       // and the sentence stays exactly where it was.
       if (!run.proposal.items.length && run.proposal.question) {
         await finishCapture(sql, {
-          id: cap.id, status: "ready", proposal,
+          id: cap.id, status: "ready", proposal, slot: resolvedSlot,
           message: { role: "agent", text: run.proposal.question, image: null, at: new Date().toISOString() },
         });
         await notify(sql, "asked", {
@@ -241,6 +241,7 @@ export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<voi
     // column on a meal that may never be written.
     await finishCapture(sql, {
       id: cap.id, status, proposal, resolved: { items: resolved, weighMethod }, mealLogId,
+      slot: resolvedSlot,
       message: { role: "agent", text: summary, image: null, at: new Date().toISOString() },
     });
     await notify(sql, status, { slot: resolvedSlot, summary, captureId: cap.id, mealLogId });
