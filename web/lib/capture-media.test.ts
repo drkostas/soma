@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ALLOWED_MIME, DB_PREFIX, extFor, isDbRef, MAX_BYTES, refToId, refuse } from "./capture-image";
+import { ALLOWED_MIME, DB_PREFIX, extFor, isAudio, isDbRef, MAX_BYTES, refToId, refuse } from "./capture-media";
 
 describe("isDbRef and refToId", () => {
   const id = "2b29a8d5-f0c9-4eff-a408-4492f0ab0ce5";
@@ -65,5 +65,29 @@ describe("refuse", () => {
 
   it("says something about a missing type instead of printing nothing", () => {
     expect(refuse("", 1024)).toContain("that kind of file");
+  });
+});
+
+describe("audio", () => {
+  it("accepts what the phone's recogniser persists, on both platforms", () => {
+    expect(refuse("audio/wav", 400_000)).toBeNull();
+    expect(refuse("audio/x-caf", 400_000)).toBeNull();
+    expect(isAudio("audio/wav")).toBe(true);
+    expect(isAudio("image/jpeg")).toBe(false);
+  });
+
+  it("names a recording a recording when it refuses one", () => {
+    expect(refuse("audio/wav", 9_000_000)).toContain("recording");
+    expect(refuse("image/jpeg", 9_000_000)).toContain("photo");
+  });
+
+  it("writes it out with an extension whisper can open", () => {
+    expect(extFor("audio/wav")).toBe("wav");
+    expect(extFor("audio/m4a")).toBe("m4a");
+    expect(extFor("audio/x-caf")).toBe("caf");
+  });
+
+  it("still refuses a file type neither side reads", () => {
+    expect(refuse("application/pdf", 1000)).toContain("cannot read");
   });
 });

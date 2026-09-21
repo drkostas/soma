@@ -8,18 +8,16 @@
  * Polls only while something is still moving and stops by itself. The words come from
  * `capture-status.ts`, which is held identical to the website's copy by a drift test.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import {
-  ExpoSpeechRecognitionModule, useSpeechRecognitionEvent,
-} from "expo-speech-recognition";
 import { Text, Button } from "soma-style";
 import {
   anyInFlight, captureDetail, captureHeadline, replyHint, shortAgo, stripCards, type CaptureCard,
 } from "../lib/capture-status";
 import { TONE, toneColor } from "../lib/capture-tone";
-import { canDictate, dictateLabel, mergeTranscript, speechOptions } from "../lib/dictation";
+import { canDictate, dictateLabel } from "../lib/dictation";
+import { useDictation } from "./use-dictation";
 import { fetchRecentCaptures, replyToCapture, uploadCapturePhoto, fetchVocabulary,} from "../lib/meal-capture";
 import { shrinkPhoto } from "../lib/shrink-photo";
 
@@ -40,32 +38,17 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
   const [replyImage, setReplyImage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
   const [bump, setBump] = useState(0);
-  const dictationBase = useRef("");
   const [vocabulary, setVocabulary] = useState<string[]>([]);
+  const speech = useDictation({
+    value: reply, onText: setReply, vocabulary, active: replyTo != null,
+  });
 
   useEffect(() => {
     let alive = true;
     void fetchVocabulary().then((w) => { if (alive) setVocabulary(w); });
     return () => { alive = false; };
   }, []);
-
-  useSpeechRecognitionEvent("result", (e) => {
-    if (replyTo == null) return;
-    setReply(mergeTranscript(dictationBase.current, e.results?.[0]?.transcript ?? ""));
-  });
-  useSpeechRecognitionEvent("end", () => setRecording(false));
-  useSpeechRecognitionEvent("error", () => setRecording(false));
-
-  const dictate = async () => {
-    if (recording) { ExpoSpeechRecognitionModule.stop(); return; }
-    const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!perm.granted) return;
-    dictationBase.current = reply;
-    setRecording(true);
-    ExpoSpeechRecognitionModule.start(speechOptions(vocabulary));
-  };
 
   const attach = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 });
@@ -79,9 +62,10 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
   const submitReply = async (id: number) => {
     if (!reply.trim() && !replyImage) return;
     setSending(true);
-    const ok = await replyToCapture(id, reply, replyImage);
+    const ok = await replyToCapture(id, reply, replyImage, await speech.spoken());
     setSending(false);
     if (!ok) return;
+    speech.clear();
     setReplyTo(null); setReply(""); setReplyImage(null);
     // Back to `captured`, so restart the poll to follow it.
     setBump((b) => b + 1);
@@ -140,14 +124,14 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
                   style={{ color: "white", fontSize: 14, minHeight: 36 }}
                   testID={`capture-reply-${c.id}`}
                 />
-                {replyError ? (
-                  <Text variant="caption" style={{ color: TONE.danger }}>{replyError}</Text>
+                {replyError ?? speech.error ? (
+                  <Text variant="caption" style={{ color: TONE.danger }}>{replyError ?? speech.error}</Text>
                 ) : null}
                 <View className="flex-row items-center gap-3">
-                  {canDictate(true, null) ? (
-                    <Pressable onPress={dictate} testID={`capture-reply-speak-${c.id}`}>
-                      <Text variant="caption" style={{ color: recording ? TONE.danger : TONE.quiet }}>
-                        {dictateLabel(recording)}
+                  {canDictate(true, speech.permitted) ? (
+                    <Pressable onPress={speech.toggle} testID={`capture-reply-speak-${c.id}`}>
+                      <Text variant="caption" style={{ color: speech.recording ? TONE.danger : TONE.quiet }}>
+                        {dictateLabel(speech.recording)}
                       </Text>
                     </Pressable>
                   ) : null}
@@ -164,7 +148,7 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
                 </View>
               </View>
             ) : (
-              <Pressable onPress={() => { setReplyTo(c.id); setReply(""); setReplyImage(null); }}
+              <Pressable onPress={() => { setReplyTo(c.id); setReply(""); setReplyImage(null); speech.clear(); }}
                 testID={`capture-reply-open-${c.id}`}>
                 <Text variant="caption" className="text-text-secondary mt-1">{replyHint(c)}</Text>
               </Pressable>

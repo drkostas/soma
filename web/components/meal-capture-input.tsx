@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Camera, Loader2, Mic, Send, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { canDictate, mergeTranscript } from "@/lib/dictation";
+import { canDictate, heardNext, heardStart, heardText, type Heard } from "@/lib/dictation";
 
 /**
  * The browser's own speech recognition, which is the same on-device idea as the app's Speak
@@ -25,7 +25,7 @@ interface WebSpeech {
   interimResults: boolean;
   start(): void;
   stop(): void;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal?: boolean }> }) => void) | null;
   onend: (() => void) | null;
   onerror: ((e: { error: string }) => void) | null;
 }
@@ -72,8 +72,8 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
   // render has no window and a button that appears and then vanishes is worse than one that waits.
   const [speechReady, setSpeechReady] = useState(false);
   const recognition = useRef<WebSpeech | null>(null);
-  // What was in the box when recording started: each result carries the whole utterance, so the
-  // text is rebuilt from this rather than appended to.
+  // What was in the box when recording started. The transcript is rebuilt from this on every event
+  // rather than appended to, because a result revises the utterance rather than continuing it.
   const dictationBase = useRef("");
 
   useEffect(() => { setSpeechReady(speechCtor() !== null); }, []);
@@ -85,13 +85,20 @@ export function MealCaptureInput({ slot, defaultMode, onCaptured }: Props) {
     setError(null);
     const r = new Ctor();
     r.lang = "en-US";
-    r.continuous = false;
+    // ⛔ `continuous = false` ENDS THE SESSION AT THE FIRST PAUSE, which is the same ten-second cut
+    // off the phone had. Describing a plate takes longer than one breath.
+    r.continuous = true;
     // Interim results are what make it feel live: the words appear as they are said.
     r.interimResults = true;
     r.onresult = (e) => {
-      const last = e.results[e.results.length - 1];
-      const said = last?.[0]?.transcript ?? "";
-      setText(mergeTranscript(dictationBase.current, said));
+      // A continuous session keeps every result in the list, so the text is the settled ones joined
+      // plus whichever guess is still in progress.
+      let heard: Heard = heardStart(dictationBase.current);
+      for (let i = 0; i < e.results.length; i++) {
+        const res = e.results[i];
+        heard = heardNext(heard, res?.[0]?.transcript ?? "", res?.isFinal === true);
+      }
+      setText(heardText(heard));
     };
     r.onend = () => setRecording(false);
     r.onerror = (e) => {

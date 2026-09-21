@@ -7,14 +7,16 @@
  * reason the capture is a row of its own.
  */
 import type { QueryFn } from "./db";
-import { claimNextCapture, finishCapture, MAX_ATTEMPTS, type CaptureRow, type CaptureStatus } from "./meal-capture";
+import { claimNextCapture, finishCapture, getCapture, MAX_ATTEMPTS, saveMessages, type CaptureMessage, type CaptureRow, type CaptureStatus } from "./meal-capture";
 import { fastParse, type CatalogEntry } from "./meal-fast-path";
 import { buildAgentContext, renderContext } from "./nutrition-agent-context";
 import { runMealAgent, type ProposalItem, uploadsDir } from "./nutrition-agent";
 import { getPortionBands } from "./portion-history";
 import { resolveQuantities, type ResolvableItem, type ResolvedItem } from "./meal-quantity";
 import { enforcePlausibility, getHistoryStats } from "./meal-plausibility";
-import { materialise } from "./capture-image";
+import { materialise, saveTranscript, transcriptOf } from "./capture-media";
+import { transcribeAudio, textForAgent } from "./transcribe";
+import { getVocabulary } from "./capture-vocabulary";
 import type { Ingredient } from "./portion-solver";
 import { sendPush } from "./notify-push";
 
@@ -153,7 +155,44 @@ async function notify(
   try { await sendPush(sql, { ...n, eventType: "meal_ready" }); } catch { /* ignored */ }
 }
 
-export async function processCapture(sql: QueryFn, cap: CaptureRow): Promise<void> {
+/**
+ * Replace each spoken message's words with a real model's reading of the recording.
+ *
+ * ⛔ THIS RUNS BEFORE ANYTHING ELSE READS THE THREAD. The model-free parser, the summary line and
+ * the agent all read `text`, so a transcript applied halfway down would have some of them reading
+ * the phone's guess and some reading this one. One pass at the top, and everything downstream is
+ * looking at the same sentence.
+ *
+ * A reading already stored is reused rather than made again, so a follow-up does not quietly change
+ * what he is recorded as having said.
+ */
+export async function readAloud(sql: QueryFn, id: number, messages: CaptureMessage[]): Promise<CaptureMessage[]> {
+  if (!messages.some((m) => m.audio)) return messages;
+  const words = await getVocabulary(sql);
+  const out: CaptureMessage[] = [];
+  for (const m of messages) {
+    if (!m.audio) { out.push(m); continue; }
+    let said = await transcriptOf(sql, m.audio);
+    if (!said) {
+      const path = await materialise(sql, m.audio, uploadsDir());
+      const read = path ? await transcribeAudio(path, words) : null;
+      if (read) {
+        await saveTranscript(sql, m.audio, read.text, read.source);
+        console.log(`[meal-worker] heard in ${read.seconds}s: ${read.text.slice(0, 90)}`);
+        said = read.text;
+      } else {
+        console.error("[meal-worker] could not read the recording, keeping the phone's transcript");
+      }
+    }
+    out.push({ ...m, text: textForAgent(m, said) });
+  }
+  // The thread he can see has to say what was logged, so the better reading is kept.
+  if (out.some((m, i) => m.text !== messages[i].text)) await saveMessages(sql, id, out);
+  return out;
+}
+
+export async function processCapture(sql: QueryFn, raw: CaptureRow): Promise<void> {
+  const cap: CaptureRow = { ...raw, messages: await readAloud(sql, raw.id, raw.messages) };
   const slot = cap.meal_slot ?? "lunch";
   try {
     const { slotKcal, dayLeft, consumed: dayConsumed } = await budgetForDay(sql, cap.date, slot, cap.meal_log_id);
@@ -275,6 +314,12 @@ export async function reviveStalled(sql: QueryFn, olderThanMinutes = 10): Promis
  *  `failed` before the Mac's sweep ever sees it. Same test chat-transport.ts uses. */
 export function agentRunsHere(): boolean {
   return !process.env.VERCEL;
+}
+
+/** Move one capture to `running` so a check script can drive the worker the way the drain does. */
+export async function claimForCheck(sql: QueryFn, id: number): Promise<CaptureRow | null> {
+  await sql`UPDATE meal_capture SET status = 'running', attempts = attempts + 1 WHERE id = ${id}`;
+  return await getCapture(sql, id);
 }
 
 /** Drain the queue. Called after a capture and on a sweep, so a restart strands nothing.

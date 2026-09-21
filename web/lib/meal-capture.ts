@@ -15,6 +15,11 @@ export interface CaptureMessage {
   text: string;
   image: string | null;
   at: string;
+  /** A `db:` reference to the recording, when he spoke it rather than typed it. */
+  audio?: string | null;
+  /** What the phone's recogniser put in the box, so an edit can be told from a dictation.
+   *  `textForAgent` needs this to know whether a better reading may replace the text. */
+  heard?: string | null;
 }
 
 export const MAX_ATTEMPTS = 2;
@@ -62,9 +67,13 @@ export interface CaptureRow {
 
 export async function createCapture(
   sql: QueryFn,
-  o: { date: string; slot: string | null; mode: CaptureMode; text: string; image: string | null },
+  o: { date: string; slot: string | null; mode: CaptureMode; text: string; image: string | null;
+       audio?: string | null; heard?: string | null },
 ): Promise<number> {
-  const msg: CaptureMessage = { role: "user", text: o.text, image: o.image, at: new Date().toISOString() };
+  const msg: CaptureMessage = {
+    role: "user", text: o.text, image: o.image, at: new Date().toISOString(),
+    audio: o.audio ?? null, heard: o.heard ?? null,
+  };
   const rows = (await sql`
     INSERT INTO meal_capture (date, meal_slot, mode, status, messages)
     VALUES (${o.date}, ${o.slot}, ${o.mode}, 'captured', ${JSON.stringify([msg])}::jsonb)
@@ -87,6 +96,18 @@ export async function getCapture(sql: QueryFn, id: number): Promise<CaptureRow |
     meal_log_id: r.meal_log_id == null ? null : Number(r.meal_log_id),
     error: (r.error as string) ?? null, attempts: Number(r.attempts),
   };
+}
+
+/**
+ * Write the thread back after a recording has been read properly.
+ *
+ * ⛔ THE STRIP READS `messages`, so without this it showed him the phone's mangled words above a
+ * meal containing the right food, which reads as soma having invented the food. The phone's version
+ * is not lost: it stays in `heard`, which is also what tells a re-run that the text it now holds is
+ * already the better reading.
+ */
+export async function saveMessages(sql: QueryFn, id: number, messages: CaptureMessage[]): Promise<void> {
+  await sql`UPDATE meal_capture SET messages = ${JSON.stringify(messages)}::jsonb WHERE id = ${id}`;
 }
 
 /** Take the next waiting capture. SKIP LOCKED so two drains never fight over the same row. */

@@ -1,5 +1,5 @@
 /**
- * A meal photo, kept where both sides can reach it.
+ * A meal photo or a voice note, kept where both sides can reach it.
  *
  * ⛔ THE OBVIOUS PLACE IS THE WRONG PLACE. `uploadsDir()` is `os.tmpdir()/soma-meal`, and the app
  * posts to soma.gkos.dev, so a photo uploaded from the phone was written into the filesystem of a
@@ -25,11 +25,24 @@ export const DB_PREFIX = "db:";
  * The phone resizes to 1280 on the long side first, so a real photo is a few hundred kilobytes.
  */
 export const MAX_BYTES = 3 * 1024 * 1024;
+
+/** Audio this accepts. Android's recogniser persists 16 kHz wav, which is what whisper wants. */
+export const ALLOWED_AUDIO: ReadonlySet<string> = new Set(["audio/wav", "audio/x-wav", "audio/wave", "audio/mp4", "audio/m4a", "audio/x-caf"]);
+
+/** True when this reference is a recording rather than a picture. */
+export function isAudio(mime: string): boolean {
+  return ALLOWED_AUDIO.has(mime);
+}
 export const ALLOWED_MIME: ReadonlySet<string> = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
 
 /** The file extension for a stored image, so the agent's copy is named honestly. */
 export function extFor(mime: string): string {
-  return mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  if (mime === "audio/mp4" || mime === "audio/m4a") return "m4a";
+  if (mime === "audio/x-caf") return "caf";
+  if (isAudio(mime)) return "wav";
+  return "jpg";
 }
 
 /** True when this reference lives in the database rather than on some machine's disk. */
@@ -47,18 +60,22 @@ export function refToId(ref: string): string | null {
 
 /** Why an upload was refused, in words the owner can act on. Null when it is fine. */
 export function refuse(mime: string, byteSize: number): string | null {
-  if (!ALLOWED_MIME.has(mime)) return `soma cannot read ${mime || "that kind of file"}. A JPEG, PNG or WebP works.`;
-  if (byteSize > MAX_BYTES) {
-    return `That photo is ${(byteSize / 1024 / 1024).toFixed(1)} MB and the limit is ${MAX_BYTES / 1024 / 1024} MB.`;
+  const audio = isAudio(mime);
+  if (!ALLOWED_MIME.has(mime) && !audio) {
+    return `soma cannot read ${mime || "that kind of file"}. A JPEG, PNG or WebP works.`;
   }
-  if (byteSize <= 0) return "That photo came through empty.";
+  const noun = audio ? "recording" : "photo";
+  if (byteSize > MAX_BYTES) {
+    return `That ${noun} is ${(byteSize / 1024 / 1024).toFixed(1)} MB and the limit is ${MAX_BYTES / 1024 / 1024} MB.`;
+  }
+  if (byteSize <= 0) return `That ${noun} came through empty.`;
   return null;
 }
 
 /** Store the bytes and return the reference to put in the message. */
-export async function putImage(sql: QueryFn, mime: string, bytes: Buffer): Promise<string> {
+export async function putMedia(sql: QueryFn, mime: string, bytes: Buffer): Promise<string> {
   const rows = (await sql`
-    INSERT INTO capture_image (mime, bytes, byte_size)
+    INSERT INTO capture_media (mime, bytes, byte_size)
     VALUES (${mime}, ${bytes}, ${bytes.length})
     RETURNING id`) as Array<{ id: string }>;
   return `${DB_PREFIX}${rows[0].id}`;
@@ -73,11 +90,35 @@ export async function putImage(sql: QueryFn, mime: string, bytes: Buffer): Promi
 export async function materialise(sql: QueryFn, ref: string, dir: string): Promise<string | null> {
   const id = refToId(ref);
   if (!id) return ref;
-  const rows = (await sql`SELECT mime, bytes FROM capture_image WHERE id = ${id}::uuid`) as Array<{ mime: string; bytes: Buffer }>;
+  const rows = (await sql`SELECT mime, bytes FROM capture_media WHERE id = ${id}::uuid`) as Array<{ mime: string; bytes: Buffer }>;
   const row = rows[0];
   if (!row) return null;
   await mkdir(dir, { recursive: true });
   const path = join(dir, `${randomUUID()}.${extFor(row.mime)}`);
   await writeFile(path, Buffer.isBuffer(row.bytes) ? row.bytes : Buffer.from(row.bytes));
   return path;
+}
+
+/** What a recording was heard to say, kept beside it so a bad reading can be compared later. */
+export async function saveTranscript(sql: QueryFn, ref: string, transcript: string, source: string): Promise<void> {
+  const id = refToId(ref);
+  if (!id) return;
+  await sql`
+    UPDATE capture_media SET transcript = ${transcript.slice(0, 4000)}, transcript_source = ${source.slice(0, 30)}
+    WHERE id = ${id}::uuid`;
+}
+
+/**
+ * A reading already made, so a re-run does not make a different one.
+ *
+ * A follow-up re-runs the whole thread, and transcribing the same recording again would cost two
+ * seconds per clip and could return slightly different words, which reads as the agent changing its
+ * mind about what he said.
+ */
+export async function transcriptOf(sql: QueryFn, ref: string): Promise<string | null> {
+  const id = refToId(ref);
+  if (!id) return null;
+  const rows = (await sql`SELECT transcript FROM capture_media WHERE id = ${id}::uuid`) as Array<{ transcript: string | null }>;
+  const t = rows[0]?.transcript;
+  return t ? String(t) : null;
 }

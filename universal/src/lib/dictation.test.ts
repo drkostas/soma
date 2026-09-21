@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canDictate, dictateLabel, MAX_HINTS, mergeTranscript, MIN_SPEECH_MS, SILENCE_MS, speechOptions } from "./dictation";
+import { canDictate, dictateLabel, heardNext, heardStart, heardText, MAX_HINTS, mergeTranscript, MIN_SPEECH_MS, SILENCE_MS, speechOptions } from "./dictation";
 
 describe("mergeTranscript", () => {
   it("is the transcript when the box was empty", () => {
@@ -85,5 +85,55 @@ describe("speechOptions", () => {
 
   it("does not add punctuation, because the agent expects dictated text", () => {
     expect(speechOptions([]).addsPunctuation).toBe(false);
+  });
+});
+
+describe("a segmented continuous session", () => {
+  const fold = (base: string, events: [string, boolean][]) => {
+    let h = heardStart(base);
+    for (const [t, final] of events) h = heardNext(h, t, final);
+    return heardText(h);
+  };
+
+  it("keeps a whole sentence that arrived in two segments", () => {
+    // ⛔ THE BUG THIS GUARDS. Android finalises a segment mid-sentence and the next partial covers
+    // only the new segment, so merging each event onto the starting text kept the last part alone.
+    const said = fold("", [
+      ["I ate a few bites of", false],
+      ["I ate a few bites of mpiskotogluko", true],
+      ["and a few more", false],
+      ["and a few more from an ekmek kataifi", true],
+    ]);
+    expect(said).toBe("I ate a few bites of mpiskotogluko and a few more from an ekmek kataifi");
+  });
+
+  it("revises a guess in progress instead of repeating it", () => {
+    expect(fold("", [["eight look", false], ["eight loukou", false], ["eight loukoumades", false]]))
+      .toBe("eight loukoumades");
+  });
+
+  it("keeps what he typed before pressing Speak", () => {
+    expect(fold("two eggs", [["and toast", true]])).toBe("two eggs and toast");
+  });
+
+  it("settles to the finals when the session ends", () => {
+    expect(fold("", [["a banana", true], ["", false]])).toBe("a banana");
+  });
+});
+
+describe("speechOptions", () => {
+  it("does not stop at the first pause, which is what cut him off at ten seconds", () => {
+    expect(speechOptions([]).continuous).toBe(true);
+    expect(SILENCE_MS).toBeGreaterThanOrEqual(10000);
+  });
+
+  it("keeps the recording only when the caller says the phone can", () => {
+    expect(speechOptions([], true).recordingOptions.persist).toBe(true);
+    // The browser cannot persist and an older Android cannot either, so the default is off.
+    expect(speechOptions([]).recordingOptions.persist).toBe(false);
+  });
+
+  it("hands his own food words to the recogniser", () => {
+    expect(speechOptions(["loukoumades"]).contextualStrings).toContain("loukoumades");
   });
 });
