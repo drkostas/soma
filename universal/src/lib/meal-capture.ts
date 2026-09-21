@@ -13,7 +13,10 @@ import type { CaptureCard } from "./capture-status";
 export type CaptureMode = "log" | "calibrate";
 /** The five states a capture moves through, mirroring `web/lib/meal-capture.ts`. */
 export type CaptureStatus = "captured" | "running" | "ready" | "logged" | "failed";
-export interface CaptureMessage { role: "user" | "agent"; text: string; image: string | null; at: string }
+export interface CaptureMessage {
+  role: "user" | "agent"; text: string; image: string | null; at: string;
+  audio?: string | null; heard?: string | null;
+}
 
 export function slotForHour(h: number): string {
   if (h < 11) return "breakfast";
@@ -29,11 +32,15 @@ export function captureAck(mode: CaptureMode): string {
 
 export async function captureMeal(
   text: string, image: string | null, mode: CaptureMode,
+  spoken: { audio?: string | null; heard?: string | null } = {},
 ): Promise<number | null> {
   const res = await fetch(`${API_BASE}/api/nutrition/capture`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
-    body: JSON.stringify({ text: text.trim(), image, mode }),
+    body: JSON.stringify({
+      text: text.trim(), image, mode,
+      audio: spoken.audio ?? null, heard: spoken.heard ?? null,
+    }),
   });
   if (!res.ok) return null;
   return ((await res.json()) as { id: number }).id;
@@ -62,12 +69,12 @@ export async function setCaptureMode(mode: CaptureMode): Promise<void> {
   }
 }
 
-/** Either the stored photo's reference, or the reason there isn't one. */
+/** Either the stored file's reference, or the reason there isn't one. */
 export type PhotoUpload = { ref: string } | { error: string };
 
 /** The server is authoritative; this exists so the phone can say the same thing without sending
- *  ten megabytes to find out. Keep it equal to `MAX_BYTES` in `web/lib/capture-image.ts`. */
-export const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+ *  ten megabytes to find out. Keep it equal to `MAX_BYTES` in `web/lib/capture-media.ts`. */
+export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 
 /**
  * Upload a photo picked on the phone.
@@ -82,22 +89,41 @@ export const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
  * network all used to read the same.
  */
 export async function uploadCapturePhoto(uri: string): Promise<PhotoUpload> {
+  // The picker hands back a JPEG on both platforms; the server checks the bytes' size and type.
+  const mime = /\.png$/i.test(uri) ? "image/png" : /\.webp$/i.test(uri) ? "image/webp" : "image/jpeg";
+  return await uploadCaptureFile(uri, mime, "photo");
+}
+
+/**
+ * Upload the recording of him speaking, so a real model on the Mac can read it.
+ *
+ * The phone's own recogniser has already filled the box by the time this runs. This is the copy the
+ * worker transcribes properly, and it stays in the database so a wrong reading can be compared
+ * against what was actually said instead of being the only record of the meal.
+ *
+ * Android persists 16 kHz mono PCM, which is 32 KB a second, so the 3 MB ceiling is about a minute
+ * and a half of talking. Describing a plate takes fifteen seconds.
+ */
+export async function uploadCaptureAudio(uri: string): Promise<PhotoUpload> {
+  const mime = /\.caf$/i.test(uri) ? "audio/x-caf" : /\.m4a$/i.test(uri) ? "audio/m4a" : "audio/wav";
+  return await uploadCaptureFile(uri, mime, "recording");
+}
+
+async function uploadCaptureFile(uri: string, mime: string, noun: string): Promise<PhotoUpload> {
   let base64: string;
   try {
     base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
   } catch (e) {
-    return { error: `soma could not open that photo (${(e as Error).message ?? "unreadable"}).` };
+    return { error: `soma could not open that ${noun} (${(e as Error).message ?? "unreadable"}).` };
   }
-  if (!base64) return { error: "That photo came through empty." };
+  if (!base64) return { error: `That ${noun} came through empty.` };
   // ⛔ Check the size HERE. A body over about 10 MB is truncated before the route ever sees it, and
   // the owner gets "Unterminated string in JSON at position 10485555" instead of a size. Base64
-  // carries three bytes in four characters, so this is the real photo's size.
+  // carries three bytes in four characters, so this is the real file's size.
   const byteSize = Math.floor((base64.length * 3) / 4);
-  if (byteSize > MAX_PHOTO_BYTES) {
-    return { error: `That photo is ${(byteSize / 1024 / 1024).toFixed(1)} MB and the limit is ${MAX_PHOTO_BYTES / 1024 / 1024} MB.` };
+  if (byteSize > MAX_UPLOAD_BYTES) {
+    return { error: `That ${noun} is ${(byteSize / 1024 / 1024).toFixed(1)} MB and the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.` };
   }
-  // The picker hands back a JPEG on both platforms; the server checks the bytes' size and type.
-  const mime = /\.png$/i.test(uri) ? "image/png" : /\.webp$/i.test(uri) ? "image/webp" : "image/jpeg";
   try {
     const res = await fetch(`${API_BASE}/api/nutrition/capture/upload`, {
       method: "POST",
@@ -106,7 +132,7 @@ export async function uploadCapturePhoto(uri: string): Promise<PhotoUpload> {
     });
     const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string };
     if (!res.ok) return { error: body.error ?? `The upload failed (${res.status}).` };
-    if (!body.path) return { error: "The upload came back without a reference." };
+    if (!body.path) return { error: `The ${noun} came back without a reference.` };
     return { ref: body.path };
   } catch (e) {
     return { error: `soma could not reach the server (${(e as Error).message ?? "no connection"}).` };
@@ -128,12 +154,18 @@ export async function fetchRecentCaptures(date?: string): Promise<CaptureCard[]>
 
 /** Reply to a capture: text, a photo, or both. The whole thread is re-run, and a meal already
  *  logged is replaced rather than joined by a second one. */
-export async function replyToCapture(id: number, text: string, image: string | null): Promise<boolean> {
+export async function replyToCapture(
+  id: number, text: string, image: string | null,
+  spoken: { audio?: string | null; heard?: string | null } = {},
+): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/api/nutrition/capture`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
-      body: JSON.stringify({ id, text: text.trim(), image }),
+      body: JSON.stringify({
+        id, text: text.trim(), image,
+        audio: spoken.audio ?? null, heard: spoken.heard ?? null,
+      }),
     });
     return res.ok;
   } catch {

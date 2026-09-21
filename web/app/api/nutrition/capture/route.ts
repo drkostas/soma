@@ -18,18 +18,22 @@ export const maxDuration = 300;
 export async function POST(req: NextRequest) {
   const sql = getDb();
   const body = (await req.json()) as {
-    text?: string; image?: string | null; mode?: string; date?: string; slot?: string;
+    text?: string; image?: string | null; audio?: string | null; heard?: string | null;
+    mode?: string; date?: string; slot?: string;
   };
   const text = typeof body.text === "string" ? body.text.trim() : "";
-  if (!text && !body.image) {
-    return NextResponse.json({ error: "text or image is required" }, { status: 400 });
+  if (!text && !body.image && !body.audio) {
+    return NextResponse.json({ error: "text, image or audio is required" }, { status: 400 });
   }
 
   const date = body.date || todayAthlete();
   const slot = body.slot || slotForHour(new Date().getHours());
   const mode: CaptureMode = body.mode === "calibrate" ? "calibrate" : "log";
 
-  const id = await createCapture(sql, { date, slot, mode, text, image: body.image ?? null });
+  const id = await createCapture(sql, {
+    date, slot, mode, text, image: body.image ?? null,
+    audio: body.audio ?? null, heard: body.heard ?? null,
+  });
 
   // Deliberately not awaited. The owner is already gone.
   void drainCaptures(sql).catch(() => { /* the sweep retries */ });
@@ -49,16 +53,21 @@ export async function GET(req: NextRequest) {
 /** A follow-up: append to the thread and run it again with the whole conversation. */
 export async function PATCH(req: NextRequest) {
   const sql = getDb();
-  const body = (await req.json()) as { id?: number; text?: string; image?: string | null };
+  const body = (await req.json()) as {
+    id?: number; text?: string; image?: string | null; audio?: string | null; heard?: string | null;
+  };
   const id = Number(body.id);
   const text = typeof body.text === "string" ? body.text.trim() : "";
-  if (!id || (!text && !body.image)) {
-    return NextResponse.json({ error: "id and text (or image) are required" }, { status: 400 });
+  if (!id || (!text && !body.image && !body.audio)) {
+    return NextResponse.json({ error: "id and text (or image or audio) are required" }, { status: 400 });
   }
   const cap = await getCapture(sql, id);
   if (!cap) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const msg = JSON.stringify([{ role: "user", text, image: body.image ?? null, at: new Date().toISOString() }]);
+  const msg = JSON.stringify([{
+    role: "user", text, image: body.image ?? null, at: new Date().toISOString(),
+    audio: body.audio ?? null, heard: body.heard ?? null,
+  }]);
   await sql`
     UPDATE meal_capture
     SET messages = messages || ${msg}::jsonb,

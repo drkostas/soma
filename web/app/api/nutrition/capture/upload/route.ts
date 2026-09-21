@@ -1,5 +1,5 @@
 /**
- * A photo for a meal capture.
+ * A photo or a voice recording for a meal capture.
  *
  * ⛔ IT GOES IN THE DATABASE, NOT ON THIS MACHINE'S DISK. The app posts here against
  * soma.gkos.dev, and the agent that reads the photo runs on the Mac, so writing to
@@ -12,7 +12,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { putImage, refuse } from "@/lib/capture-image";
+import { isAudio, MAX_BYTES, putMedia, refuse } from "@/lib/capture-media";
 
 export const runtime = "nodejs";
 
@@ -33,7 +33,7 @@ async function readBody(req: NextRequest): Promise<{ mime: string; bytes: Buffer
     try {
       body = (await req.json()) as { mime?: string; base64?: string };
     } catch {
-      return { error: "That photo was too large to send. Under 10 MB works.", status: 413 };
+      return { error: `That file was too large to send. Under ${MAX_BYTES / 1024 / 1024} MB works.`, status: 413 };
     }
     if (typeof body.base64 !== "string" || !body.base64) return { error: "missing 'base64'", status: 400 };
     // A data URI is a common thing to send by accident; take the payload rather than refusing it.
@@ -59,14 +59,15 @@ export async function POST(req: NextRequest) {
   // (500)", which told nobody anything. Every other refusal on this route says what happened.
   let path: string;
   try {
-    path = await putImage(getDb(), read.mime, read.bytes);
+    path = await putMedia(getDb(), read.mime, read.bytes);
   } catch (e) {
     const msg = (e as Error).message ?? "";
     const tooLarge = /too large|413|payload/i.test(msg);
+    const noun = isAudio(read.mime) ? "recording" : "photo";
     return NextResponse.json({
       error: tooLarge
-        ? `soma could not store a photo that size (${(read.bytes.length / 1024 / 1024).toFixed(1)} MB). A smaller one works.`
-        : `soma could not store that photo (${msg.slice(0, 120)}).`,
+        ? `soma could not store a ${noun} that size (${(read.bytes.length / 1024 / 1024).toFixed(1)} MB). A smaller one works.`
+        : `soma could not store that ${noun} (${msg.slice(0, 120)}).`,
     }, { status: tooLarge ? 413 : 500 });
   }
   // `path` is kept as the field name because the message shape has not changed: it is a reference

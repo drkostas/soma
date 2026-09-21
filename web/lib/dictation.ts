@@ -18,14 +18,39 @@ export function mergeTranscript(base: string, transcript: string): string {
   const b = base.trim();
   if (!t) return b;
   if (!b) return t;
-  // A space, not a newline: the agent's instructions expect dictated text in one breath, and a
-  // second dictation is a continuation of the same sentence rather than a new line.
   return `${b} ${t}`;
+}
+
+/**
+ * The running text of a recognition session: what has been settled, and the guess in progress.
+ *
+ * ⛔ A CONTINUOUS SESSION ON ANDROID IS SEGMENTED, and this is why a plain merge is not enough. When
+ * a segment reaches a final result, the next partial starts a NEW segment whose transcript covers
+ * only that segment, not the whole utterance. Merging every event onto the text from before
+ * recording therefore replaced the first half of a long sentence with the second half. It only
+ * appears once the sentence is long enough to be segmented, which is exactly the sentence this
+ * feature exists for.
+ */
+export interface Heard { committed: string; live: string }
+
+/** Start from whatever was already in the box. */
+export function heardStart(base: string): Heard {
+  return { committed: base, live: "" };
+}
+
+/** Fold one recognition event in. A final result is settled; a partial one replaces the guess. */
+export function heardNext(h: Heard, transcript: string, isFinal: boolean): Heard {
+  if (isFinal) return { committed: mergeTranscript(h.committed, transcript), live: "" };
+  return { committed: h.committed, live: transcript };
+}
+
+/** What belongs in the box right now. */
+export function heardText(h: Heard): string {
+  return mergeTranscript(h.committed, h.live);
 }
 
 /** Whether the mic should be offered at all. Hidden rather than shown broken. */
 export function canDictate(available: boolean, permitted: boolean | null): boolean {
-  // null means not asked yet, which is offerable: the tap is what asks.
   return available && permitted !== false;
 }
 
@@ -44,18 +69,30 @@ export function dictateLabel(recording: boolean): string {
  *
  * `contextualStrings` is his own food vocabulary. The words this destroys are Greek food names,
  * and they are sitting in his log.
+ *
+ * ⭐ `keepAudio` KEEPS THE RECORDING, and that is the point of the spoken path. The phone's
+ * recogniser is a small on-device model that has never heard of a loukoumas, and whatever it mangles
+ * becomes the only record of the meal. Persisting the recording means a real model on the Mac reads
+ * it afterwards and the audio survives, so a wrong reading can be compared against what was actually
+ * said. The file lands in the cache directory and `audioend` carries its uri.
+ *
+ * ⚠️ Persisting needs Android 13 or newer, so the caller passes `supportsRecording()` rather than
+ * `true`, and the browser cannot do it at all.
+ *
+ * ⚠️ NO CLAUDE MODEL TAKES AUDIO AS INPUT. Not through the API, and not in the Claude app, which
+ * transcribes on the device exactly as this does. So the voice itself cannot reach the agent, and a
+ * much better transcript is the honest best. Do not add an audio content block expecting it to work.
  */
-export function speechOptions(words: readonly string[]) {
+export function speechOptions(words: readonly string[], keepAudio = false) {
   return {
     lang: "en-US",
     interimResults: true,
-    // He decides when he has finished, by pressing Stop.
     continuous: true,
     addsPunctuation: false,
     requiresOnDeviceRecognition: false,
     contextualStrings: words.slice(0, MAX_HINTS),
+    recordingOptions: { persist: keepAudio },
     androidIntentOptions: {
-      // A pause while thinking must not end the recording.
       EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: SILENCE_MS,
       EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: SILENCE_MS,
       EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS: MIN_SPEECH_MS,

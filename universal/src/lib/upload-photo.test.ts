@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { __setFile } from "../test/expo-file-system-legacy.stub";
-import { MAX_PHOTO_BYTES, uploadCapturePhoto } from "./meal-capture";
+import { MAX_UPLOAD_BYTES, uploadCapturePhoto } from "./meal-capture";
 
 const okJson = (body: unknown, status = 200) =>
   ({ ok: status < 400, status, json: async () => body }) as unknown as Response;
@@ -83,16 +83,16 @@ describe("uploadCapturePhoto", () => {
   it("refuses an oversized photo before sending it, because the body is truncated otherwise", async () => {
     // A body over about 10 MB arrives truncated and the route throws a JSON parse error about a
     // character position, which is a terrible thing to show someone who took a photo.
-    __setFile("A".repeat(Math.ceil(((MAX_PHOTO_BYTES + 1024 * 1024) * 4) / 3)));
+    __setFile("A".repeat(Math.ceil(((MAX_UPLOAD_BYTES + 1024 * 1024) * 4) / 3)));
     const fetchMock = vi.fn(async () => okJson({ path: "db:x" }));
     vi.stubGlobal("fetch", fetchMock);
     const r = await uploadCapturePhoto("file:///x/huge.jpg");
-    expect("error" in r && r.error).toContain(`and the limit is ${MAX_PHOTO_BYTES / 1024 / 1024} MB`);
+    expect("error" in r && r.error).toContain(`and the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("sends a photo right on the limit", async () => {
-    __setFile("A".repeat(Math.floor((MAX_PHOTO_BYTES * 4) / 3)));
+    __setFile("A".repeat(Math.floor((MAX_UPLOAD_BYTES * 4) / 3)));
     const fetchMock = vi.fn(async () => okJson({ path: "db:ok" }));
     vi.stubGlobal("fetch", fetchMock);
     expect(await uploadCapturePhoto("file:///x/edge.jpg")).toEqual({ ref: "db:ok" });
@@ -107,10 +107,10 @@ describe("uploadCapturePhoto", () => {
 });
 
 describe("the two caps agree", () => {
-  it("is 3 MB, matching web/lib/capture-image.ts, which the db gateway bounds", () => {
+  it("is 3 MB, matching web/lib/capture-media.ts, which the db gateway bounds", () => {
     // A photo much over this cannot reach the database: the bytes go in as a bytea parameter and
     // the Neon HTTP driver sends a Buffer as a hex string, so the request is twice the photo, and
     // the gateway allows 8 MB.
-    expect(MAX_PHOTO_BYTES).toBe(3 * 1024 * 1024);
+    expect(MAX_UPLOAD_BYTES).toBe(3 * 1024 * 1024);
   });
 });
