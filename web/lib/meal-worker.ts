@@ -191,10 +191,15 @@ export async function readAloud(sql: QueryFn, id: number, messages: CaptureMessa
   return out;
 }
 
-export async function processCapture(sql: QueryFn, raw: CaptureRow): Promise<void> {
-  const cap: CaptureRow = { ...raw, messages: await readAloud(sql, raw.id, raw.messages) };
+export async function processCapture(sql: QueryFn, row: CaptureRow): Promise<void> {
+  let cap: CaptureRow = row;
   const slot = cap.meal_slot ?? "lunch";
   try {
+    // ⛔ INSIDE THE TRY. `readAloud` touches the database four times, and the drain does not catch,
+    // so a hiccup out here left the capture `running` for ever: revive would pick it up, throw
+    // again, and `finishCapture` would never run to mark it failed. In here the existing catch
+    // handles it like any other failure and his words survive in the row.
+    cap = { ...cap, messages: await readAloud(sql, cap.id, cap.messages) };
     const { slotKcal, dayLeft, consumed: dayConsumed } = await budgetForDay(sql, cap.date, slot, cap.meal_log_id);
     const catalog = (await sql`
       SELECT id, name FROM ingredients WHERE status = 'confirmed'`) as CatalogEntry[];
