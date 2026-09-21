@@ -33,3 +33,39 @@ export function canDictate(available: boolean, permitted: boolean | null): boole
 export function dictateLabel(recording: boolean): string {
   return recording ? "Stop" : "Speak";
 }
+
+/**
+ * How to ask for recognition.
+ *
+ * ⛔ `continuous: false` IS WHY IT STOPPED AT TEN SECONDS. Android ends the utterance on its own
+ * silence timer, and ten seconds is not long enough to describe a plate, especially while
+ * remembering what was on it. The silence timeouts are set explicitly for the same reason: a pause
+ * mid-sentence is thinking, not finishing.
+ *
+ * `contextualStrings` is his own food vocabulary. The words this destroys are Greek food names,
+ * and they are sitting in his log.
+ */
+export function speechOptions(words: readonly string[]) {
+  return {
+    lang: "en-US",
+    interimResults: true,
+    // He decides when he has finished, by pressing Stop.
+    continuous: true,
+    addsPunctuation: false,
+    requiresOnDeviceRecognition: false,
+    contextualStrings: words.slice(0, MAX_HINTS),
+    androidIntentOptions: {
+      // A pause while thinking must not end the recording.
+      EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: SILENCE_MS,
+      EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: SILENCE_MS,
+      EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS: MIN_SPEECH_MS,
+    },
+  } as const;
+}
+
+/** Long enough to think mid-sentence without being cut off. */
+export const SILENCE_MS = 10000;
+/** A recording is never shorter than this, so a slow start is not taken for silence. */
+export const MIN_SPEECH_MS = 2000;
+/** Android caps how many hints it will take; past this they stop helping. */
+export const MAX_HINTS = 100;

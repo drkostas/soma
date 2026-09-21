@@ -19,8 +19,8 @@ import {
   anyInFlight, captureDetail, captureHeadline, replyHint, shortAgo, stripCards, type CaptureCard,
 } from "../lib/capture-status";
 import { TONE, toneColor } from "../lib/capture-tone";
-import { canDictate, dictateLabel, mergeTranscript } from "../lib/dictation";
-import { fetchRecentCaptures, replyToCapture, uploadCapturePhoto } from "../lib/meal-capture";
+import { canDictate, dictateLabel, mergeTranscript, speechOptions } from "../lib/dictation";
+import { fetchRecentCaptures, replyToCapture, uploadCapturePhoto, fetchVocabulary,} from "../lib/meal-capture";
 import { shrinkPhoto } from "../lib/shrink-photo";
 
 /** The agent takes tens of seconds, so four is live enough and costs nothing. */
@@ -43,6 +43,13 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
   const [recording, setRecording] = useState(false);
   const [bump, setBump] = useState(0);
   const dictationBase = useRef("");
+  const [vocabulary, setVocabulary] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchVocabulary().then((w) => { if (alive) setVocabulary(w); });
+    return () => { alive = false; };
+  }, []);
 
   useSpeechRecognitionEvent("result", (e) => {
     if (replyTo == null) return;
@@ -57,7 +64,7 @@ export function MealCaptureStatus({ date, version = 0 }: Props) {
     if (!perm.granted) return;
     dictationBase.current = reply;
     setRecording(true);
-    ExpoSpeechRecognitionModule.start({ lang: "en-US", interimResults: true, continuous: false, addsPunctuation: false });
+    ExpoSpeechRecognitionModule.start(speechOptions(vocabulary));
   };
 
   const attach = async () => {

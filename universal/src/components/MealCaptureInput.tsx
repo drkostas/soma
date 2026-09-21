@@ -22,11 +22,10 @@ import {
 } from "expo-speech-recognition";
 import { Text, Card, Button } from "soma-style";
 import {
-  captureAck, captureMeal, getCaptureMode, setCaptureMode, uploadCapturePhoto, type CaptureMode,
-} from "../lib/meal-capture";
+  captureAck, captureMeal, getCaptureMode, setCaptureMode, uploadCapturePhoto, type CaptureMode, fetchVocabulary,} from "../lib/meal-capture";
 import { shrinkPhoto } from "../lib/shrink-photo";
 import { TONE } from "../lib/capture-tone";
-import { canDictate, dictateLabel, mergeTranscript } from "../lib/dictation";
+import { canDictate, dictateLabel, mergeTranscript, speechOptions } from "../lib/dictation";
 
 interface Props {
   slot: string;
@@ -48,6 +47,14 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
   // What was in the box when recording started. Recognition revises the whole utterance on every
   // event, so each result is merged onto this rather than appended to the visible text.
   const dictationBase = useRef("");
+  /** His own food words, so the recogniser is not guessing at "loukoumades". */
+  const [vocabulary, setVocabulary] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchVocabulary().then((w) => { if (alive) setVocabulary(w); });
+    return () => { alive = false; };
+  }, []);
 
   // The remembered choice, so the toggle is set once and then forgotten.
   useEffect(() => {
@@ -75,15 +82,7 @@ export const MealCaptureInput = forwardRef<TextInput, Props>(function MealCaptur
     if (!perm.granted) { setError("The microphone is not allowed for soma."); return; }
     dictationBase.current = text;
     setRecording(true);
-    ExpoSpeechRecognitionModule.start({
-      lang: "en-US",
-      // Interim results are what make it feel live: the words appear as they are said.
-      interimResults: true,
-      continuous: false,
-      // On-device where the phone can, so nothing is sent anywhere.
-      requiresOnDeviceRecognition: false,
-      addsPunctuation: false,
-    });
+    ExpoSpeechRecognitionModule.start(speechOptions(vocabulary));
   };
 
   const attach = async () => {

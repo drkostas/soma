@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canDictate, dictateLabel, mergeTranscript } from "./dictation";
+import { canDictate, dictateLabel, MAX_HINTS, mergeTranscript, MIN_SPEECH_MS, SILENCE_MS, speechOptions } from "./dictation";
 
 describe("mergeTranscript", () => {
   it("is the transcript when the box was empty", () => {
@@ -49,5 +49,41 @@ describe("dictateLabel", () => {
   it("says what the tap will do, not what is happening", () => {
     expect(dictateLabel(false)).toBe("Speak");
     expect(dictateLabel(true)).toBe("Stop");
+  });
+});
+
+describe("speechOptions", () => {
+  /**
+   * It stopped at ten seconds, every time, because `continuous: false` lets Android end the
+   * utterance on its own silence timer. Ten seconds is not long enough to describe a plate,
+   * especially while remembering what was on it.
+   */
+  it("does not let Android decide when he has finished", () => {
+    expect(speechOptions([]).continuous).toBe(true);
+  });
+
+  it("gives a pause mid-sentence room, because a pause is thinking", () => {
+    const o = speechOptions([]);
+    expect(o.androidIntentOptions.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS).toBe(SILENCE_MS);
+    expect(SILENCE_MS).toBeGreaterThanOrEqual(10000);
+    expect(o.androidIntentOptions.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS).toBe(MIN_SPEECH_MS);
+  });
+
+  it("tells the recogniser his own words, which are the ones it destroys", () => {
+    const o = speechOptions(["loukoumades", "mpiskotogluko"]);
+    expect(o.contextualStrings).toEqual(["loukoumades", "mpiskotogluko"]);
+  });
+
+  it("caps the hints, because past a point they stop helping", () => {
+    const many = Array.from({ length: 400 }, (_, i) => `word${i}`);
+    expect(speechOptions(many).contextualStrings).toHaveLength(MAX_HINTS);
+  });
+
+  it("still asks for interim results, which is what makes it feel live", () => {
+    expect(speechOptions([]).interimResults).toBe(true);
+  });
+
+  it("does not add punctuation, because the agent expects dictated text", () => {
+    expect(speechOptions([]).addsPunctuation).toBe(false);
   });
 });

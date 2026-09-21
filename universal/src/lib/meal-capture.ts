@@ -140,3 +140,15 @@ export async function replyToCapture(id: number, text: string, image: string | n
     return false;
   }
 }
+
+/** The food words to expect, for the recogniser. Empty on failure: hints are a help, not a gate. */
+export async function fetchVocabulary(): Promise<string[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/nutrition/capture/vocabulary`, { headers: AUTH_HEADERS });
+    if (!res.ok) return [];
+    const d = (await res.json()) as { words?: string[] };
+    return Array.isArray(d.words) ? d.words : [];
+  } catch {
+    return [];
+  }
+}
