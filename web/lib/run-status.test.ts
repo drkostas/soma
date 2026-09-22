@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runStatus, RUN_TREND_MIN_RUNS, RUN_LAPSED_DAYS } from "./run-status";
+import { unknownRunStatus, runStatus, RUN_TREND_MIN_RUNS, RUN_LAPSED_DAYS } from "./run-status";
 
 const T = "2026-09-06";
 const d = (date: string, load = 60) => ({ date, load });
@@ -69,5 +69,43 @@ describe("runStatus (#738)", () => {
   it("future-dated rows are ignored", () => {
     const s = runStatus([d("2026-09-20", 500)], T);
     expect(s.kind).toBe("none");
+  });
+});
+
+/**
+ * "No runs" and "I have no load data" are different claims (#1004).
+ *
+ * loadRunStatus swallowed a query failure into an empty list, so a missing or
+ * unpopulated training_load rendered as "No runs in 4 weeks / no run recorded"
+ * beside a header saying "25 runs tracked · 222 km total". The two contradict
+ * each other on the same screen.
+ *
+ * It matters beyond the demo: a self-hoster whose sync has not yet written
+ * training_load is told, about their own training, something that is false.
+ */
+describe("when there is no load data to judge from", () => {
+  it("says so instead of claiming there were no runs", () => {
+    const s = unknownRunStatus();
+    expect(s.kind).toBe("unknown");
+    expect(s.label).not.toMatch(/no runs/i);
+    expect(s.detail).toMatch(/load/i);
+  });
+
+  it("reports no counts it cannot support", () => {
+    // Zeros here would read as measurements. They are not.
+    const s = unknownRunStatus();
+    expect(s.runs28).toBe(0);
+    expect(s.lastRun).toBeNull();
+    expect(s.daysSinceRun).toBeNull();
+    expect(s.acwr).toBeNull();
+  });
+
+  it("is distinct from a genuine absence of runs", () => {
+    // An account with load data and no recent runs must still say "No runs in
+    // 4 weeks". That claim is true there, and it is the useful one.
+    const genuine = runStatus([], "2026-09-22");
+    expect(genuine.kind).toBe("none");
+    expect(genuine.label).toBe("No runs in 4 weeks");
+    expect(unknownRunStatus().kind).not.toBe(genuine.kind);
   });
 });
