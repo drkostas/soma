@@ -15,7 +15,15 @@ export interface RunLoadDay {
   load: number;
 }
 
-export type RunStatusKind = "none" | "lapsed" | "light" | "easing" | "steady" | "building" | "spiking";
+export type RunStatusKind =
+  | "unknown"
+  | "none"
+  | "lapsed"
+  | "light"
+  | "easing"
+  | "steady"
+  | "building"
+  | "spiking";
 
 export interface RunStatus {
   kind: RunStatusKind;
@@ -62,4 +70,30 @@ export function runStatus(days: readonly RunLoadDay[], today: string): RunStatus
   if (acwr <= 1.3) return { ...base, kind: "steady", label: "Steady", detail };
   if (acwr <= 1.5) return { ...base, kind: "building", label: "Building", detail };
   return { ...base, kind: "spiking", label: "Spiking", detail };
+}
+
+
+/**
+ * There is no running load to judge from (#1004).
+ *
+ * Distinct from "none", which is the claim that there were no runs. That claim
+ * needs load data to stand on: without it the card said "No runs in 4 weeks"
+ * beside a header reporting 25 runs, and a self-hoster whose sync has not yet
+ * written `training_load` was told something false about their own training.
+ *
+ * Every count is null rather than zero. A zero here would read as a
+ * measurement, and nothing was measured.
+ */
+export function unknownRunStatus(): RunStatus {
+  return {
+    kind: "unknown",
+    label: "No running load yet",
+    detail: "nothing in training_load to read a trend from",
+    runs28: 0,
+    lastRun: null,
+    daysSinceRun: null,
+    acute: 0,
+    chronic: 0,
+    acwr: null,
+  };
 }
