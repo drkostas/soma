@@ -1,11 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { captureBody, placeholderFor, ackFor } from "./meal-capture-input";
+import { captureBody, deviceTz, placeholderFor, ackFor } from "./meal-capture-input";
 
 describe("captureBody", () => {
   it("sends the text and the chosen mode", () => {
-    expect(captureBody("200g chicken", null, "calibrate")).toEqual({
-      text: "200g chicken", image: null, mode: "calibrate",
+    expect(captureBody("200g chicken", null, "calibrate", "Europe/Athens")).toEqual({
+      text: "200g chicken", image: null, mode: "calibrate", tz: "Europe/Athens",
     });
+  });
+
+  it("⛔ carries THIS screen's timezone, because the server's clock is Vercel's", () => {
+    // Without it the route guessed the slot and the calendar day from where the code runs: at half
+    // past nine here it is half past six there, which is dinner rather than pre-sleep.
+    expect(captureBody("a banana", null, "log", "Asia/Tokyo").tz).toBe("Asia/Tokyo");
+    // And the real browser value by default, whatever this runner happens to be.
+    expect(captureBody("a banana", null, "log").tz).toBe(deviceTz());
   });
 
   it("carries an attached photo's path", () => {

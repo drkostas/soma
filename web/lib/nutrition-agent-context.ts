@@ -42,11 +42,11 @@ export interface AgentContext {
  * When the meal was eaten, as far as anything knows: what he said, or failing that when the row
  * was written. Never an empty string for a row that has a time, because a blank reads as unknown.
  */
-export function eatenAt(saidAt: string | null, loggedAt: string | null): string {
+export function eatenAt(saidAt: string | null, loggedAt: string | null, tz?: string): string {
   for (const v of [saidAt, loggedAt]) {
     if (!v) continue;
     const d = new Date(v);
-    if (!Number.isNaN(d.getTime())) return hhmm(d);
+    if (!Number.isNaN(d.getTime())) return hhmm(d, tz ?? athleteTz());
   }
   return "";
 }
@@ -95,6 +95,8 @@ export function nextMealSlot(logged: Array<Pick<LoggedMeal, "slot">>, clockSlot:
 
 export async function buildAgentContext(
   sql: QueryFn, date: string, slot: string, slotBudgetKcal: number, dayRemainingKcal: number,
+  /** The zone the capture was made in, so every time in the block is on the clock he was reading. */
+  tz: string = athleteTz(),
 ): Promise<AgentContext> {
   const bands = await getPortionBands(sql);
 
@@ -131,10 +133,10 @@ export async function buildAgentContext(
 
   return {
     date, slot, slotBudgetKcal, dayRemainingKcal,
-    now: hhmm(new Date()),
+    now: hhmm(new Date(), tz),
     logged: loggedRows.map((r) => ({
       slot: String(r.meal_slot ?? ""),
-      at: eatenAt(r.said_at as string | null, r.logged_at as string | null),
+      at: eatenAt(r.said_at as string | null, r.logged_at as string | null, tz),
       calories: Math.round(Number(r.calories ?? 0)),
       what: String(r.what ?? "").slice(0, 200),
     })),
