@@ -120,8 +120,23 @@ async function budgetForDay(
   };
 }
 
+/**
+ * The day a meal belongs to, counted back from the day he was talking.
+ *
+ * Plain date arithmetic in UTC on purpose: these are calendar days from `todayAthlete`, not
+ * instants, so constructing them as local dates would shift them across a timezone boundary.
+ */
+export function dayBack(date: string, offset: number): string {
+  if (!offset) return date;
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  d.setUTCDate(d.getUTCDate() - offset);
+  return d.toISOString().slice(0, 10);
+}
+
 async function writeMeal(
-  sql: QueryFn, cap: CaptureRow, slot: string, items: ResolvedItem[], weighMethod: string,
+  sql: QueryFn, cap: CaptureRow, date: string, slot: string, items: ResolvedItem[],
+  weighMethod: string,
 ): Promise<number> {
   const t = items.reduce((a, i) => ({
     calories: a.calories + i.calories, protein: a.protein + i.protein,
@@ -130,7 +145,9 @@ async function writeMeal(
   const notes = cap.messages.filter((m) => m.role === "user").map((m) => m.text).join(" / ").slice(0, 1000);
   const source = cap.messages.some((m) => m.image) ? "photo" : "chat";
 
-  await sql`INSERT INTO nutrition_day (date) VALUES (${cap.date}) ON CONFLICT (date) DO NOTHING`;
+  // ⛔ `date`, NOT `cap.date`. The capture's date is when he said it; this is when he ate it, and
+  // they differ every time he logs something retroactively.
+  await sql`INSERT INTO nutrition_day (date) VALUES (${date}) ON CONFLICT (date) DO NOTHING`;
   // ⛔ A capture owns at most ONE meal. A follow-up re-runs the whole conversation, which is
   // right, and this used to INSERT a second row while the capture's meal_log_id moved on, so the
   // meal being corrected stayed in the day's total. Correcting a mistake made the day grow.
@@ -140,7 +157,7 @@ async function writeMeal(
   const rows = (await sql`
     INSERT INTO meal_log (date, meal_slot, source, portion_multiplier, items,
                           calories, protein, carbs, fat, fiber, notes, weigh_method)
-    VALUES (${cap.date}, ${slot}, ${source}, 1.0, ${JSON.stringify(items)}::jsonb,
+    VALUES (${date}, ${slot}, ${source}, 1.0, ${JSON.stringify(items)}::jsonb,
             ${Math.round(t.calories)}, ${Math.round(t.protein)}, ${Math.round(t.carbs)},
             ${Math.round(t.fat)}, ${Math.round(t.fiber)}, ${notes}, ${weighMethod})
     RETURNING id`) as Array<{ id: number }>;
@@ -206,6 +223,8 @@ export async function processCapture(sql: QueryFn, raw: CaptureRow): Promise<voi
     let summary = "";
     let proposal: unknown = null;
     let resolvedSlot = slot;
+    // The day the food was eaten. Only a retroactive sentence moves it off the capture's date.
+    let resolvedDate = cap.date;
     let totalGrams: number | null = null;
 
     // The model-free reading is only tried on a first, image-free turn. A follow-up means the
@@ -226,6 +245,7 @@ export async function processCapture(sql: QueryFn, raw: CaptureRow): Promise<voi
       const run = await runMealAgent(ctx, thread);
       proposal = run.proposal;
       resolvedSlot = run.proposal.slot;
+      resolvedDate = dayBack(cap.date, run.proposal.day_offset);
       summary = run.proposal.summary;
       totalGrams = run.proposal.total_grams;
 
@@ -255,10 +275,20 @@ export async function processCapture(sql: QueryFn, raw: CaptureRow): Promise<voi
       items = resolvable;
     }
 
+    // ⛔ RE-READ THE BUDGET FOR THE DAY THE FOOD WAS EATEN. The first read was today's, which is
+    // what the agent should see, because today is what he is looking at. Portioning an unstated
+    // amount is a different question: "how much was left that day" is only the same number when
+    // the meal is today's.
+    let budget = { slotKcal, dayConsumed };
+    if (resolvedDate !== cap.date) {
+      const b = await budgetForDay(sql, resolvedDate, resolvedSlot, cap.meal_log_id);
+      budget = { slotKcal: b.slotKcal, dayConsumed: b.consumed };
+    }
+
     const bands = await getPortionBands(sql);
     const ingredients = await loadIngredients(sql, items.map((i) => i.ingredient_id));
     const { items: raw, weighMethod } = resolveQuantities({
-      items, totalGrams, slotBudgetKcal: slotKcal, ingredients, bands,
+      items, totalGrams, slotBudgetKcal: budget.slotKcal, ingredients, bands,
     });
     if (!raw.length) throw new Error("nothing left after resolving quantities");
 
@@ -266,13 +296,18 @@ export async function processCapture(sql: QueryFn, raw: CaptureRow): Promise<voi
     // the meal is nothing like anything in his log. It says so when it does, so the strip shows it.
     const stats = await getHistoryStats(sql);
     const check = enforcePlausibility({
-      items: raw, weighMethod, slot: resolvedSlot, consumedToday: dayConsumed, stats,
+      items: raw, weighMethod, slot: resolvedSlot, consumedToday: budget.dayConsumed, stats,
     });
     const resolved = check.items;
     if (check.note) summary = `${summary} ${check.note}`;
+    // The strip reads this line. Saying the day out loud is what stops "(yesterday)" in prose
+    // sitting above a row dated today.
+    if (resolvedDate !== cap.date) summary = `${summary} (on ${resolvedDate})`;
 
     let mealLogId: number | null = null;
-    if (cap.mode === "log") mealLogId = await writeMeal(sql, cap, resolvedSlot, resolved, weighMethod);
+    if (cap.mode === "log") {
+      mealLogId = await writeMeal(sql, cap, resolvedDate, resolvedSlot, resolved, weighMethod);
+    }
 
     const status: CaptureStatus = cap.mode === "log" ? "logged" : "ready";
     // Store how the grams were arrived at alongside them. A calibrate capture is a proposal the

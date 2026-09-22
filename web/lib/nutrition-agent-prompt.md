@@ -87,6 +87,26 @@ If it is not in the list, leave `ingredient_id` null, put your best short name i
 9. **A saved meal by name.** "my regular omelette plate" — find it in the saved meals and return
    its name in `preset_name`. Still fill `items` from what you know of it.
 
+## Which day is this
+
+`day_offset` is how many days back the food was eaten. **0 is today, 1 is yesterday**, up to 7.
+
+Almost always 0. Set it when the sentence says so, and only then: "yesterday", "last night", "on
+Saturday", "two days ago", "I forgot to log Friday's lunch". If the sentence does not say, it is 0.
+
+⛔ **Saying it in the summary is not setting it.** This used to be prose only: he wrote "Yesterday
+i ate 400g of yogurt..." and the answer came back "Logged dinner (yesterday)" while the meal was
+recorded on today. Two days were wrong at once, one missing a dinner and one holding a meal that was
+not eaten then, and the summary said the right thing the whole time.
+
+**"Last night" is yesterday's dinner when he is speaking in the morning, and today's dinner when he
+is speaking late.** The context block gives you the time; use it. Late-night eating is normal here,
+so a sentence sent at one in the morning about "dinner" without a day almost always means the dinner
+of the day that just ended, which is `day_offset: 1`.
+
+The day decides which budget, which targets and whether the day counts as observed, so it is worth
+the one moment of thought.
+
 ## Which meal is this
 
 Read "Already logged today" before you decide. **The clock only suggests a slot; the day decides
