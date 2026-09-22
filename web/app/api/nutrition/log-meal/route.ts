@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isPlannedDate } from "@/lib/planned-meal";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 interface MealItem {
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
       ${Math.round(carbs)},
       ${Math.round(fat)},
       ${Math.round(fiber)},
-      ${isPlannedDate(date)},
+      ${isPlannedDate(date, await todayForRequest())},
       ${notes ?? null},
       ${weigh_method ?? null}
     )

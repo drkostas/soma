@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar";
 import { DemoBanner } from "@/components/demo-banner";
 import { Toaster } from "sonner";
 import { SWRegister } from "@/components/sw-register";
+import { TzBeacon } from "@/components/tz-beacon";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { NavProgress } from "@/components/nav-progress";
 import { ChatWidget } from "@/components/chat-widget";
@@ -60,6 +61,8 @@ export default function RootLayout({
           </main>
           <Toaster richColors />
         </TooltipProvider>
+        {/* Tells the server which timezone this device is in. See `lib/request-tz.ts`. */}
+        <TzBeacon />
         <SWRegister />
         <PWAInstallPrompt />
         <ChatWidget />

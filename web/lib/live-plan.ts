@@ -69,7 +69,13 @@ export interface LivePlan {
   days: PlanDayRow[];
 }
 
-/** Today in the athlete's timezone as YYYY-MM-DD; matches graph/route.ts. */
+/**
+ * Today in the FALLBACK timezone as YYYY-MM-DD.
+ *
+ * ⚠️ NOT FOR A REQUEST. A route or a page should use `todayForRequest()`, which reads the zone the
+ * device sent; this is the constant, for the drain and the daemons that have no device to ask. Its
+ * one caller was a route and has been moved.
+ */
 export function todayLocal(): string {
   return todayAthlete();
 }

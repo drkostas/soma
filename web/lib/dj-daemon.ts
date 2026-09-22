@@ -186,7 +186,8 @@ export async function runDaemon(opts: DaemonOpts): Promise<void> {
 
   writeStatus(statusFile, { state: "starting", hr: null, target_bpm: null });
 
-  const todayNyc = () => todayAthlete();
+  // The daemon has no device to ask, so the fallback zone is the right answer here.
+  const todayHere = () => todayAthlete();
 
   while (!stop) {
     try {
@@ -200,7 +201,7 @@ export async function runDaemon(opts: DaemonOpts): Promise<void> {
       }
 
       // 1. Poll Garmin HR.
-      const today = todayNyc();
+      const today = todayHere();
       const hrData = (await garmin.connectapi(`/wellness-service/wellness/dailyHeartRate/${display}?date=${today}`)) as any;
       const hrResult = latestHrFromGarminData(hrData, HR_WINDOW_SECONDS);
       if (hrResult) [lastHr, lastHrTs] = hrResult;
