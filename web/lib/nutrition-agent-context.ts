@@ -6,6 +6,7 @@
  */
 import type { QueryFn } from "./db";
 import { getPortionBands } from "./portion-history";
+import { athleteTz } from "./athlete-tz";
 
 export interface ContextIngredient {
   id: string; name: string; category: string;
@@ -50,9 +51,17 @@ export function eatenAt(saidAt: string | null, loggedAt: string | null): string 
   return "";
 }
 
-/** One clock for both the logged times and "now", so "soon after" is a real comparison. */
-export function hhmm(d: Date): string {
-  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+/**
+ * One clock for both the logged times and "now", so "soon after" is a real comparison.
+ *
+ * ⚠️ NAME THE ZONE. Every date here comes from `athleteTz`, and this was taking the process's zone
+ * instead, so the clock and the calendar would disagree the moment the worker ran anywhere but his
+ * own machine. Related and worse: the DATABASE session is New York while he is in Athens, so a
+ * timestamp formatted in SQL reads seven hours early. His eight in the morning looked like one at
+ * night to me, and I built prompt guidance on it. Never format a timestamp in SQL.
+ */
+export function hhmm(d: Date, tz: string = athleteTz()): string {
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz });
 }
 
 /** The order of the day, for naming which slots are still empty. */

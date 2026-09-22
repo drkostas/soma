@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readDayOffset, MAX_DAYS_BACK } from "./nutrition-agent";
 import { dayBack } from "./meal-worker";
+import { hhmm } from "./nutrition-agent-context";
 
 describe("readDayOffset", () => {
   it("reads the ordinary cases", () => {
@@ -58,5 +59,26 @@ describe("dayBack", () => {
 
   it("returns the date unchanged when it cannot be read", () => {
     expect(dayBack("not a date", 1)).toBe("not a date");
+  });
+});
+
+describe("hhmm, the clock the agent is shown", () => {
+  // 05:10 UTC is 08:10 in Athens and 01:10 in New York. That gap is the whole story: the database
+  // session is New York, so his ordinary breakfast at 08:10 read as 01:10 out of a SQL `to_char`,
+  // and I took it for late-night eating and wrote prompt guidance on top of it.
+  const t = new Date("2026-09-22T05:10:00Z");
+
+  it("is his clock, not the machine's and not the database's", () => {
+    expect(hhmm(t, "Europe/Athens")).toBe("08:10");
+  });
+
+  it("⛔ is seven hours out if the database's zone is used, which is the bug", () => {
+    expect(hhmm(t, "America/New_York")).toBe("01:10");
+    expect(hhmm(t, "America/New_York")).not.toBe(hhmm(t, "Europe/Athens"));
+  });
+
+  it("names a zone by default rather than inheriting the process's", () => {
+    // Whatever TZ this test process has, the default must agree with the athlete's zone.
+    expect(hhmm(t)).toBe(hhmm(t, process.env.ATHLETE_TZ || "Europe/Athens"));
   });
 });
