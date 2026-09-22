@@ -97,22 +97,38 @@ describe("renderContext puts the day in front of the agent", () => {
 
 describe("hhmm", () => {
   /**
-   * Both the logged times and "now" go through this one function, on purpose. The database
-   * session here is on America/New_York while the owner and this process are on Europe/Athens, so
-   * a time formatted by Postgres would be seven hours out and "soon after breakfast" would be
-   * nonsense. One clock, one formatter.
+   * Both the logged times and "now" go through this one function, on purpose. The database session
+   * here is on America/New_York while the owner is on Europe/Athens, so a time formatted by
+   * Postgres would be seven hours out and "soon after breakfast" would be nonsense. One clock, one
+   * formatter.
+   *
+   * ⛔ THE INSTANTS ARE UTC AND THE EXPECTATIONS ARE HIS ZONE. These assertions used to build a
+   * date with `new Date(y, m, d, h, m)`, which is the PROCESS's zone, and then expect that same
+   * zone back: a round trip that agreed with itself on any machine and therefore tested nothing
+   * about whose clock it is. It only came apart when `hhmm` was given the athlete's zone by name,
+   * and then it failed in CI and nowhere else, because CI runs in UTC while this laptop is already
+   * Athens. September is EEST, so Athens is UTC+3.
    */
-  it("is 24-hour, zero-padded, with no seconds", () => {
-    expect(hhmm(new Date(2026, 8, 20, 7, 47))).toBe("07:47");
-    expect(hhmm(new Date(2026, 8, 20, 19, 5))).toBe("19:05");
-    expect(hhmm(new Date(2026, 8, 20, 0, 0))).toBe("00:00");
+  const ATHENS = "Europe/Athens";
+
+  it("is 24-hour, zero-padded, with no seconds, on his clock", () => {
+    expect(hhmm(new Date("2026-09-20T04:47:00Z"), ATHENS)).toBe("07:47");
+    expect(hhmm(new Date("2026-09-20T16:05:00Z"), ATHENS)).toBe("19:05");
+    expect(hhmm(new Date("2026-09-19T21:00:00Z"), ATHENS)).toBe("00:00");
+  });
+
+  it("⛔ is his zone and not the runner's, which is the thing worth pinning", () => {
+    const t = new Date("2026-09-20T04:47:00Z");
+    expect(hhmm(t, ATHENS)).toBe("07:47");
+    expect(hhmm(t, "UTC")).toBe("04:47");
+    expect(hhmm(t, "America/New_York")).toBe("00:47");
   });
 
   it("formats a logged time and now through the same clock, so they can be compared", () => {
-    const logged = new Date(2026, 8, 20, 7, 47);
-    const now = new Date(2026, 8, 20, 11, 30);
+    const logged = new Date("2026-09-20T04:47:00Z");
+    const now = new Date("2026-09-20T08:30:00Z");
     // Nothing clever asserted, only that the two are comparable strings from one source.
-    expect(hhmm(logged) < hhmm(now)).toBe(true);
+    expect(hhmm(logged, ATHENS) < hhmm(now, ATHENS)).toBe(true);
   });
 });
 
@@ -169,8 +185,10 @@ describe("eatenAt", () => {
    * the repair time, and his live day showed 13:32 for a breakfast he had said at 10:47, so
    * "soon after" was being judged against a clock with nothing to do with eating.
    */
-  const said = new Date(2026, 8, 20, 10, 47).toISOString();
-  const written = new Date(2026, 8, 20, 13, 32).toISOString();
+  // UTC instants, read back on his clock. Athens is UTC+3 in September, so these are 10:47 and
+  // 13:32 to him wherever the test happens to run.
+  const said = "2026-09-20T07:47:00Z";
+  const written = "2026-09-20T10:32:00Z";
 
   it("prefers when he said it over when the row was written", () => {
     expect(eatenAt(said, written)).toBe("10:47");

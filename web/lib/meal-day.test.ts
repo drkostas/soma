@@ -79,6 +79,8 @@ describe("hhmm, the clock the agent is shown", () => {
 
   it("names a zone by default rather than inheriting the process's", () => {
     // Whatever TZ this test process has, the default must agree with the athlete's zone.
-    expect(hhmm(t)).toBe(hhmm(t, process.env.ATHLETE_TZ || "Europe/Athens"));
+    // `athleteTz()` reads SOMA_TZ and falls back to Athens. An earlier version of this line named
+    // ATHLETE_TZ, which does not exist, and passed anyway: a test that is right by accident.
+    expect(hhmm(t)).toBe(hhmm(t, process.env.SOMA_TZ?.trim() || "Europe/Athens"));
   });
 });
