@@ -122,7 +122,8 @@ export interface SomaMeal {
 export interface SomaBreakdown {
   totalBurn?: number; bmr?: number;
   stepCalories?: number; stepCaloriesPredicted?: number; expectedSteps?: number; actualSteps?: number;
-  runCalories?: number; runActual?: number; runPredicted?: number; runEnabled?: boolean; runActualDistKm?: number; runDistanceKm?: number;
+  runCalories?: number; /** A FLAG, not a figure: true when the run really happened. `runCalories` is the number. */
+  runActual?: boolean; runPredicted?: number; runEnabled?: boolean; runActualDistKm?: number; runDistanceKm?: number;
   gymCalories?: number; gymBreakdown?: { title: string; calories: number; predicted?: number; actual?: boolean }[];
   drinkCalories?: number; deficit?: number;
   weightKg?: number;
