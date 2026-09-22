@@ -10,6 +10,7 @@ import {
 import { MealCaptureInput } from "../../components/MealCaptureInput";
 import { MealCaptureStatus } from "../../components/MealCaptureStatus";
 import { slotForHour } from "../../lib/meal-capture";
+import { runKcal, runIsPlanned, runPredictionNote } from "../../lib/burn-row";
 import { NutritionOnboarding } from "../../components/nutrition-onboarding";
 import { BodyCompChart } from "../../components/body-comp-chart";
 import { ActivitySelector } from "../../components/activity-selector";
@@ -325,8 +326,12 @@ export default function NutritionScreen() {
       </View>
     );
 
+  // ⛔ `runActual` IS A FLAG, NOT A FIGURE. It is true when the run really happened, and the
+  // calories are in `runCalories`. Summing the flag added 1 instead of 222 to a day's burn, so this
+  // fallback was 221 kcal short. It never showed because the API does send `totalBurn`, which is
+  // the only reason this was invisible rather than wrong on screen.
   const totalBurn = bd?.totalBurn ?? (
-    (bd?.bmr ?? 0) + (bd?.stepCalories ?? 0) + (bd?.runActual ?? bd?.runPredicted ?? bd?.runCalories ?? 0) + (bd?.gymCalories ?? 0)
+    (bd?.bmr ?? 0) + (bd?.stepCalories ?? 0) + runKcal(bd) + (bd?.gymCalories ?? 0)
   );
 
   // Live day-level meal preview: the in-progress preset (base x scale) or compose
@@ -582,13 +587,16 @@ export default function NutritionScreen() {
                   { note: [bd.expectedSteps ? `${bd.expectedSteps.toLocaleString()} expected` : null, "excl. run steps"].filter(Boolean).join(" · ") },
                 )}
                 {bd.runEnabled ? burnRow(
-                  `Run${bd.runActual ? "" : " (planned)"}`,
-                  bd.runActual ?? bd.runPredicted ?? bd.runCalories,
+                  `Run${runIsPlanned(bd) ? " (planned)" : ""}`,
+                  // ⛔ `runKcal(bd)`, never `bd.runActual`. That field is a FLAG; passing it here
+                  // rendered his 222 kcal run as "1 kcal". The choice lives in `burn-row.ts` so a
+                  // test can hold it, which is what this screen cannot have.
+                  runKcal(bd),
                   {
-                    amber: !bd.runActual,
+                    amber: runIsPlanned(bd),
                     note: [
                       bd.runActualDistKm ? `${bd.runActualDistKm.toFixed(1)} km actual` : (bd.runDistanceKm ?? 0) > 0 ? `${(bd.runDistanceKm ?? 0).toFixed(1)} km planned` : null,
-                      bd.runActual != null && bd.runPredicted != null ? `~${Math.round(bd.runPredicted)} kcal predicted` : null,
+                      runPredictionNote(bd),
                     ].filter(Boolean).join(" · ") || undefined,
                   },
                 ) : null}
