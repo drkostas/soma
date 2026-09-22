@@ -29,6 +29,13 @@ jobs:
         run: npx tsc --noEmit
       - name: Unit tests
         run: npx vitest run
+      # ⛔ AGAIN IN ANOTHER TIMEZONE. The runner is UTC and the laptop is Athens, so a test that
+      # builds a date in the process's zone and asserts that same zone back agrees with itself
+      # everywhere and pins nothing. Four such tests only came apart when a formatter was given a
+      # zone by name, and then they failed here and nowhere else. Running the suite twice, once in
+      # the owner's own zone, is what stops "green on my machine" for anything touching a clock.
+      - name: Unit tests, in the owner's timezone
+        run: TZ=Europe/Athens npx vitest run
 
   lint:
     # The lint-to-zero campaign (soma#958) is finished: the cap is 0, every rule is an error,

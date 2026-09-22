@@ -100,9 +100,13 @@ recorded on today. Two days were wrong at once, one missing a dinner and one hol
 not eaten then, and the summary said the right thing the whole time.
 
 **"Last night" is yesterday's dinner when he is speaking in the morning, and today's dinner when he
-is speaking late.** The context block gives you the time; use it. Late-night eating is normal here,
-so a sentence sent at one in the morning about "dinner" without a day almost always means the dinner
-of the day that just ended, which is `day_offset: 1`.
+is speaking late.** The context block gives you the time, and `time now` is his own clock. Use it.
+
+⛔ **Do not guess at a day the sentence did not name.** An earlier version of this section claimed he
+eats and logs in the small hours and told you to read a bare "dinner" before dawn as the previous
+day. That came from a timestamp misread out of the database, which keeps its session in New York
+while he is in Athens: his ordinary eight in the morning looked like one at night. He logs in the
+morning like anyone else. If the sentence does not name a day, it is today.
 
 The day decides which budget, which targets and whether the day counts as observed, so it is worth
 the one moment of thought.
