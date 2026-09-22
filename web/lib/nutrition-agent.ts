@@ -45,6 +45,8 @@ export interface ProposalItem {
 
 export interface MealProposal {
   slot: Slot;
+  /** How many days back the food was eaten. 0 is today, 1 is yesterday. See `MAX_DAYS_BACK`. */
+  day_offset: number;
   tense: "planning" | "eaten";
   preset_name: string | null;
   total_grams: number | null;
@@ -53,10 +55,34 @@ export interface MealProposal {
   question: string | null;
 }
 
+/**
+ * How far back a meal may be placed.
+ *
+ * ⛔ THE AGENT USED TO SAY "yesterday" AND THE MEAL STILL LANDED TODAY. On 2026-09-22 he wrote
+ * "Yesterday i ate 400g of yogurt..." and the summary came back "Logged dinner (yesterday)", which
+ * read as though it had understood, while the row went to today's date. Two days were wrong at
+ * once: one short of a dinner, one carrying a meal that was not eaten then. There was no field for
+ * a day at all, so the agent could only ever say it in prose.
+ *
+ * A week is enough for anything he would remember eating, and the bound matters: the day decides
+ * which budget, which targets and which "observed versus extrapolated" reading the food lands in.
+ */
+export const MAX_DAYS_BACK = 7;
+
+/** The day a meal belongs to, as an offset the agent cannot get wrong by inventing a date. */
+export function readDayOffset(v: unknown): number {
+  const n = num(v);
+  if (n == null || !Number.isFinite(n)) return 0;
+  // Never the future, never further back than the bound. Out of range means today, not a refusal:
+  // losing the meal over a bad day number would be worse than putting it where he is looking.
+  return Math.min(MAX_DAYS_BACK, Math.max(0, Math.round(n)));
+}
+
 export const MEAL_PROPOSAL_SCHEMA = {
   type: "object",
   properties: {
     slot: { type: "string", enum: [...SLOTS] },
+    day_offset: { type: "integer", minimum: 0, maximum: 7 },
     tense: { type: "string", enum: ["planning", "eaten"] },
     preset_name: { type: ["string", "null"] },
     total_grams: { type: ["number", "null"] },
@@ -185,7 +211,7 @@ export function parseProposal(v: unknown): MealProposal | null {
   // The instructions allow that one question, so rejecting it here stranded the owner's sentence,
   // which is the opposite of the point. Found by sending a photo it could not read.
   if (!o.items.length) return question ? {
-    slot: String(o.slot) as Slot, tense, total_grams: totalGrams,
+    slot: String(o.slot) as Slot, day_offset: readDayOffset(o.day_offset), tense, total_grams: totalGrams,
     preset_name: typeof o.preset_name === "string" && o.preset_name ? o.preset_name : null,
     items: [], summary: String(o.summary ?? "").slice(0, 500), question,
   } : null;
@@ -220,7 +246,10 @@ export function parseProposal(v: unknown): MealProposal | null {
   }
 
   return {
-    slot: String(o.slot) as Slot, tense, total_grams: totalGrams,
+    slot: String(o.slot) as Slot,
+    day_offset: readDayOffset(o.day_offset),
+    tense,
+    total_grams: totalGrams,
     preset_name: typeof o.preset_name === "string" && o.preset_name ? o.preset_name : null,
     items,
     summary: String(o.summary ?? "").slice(0, 500),
