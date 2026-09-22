@@ -40,9 +40,24 @@ function speechCtor(): WebSpeechCtor | null {
 
 export type CaptureMode = "log" | "calibrate";
 
+/**
+ * The browser's own timezone, so the day and the slot are decided on the clock on this screen.
+ *
+ * The route used to decide both from ITS clock, which is Vercel's, so at half past nine here it was
+ * half past six there: dinner rather than pre-sleep, and the wrong calendar day either side of
+ * midnight. Empty when the browser will not say, and the server falls back.
+ */
+export function deviceTz(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
 /** What goes on the wire. Pure, so it can be tested without rendering anything. */
-export function captureBody(text: string, image: string | null, mode: CaptureMode) {
-  return { text: text.trim(), image, mode };
+export function captureBody(text: string, image: string | null, mode: CaptureMode, tz = deviceTz()) {
+  return { text: text.trim(), image, mode, tz };
 }
 
 export function placeholderFor(slot: string): string {

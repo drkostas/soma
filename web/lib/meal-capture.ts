@@ -60,6 +60,8 @@ export function nextStatus(current: CaptureStatus, event: CaptureEvent, attempts
 
 export interface CaptureRow {
   id: number; date: string; meal_slot: string | null; mode: CaptureMode;
+  /** The zone the device was in when he sent it. Null on captures that predate this. */
+  tz: string | null;
   status: CaptureStatus; messages: CaptureMessage[];
   proposal: unknown | null; resolved: unknown | null;
   meal_log_id: number | null; error: string | null; attempts: number;
@@ -68,15 +70,16 @@ export interface CaptureRow {
 export async function createCapture(
   sql: QueryFn,
   o: { date: string; slot: string | null; mode: CaptureMode; text: string; image: string | null;
-       audio?: string | null; heard?: string | null },
+       audio?: string | null; heard?: string | null; tz?: string | null },
 ): Promise<number> {
   const msg: CaptureMessage = {
     role: "user", text: o.text, image: o.image, at: new Date().toISOString(),
     audio: o.audio ?? null, heard: o.heard ?? null,
   };
   const rows = (await sql`
-    INSERT INTO meal_capture (date, meal_slot, mode, status, messages)
-    VALUES (${o.date}, ${o.slot}, ${o.mode}, 'captured', ${JSON.stringify([msg])}::jsonb)
+    INSERT INTO meal_capture (date, meal_slot, mode, status, messages, tz)
+    VALUES (${o.date}, ${o.slot}, ${o.mode}, 'captured', ${JSON.stringify([msg])}::jsonb,
+            ${o.tz ?? null})
     RETURNING id`) as Array<{ id: number }>;
   return Number(rows[0].id);
 }
@@ -84,12 +87,13 @@ export async function createCapture(
 export async function getCapture(sql: QueryFn, id: number): Promise<CaptureRow | null> {
   const rows = (await sql`
     SELECT id, date::text AS date, meal_slot, mode, status, messages, proposal, resolved,
-           meal_log_id, error, attempts
+           meal_log_id, error, attempts, tz
     FROM meal_capture WHERE id = ${id}`) as Array<Record<string, unknown>>;
   if (!rows.length) return null;
   const r = rows[0];
   return {
     id: Number(r.id), date: String(r.date), meal_slot: (r.meal_slot as string) ?? null,
+    tz: (r.tz as string) ?? null,
     mode: r.mode as CaptureMode, status: r.status as CaptureStatus,
     messages: (typeof r.messages === "string" ? JSON.parse(r.messages) : r.messages ?? []) as CaptureMessage[],
     proposal: r.proposal ?? null, resolved: r.resolved ?? null,

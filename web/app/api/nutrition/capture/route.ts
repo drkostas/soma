@@ -8,7 +8,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { todayAthlete } from "@/lib/athlete-tz";
+import { dateInAthleteTz, hourInTz, readTz } from "@/lib/athlete-tz";
 import { createCapture, getCapture, slotForHour, type CaptureMode } from "@/lib/meal-capture";
 import { drainCaptures } from "@/lib/meal-worker";
 
@@ -19,20 +19,26 @@ export async function POST(req: NextRequest) {
   const sql = getDb();
   const body = (await req.json()) as {
     text?: string; image?: string | null; audio?: string | null; heard?: string | null;
-    mode?: string; date?: string; slot?: string;
+    mode?: string; date?: string; slot?: string; tz?: string;
   };
   const text = typeof body.text === "string" ? body.text.trim() : "";
   if (!text && !body.image && !body.audio) {
     return NextResponse.json({ error: "text, image or audio is required" }, { status: 400 });
   }
 
-  const date = body.date || todayAthlete();
-  const slot = body.slot || slotForHour(new Date().getHours());
+  // ⛔ HIS CLOCK, NOT THIS MACHINE'S. `new Date().getHours()` is the hour where the code runs, and
+  // this runs on Vercel, so an evening meal was guessed against a clock three hours behind him: at
+  // half past nine his time it is half past six there, which is dinner rather than pre-sleep. The
+  // date had the same problem either side of midnight. The device sends its zone and we use it.
+  const tz = readTz(body.tz);
+  const now = new Date();
+  const date = body.date || dateInAthleteTz(now, tz);
+  const slot = body.slot || slotForHour(hourInTz(now, tz));
   const mode: CaptureMode = body.mode === "calibrate" ? "calibrate" : "log";
 
   const id = await createCapture(sql, {
     date, slot, mode, text, image: body.image ?? null,
-    audio: body.audio ?? null, heard: body.heard ?? null,
+    audio: body.audio ?? null, heard: body.heard ?? null, tz,
   });
 
   // Deliberately not awaited. The owner is already gone.

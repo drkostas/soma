@@ -234,7 +234,11 @@ export async function processCapture(sql: QueryFn, raw: CaptureRow): Promise<voi
     if (items) {
       summary = `Logged ${slot}: ${lastUser!.text}`;
     } else {
-      const ctx = renderContext(await buildAgentContext(sql, cap.date, slot, slotKcal, dayLeft));
+      // The capture carries the zone the device was in, so the times the agent reads are the ones
+      // that were on his screen rather than the ones on this machine.
+      const ctx = renderContext(
+        await buildAgentContext(sql, cap.date, slot, slotKcal, dayLeft, cap.tz ?? undefined),
+      );
       // The agent opens a file, and a photo from the phone lives in the database, so write it out
       // here. A reference that is already a path comes back untouched.
       const thread: Array<{ role: "user" | "agent"; text: string; image: string | null }> = [];

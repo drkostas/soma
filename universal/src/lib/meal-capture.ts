@@ -25,6 +25,21 @@ export function slotForHour(h: number): string {
   return "pre_sleep";
 }
 
+/**
+ * The phone's own timezone, so the day and the slot are decided on the clock he is holding.
+ *
+ * The server used to decide both from ITS clock, which is Vercel's, so at half past nine here it
+ * was half past six there: dinner rather than pre-sleep, and the wrong calendar day either side of
+ * midnight. Empty when the engine cannot say, and the server falls back.
+ */
+export function deviceTz(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
 /** The acknowledgement. It must not claim the meal is there yet, because it is not. */
 export function captureAck(mode: CaptureMode): string {
   return mode === "log" ? "Got it, logging it now." : "Got it, I'll have it ready to check.";
@@ -38,7 +53,7 @@ export async function captureMeal(
     method: "POST",
     headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
     body: JSON.stringify({
-      text: text.trim(), image, mode,
+      text: text.trim(), image, mode, tz: deviceTz(),
       audio: spoken.audio ?? null, heard: spoken.heard ?? null,
     }),
   });
@@ -141,7 +156,11 @@ async function uploadCaptureFile(uri: string, mime: string, noun: string): Promi
 
 /** Today's captures and where each has got to, for the status strip. */
 export async function fetchRecentCaptures(date?: string): Promise<CaptureCard[]> {
-  const qs = date ? `?date=${encodeURIComponent(date)}` : "";
+  // Send the zone even when a date is given: the route needs it only for the fallback, and passing
+  // it always means the fallback can never be the database's idea of today, which is New York's.
+  const qs = date
+    ? `?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(deviceTz())}`
+    : `?tz=${encodeURIComponent(deviceTz())}`;
   try {
     const res = await fetch(`${API_BASE}/api/nutrition/capture/recent${qs}`, { headers: AUTH_HEADERS });
     if (!res.ok) return [];
@@ -163,7 +182,7 @@ export async function replyToCapture(
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
       body: JSON.stringify({
-        id, text: text.trim(), image,
+        id, text: text.trim(), image, tz: deviceTz(),
         audio: spoken.audio ?? null, heard: spoken.heard ?? null,
       }),
     });
