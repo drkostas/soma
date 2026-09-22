@@ -13,7 +13,7 @@ import { PlanLifecycleCard } from "@/components/plan-lifecycle-card";
 import { getPlanLifecycle } from "@/lib/live-plan";
 import { projectVdotSeries, DEFAULT_BANISTER, type DatedLoad } from "banister";
 import { vdotFromHmSeconds } from "banister";
-import { todayAthlete } from "@/lib/athlete-tz";
+import { todayForRequest } from "@/lib/request-tz";
 import { daysUntil } from "@/lib/date-range";
 
 export const metadata: Metadata = { title: "Training" };
@@ -88,11 +88,10 @@ async function getPlanForPage(): Promise<{
   return { planDays, raceInfo, live };
 }
 
-async function getReadiness() {
+async function getReadiness(today: string) {
   const sql = getDb();
   // Today's row only: readiness is about last night, so an older row is not a
   // fallback — with no row the card says "No readiness data" (#647).
-  const today = todayAthlete();
   const rows = await safeQuery(
     () => sql`
       SELECT r.composite_score, r.traffic_light,
@@ -421,10 +420,14 @@ async function getTrajectoryData(
 }
 
 export default async function TrainingPage() {
-  const today = todayAthlete();
+  // ⚠️ THIS IS WHAT MAKES THE PAGE DYNAMIC. It was prerendered with a five minute revalidate, and
+  // reading a cookie cannot be cached. The trade is deliberate: a cached page cannot know which day
+  // it is for the person looking at it, and on a single-user app five minutes of caching is worth
+  // less than being right about today while travelling.
+  const today = await todayForRequest();
   const [planForPage, _readiness, _pmcLatest, _fitnessLatest, referenceData, banisterParams, trailingLoad, lifecycle] = await Promise.all([
     getPlanForPage(),
-    getReadiness(),
+    getReadiness(today),
     getPMCLatest(),
     getFitnessLatest(),
     getReferenceData(),

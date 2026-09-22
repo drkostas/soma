@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getLivePlan, getTrailingLoad } from "@/lib/live-plan";
-import { todayAthlete } from "@/lib/athlete-tz";
+import { todayForRequest } from "@/lib/request-tz";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const sql = getDb();
-  const today = todayAthlete();
+  const today = await todayForRequest();
 
   const [
     pmcRows,

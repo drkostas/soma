@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { GarminAuth, DBTokenStore } from "garmin-auth";
 import { getDb } from "@/lib/db";
-import { getPlanLifecycle, todayLocal } from "@/lib/live-plan";
+import { getPlanLifecycle } from "@/lib/live-plan";
 import { createPlan, dropPlan, type GarminDeleter } from "@/lib/plan-admin";
+import { todayForRequest } from "@/lib/request-tz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export async function POST(req: Request): Promise<Response> {
     action?: string; raceDate?: string; raceDistanceKm?: number; goalTimeSeconds?: number; name?: string;
   };
   const sql = getDb();
-  const today = todayLocal();
+  const today = (await todayForRequest());
   try {
     if (body.action === "drop") {
       const { current } = await getPlanLifecycle(sql, today);

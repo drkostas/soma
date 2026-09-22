@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isPlannedDate } from "@/lib/planned-meal";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 export async function POST(req: NextRequest) {
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
         ${m.fat},
         ${m.fiber},
         ${m.notes},
-        ${isPlannedDate(to_date)}
+        ${isPlannedDate(to_date, await todayForRequest())}
       )
     `;
     copied++;
