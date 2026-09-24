@@ -39,7 +39,8 @@ export function driverFor(url: string): DbDriver {
 
 // One pool per process, created on first use. `next start` is long-lived, so a pool is right
 // here in a way it never was on a serverless function.
-let pool: Pool | null = null;
+/** A pool per connection string. See `localDb` for why this is a map. */
+const pools = new Map<string, Pool>();
 
 /**
  * The same tagged-template shape as `neon()`, over a normal Postgres connection. The template
@@ -47,8 +48,17 @@ let pool: Pool | null = null;
  * tell the difference and no query text changes.
  */
 function localDb(url: string): QueryFn {
+  // ⛔ ONE POOL PER URL, KEYED BY URL. This was a single module-level `pool`, created on the first
+  // call and then returned for EVERY later call whatever url was asked for. `getDb()` never showed
+  // it, because it always passes the same DATABASE_URL. A script that wanted two databases at once
+  // got one: it created the pool on `soma`, then asked for `verify_soma`, was silently handed
+  // `soma`, and its SELECT returned nothing and its UPDATE hit the wrong database. Both looked like
+  // success. That cost 29 unwanted weigh-ins written into his live Garmin account, because the
+  // cleanup that should have removed them queried an empty result and reported "nothing to do".
+  let pool = pools.get(url);
   if (!pool) {
     pool = new Pool({ connectionString: url, max: 8, idleTimeoutMillis: 30_000 });
+    pools.set(url, pool);
     // ⛔ AN IDLE CLIENT EMITTING error WITH NO LISTENER TAKES THE PROCESS DOWN. pg is explicit
     // about this, and idle clients emit on any backend restart, so one `brew services restart
     // postgresql` would kill the pinned host. This never mattered against Neon because the HTTP
@@ -87,6 +97,19 @@ function localDb(url: string): QueryFn {
  */
 function isBuildPhase(): boolean {
   return process.env.NEXT_PHASE === "phase-production-build" || process.env.npm_lifecycle_event === "build";
+}
+
+/**
+ * A connection to a named database, for the rare caller that needs two at once.
+ *
+ * ⚠️ WHY THIS EXISTS. A check script writes its probe rows to `verify_soma` so his real log is
+ * untouched, but the GARMIN TOKENS live only in `soma`, and a token store pointed at the wrong
+ * database reports "Login needs MFA / fresh SSO" — which reads as an expired credential and is
+ * nothing of the kind. `getDb()` remains the one connection every route and the sync should use.
+ */
+export function makeDb(url: string): QueryFn {
+  if (!url) throw new Error("makeDb needs a connection string");
+  return driverFor(url) === "http" ? (neon(url) as QueryFn) : localDb(url);
 }
 
 export function getDb(): QueryFn {
