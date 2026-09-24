@@ -21,6 +21,7 @@ import { getLivePlan } from "../lib/live-plan";
 import { enrichGarminRunActivities } from "../lib/garmin-run-enrich";
 import { uploadEnrichedToGarmin } from "../lib/hevy-upload";
 import { enrichGarminGymActivities } from "../lib/garmin-gym-enrich";
+import { pushWeightsToGarmin } from "../lib/weight-push";
 import { notifyPendingWorkouts } from "../lib/notify";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -140,6 +141,16 @@ if (garminClient) {
   // After the upload, so a workout uploaded in this pass is described in this pass too
   // (soma#982). Idempotent through the garmin_enrichment ledger, so a re-run is a no-op.
   await step("gym-enrich", () => enrichGarminGymActivities(sql, garminClient!, webBaseUrl));
+  // Weigh-ins the phone read out of Health Connect, sent onward to Garmin.
+  //
+  // ⛔ ONLY rows soma itself originated go out, which is why weightsOwedToGarmin filters on
+  // source_type = HEALTH_CONNECT and nothing else. Every other value in that column was minted by
+  // Garmin (MANUAL means "typed into Garmin", not "typed into soma"), and sending those back
+  // duplicates his own history beside itself. It already happened once, on 2026-09-24, to 29 rows.
+  //
+  // Each row is marked as it lands rather than after the batch, so a failure halfway through
+  // re-sends only what never arrived.
+  await step("weight-push", () => pushWeightsToGarmin(sql, garminClient!));
 }
 
 // 5. Telegram + push notifications for workouts now on Garmin.

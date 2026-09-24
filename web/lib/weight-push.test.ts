@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { garminWeightBody, pushWeightsToGarmin, PUSHABLE_SOURCES } from "./weight-push";
 
@@ -67,5 +68,37 @@ describe("pushWeightsToGarmin", () => {
     for (const garminOwned of ["MANUAL", "manual", "USER_SETTING", "INDEX_SCALE", "MFP"]) {
       expect(PUSHABLE_SOURCES as readonly string[]).not.toContain(garminOwned);
     }
+  });
+});
+
+/**
+ * ⛔ THE BUG THIS PINS IS "IT EXISTS BUT NOTHING CALLS IT", WHICH ALREADY HAPPENED TO THIS FILE.
+ *
+ * `pushWeightsToGarmin` shipped with its tests and no caller, so weigh-ins landed in soma and stopped
+ * there while every unit test stayed green. The same defect was found six times during the
+ * hevy2garmin parity audit. A unit test cannot catch it, because the pipeline is a script with
+ * side effects at import and nothing can load it, so this reads the source instead.
+ */
+describe("the hourly pipeline actually calls it", () => {
+  const pipeline = readFileSync(
+    new URL("../scripts/sync-pipeline.mts", import.meta.url),
+    "utf8",
+  );
+
+  it("imports the pusher", () => {
+    expect(pipeline).toContain('from "../lib/weight-push"');
+  });
+
+  it("calls it inside the block that holds an authenticated Garmin client", () => {
+    expect(pipeline).toMatch(/pushWeightsToGarmin\(sql, garminClient!\)/);
+    // The call has to be inside `if (garminClient) {`, or it runs with a null client.
+    const guard = pipeline.indexOf("if (garminClient) {");
+    const call = pipeline.indexOf("pushWeightsToGarmin(sql, garminClient!)");
+    expect(guard).toBeGreaterThan(-1);
+    expect(call).toBeGreaterThan(guard);
+  });
+
+  it("runs as a named step, so a failure is recorded rather than thrown away", () => {
+    expect(pipeline).toContain('await step("weight-push"');
   });
 });
