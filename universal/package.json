@@ -11,6 +11,7 @@
     "banister": "^0.5.1",
     "expo": "~57.0.6",
     "expo-background-task": "~57.0.20",
+    "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.5",
     "expo-device": "~57.0.1",
     "expo-file-system": "~57.0.6",
