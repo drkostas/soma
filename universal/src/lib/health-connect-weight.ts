@@ -12,6 +12,32 @@
  * nothing.
  */
 
+/**
+ * ⛔ PACKAGES SOMA PUSHES WEIGHT TO, WHOSE OWN RECORDS MUST NEVER BE READ BACK AS SOURCE READINGS.
+ *
+ * Garmin Connect declares WRITE_WEIGHT and WRITE_BODY_FAT to Health Connect and no reads at all
+ * (verified from `dumpsys package`, 13 health permissions, every one a write). So the moment that
+ * write is granted, a weigh-in soma pushed to Garmin comes back into Health Connect as a NEW record
+ * with a NEW id, soma reads it as a fresh reading, stores it, and pushes it to Garmin again.
+ *
+ * That is the same defect that already cost this project 13.5% of its 90-day training load, arriving
+ * one layer down. It is currently latent only because Garmin's write is not granted, which is one
+ * toggle away from being granted.
+ *
+ * `weight_log`'s existing `UNIQUE (date, weight_grams)` is the backstop and it caught this in a live
+ * probe, answering `already` to Garmin's copy of the same weigh-in. It is a backstop rather than the
+ * guard because it only holds while the grams match to the last gram, and a float round trip through
+ * Garmin need not preserve that.
+ */
+export const FEEDBACK_ORIGINS: readonly string[] = [
+  "com.garmin.android.apps.connectmobile",
+];
+
+/** Whether this record came from something soma feeds, rather than from a scale. */
+export function isFeedback(origin: string | undefined | null): boolean {
+  return typeof origin === "string" && FEEDBACK_ORIGINS.includes(origin);
+}
+
 /** Far enough back to predate any scale he has owned. Weight records are tiny and few. */
 export const HISTORY_ORIGIN = "2015-01-01T00:00:00.000Z";
 
@@ -28,6 +54,8 @@ export interface HcBodyFatRecord {
 
 export interface WeightReading {
   externalId: string | null;
+  /** Which app wrote the record, so the server can see where a reading came from. */
+  origin: string | null;
   at: string;
   weightKg: number;
   bodyFatPct: number | null;
@@ -64,6 +92,10 @@ export function toReadings(
 
   const out: WeightReading[] = [];
   for (const w of weights) {
+    // An unknown origin is KEPT. If a library version stops populating it, dropping those would
+    // silently sync nothing, which is worse than the loop this guards, and the loop still has the
+    // unique key behind it.
+    if (isFeedback(w.metadata?.dataOrigin)) continue;
     const kg = w.weight?.inKilograms;
     const t = Date.parse(w.time ?? "");
     if (typeof kg !== "number" || !Number.isFinite(kg) || !Number.isFinite(t)) continue;
@@ -77,6 +109,7 @@ export function toReadings(
 
     out.push({
       externalId: w.metadata?.id ?? null,
+      origin: w.metadata?.dataOrigin ?? null,
       at: new Date(t).toISOString(),
       weightKg: kg,
       bodyFatPct: nearest ? nearest.pct : null,

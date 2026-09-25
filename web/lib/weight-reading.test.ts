@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { acceptWeight, MIN_KG, MAX_KG } from "./weight-reading";
+import { acceptWeight, MIN_KG, MAX_KG, FEEDBACK_ORIGINS } from "./weight-reading";
 
 const now = new Date("2026-09-24T14:00:00Z");
 const ok = (r: Parameters<typeof acceptWeight>[0], tz = "Europe/Athens") => {
@@ -60,5 +60,45 @@ describe("acceptWeight", () => {
 
   it("has no external id when the source gives none, so the old unique key still applies", () => {
     expect(ok({ weightKg: 73.4 }).externalId).toBeNull();
+  });
+});
+
+/**
+ * ⛔ The second line of defence against the feedback loop. The phone filters Garmin's own records
+ * out, and this refuses them again so an older APK cannot open the loop after the server is updated.
+ */
+describe("a reading that came from something soma feeds", () => {
+  const GARMIN = "com.garmin.android.apps.connectmobile";
+
+  it("names Garmin Connect", () => {
+    expect(FEEDBACK_ORIGINS).toContain(GARMIN);
+  });
+
+  it("is refused, and says why in words worth reading", () => {
+    const r = acceptWeight(
+      { externalId: "g1", origin: GARMIN, at: "2026-09-20T06:00:00.000Z", weightKg: 81.3 },
+      "Europe/Athens",
+      new Date("2026-09-21T10:00:00.000Z"),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.why).toContain("our own push returning");
+  });
+
+  it("accepts the same reading from the scale", () => {
+    const r = acceptWeight(
+      { externalId: "s1", origin: "com.qingniu.arboleaf", at: "2026-09-20T06:00:00.000Z", weightKg: 81.3 },
+      "Europe/Athens",
+      new Date("2026-09-21T10:00:00.000Z"),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("accepts a reading with no origin, so a build that does not send one still works", () => {
+    const r = acceptWeight(
+      { externalId: "x", at: "2026-09-20T06:00:00.000Z", weightKg: 81.3 },
+      "Europe/Athens",
+      new Date("2026-09-21T10:00:00.000Z"),
+    );
+    expect(r.ok).toBe(true);
   });
 });

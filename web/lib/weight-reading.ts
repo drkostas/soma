@@ -11,6 +11,8 @@
 export interface IncomingWeight {
   /** Health Connect's own record id. The key that makes a re-read a no-op. */
   externalId?: string | null;
+  /** Which app wrote the Health Connect record. See FEEDBACK_ORIGINS. */
+  origin?: string | null;
   /** When the scale measured it, as an ISO instant. */
   at?: string | null;
   weightKg?: number | null;
@@ -42,6 +44,22 @@ export interface AcceptedWeight {
  * through: 73 kg read as 73 lb is 33 kg, which this still admits, so the app sends kilograms and
  * this is the backstop rather than the check.
  */
+/**
+ * ⛔ APPS SOMA PUSHES WEIGHT TO. A reading that came from one of them is soma's own push returning,
+ * not a weigh-in, and storing it would send it to Garmin a second time.
+ *
+ * Garmin Connect declares WRITE_WEIGHT to Health Connect and no reads at all, so once that write is
+ * granted, every weigh-in soma pushes re-enters Health Connect as a new record with a new id. The
+ * phone filters these out, and this refuses them again for an older build that does not, which is
+ * the point of having it in two places rather than one.
+ *
+ * `UNIQUE (date, weight_grams)` is a third line behind both, and it only holds while the grams
+ * survive a float round trip through Garmin unchanged.
+ */
+export const FEEDBACK_ORIGINS: readonly string[] = [
+  "com.garmin.android.apps.connectmobile",
+];
+
 export const MIN_KG = 30;
 export const MAX_KG = 250;
 
@@ -68,6 +86,10 @@ export function acceptWeight(
   tz: string,
   now: Date = new Date(),
 ): { ok: true; row: AcceptedWeight } | { ok: false; why: string } {
+  if (typeof r.origin === "string" && FEEDBACK_ORIGINS.includes(r.origin)) {
+    return { ok: false, why: `${r.origin} is fed by soma, so this is our own push returning` };
+  }
+
   const kg = typeof r.weightKg === "number" ? r.weightKg : NaN;
   if (!Number.isFinite(kg)) return { ok: false, why: "no weight" };
   if (kg < MIN_KG || kg > MAX_KG) return { ok: false, why: `${kg} kg is outside ${MIN_KG}-${MAX_KG}` };
