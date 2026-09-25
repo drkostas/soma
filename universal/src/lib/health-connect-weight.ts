@@ -191,3 +191,23 @@ export async function readAllPages<T>(
   }
   return all;
 }
+
+/** Which permission request the app should make next. */
+export type AskStep = "data" | "extras" | "none";
+
+/**
+ * What to ask for next, given what Health Connect has granted.
+ *
+ * ⛔ TWO STEPS, NOT ONE. On his phone a single request for all four granted Weight and BodyFat and
+ * left history and background false, with no follow-up screen, even though he chose "Allow all".
+ * Android's own examples ask for background and history as a request of their own, after a data
+ * permission exists. So the data types come first and the extras second.
+ *
+ * History cannot be part of this decision: `react-native-health-connect` 4.1.3 never reports it back.
+ * It rides along with the background request instead, which the library does report.
+ */
+export function nextAsk(granted: { weight: boolean; background: boolean }): AskStep {
+  if (!granted.weight) return "data";
+  if (!granted.background) return "extras";
+  return "none";
+}

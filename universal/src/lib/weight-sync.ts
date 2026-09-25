@@ -29,21 +29,26 @@ import { API_BASE, AUTH_HEADERS } from "./api";
 import { deviceTz } from "./meal-capture";
 
 /**
- * Everything the weight sync needs, asked for in ONE sheet so granting it is one tap.
- *
- * Read-only, and only the two types a scale writes: soma never writes to Health Connect. The two extra
- * entries are what make it do what he asked for.
- *
- * - `ReadHealthDataHistory` is the backlog. Without it Health Connect refuses anything older than 30
- *   days before the first grant, and it refuses by failing the WHOLE read.
- * - `BackgroundAccessPermission` is "fully automated". Without it the 15-minute background task cannot
- *   read at all, and the sync only happens when the app is opened.
+ * The data types a scale writes. Read-only: soma never writes to Health Connect.
  */
-export const WEIGHT_PERMISSIONS: Parameters<typeof requestPermission>[0] = [
+export const DATA_PERMISSIONS: Parameters<typeof requestPermission>[0] = [
   { accessType: "read", recordType: "Weight" },
   { accessType: "read", recordType: "BodyFat" },
-  { accessType: "read", recordType: "ReadHealthDataHistory" },
+];
+
+/**
+ * The two extras that make the sync do what he asked for, requested SEPARATELY once a data
+ * permission exists (see `nextAsk`). Asked for together with the data types, on his phone, they were
+ * silently left ungranted.
+ *
+ * - `BackgroundAccessPermission` is "fully automated". Without it the 15-minute background task cannot
+ *   read, and weight syncs only when the app is opened.
+ * - `ReadHealthDataHistory` is the backlog past 30 days. It goes in this request because the library
+ *   never reports whether it was granted, so it cannot have a request of its own to decide about.
+ */
+export const EXTRA_PERMISSIONS: Parameters<typeof requestPermission>[0] = [
   { accessType: "read", recordType: "BackgroundAccessPermission" },
+  { accessType: "read", recordType: "ReadHealthDataHistory" },
 ];
 
 export interface SyncOutcome {
@@ -60,18 +65,27 @@ export interface SyncOutcome {
 }
 
 /**
- * Raise Health Connect's own permission sheet for everything above, and say what came back.
+ * What Health Connect has granted soma, as far as the library can report it.
  *
- * ⚠️ `history` is NOT reported here, and it is not an oversight on our side. `react-native-health-connect`
- * 4.1.3 maps background access back to JavaScript but never maps `READ_HEALTH_DATA_HISTORY`, even when
- * it was granted. So the sync never trusts a flag for it and decides by behaviour instead, see
- * `readWithFallback`.
+ * ⚠️ History is absent on purpose, not by oversight. `react-native-health-connect` 4.1.3 maps background
+ * access back to JavaScript but never `READ_HEALTH_DATA_HISTORY`, so it can never be known here. The
+ * sync decides its window by behaviour instead, see `readWithFallback`.
  */
-export async function askForWeightAccess(): Promise<{ weight: boolean; background: boolean }> {
-  if (!(await initialize())) return { weight: false, background: false };
-  const granted = await requestPermission(WEIGHT_PERMISSIONS);
+export async function grantedWeightAccess(): Promise<{ weight: boolean; background: boolean }> {
+  const granted = await getGrantedPermissions();
   const has = (r: string) => granted.some((g) => g.recordType === r && g.accessType === "read");
   return { weight: has("Weight"), background: has("BackgroundAccessPermission") };
+}
+
+/**
+ * Raise Health Connect's sheet for one step, then re-read what is granted.
+ *
+ * The re-read is deliberate: what `requestPermission` returns is not trusted as the full picture,
+ * `getGrantedPermissions` is.
+ */
+export async function requestWeightAccess(step: "data" | "extras"): Promise<{ weight: boolean; background: boolean }> {
+  await requestPermission(step === "data" ? DATA_PERMISSIONS : EXTRA_PERMISSIONS);
+  return grantedWeightAccess();
 }
 
 /** Whether he has granted soma the reads. Checked rather than assumed, so a refusal is not an error. */

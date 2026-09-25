@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toReadings, historyWindow, HISTORY_ORIGIN, PAIR_WINDOW_MS, FEEDBACK_ORIGINS, isFeedback, RECENT_WINDOW_DAYS, readWithFallback, readAllPages, MAX_PAGES } from "./health-connect-weight";
+import { toReadings, historyWindow, HISTORY_ORIGIN, PAIR_WINDOW_MS, FEEDBACK_ORIGINS, isFeedback, RECENT_WINDOW_DAYS, readWithFallback, readAllPages, MAX_PAGES, nextAsk } from "./health-connect-weight";
 
 describe("historyWindow", () => {
   it("⛔ always starts at the origin, never at a watermark", () => {
@@ -211,5 +211,28 @@ describe("reading every page", () => {
     const all = await readAllPages(async () => { calls++; return { records: [calls], pageToken: "same" }; });
     expect(calls).toBe(MAX_PAGES);
     expect(all).toHaveLength(MAX_PAGES);
+  });
+});
+
+/**
+ * ⛔ ONE REQUEST FOR ALL FOUR GRANTED ONLY THE DATA TYPES (2026-09-25). He chose "Allow all" and the
+ * extras stayed false, with no follow-up screen. Android asks for background and history access as a
+ * request of their own, after a data permission exists, so the app asks in two steps.
+ */
+describe("what to ask for next", () => {
+  it("asks for the data types first, when nothing is granted", () => {
+    expect(nextAsk({ weight: false, background: false })).toBe("data");
+  });
+
+  it("⛔ asks for the extras SEPARATELY once Weight is granted, which is where he is now", () => {
+    expect(nextAsk({ weight: true, background: false })).toBe("extras");
+  });
+
+  it("asks for nothing once background access is granted too", () => {
+    expect(nextAsk({ weight: true, background: true })).toBe("none");
+  });
+
+  it("still asks for the data types first if only background somehow exists", () => {
+    expect(nextAsk({ weight: false, background: true })).toBe("data");
   });
 });
