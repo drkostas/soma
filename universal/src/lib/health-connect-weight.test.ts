@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toReadings, historyWindow, HISTORY_ORIGIN, PAIR_WINDOW_MS } from "./health-connect-weight";
+import { toReadings, historyWindow, HISTORY_ORIGIN, PAIR_WINDOW_MS, FEEDBACK_ORIGINS, isFeedback } from "./health-connect-weight";
 
 describe("historyWindow", () => {
   it("⛔ always starts at the origin, never at a watermark", () => {
@@ -27,7 +27,7 @@ describe("toReadings", () => {
       [w("a", "2026-09-24T06:00:00.000Z", 73.4)],
       [{ time: "2026-09-24T06:00:02.000Z", percentage: 18.2 }],
     );
-    expect(r).toEqual([{ externalId: "a", at: "2026-09-24T06:00:00.000Z", weightKg: 73.4, bodyFatPct: 18.2, source: "HEALTH_CONNECT" }]);
+    expect(r).toEqual([{ externalId: "a", origin: null, at: "2026-09-24T06:00:00.000Z", weightKg: 73.4, bodyFatPct: 18.2, source: "HEALTH_CONNECT" }]);
   });
 
   it("takes the nearest body fat when a day has two weigh-ins", () => {
@@ -78,5 +78,45 @@ describe("toReadings", () => {
   it("handles an empty Health Connect, which is the state today", () => {
     expect(toReadings([], [])).toEqual([]);
     expect(toReadings([])).toEqual([]);
+  });
+});
+
+/**
+ * ⛔ THE FEEDBACK LOOP. Garmin Connect writes weight INTO Health Connect and reads none of it, so a
+ * weigh-in soma pushed to Garmin can return as a new record with a new id and be pushed again. This
+ * is the double-count class that already cost this project 13.5% of its 90-day load.
+ */
+describe("records written by something soma feeds", () => {
+  const GARMIN = "com.garmin.android.apps.connectmobile";
+  const SCALE = "com.qingniu.arboleaf";
+
+  it("names Garmin Connect, which is the only thing soma pushes weight to", () => {
+    expect(FEEDBACK_ORIGINS).toContain(GARMIN);
+    expect(isFeedback(GARMIN)).toBe(true);
+    expect(isFeedback(SCALE)).toBe(false);
+  });
+
+  it("drops Garmin's echo of a weigh-in and keeps the scale's own", () => {
+    const out = toReadings([
+      { metadata: { id: "scale-1", dataOrigin: SCALE }, time: "2026-09-20T06:00:00.000Z", weight: { inKilograms: 81.3 } },
+      { metadata: { id: "garmin-1", dataOrigin: GARMIN }, time: "2026-09-20T06:00:00.000Z", weight: { inKilograms: 81.3 } },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].externalId).toBe("scale-1");
+    expect(out[0].origin).toBe(SCALE);
+  });
+
+  it("KEEPS a record with no origin, because dropping those would silently sync nothing", () => {
+    const out = toReadings([
+      { metadata: { id: "no-origin" }, time: "2026-09-20T06:00:00.000Z", weight: { inKilograms: 80 } },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].origin).toBeNull();
+  });
+
+  it("drops a Garmin record even when it is the only one there", () => {
+    expect(toReadings([
+      { metadata: { id: "g", dataOrigin: GARMIN }, time: "2026-09-20T06:00:00.000Z", weight: { inKilograms: 81.3 } },
+    ])).toEqual([]);
   });
 });
