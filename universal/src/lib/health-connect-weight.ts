@@ -62,9 +62,28 @@ export interface WeightReading {
   source: string;
 }
 
-/** The window to ask Health Connect for. Always the whole history. */
-export function historyWindow(now: Date = new Date()): { startTime: string; endTime: string } {
-  return { startTime: HISTORY_ORIGIN, endTime: now.toISOString() };
+/**
+ * How far back Health Connect lets an app read WITHOUT `READ_HEALTH_DATA_HISTORY`.
+ *
+ * From Android's documentation: "By default, all applications can read data from Health Connect for
+ * up to 30 days prior to when any permission was first granted", and without the history permission
+ * "an attempt to read records older than 30 days results in an error". The error is the dangerous
+ * part, because it fails the WHOLE read, not just the old records in it.
+ */
+export const RECENT_WINDOW_DAYS = 30;
+
+/** "full" asks for everything since `HISTORY_ORIGIN`; "recent" for the last 30 days. */
+export type WindowSpan = "full" | "recent";
+
+/** The window to ask Health Connect for. The whole history, unless told to read only the recent part. */
+export function historyWindow(
+  now: Date = new Date(),
+  span: WindowSpan = "full",
+): { startTime: string; endTime: string } {
+  const start = span === "full"
+    ? HISTORY_ORIGIN
+    : new Date(now.getTime() - RECENT_WINDOW_DAYS * 86_400_000).toISOString();
+  return { startTime: start, endTime: now.toISOString() };
 }
 
 /**
@@ -118,4 +137,57 @@ export function toReadings(
   }
   // Oldest first, so a partial send still walks the history forwards.
   return out.sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/**
+ * Read the whole history, and if Health Connect refuses that, read the last 30 days instead.
+ *
+ * ⛔ WHY BY BEHAVIOUR AND NOT BY CHECKING THE GRANT. `react-native-health-connect` 4.1.3 reports
+ * background access back to JavaScript but never reports `READ_HEALTH_DATA_HISTORY`, even when it is
+ * granted. So "is history allowed? then read everything" would always answer no and the backlog would
+ * never be read. Asking for everything and falling back when refused works whatever the library says.
+ *
+ * ⚠️ `span: "full"` means the full range was asked for and not refused. It does not prove the old
+ * records came back, because Health Connect may also trim silently. The proof of the backlog is the
+ * oldest date that reaches soma, which is checked on the server.
+ */
+export async function readWithFallback<T>(
+  read: (window: { startTime: string; endTime: string }) => Promise<T>,
+  now: Date = new Date(),
+): Promise<{ value: T; span: WindowSpan; fullError?: string }> {
+  try {
+    return { value: await read(historyWindow(now, "full")), span: "full" };
+  } catch (e) {
+    const fullError = (e as Error)?.message?.slice(0, 200) ?? String(e);
+    // If this one throws too, let it. Its message is the real reason nothing could be read.
+    const value = await read(historyWindow(now, "recent"));
+    return { value, span: "recent", fullError };
+  }
+}
+
+/**
+ * The most pages one read will follow. 50 pages of 1000 is 50,000 weigh-ins, which is well over a
+ * century of daily weighing, so this only ever bites on a page token that never ends.
+ */
+export const MAX_PAGES = 50;
+
+/**
+ * Every record across every page, not just the first 1000.
+ *
+ * ⛔ `readRecords` returns one page (1000 by default) plus a `pageToken` when there is more, and a
+ * single call silently drops the rest. For years of weigh-ins read oldest first, what it drops is the
+ * history, which is the whole requirement.
+ */
+export async function readAllPages<T>(
+  readPage: (pageToken: string | undefined) => Promise<{ records?: T[]; pageToken?: string }>,
+): Promise<T[]> {
+  const all: T[] = [];
+  let token: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const r = await readPage(token);
+    all.push(...(r.records ?? []));
+    if (!r.pageToken) break;
+    token = r.pageToken;
+  }
+  return all;
 }

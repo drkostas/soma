@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toReadings, historyWindow, HISTORY_ORIGIN, PAIR_WINDOW_MS, FEEDBACK_ORIGINS, isFeedback } from "./health-connect-weight";
+import { toReadings, historyWindow, HISTORY_ORIGIN, PAIR_WINDOW_MS, FEEDBACK_ORIGINS, isFeedback, RECENT_WINDOW_DAYS, readWithFallback, readAllPages, MAX_PAGES } from "./health-connect-weight";
 
 describe("historyWindow", () => {
   it("⛔ always starts at the origin, never at a watermark", () => {
@@ -118,5 +118,98 @@ describe("records written by something soma feeds", () => {
     expect(toReadings([
       { metadata: { id: "g", dataOrigin: GARMIN }, time: "2026-09-20T06:00:00.000Z", weight: { inKilograms: 81.3 } },
     ])).toEqual([]);
+  });
+});
+
+/**
+ * ⛔ HEALTH CONNECT REFUSES ANYTHING OLDER THAN 30 DAYS UNLESS READ_HEALTH_DATA_HISTORY IS GRANTED,
+ * and the library cannot tell us whether it is (4.1.3 never reports that grant back). So the window
+ * is decided by behaviour: ask for everything, and if that is refused, ask for the last 30 days.
+ */
+describe("the window, when history is not allowed", () => {
+  const now = new Date("2026-09-25T12:00:00.000Z");
+
+  it("is the last 30 days", () => {
+    expect(RECENT_WINDOW_DAYS).toBe(30);
+    expect(historyWindow(now, "recent")).toEqual({
+      startTime: "2026-08-26T12:00:00.000Z",
+      endTime: "2026-09-25T12:00:00.000Z",
+    });
+  });
+
+  it("is still the whole history by default, because the backlog is the requirement", () => {
+    expect(historyWindow(now).startTime).toBe(HISTORY_ORIGIN);
+    expect(historyWindow(now, "full").startTime).toBe(HISTORY_ORIGIN);
+  });
+});
+
+describe("reading with a fallback to the last 30 days", () => {
+  const now = new Date("2026-09-25T12:00:00.000Z");
+
+  it("uses the whole history when Health Connect allows it, and asks only once", async () => {
+    const asked: string[] = [];
+    const r = await readWithFallback(async (w) => { asked.push(w.startTime); return ["everything"]; }, now);
+    expect(r.span).toBe("full");
+    expect(r.value).toEqual(["everything"]);
+    expect(asked).toEqual([HISTORY_ORIGIN]);
+    expect(r.fullError).toBeUndefined();
+  });
+
+  it("⛔ falls back to 30 days when the full range is refused, instead of syncing NOTHING", async () => {
+    const asked: string[] = [];
+    const r = await readWithFallback(async (w) => {
+      asked.push(w.startTime);
+      if (w.startTime === HISTORY_ORIGIN) throw new Error("Caller doesn't have permission to read data older than 30 days");
+      return ["this month"];
+    }, now);
+    expect(r.span).toBe("recent");
+    expect(r.value).toEqual(["this month"]);
+    expect(asked).toEqual([HISTORY_ORIGIN, "2026-08-26T12:00:00.000Z"]);
+    expect(r.fullError).toContain("older than 30 days");
+  });
+
+  it("gives up with the recent error when even 30 days is refused, so the real reason is reported", async () => {
+    await expect(readWithFallback(async (w) => {
+      throw new Error(w.startTime === HISTORY_ORIGIN ? "full refused" : "no permission at all");
+    }, now)).rejects.toThrow("no permission at all");
+  });
+});
+
+/**
+ * ⛔ `readRecords` RETURNS ONE PAGE, 1000 RECORDS BY DEFAULT, AND A `pageToken` WHEN THERE IS MORE.
+ * One call silently drops everything past the first page, which for years of daily weigh-ins is the
+ * oldest part of the history, the part he asked for.
+ */
+describe("reading every page", () => {
+  it("follows the page token to the end", async () => {
+    const pages: Record<string, { records: number[]; pageToken?: string }> = {
+      "": { records: [1, 2], pageToken: "p2" },
+      p2: { records: [3, 4], pageToken: "p3" },
+      p3: { records: [5] },
+    };
+    const asked: (string | undefined)[] = [];
+    const all = await readAllPages(async (t) => { asked.push(t); return pages[t ?? ""]; });
+    expect(all).toEqual([1, 2, 3, 4, 5]);
+    expect(asked).toEqual([undefined, "p2", "p3"]);
+  });
+
+  it("makes one call when everything fits on the first page", async () => {
+    let calls = 0;
+    const all = await readAllPages(async () => { calls++; return { records: ["a"] }; });
+    expect(all).toEqual(["a"]);
+    expect(calls).toBe(1);
+  });
+
+  it("treats an empty token as the end, not as another page", async () => {
+    let calls = 0;
+    await readAllPages(async () => { calls++; return { records: [1], pageToken: "" }; });
+    expect(calls).toBe(1);
+  });
+
+  it("stops at a cap rather than looping for ever on a token that never ends", async () => {
+    let calls = 0;
+    const all = await readAllPages(async () => { calls++; return { records: [calls], pageToken: "same" }; });
+    expect(calls).toBe(MAX_PAGES);
+    expect(all).toHaveLength(MAX_PAGES);
   });
 });
