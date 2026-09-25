@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { keepPlausible } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 
 
@@ -110,19 +111,34 @@ export async function POST(req: NextRequest) {
   `;
 
   // --- Task 9: Recompute deficit from BF% goal when a weigh-in exists ---
-  const weightRow = await sql`
-    SELECT weight_grams FROM weight_log WHERE date = ${date} LIMIT 1
-  `;
-  if (weightRow.length > 0) {
-    const newWeightKg = Number(weightRow[0].weight_grams) / 1000;
+  // ⛔ BOTH of these used to be computed in SQL, which is why the typo filter could not reach them.
+  // The day's own weigh-in came straight off `WHERE date = ...`, and the seven-day average was an
+  // `AVG()`. A weigh-in has to be judged against its neighbours, so read the surrounding fortnight
+  // once, filter it, and derive both from what survives. The deficit is recomputed from this, so a
+  // typo here would have moved his calorie target on the day he closed.
+  const windowRows = (await sql`
+    SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
+    FROM weight_log
+    WHERE weight_grams IS NOT NULL AND weight_grams > 0
+      AND date >= ${date}::date - interval '14 days'
+      AND date <= ${date}::date + interval '14 days'
+    ORDER BY date
+  `) as unknown as { date: string; weight_kg: number }[];
+  const plausible = keepPlausible(
+    windowRows.map((r) => ({ date: r.date, weightKg: Number(r.weight_kg) })),
+    "close-day",
+  );
 
-    // Update analytics_weight_trend with 7-day average
-    const trend = await sql`
-      SELECT AVG(weight_grams) as avg_7d
-      FROM weight_log
-      WHERE date >= ${date}::date - interval '7 days' AND date <= ${date}::date
-    `;
-    const avg7d = trend[0]?.avg_7d ? Number(trend[0].avg_7d) / 1000.0 : newWeightKg;
+  const onTheDay = plausible.find((w) => w.date === date);
+  if (onTheDay) {
+    const newWeightKg = onTheDay.weightKg;
+
+    // The seven-day average, over the surviving weigh-ins only.
+    const weekStart = new Date(Date.parse(`${date}T00:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10);
+    const week = plausible.filter((w) => w.date >= weekStart && w.date <= date);
+    const avg7d = week.length
+      ? week.reduce((a, w) => a + w.weightKg, 0) / week.length
+      : newWeightKg;
     await sql`
       INSERT INTO analytics_weight_trend (date, weight_kg, avg_7d)
       VALUES (${date}, ${newWeightKg}, ${avg7d})

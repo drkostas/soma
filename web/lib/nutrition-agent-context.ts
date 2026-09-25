@@ -5,6 +5,7 @@
  * three portion columns are what let "large" mean 208g of chicken without anyone being asked.
  */
 import type { QueryFn } from "./db";
+import { latestWeighIn } from "./weigh-ins";
 import { getPortionBands } from "./portion-history";
 import { athleteTz } from "./athlete-tz";
 
@@ -109,9 +110,10 @@ export async function buildAgentContext(
            total_calories, total_protein, total_carbs, total_fat, total_fiber
     FROM preset_meals ORDER BY name`) as Array<Record<string, unknown>>;
 
-  const weightRows = (await sql`
-    SELECT weight_grams / 1000.0 AS kg FROM weight_log
-    WHERE weight_grams > 0 ORDER BY date DESC LIMIT 1`) as Array<{ kg: number }>;
+  // ⛔ This was `ORDER BY date DESC LIMIT 1` with no date bound at all, so a mistyped weigh-in
+  // would have been the weight the agent reasoned about. Judged against its neighbours first.
+  const latestWeight = await latestWeighIn(sql, date, "agent-context");
+  const weightRows: Array<{ kg: number }> = latestWeight ? [{ kg: latestWeight.weightKg }] : [];
 
   // What the day already holds. Until this was here the agent could only go by the clock, so a
   // sweet eaten twenty minutes after breakfast landed in lunch.

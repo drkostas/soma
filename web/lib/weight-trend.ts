@@ -1,6 +1,7 @@
 /** Weight trend, DB half: read the weigh-ins and hand them to banister's computeWeightTrend. */
 import type { QueryFn } from "./db";
 import type { WeightTrend } from "banister";
+import { keepPlausible } from "./weigh-ins";
 import { WEIGHT_TREND_WINDOW_DAYS, computeWeightTrend } from "banister";
 export { WEIGHT_TREND_WINDOW_DAYS, WEIGHT_TREND_MIN_POINTS, computeWeightTrend } from "banister";
 export type { WeighInPoint, WeightTrend } from "banister";
@@ -15,7 +16,14 @@ export async function getWeightTrend(sql: QueryFn, today: string, windowDays = W
         AND date <= ${today}::date
       ORDER BY date
     `) as unknown as { date: string; weight_kg: number }[];
-    return computeWeightTrend(rows.map((r) => ({ date: r.date, weightKg: Number(r.weight_kg) })), today, windowDays);
+
+    // A hand-entered weigh-in is a real one, and a typo is not. `keepPlausible` judges the number
+    // against his own neighbouring weigh-ins rather than where it came from.
+    const kept = keepPlausible(
+      rows.map((r) => ({ date: r.date, weightKg: Number(r.weight_kg) })),
+      "weight-trend",
+    );
+    return computeWeightTrend(kept, today, windowDays);
   } catch {
     return computeWeightTrend([], today, windowDays);
   }

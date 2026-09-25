@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { latestWeighIn, keepPlausible } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 import { computeMacroTargetsFromContext } from "@/lib/macro-targets";
 import type { Mode } from "@/lib/mode-engine";
@@ -260,13 +261,11 @@ async function planForDay(req: NextRequest) {
 
     // Use latest weight from weight_log (more current than profile)
     try {
-      const weightRows = await sql`
-        SELECT weight_grams / 1000.0 AS weight_kg FROM weight_log
-        WHERE weight_grams IS NOT NULL
-        ORDER BY date DESC LIMIT 1
-      `;
-      if (weightRows[0]?.weight_kg) {
-        const lw = Number(weightRows[0].weight_kg);
+      // ⛔ This was `ORDER BY date DESC LIMIT 1` with no date bound, so a mistyped weigh-in would
+      // have set his calorie target until the next one arrived. Judged against its neighbours.
+      const latest = await latestWeighIn(sql, new Date().toISOString().slice(0, 10), "plan");
+      if (latest) {
+        const lw = latest.weightKg;
         if (lw > 0) weightKg = lw;
       }
     } catch {}
@@ -533,12 +532,15 @@ async function planForDay(req: NextRequest) {
     t.setUTCDate(t.getUTCDate() + n);
     return t.toISOString().slice(0, 10);
   };
-  const weighIns = (
-    await sql`
-      SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
-      FROM weight_log WHERE weight_grams IS NOT NULL AND date <= ${date}::date ORDER BY date
-    `
-  ).map((w: Record<string, unknown>) => ({ date: String(w.date), weightKg: Number(w.weight_kg) }));
+  const weighIns = keepPlausible(
+    (
+      await sql`
+        SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
+        FROM weight_log WHERE weight_grams IS NOT NULL AND date <= ${date}::date ORDER BY date
+      `
+    ).map((w: Record<string, unknown>) => ({ date: String(w.date), weightKg: Number(w.weight_kg) })),
+    "plan-span",
+  );
   const windowStart = shiftDate(date, -6);
   // The span starts at the beginning of the last complete weigh-in interval
   // before the window: the rate that fills the window's unlogged days is that
