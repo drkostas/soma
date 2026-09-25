@@ -12,7 +12,8 @@
 import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import { initialize } from "react-native-health-connect";
-import { askForWeightAccess, hasWeightPermission, syncWeights, type SyncOutcome } from "./weight-sync";
+import { grantedWeightAccess, requestWeightAccess, syncWeights, type SyncOutcome } from "./weight-sync";
+import { nextAsk } from "./health-connect-weight";
 
 export const WEIGHT_TASK = "soma-weight-sync";
 
@@ -57,8 +58,9 @@ let askedThisRun = false;
  * headless task, because the permission sheet needs a visible activity.
  *
  * 1. Make sure the background job exists (a reinstall clears Android's scheduled jobs).
- * 2. If Weight is not granted, raise Health Connect's sheet ONCE. Android itself stops showing it
- *    after two refusals, so this cannot become a nag.
+ * 2. Ask for what is missing, at most once per run: the data types if Weight is not granted, then
+ *    background and history as a SEPARATE request. Android stops showing a sheet after two
+ *    refusals, so this cannot become a nag.
  * 3. Sync now, in the foreground. This is what makes opening soma sync even before background access
  *    is granted, and it means the tap on "Allow" is followed straight away by his history arriving.
  */
@@ -69,10 +71,19 @@ export async function startWeightSync(): Promise<void> {
       console.log("[weight-sync] Health Connect is not available on this device");
       return;
     }
-    if (!askedThisRun && !(await hasWeightPermission())) {
+    if (!askedThisRun) {
       askedThisRun = true;
-      const got = await askForWeightAccess();
-      console.log(`[weight-sync] asked for access: weight=${got.weight} background=${got.background}`);
+      // Two steps, because one request for all four granted only the data types on his phone. The
+      // data types first; the extras (background, history) as a request of their own afterwards.
+      let got = await grantedWeightAccess();
+      if (nextAsk(got) === "data") {
+        got = await requestWeightAccess("data");
+        console.log(`[weight-sync] asked for the data types: weight=${got.weight}`);
+      }
+      if (nextAsk(got) === "extras") {
+        got = await requestWeightAccess("extras");
+        console.log(`[weight-sync] asked for background and history: background=${got.background}`);
+      }
     }
     console.log(describeOutcome("foreground", await syncWeights()));
   } catch (e) {
