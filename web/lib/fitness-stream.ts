@@ -1,5 +1,6 @@
 /** Fitness stream, DB half: fill fitness_trajectory from the Garmin raw tables. The formulas live in banister. */
 import type { QueryFn } from "./db";
+import { latestWeighIn } from "./weigh-ins";
 import { computeEfficiencyFactor, computeDecoupling, extractVo2max, splitIntoHalves } from "banister";
 import { timeFromVdot, HM_M, type FitnessTrajectory } from "banister";
 const r = (x: number, n: number) => Number(x.toFixed(n)); // Python round(x, n) for n>=1
@@ -63,11 +64,11 @@ export async function updateFitnessTrajectory(sql: QueryFn, targetDate: string):
     }
   }
 
-  const wRows = await sql`
-    SELECT weight_grams / 1000.0 AS kg FROM weight_log
-    WHERE date <= ${targetDate} AND weight_grams IS NOT NULL AND weight_grams > 0
-    ORDER BY date DESC LIMIT 1`;
-  if (wRows.length) weightKg = Number(wRows[0].kg);
+  // ⛔ This was `ORDER BY date DESC LIMIT 1`, so a single mistyped weigh-in became his weight here
+  // until the next one arrived, and the VDOT and race prediction are computed from it.
+  // `latestWeighIn` judges the newest reading against its neighbours before trusting it.
+  const latest = await latestWeighIn(sql, targetDate, "fitness-stream");
+  if (latest) weightKg = latest.weightKg;
 
   if (vo2max === null && ef === null && decouplingPct === null) return null;
 

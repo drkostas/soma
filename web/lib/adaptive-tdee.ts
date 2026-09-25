@@ -9,6 +9,7 @@
  * consecutive recent deficit days that aren't diet breaks / refeeds.
  */
 import { computeAdaptiveTdee, recommendDietBreak, type DietBreakLevel } from "macro-engine-core";
+import { keepPlausible } from "./weigh-ins";
 import type { QueryFn } from "@/lib/db";
 import { meetsCoverageFloor, daysBetween, STREAK_MAX_GAP_DAYS } from "@/lib/coverage";
 
@@ -145,7 +146,12 @@ export async function computeAdaptiveContext(sql: QueryFn): Promise<AdaptiveCont
       AND date >= CURRENT_DATE - ${`${LOOKBACK_DAYS} days`}::interval
     ORDER BY date
   `) as unknown as { date: string; weight_kg: number }[];
-  const weights: WeighIn[] = weightRows.map((w) => ({ date: w.date, weightKg: Number(w.weight_kg) }));
+  // A mistyped weigh-in moves the TDEE, because the TDEE is computed FROM the weight change, so a
+  // typo reads as a real gain or loss and changes his calorie target. Judged against neighbours.
+  const weights: WeighIn[] = keepPlausible(
+    weightRows.map((w) => ({ date: w.date, weightKg: Number(w.weight_kg) })),
+    "adaptive-tdee",
+  );
 
   const days = buildDayPoints(rows, weights);
   const adaptive = computeAdaptiveTdee(days);

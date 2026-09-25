@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { latestWeighIn } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 import { listIngredients } from "@/lib/ingredient-catalog";
 import { getLivePlan } from "@/lib/live-plan";
@@ -35,12 +36,10 @@ async function getBootstrap() {
       WHERE bmr_kilocalories IS NOT NULL
       ORDER BY date DESC LIMIT 1
     `,
-    sql`
-      SELECT weight_grams / 1000.0 AS weight_kg
-      FROM weight_log
-      WHERE weight_grams IS NOT NULL
-      ORDER BY date DESC LIMIT 1
-    `,
+    // ⛔ Was `ORDER BY date DESC LIMIT 1`, so a typo would have been the weight on the page.
+    latestWeighIn(sql, new Date().toISOString().slice(0, 10), "nutrition-page").then((w) =>
+      w ? [{ weight_kg: w.weightKg }] : [],
+    ),
     sql`
       SELECT vo2max
       FROM fitness_trajectory

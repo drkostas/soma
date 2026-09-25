@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { keepPlausible } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 import { deficitWindow, windowLabel } from "@/lib/deficit-window";
 import { isObservedDay } from "@/lib/observed-day";
@@ -32,10 +33,17 @@ export async function GET() {
 async function trajectory() {
   const sql = getDb();
 
-  const [profileRows, weightRows] = await Promise.all([
+  const [profileRows, rawWeightRows] = await Promise.all([
     sql`SELECT weight_kg, estimated_bf_pct, target_bf_pct, target_date, daily_deficit, estimated_ffm_kg FROM nutrition_profile WHERE id = 1`,
     sql`SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg FROM weight_log WHERE weight_grams IS NOT NULL ORDER BY date`,
   ]);
+
+  // A typo drags the EMA for days and shifts every figure computed off it. Filtered here and mapped
+  // back to the row shape, so the four readers below are untouched.
+  const weightRows = keepPlausible(
+    rawWeightRows.map((w: Record<string, unknown>) => ({ date: String(w.date), weightKg: Number(w.weight_kg) })),
+    "body-comp-route",
+  ).map((w) => ({ date: w.date, weight_kg: w.weightKg }));
 
   const profile = profileRows[0];
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 404 });
