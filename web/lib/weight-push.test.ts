@@ -35,8 +35,8 @@ describe("pushWeightsToGarmin", () => {
   it("pushes each and marks it", async () => {
     const { sql, marked } = fakeSql(rows);
     const sent: unknown[] = [];
-    const r = await pushWeightsToGarmin(sql, { post: async <T>(_p: string, b: unknown) => { sent.push(b); return {} as T; } });
-    expect(r).toEqual({ pushed: 2, failed: 0, errors: [] });
+    const r = await pushWeightsToGarmin(sql, { connectapi: async <T>() => ({ dailyWeightSummaries: [] }) as T, post: async <T>(_p: string, b: unknown) => { sent.push(b); return {} as T; } });
+    expect(r).toEqual({ pushed: 2, skipped: 0, failed: 0, errors: [] });
     expect(marked).toEqual([1, 2]);
     expect(sent).toHaveLength(2);
   });
@@ -45,6 +45,7 @@ describe("pushWeightsToGarmin", () => {
     const { sql, marked } = fakeSql(rows);
     let n = 0;
     const r = await pushWeightsToGarmin(sql, {
+      connectapi: async <T>() => ({ dailyWeightSummaries: [] }) as T, 
       post: async <T>() => { if (++n === 2) throw new Error("Garmin said 500"); return {} as T; },
     });
     expect(r.pushed).toBe(1);
@@ -56,7 +57,7 @@ describe("pushWeightsToGarmin", () => {
 
   it("names which weigh-in failed, rather than counting them", async () => {
     const { sql } = fakeSql([rows[0]]);
-    const r = await pushWeightsToGarmin(sql, { post: async <T>(): Promise<T> => { throw new Error("401 unauthorised"); } });
+    const r = await pushWeightsToGarmin(sql, { connectapi: async <T>() => ({ dailyWeightSummaries: [] }) as T, post: async <T>(): Promise<T> => { throw new Error("401 unauthorised"); } });
     expect(r.errors[0]).toContain("2026-09-24");
     expect(r.errors[0]).toContain("401");
   });
@@ -100,5 +101,76 @@ describe("the hourly pipeline actually calls it", () => {
 
   it("runs as a named step, so a failure is recorded rather than thrown away", () => {
     expect(pipeline).toContain('await step("weight-push"');
+  });
+});
+
+/**
+ * ⛔ THE FIRST REAL PUSH DUPLICATED TWO OF HIS WEIGH-INS (2026-09-25). On 2025-11-29 and 2025-12-04
+ * he had already typed the scale's reading into Garmin, rounded, and soma added the scale's own value
+ * beside it. The grams differed by 50, so no equality check on soma's side could have caught it.
+ */
+describe("a day Garmin already holds", () => {
+  const rows = [
+    { id: 1, date: "2025-11-29", weight_grams: 80050, measured_at: null },
+    { id: 2, date: "2026-09-24", weight_grams: 74500, measured_at: null },
+  ];
+  function fakeSql() {
+    const marked: number[] = [];
+    const sql = (async (strings: TemplateStringsArray, ...vals: unknown[]) => {
+      const q = strings.join("?");
+      if (q.includes("SELECT id")) return rows;
+      if (q.includes("UPDATE weight_log")) { marked.push(Number(vals[0])); return []; }
+      return [];
+    }) as never;
+    return { sql, marked };
+  }
+  const holds = (date: string) => (path: string) =>
+    path.includes(`/${date}/${date}`)
+      ? { dailyWeightSummaries: [{ allWeightMetrics: [{ weight: 80000, samplePk: 1764448076401 }] }] }
+      : { dailyWeightSummaries: [] };
+
+  it("⛔ is skipped, not given a second copy of the same weigh-in", async () => {
+    const { sql } = fakeSql();
+    const posted: string[] = [];
+    const r = await pushWeightsToGarmin(sql, {
+      connectapi: async <T>(path: string) => holds("2025-11-29")(path) as T,
+      post: async <T>(_p: string, b: unknown) => { posted.push(JSON.stringify(b)); return {} as T; },
+    });
+    expect(r.skipped).toBe(1);
+    expect(r.pushed).toBe(1);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toContain("2026-09-24"); // only the day Garmin had nothing for
+  });
+
+  it("is marked settled, so it is not asked about again on every run", async () => {
+    const { sql, marked } = fakeSql();
+    await pushWeightsToGarmin(sql, {
+      connectapi: async <T>(path: string) => holds("2025-11-29")(path) as T,
+      post: async <T>() => ({}) as T,
+    });
+    expect(marked.sort()).toEqual([1, 2]);
+  });
+
+  it("asks about the exact day, not a range around it", async () => {
+    const { sql } = fakeSql();
+    const asked: string[] = [];
+    await pushWeightsToGarmin(sql, {
+      connectapi: async <T>(path: string) => { asked.push(path); return { dailyWeightSummaries: [] } as T; },
+      post: async <T>() => ({}) as T,
+    });
+    expect(asked).toContain("/weight-service/weight/range/2025-11-29/2025-11-29?includeAll=true");
+  });
+
+  it("⛔ does NOT push blind when Garmin cannot be asked, and leaves it owed for the next run", async () => {
+    const { sql, marked } = fakeSql();
+    const posted: unknown[] = [];
+    const r = await pushWeightsToGarmin(sql, {
+      connectapi: async <T>(): Promise<T> => { throw new Error("Garmin said 503"); },
+      post: async <T>(_p: string, b: unknown) => { posted.push(b); return {} as T; },
+    });
+    expect(posted).toEqual([]);
+    expect(marked).toEqual([]);
+    expect(r.failed).toBe(2);
+    expect(r.errors[0]).toContain("could not ask Garmin");
   });
 });

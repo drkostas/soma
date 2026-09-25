@@ -51,7 +51,20 @@ export async function weightsOwedToGarmin(sql: QueryFn, limit = 30): Promise<Pus
 }
 
 interface WeightClient {
+  /** GET. `garmin-auth`'s `connectapi` only reads, which is all the day lookup needs. */
+  connectapi<T = unknown>(path: string): Promise<T>;
   post<T = unknown>(path: string, body: unknown): Promise<T>;
+}
+
+/** Garmin's own list of weigh-ins for one calendar day. */
+export function dayPath(date: string): string {
+  return `/weight-service/weight/range/${date}/${date}?includeAll=true`;
+}
+
+/** Whether Garmin's answer for a day holds any weigh-in at all, whoever wrote it. */
+export function garminHoldsWeighIn(res: unknown): boolean {
+  const days = (res as { dailyWeightSummaries?: Array<{ allWeightMetrics?: unknown[] }> })?.dailyWeightSummaries ?? [];
+  return days.some((d) => (d.allWeightMetrics ?? []).length > 0);
 }
 
 /**
@@ -60,18 +73,42 @@ interface WeightClient {
  * Marked one at a time rather than in a batch at the end: a failure halfway through must not
  * re-send the ones that already landed, because Garmin keeps every sample and he would see the same
  * weigh-in several times.
+ *
+ * ⛔ A DAY GARMIN ALREADY HOLDS IS SKIPPED, NOT GIVEN A SECOND COPY. He reads the scale and types it
+ * into Garmin rounded, so on 2025-11-29 Garmin had his 80.00 and soma added the scale's 80.05 beside
+ * it. The grams differ, so no equality check here could catch it; asking Garmin about the day can.
+ * His entry is the record for that day, and the row is marked settled so it is not asked about again.
+ * This gives up a second genuine weigh-in on one day, which Garmin does not need: it keeps a daily
+ * weight, and soma still holds both.
+ *
+ * ⛔ IF GARMIN CANNOT BE ASKED, NOTHING IS PUSHED for that row. A blind push is what caused the
+ * duplicates, so the row stays owed and the next run tries again.
  */
 export async function pushWeightsToGarmin(
   sql: QueryFn,
   client: WeightClient,
   limit = 30,
-): Promise<{ pushed: number; failed: number; errors: string[] }> {
+): Promise<{ pushed: number; skipped: number; failed: number; errors: string[] }> {
   const owed = await weightsOwedToGarmin(sql, limit);
   let pushed = 0;
+  let skipped = 0;
   let failed = 0;
   const errors: string[] = [];
 
   for (const w of owed) {
+    let held: boolean;
+    try {
+      held = garminHoldsWeighIn(await client.connectapi(dayPath(w.date)));
+    } catch (e) {
+      failed++;
+      errors.push(`${w.date} ${(w.weight_grams / 1000).toFixed(1)}kg: could not ask Garmin about the day, not pushed: ${(e as Error).message.slice(0, 100)}`);
+      continue;
+    }
+    if (held) {
+      await sql`UPDATE weight_log SET pushed_garmin_at = now() WHERE id = ${w.id}`;
+      skipped++;
+      continue;
+    }
     try {
       await client.post("/weight-service/user-weight", garminWeightBody(w));
       await sql`UPDATE weight_log SET pushed_garmin_at = now() WHERE id = ${w.id}`;
@@ -82,5 +119,5 @@ export async function pushWeightsToGarmin(
       errors.push(`${w.date} ${(w.weight_grams / 1000).toFixed(1)}kg: ${(e as Error).message.slice(0, 120)}`);
     }
   }
-  return { pushed, failed, errors };
+  return { pushed, skipped, failed, errors };
 }
