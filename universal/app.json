@@ -20,7 +20,9 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.health.READ_WEIGHT",
-        "android.permission.health.READ_BODY_FAT"
+        "android.permission.health.READ_BODY_FAT",
+        "android.permission.health.READ_HEALTH_DATA_HISTORY",
+        "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
       ]
     },
     "web": {

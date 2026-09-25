@@ -11,18 +11,27 @@
  */
 import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
-import { syncWeights } from "./weight-sync";
+import { initialize } from "react-native-health-connect";
+import { askForWeightAccess, hasWeightPermission, syncWeights, type SyncOutcome } from "./weight-sync";
 
 export const WEIGHT_TASK = "soma-weight-sync";
 
 /** Roughly a quarter of an hour, which is the floor Android's scheduler will honour. */
 export const WEIGHT_TASK_MINUTES = 15;
 
+/** One line saying what a run did, including whether it read the whole history or only 30 days. */
+export function describeOutcome(where: string, r: SyncOutcome): string {
+  if (!r.ok) return `[weight-sync ${where}] nothing done: ${r.why}`;
+  const window = r.span === "recent"
+    ? `the last 30 days only (full history refused: ${r.fullError ?? "no reason given"})`
+    : "the whole history";
+  return `[weight-sync ${where}] read ${r.read} over ${window}, stored ${r.stored}, already held ${r.already}`;
+}
+
 TaskManager.defineTask(WEIGHT_TASK, async () => {
   const r = await syncWeights();
   // The log is the only account of a headless run, so say what happened either way.
-  if (r.ok) console.log(`[weight-sync] read ${r.read} stored ${r.stored} already ${r.already}`);
-  else console.log(`[weight-sync] nothing done: ${r.why}`);
+  console.log(describeOutcome("background", r));
   // ⚠️ A MISSING PERMISSION IS NOT A FAILURE. Reporting Failed for it would have Android back off
   // and eventually stop scheduling, so the job would be dead by the time he grants it.
   return BackgroundTask.BackgroundTaskResult.Success;
@@ -37,5 +46,37 @@ export async function registerWeightSync(): Promise<void> {
   } catch (e) {
     // Never take the app down over a background job.
     console.log(`[weight-sync] could not register: ${(e as Error).message}`);
+  }
+}
+
+/** Asked at most once per run of the app, so a re-render or a fast refresh cannot re-open the sheet. */
+let askedThisRun = false;
+
+/**
+ * Everything the app does about weight when it opens. Called from the root layout, never from the
+ * headless task, because the permission sheet needs a visible activity.
+ *
+ * 1. Make sure the background job exists (a reinstall clears Android's scheduled jobs).
+ * 2. If Weight is not granted, raise Health Connect's sheet ONCE. Android itself stops showing it
+ *    after two refusals, so this cannot become a nag.
+ * 3. Sync now, in the foreground. This is what makes opening soma sync even before background access
+ *    is granted, and it means the tap on "Allow" is followed straight away by his history arriving.
+ */
+export async function startWeightSync(): Promise<void> {
+  await registerWeightSync();
+  try {
+    if (!(await initialize())) {
+      console.log("[weight-sync] Health Connect is not available on this device");
+      return;
+    }
+    if (!askedThisRun && !(await hasWeightPermission())) {
+      askedThisRun = true;
+      const got = await askForWeightAccess();
+      console.log(`[weight-sync] asked for access: weight=${got.weight} background=${got.background}`);
+    }
+    console.log(describeOutcome("foreground", await syncWeights()));
+  } catch (e) {
+    // Never take the app down over this.
+    console.log(`[weight-sync] could not start: ${(e as Error).message}`);
   }
 }
