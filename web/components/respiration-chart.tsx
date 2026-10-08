@@ -49,7 +49,7 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
   const tickDates = buildChartTicks(chartData);
 
   return (
-    <ResponsiveContainer width="100%" height={180}>
+    <ResponsiveContainer width="100%" height={300}>
       <AreaChart
         data={chartData}
         margin={{ top: 5, right: 10, left: 0, bottom: 5 }}

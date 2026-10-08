@@ -18,7 +18,7 @@ export function ClickableLastWorkout({
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
         tabIndex={0}
         role="button"
-        className="cursor-pointer transition-colors hover:bg-muted/50 active:scale-[0.99] rounded-xl focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="flex flex-col cursor-pointer transition-colors hover:bg-muted/50 active:scale-[0.99] rounded-xl focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {children}
       </div>

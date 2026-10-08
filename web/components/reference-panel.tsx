@@ -28,7 +28,7 @@ export function ReferencePanel({ metrics }: ReferencePanelProps) {
         External Comparison Signals
         <span className="ml-2 text-xs opacity-60">&mdash; not part of the model, shown for reference</span>
       </h3>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
       {metrics.map((metric) => (
         <Card
           key={metric.id}

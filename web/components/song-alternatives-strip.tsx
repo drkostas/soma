@@ -1,7 +1,7 @@
 // web/components/song-alternatives-strip.tsx
 "use client";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, Plus, ChevronRight } from "lucide-react";
+import { Play, Plus, ChevronRight, ChevronLeft } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { SongData } from "./song-card";
 
@@ -60,7 +60,8 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, exclud
   const [loading, setLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stripRef = useRef<HTMLDivElement>(null);
-  const [showFade, setShowFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+  const [showLeftFade, setShowLeftFade] = useState(false);
 
   // Fetch and shuffle full pool on config/filter changes
   useEffect(() => {
@@ -117,7 +118,8 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, exclud
     if (!el) return;
     const check = () => {
       const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 10;
-      setShowFade(!atEnd && el.scrollWidth > el.clientWidth);
+      setShowRightFade(!atEnd && el.scrollWidth > el.clientWidth);
+      setShowLeftFade(el.scrollLeft > 10);
       if (atEnd && visibleCount < allSongs.length) {
         setVisibleCount(v => Math.min(v + PAGE_SIZE, allSongs.length));
       }
@@ -190,9 +192,20 @@ export default function SongAlternativesStrip({ segmentConfig, placedIds, exclud
           )}
         </AnimatePresence>
       </div>
-      {showFade && (
-        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent flex items-center justify-end pr-0.5 pointer-events-none">
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+      {showLeftFade && (
+        <div 
+          className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent flex items-center justify-start pl-0.5 cursor-pointer z-10"
+          onClick={() => stripRef.current?.scrollBy({ left: -300, behavior: 'smooth' })}
+        >
+          <ChevronLeft className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors bg-background/80 rounded-full" />
+        </div>
+      )}
+      {showRightFade && (
+        <div 
+          className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent flex items-center justify-end pr-0.5 cursor-pointer z-10"
+          onClick={() => stripRef.current?.scrollBy({ left: 300, behavior: 'smooth' })}
+        >
+          <ChevronRight className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors bg-background/80 rounded-full" />
         </div>
       )}
     </div>

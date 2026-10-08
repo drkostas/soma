@@ -34,7 +34,7 @@ export function MileageChart({ data }: { data: MileageEntry[] }) {
   const max = Math.max(...chartData.map((d) => d.km));
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
+    <ResponsiveContainer width="100%" height={300}>
       <BarChart data={chartData}>
         <XAxis
           dataKey="month"

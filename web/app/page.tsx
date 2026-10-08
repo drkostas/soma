@@ -1213,10 +1213,10 @@ export default async function HomePage({
       </div>
 
       {/* Fitness Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div className="flex flex-col md:flex-row gap-4 mb-6 items-stretch">
         {/* Fitness Age */}
         {fitnessAge && (
-          <Card>
+          <Card className="flex-1 flex flex-col">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                 <Heart className="h-4 w-4 text-red-400" />
@@ -1283,7 +1283,7 @@ export default async function HomePage({
 
         {/* Intensity Minutes */}
         {intensityMin && (
-          <Card>
+          <Card className="flex-1 flex flex-col">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                 <Timer className="h-4 w-4 text-emerald-400" />
@@ -1427,7 +1427,7 @@ export default async function HomePage({
         {/* Last Workout (3rd column in the bottom grid) */}
         {lastWorkout?.workoutId ? (
           <ClickableLastWorkout workoutId={lastWorkout.workoutId}>
-            <Card>
+            <Card className="flex-1 h-full flex flex-col">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   Last Gym Session
@@ -1454,7 +1454,7 @@ export default async function HomePage({
             </Card>
           </ClickableLastWorkout>
         ) : (
-          <Card>
+          <Card className="flex-1 flex flex-col">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Last Gym Session

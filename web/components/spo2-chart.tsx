@@ -48,7 +48,7 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
   const tickDates = buildChartTicks(chartData);
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
+    <ResponsiveContainer width="100%" height={300}>
       <AreaChart
         data={chartData}
         margin={{ top: 5, right: 10, left: 0, bottom: 5 }}

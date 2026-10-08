@@ -934,7 +934,34 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
         )}
 
         <ExpandableChartCard title="Resting Heart Rate" icon={<HeartPulse className="h-4 w-4 text-red-400" />}>
-          <RHRChart data={rhrTrend.map((d) => ({ date: d.date, rhr: Number(d.rhr ?? 0) }))} />
+            {(() => {
+              const rhrData = rhrTrend.filter((r) => Number(r.rhr) > 0);
+              const latest = rhrData.length > 0 ? Number(rhrData[rhrData.length - 1].rhr) : null;
+              const avg7d = rhrData.length > 0 ? rhrData.slice(-7).reduce((s: number, r) => s + Number(r.rhr), 0) / Math.min(rhrData.length, 7) : null;
+              const f = freshness(rhrData.length > 0 ? rhrData[rhrData.length - 1].date : null, todayKey());
+              return (
+                <div className="mb-4" data-freshness={f.stale ? "stale" : "fresh"}>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Latest{f.stale ? "" : ` · ${rhrData[rhrData.length - 1]?.date}`}</div>
+                      <div className="text-2xl font-bold">
+                        {f.stale ? "—" : latest ?? "—"}
+                        {f.stale ? null : <span className="text-sm font-normal text-muted-foreground ml-1">bpm</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">7-Day Avg</div>
+                      <div className="text-2xl font-bold">
+                        {avg7d ? Math.round(avg7d) : "—"}
+                        <span className="text-sm font-normal text-muted-foreground ml-1">bpm</span>
+                      </div>
+                    </div>
+                    <div></div>
+                  </div>
+                </div>
+              );
+            })()}
+            <RHRChart data={rhrTrend.map((d) => ({ date: d.date, rhr: Number(d.rhr ?? 0) }))} />
         </ExpandableChartCard>
       </div>
 
@@ -983,19 +1010,42 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
         )}
 
         <ExpandableChartCard title="Body Battery" icon={<BatteryCharging className="h-4 w-4 text-green-400" />}>
-          {bodyBattery.length > 0 ? (
-            <BodyBatteryChart
-              data={bodyBattery.map((bb) => ({
-                date: bb.date,
-                charged: Number(bb.charged),
-                drained: Number(bb.drained),
-              }))}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
-              No body battery data
-            </div>
-          )}
+            {(() => {
+              const latest = bodyBattery.length > 0 ? bodyBattery[bodyBattery.length - 1] : null;
+              const f = freshness(latest?.date ?? null, todayKey());
+              return (
+                <div className="mb-4" data-freshness={f.stale ? "stale" : "fresh"}>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Charged{f.stale ? "" : ` · ${latest?.date}`}</div>
+                      <div className="text-2xl font-bold text-green-400">
+                        {f.stale ? "—" : `+${latest?.charged ?? "—"}`}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Drained</div>
+                      <div className="text-2xl font-bold text-red-400">
+                        {f.stale ? "—" : `-${latest?.drained ?? "—"}`}
+                      </div>
+                    </div>
+                    <div></div>
+                  </div>
+                </div>
+              );
+            })()}
+            {bodyBattery.length > 0 ? (
+              <BodyBatteryChart
+                data={bodyBattery.map((bb) => ({
+                  date: bb.date,
+                  charged: Number(bb.charged),
+                  drained: Number(bb.drained),
+                }))}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+                No body battery data
+              </div>
+            )}
         </ExpandableChartCard>
       </div>
 

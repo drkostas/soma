@@ -129,7 +129,7 @@ export function SyncRulesManager({ initialRules }: SyncRulesManagerProps) {
   }
 
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
