@@ -1,6 +1,6 @@
 <div align="center">
   <br>
-  <img src="soma-icon.png" width="60" alt="soma" />
+  <img src="screenshots/banner.png" width="100%" alt="soma" />
   <br><br>
   <h2>soma</h2>
   <p>Your health stack, finally unified.<br>
