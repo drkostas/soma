@@ -102,11 +102,14 @@ function boundingCircle(pts: { x: number; y: number }[]) {
 }
 // Basemap tile sources (several have a real blue sea). {z}/{x}/{y} placeholders;
 // Esri uses {z}/{y}/{x} order, handled by the template string itself.
+// CARTO's anonymous basemaps (basemaps.cartocdn.com) now return an "API KEY REQUIRED"
+// placeholder tile, so the formerly-CARTO styles below point at keyless Esri ArcGIS
+// basemaps instead (dark gray for runs, World Street for kite's voyager look).
 const BASEMAPS: Record<string, string> = {
-  dark:        "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-  darknolabels:"https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-  voyager:     "https://basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
-  positron:    "https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+  dark:        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+  darknolabels:"https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+  voyager:     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+  positron:    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
   ocean:       "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
   satellite:   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   darkgray:    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
