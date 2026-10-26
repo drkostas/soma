@@ -14,6 +14,16 @@ on:
     # Daily at 06:00 UTC — catch demo-deploy render regressions independent of PRs.
     - cron: "0 6 * * *"
 
+# One run at a time against the shared live demo (#1215). The demo reads its database through a
+# gateway that allows 240 requests a minute per client address, and one warm serverless instance
+# serves many page loads. When several pull requests opened at once each ran this suite, one
+# instance passed the limit within seconds and pages failed with a 500. queue: max keeps every
+# waiting run instead of cancelling all but the newest, so no pull request loses its check.
+concurrency:
+  group: web-e2e-live-demo
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   smoke:
     name: Playwright smoke (desktop)
