@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { slotBudget, notificationFor, slotsRemaining, ingredientIdFor, agentRunsHere, drainCaptures, type LandedMeal } from "./meal-worker";
+import { slotBudget, notificationFor, slotsRemaining, ingredientIdFor, agentRunsHere, drainCaptures, processCapture, type LandedMeal } from "./meal-worker";
+import type { CaptureRow } from "./meal-capture";
 
 describe("slotBudget", () => {
   it("splits what is left across the slots still to come", () => {
@@ -106,5 +107,38 @@ describe("drainCaptures where the agent cannot run", () => {
     expect(done).toBe(0);
     // The point is not the count. It is that no UPDATE ran, so `attempts` was never spent.
     expect(queries).toBe(0);
+  });
+});
+
+describe("processCapture when reading the recording fails", () => {
+  // The vocabulary query is the first thing readAloud asks for. When it rejects, the capture must
+  // go through the same failure path as any other error, or it stays `running` and is never
+  // marked failed (#1225).
+  function fakeSql() {
+    const finished: Array<{ status: unknown; error: unknown }> = [];
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.join("?");
+      if (text.includes("jsonb_array_elements")) return Promise.reject(new Error("connection reset"));
+      if (text.includes("UPDATE meal_capture SET")) finished.push({ status: values[0], error: values[5] });
+      return Promise.resolve([]);
+    }) as unknown as Parameters<typeof processCapture>[0];
+    return { sql, finished };
+  }
+  const spoken = (attempts: number): CaptureRow => ({
+    id: 7, date: "2026-10-26", meal_slot: "lunch", mode: "log", tz: null, status: "running",
+    messages: [{ role: "user", text: "two eggs", image: null, at: "2026-10-26T12:00:00Z", audio: "db:1" }],
+    proposal: null, resolved: null, meal_log_id: null, error: null, attempts,
+  });
+
+  it("puts the capture back for another try on the first attempt", async () => {
+    const { sql, finished } = fakeSql();
+    await expect(processCapture(sql, spoken(1))).resolves.toBeUndefined();
+    expect(finished).toEqual([{ status: "captured", error: "connection reset" }]);
+  });
+
+  it("marks the capture failed on the last attempt", async () => {
+    const { sql, finished } = fakeSql();
+    await expect(processCapture(sql, spoken(2))).resolves.toBeUndefined();
+    expect(finished).toEqual([{ status: "failed", error: "connection reset" }]);
   });
 });
