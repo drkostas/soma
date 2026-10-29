@@ -81,8 +81,31 @@ async function readFully(res: Response): Promise<Response> {
   return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
 }
 
+/**
+ * ⭐ ON THE DEMO A READ IS ANSWERED FROM THE DATA CACHE FOR SIX HOURS (soma#1237).
+ *
+ * The demo's data moves forward once a week, and its database is billed for at least five minutes
+ * every time it wakes. Caching its pages at the CDN (soma#1233) was not enough: the CDN keeps a copy
+ * per region and per kind of request (a page load, a client navigation and a prefetch are separate
+ * entries), so the same page still rendered and ran its queries several times an hour. Next.js keeps a
+ * fetch that names its own revalidate in the data cache, keyed by the request body (the query and its
+ * parameters), and every region and function instance shares that cache. It stores only 200 answers,
+ * so an error is never kept. Only a request whose every query is a plain SELECT is marked, so a write
+ * always reaches the database, and outside the demo nothing changes.
+ */
+export const DEMO_READ_CACHE_S = 21600;
+
+export function withDemoReadCache(
+  init: RequestInit | undefined,
+  demo = process.env.DEMO_MODE === "true",
+): RequestInit | undefined {
+  if (!demo || !isReadOnlyBody(init?.body)) return init;
+  return { ...init, next: { revalidate: DEMO_READ_CACHE_S } };
+}
+
 async function retryReadOnce(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   if (!isReadOnlyBody(init?.body)) return fetch(input, init);
+  init = withDemoReadCache(init);
   try {
     const res = await fetch(input, init);
     if (!RETRY_STATUSES.has(res.status)) return await readFully(res);
