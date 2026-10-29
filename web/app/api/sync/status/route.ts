@@ -11,6 +11,23 @@ interface SyncEntry {
   completed_at: string | null;
 }
 
+/**
+ * On the demo the answer never changes (the demo never syncs), but the sidebar polls this route
+ * every minute while a tab is open, and each poll woke a database that scales to zero only after
+ * five idle minutes. One open tab kept it running all day (#1229). Vercel's CDN keeps the demo's
+ * answer for an hour instead, which also covers tabs that still run older page code.
+ * `Vercel-CDN-Cache-Control` is read only by Vercel's CDN, so browsers still ask every time.
+ */
+const DEMO_CDN_SECONDS = 3600;
+
+function answer(body: unknown): NextResponse {
+  const res = NextResponse.json(body);
+  if (process.env.DEMO_MODE?.trim() === "true") {
+    res.headers.set("Vercel-CDN-Cache-Control", `max-age=${DEMO_CDN_SECONDS}`);
+  }
+  return res;
+}
+
 interface SourceStatus {
   status: string;
   lastSync: string;
@@ -37,7 +54,7 @@ export async function GET() {
 
     // No sync entries at all
     if (latestPerType.length === 0) {
-      return NextResponse.json({
+      return answer({
         lastSync: null,
         status: "never",
         recordsSynced: 0,
@@ -108,7 +125,7 @@ export async function GET() {
       { label: "Health days", count: Number(c.health_days ?? 0) },
     ];
 
-    return NextResponse.json({
+    return answer({
       lastSync: mostRecent.completed_at ?? mostRecent.started_at,
       status: overallStatus,
       recordsSynced: Number(mostRecent.records_synced) || 0,
