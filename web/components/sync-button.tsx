@@ -49,6 +49,8 @@ export function SyncButton() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = useCallback(async () => {
+    // A hidden tab has nobody looking at it, and every poll is a database read (#1229).
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
     try {
       const res = await fetch("/api/sync/status");
       if (!res.ok) return;
@@ -80,20 +82,23 @@ export function SyncButton() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; every setState it causes runs after the response.
     fetchStatus();
+    // The demo never syncs, so its status never changes: ask once and do not poll (#1229).
+    if (isDemo) return;
     startPolling(IDLE_POLL_MS);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [fetchStatus, startPolling]);
+  }, [fetchStatus, startPolling, isDemo]);
 
   // Switch to fast polling while running, back to idle when done
   useEffect(() => {
+    if (isDemo) return;
     if (state.status === "running") {
       startPolling(FAST_POLL_MS);
     } else {
       startPolling(IDLE_POLL_MS);
     }
-  }, [state.status, startPolling]);
+  }, [state.status, startPolling, isDemo]);
 
   const handleClick = async () => {
     if (state.status === "running") return;
