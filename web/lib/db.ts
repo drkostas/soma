@@ -57,17 +57,38 @@ export function httpDb(url: string): QueryFn {
 const RETRY_STATUSES = new Set([502, 503, 504]);
 const RETRY_WAIT_MS = 300;
 
-export function isReadOnlyBody(body: unknown): boolean {
-  if (typeof body !== "string") return false;
+/** The SQL texts in a request body for the HTTP driver, or null when it cannot be read. */
+function queryTexts(body: unknown): unknown[] | null {
+  if (typeof body !== "string") return null;
   let parsed: { query?: unknown; queries?: { query?: unknown }[] };
   try {
     parsed = JSON.parse(body);
   } catch {
-    return false;
+    return null;
   }
   const texts = Array.isArray(parsed.queries) ? parsed.queries.map((q) => q?.query) : [parsed.query];
-  return texts.length > 0 && texts.every((t) =>
+  return texts.length > 0 ? texts : null;
+}
+
+export function isReadOnlyBody(body: unknown): boolean {
+  const texts = queryTexts(body);
+  return !!texts && texts.every((t) =>
     typeof t === "string" && /^\s*select\b/i.test(t) && !/;\s*\S/.test(t));
+}
+
+// A word that writes, locks or changes state anywhere in a query. A false match only means a read is
+// not cached, so the list leans wide.
+const WRITE_OR_LOCK = /\b(insert|update|delete|merge|truncate|alter|create|drop|grant|revoke|copy|call|lock|nextval|setval|pg_advisory_\w+)\b/i;
+
+/**
+ * A request the demo may answer from the data cache: every query starts with SELECT or WITH, is one
+ * statement, and has no word that writes or locks (soma#1241). `WITH` is allowed here and not in
+ * `isReadOnlyBody`, because a data-modifying `WITH ... INSERT` carries the INSERT this test refuses.
+ */
+export function isCacheableRead(body: unknown): boolean {
+  const texts = queryTexts(body);
+  return !!texts && texts.every((t) =>
+    typeof t === "string" && /^\s*(select|with)\b/i.test(t) && !/;\s*\S/.test(t) && !WRITE_OR_LOCK.test(t));
 }
 
 /**
@@ -90,7 +111,7 @@ async function readFully(res: Response): Promise<Response> {
  * entries), so the same page still rendered and ran its queries several times an hour. Next.js keeps a
  * fetch that names its own revalidate in the data cache, keyed by the request body (the query and its
  * parameters), and every region and function instance shares that cache. It stores only 200 answers,
- * so an error is never kept. Only a request whose every query is a plain SELECT is marked, so a write
+ * so an error is never kept. Only a request that `isCacheableRead` accepts is marked, so a write
  * always reaches the database, and outside the demo nothing changes.
  */
 export const DEMO_READ_CACHE_S = 21600;
@@ -99,13 +120,13 @@ export function withDemoReadCache(
   init: RequestInit | undefined,
   demo = process.env.DEMO_MODE === "true",
 ): RequestInit | undefined {
-  if (!demo || !isReadOnlyBody(init?.body)) return init;
+  if (!demo || !isCacheableRead(init?.body)) return init;
   return { ...init, next: { revalidate: DEMO_READ_CACHE_S } };
 }
 
 async function retryReadOnce(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (!isReadOnlyBody(init?.body)) return fetch(input, init);
   init = withDemoReadCache(init);
+  if (!isReadOnlyBody(init?.body)) return fetch(input, init);
   try {
     const res = await fetch(input, init);
     if (!RETRY_STATUSES.has(res.status)) return await readFully(res);
