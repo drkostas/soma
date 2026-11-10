@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { ActivityDetailModal } from "./activity-detail-modal";
 import { WorkoutDetailModal } from "./workout-detail-modal";
 import {
@@ -50,6 +50,14 @@ function formatDuration(mins: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function absoluteDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// relativeDate() reads the current time, so the label a cached server render
+// produces can differ from what the browser computes on hydration (React #418).
+// Show the absolute date on the server and the first client render, then switch
+// to the relative label after mount so both passes emit the same text.
 function relativeDate(dateStr: string) {
   const date = new Date(dateStr);
   const now = new Date();
@@ -58,7 +66,7 @@ function relativeDate(dateStr: string) {
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return absoluteDate(dateStr);
 }
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -77,9 +85,17 @@ const ACTIVITY_LABELS: Record<string, string> = {
   treadmill_running: "Treadmill",
 };
 
+// Stable no-op store that reports false on the server and the first client
+// render, then true, so the time-relative labels can be deferred past hydration
+// without a setState-in-effect.
+const emptySubscribe = () => () => {};
+
 export function ClickableRecentActivity({ activities }: { activities: RecentActivity[] }) {
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
+  // Relative labels depend on the current time, so defer them past hydration
+  // to keep the server and first client render identical (see relativeDate above).
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
   return (
     <>
@@ -117,7 +133,7 @@ export function ClickableRecentActivity({ activities }: { activities: RecentActi
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate">{a.name}</div>
                 <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <span>{relativeDate(a.date)}</span>
+                  <span>{mounted ? relativeDate(a.date) : absoluteDate(a.date)}</span>
                   <span className="text-muted-foreground/40">·</span>
                   <span>{ACTIVITY_LABELS[a.type_key] || a.type_key}</span>
                 </div>
