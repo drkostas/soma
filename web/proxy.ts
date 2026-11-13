@@ -6,6 +6,12 @@ import { countVisit } from "@/lib/visit-counter";
 
 const isDev = process.env.NODE_ENV !== "production";
 
+// In the demo these read-only API answers are fixed, so Vercel's CDN can hold them
+// and a page view need not re-invoke a function. Cron, chat, auth and webhooks are
+// left out: they must run or must stay fresh.
+const DEMO_API_UNCACHED = ["/api/cron", "/api/chat", "/api/auth", "/api/webhooks"];
+const DEMO_API_CDN_SECONDS = 3600;
+
 /** Dev-only CORS so the universal Expo app can consume this API cross-origin. */
 function withDevCors(res: NextResponse, isApi: boolean): NextResponse {
   if (isDev && isApi) {
@@ -79,7 +85,11 @@ const authProxy = auth((req) => {
         true,
       );
     }
-    return withDevCors(NextResponse.next(), isApi);
+    const res = withDevCors(NextResponse.next(), isApi);
+    if (isApi && req.method === "GET" && !DEMO_API_UNCACHED.some((p) => pathname.startsWith(p))) {
+      res.headers.set("Vercel-CDN-Cache-Control", `max-age=${DEMO_API_CDN_SECONDS}`);
+    }
+    return res;
   }
 
   // Always allow auth routes, login page, and the share-card + description APIs, which the sync
@@ -110,6 +120,13 @@ const authProxy = auth((req) => {
 export default function proxy(req: NextRequest, event: NextFetchEvent) {
   // Optional visit counter: does nothing unless COLLECTOR_URL and COLLECTOR_TOKEN are set.
   countVisit(req, event);
+  // The public demo serves static, public pages, so next-auth has nothing to do on
+  // them. Returning here keeps the proxy off the cached-page path it would otherwise
+  // run before the cache. /api still goes through authProxy (it guards mutations and
+  // sets the demo read cache header).
+  if (process.env.DEMO_MODE?.trim() === "true" && !req.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
   // next-auth types its wrapper as a route handler; as the proxy it takes the fetch event and passes it on.
   return authProxy(req, event as unknown as Parameters<typeof authProxy>[1]);
 }
