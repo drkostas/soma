@@ -24,6 +24,11 @@ export { TZ_COOKIE, TZ_HEADER };
  * than every caller having to know which world it is in.
  */
 export async function requestTz(): Promise<string> {
+  // The public demo renders the same pages for everyone, so it must not read a
+  // per-request zone: that makes every page dynamic and defeats the static demo
+  // cache. The athlete fallback is a fixed zone, so the demo pages can prerender.
+  // Off the demo this is skipped and the device's own zone is used as before.
+  if (process.env.DEMO_MODE?.trim() === "true") return athleteTz();
   try {
     // The app's header first, because the native app has no cookie for this domain (soma#1125).
     // A browser has no header and falls to its cookie; a job has neither and falls to athleteTz.
