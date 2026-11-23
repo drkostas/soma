@@ -15,6 +15,7 @@
  *
  * EXTERNAL Garmin writes. Idempotent through the `garmin_enrichment` ledger.
  */
+import { uploadActivityImage } from "garmin-auth";
 import type { GarminClient } from "garmin-auth";
 import type { QueryFn } from "./db";
 import type { HevyWorkout } from "./hevy-types";
@@ -146,9 +147,7 @@ export async function enrichGarminGymActivities(
       const resp = await fetch(`${webBaseUrl}/api/workout/${row.hevy_id}/image`);
       if (resp.ok) {
         const bytes = new Uint8Array(await resp.arrayBuffer());
-        const form = new FormData();
-        form.append("file", new Blob([bytes], { type: "image/png" }), `workout_${row.hevy_id}.png`);
-        await client.postForm(`/activity-service/activity/${activityId}/image`, form);
+        await uploadActivityImage(client, activityId, bytes, { filename: `workout_${row.hevy_id}.png` });
         imagesUploaded += 1;
       } else {
         console.warn(`  gym ${activityId} image skipped: HTTP ${resp.status}`);

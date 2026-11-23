@@ -7,6 +7,7 @@
  * The share image is rendered by the existing web route /api/activity/{id}/image.
  * EXTERNAL Garmin writes. Stage: sync cutover (#187).
  */
+import { uploadActivityImage } from "garmin-auth";
 import type { GarminClient } from "garmin-auth";
 import type { QueryFn } from "./db";
 
@@ -144,9 +145,7 @@ export async function enrichGarminRunActivities(sql: QueryFn, client: GarminClie
       const resp = await fetch(`${webBaseUrl}/api/activity/${activityId}/image`);
       if (resp.ok) {
         const bytes = new Uint8Array(await resp.arrayBuffer());
-        const form = new FormData();
-        form.append("file", new Blob([bytes], { type: "image/png" }), `run_${activityId}.png`);
-        await client.postForm(`/activity-service/activity/${activityId}/image`, form);
+        await uploadActivityImage(client, activityId, bytes, { filename: `run_${activityId}.png` });
         imagesUploaded += 1;
         imageOk = true;
       }
